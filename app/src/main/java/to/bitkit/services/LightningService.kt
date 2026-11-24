@@ -321,6 +321,7 @@ class LightningService internal constructor(
 
     @Volatile
     private var watchOnlyReconcileRetryJob: Job? = null
+    private val watchOnlyReconcileRetryLock = Any()
 
     // Release of the previous node's rust handle (free_node). Rebuild and destructive storage work
     // wait on this so a new node never touches storage the old one is still draining.
@@ -552,7 +553,9 @@ class LightningService internal constructor(
             }
             val desiredConfigs = enabledOnchainWalletAccountConfigs(walletRecords, currentWalletIndex)
 
-            ServiceQueue.LDK.background(ldkQueue) {
+            val reconciled = ServiceQueue.LDK.background(ldkQueue) {
+                // The node may have been stopped and released while this waited for the queue.
+                if (this@LightningService.node !== node) return@background false
                 val trackedAccounts = node.listOnchainWalletAccounts()
                 val managedKeys = (walletRecords + accountsPendingRemoval).mapNotNull { record ->
                     when (record.addressType) {
@@ -595,8 +598,9 @@ class LightningService internal constructor(
                 if (syncAfterReconcile && desiredConfigs.isNotEmpty() && node.status().isRunning) {
                     node.syncWallets()
                 }
+                true
             }
-            if (accountsPendingRemoval.isNotEmpty()) {
+            if (reconciled && accountsPendingRemoval.isNotEmpty()) {
                 watchOnlyAccountStore.completeReconciliation(currentWalletIndex)
             }
         }
@@ -606,7 +610,7 @@ class LightningService internal constructor(
     // let the GC free it later on the finalizer thread, racing the next node. This covers the whole
     // body, including the listener join, so cancellation during listener cleanup cannot skip it.
     suspend fun stop() = withContext(NonCancellable) {
-        watchOnlyReconcileRetryJob?.cancel()
+        watchOnlyReconcileRetryJob?.cancelAndJoin()
         shouldListenForEvents = false
         // A stop requested from inside an event handler runs on the listener job itself; joining it
         // here would deadlock, so let the loop exit on shouldListenForEvents instead.
@@ -778,16 +782,34 @@ class LightningService internal constructor(
 
     /** Retries loading Paykit Server accounts until they load, the node stops, or the node rejects one for good. */
     private fun scheduleWatchOnlyReconcileRetry() {
-        if (watchOnlyReconcileRetryJob?.isActive == true) return
-        watchOnlyReconcileRetryJob = launch {
-            var retry = true
-            while (retry && isActive && node != null) {
-                delay(WATCH_ONLY_RECONCILE_RETRY_DELAY)
-                val failure = runSuspendCatching { reconcileWatchOnlyAccounts() }.exceptionOrNull()
-                failure?.let { Logger.warn("Paykit Server account reconcile retry failed", it, context = TAG) }
-                retry = failure != null && !failure.isRejectedPaykitServerAccount()
-            }
+        synchronized(watchOnlyReconcileRetryLock) {
+            if (watchOnlyReconcileRetryJob?.isActive == true) return
+            watchOnlyReconcileRetryJob = launch { retryWatchOnlyReconcile() }
         }
+    }
+
+    private suspend fun retryWatchOnlyReconcile() {
+        var retry = true
+        while (retry && currentCoroutineContext().isActive && node != null) {
+            delay(WATCH_ONLY_RECONCILE_RETRY_DELAY)
+            val failure = runSuspendCatching { reconcileWatchOnlyAccounts(syncAfterReconcile = false) }
+                .exceptionOrNull()
+            if (failure == null) {
+                syncWalletsAfterAccountsLoad()
+            } else {
+                Logger.warn("Paykit Server account reconcile retry failed", failure, context = TAG)
+            }
+            retry = failure != null && !failure.isRejectedPaykitServerAccount()
+        }
+    }
+
+    // Outside the watch-only lock, as in sync(): an Electrum round trip must not delay Pubky auth. A failure here is
+    // a wallet sync failure, which the regular sync retries.
+    private suspend fun syncWalletsAfterAccountsLoad() {
+        runSuspendCatching {
+            ServiceQueue.LDK.background(ldkQueue) { this@LightningService.node?.syncWallets() }
+            _syncStatusChanged.tryEmit(Unit)
+        }.onFailure { Logger.warn("Wallet sync after loading Paykit Server accounts failed", it, context = TAG) }
     }
 
     suspend fun sign(message: String): String {

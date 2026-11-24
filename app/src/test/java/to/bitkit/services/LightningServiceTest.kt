@@ -18,6 +18,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import org.junit.Before
 import org.junit.Rule
@@ -115,6 +116,7 @@ import org.lightningdevkit.ldknode.PreparedOnchainSend as NativePreparedOnchainS
 private const val VERIFY_TIMEOUT_MS = 2_000L
 private const val RELEASE_GATE_PROBE_MS = 200L
 private const val STOP_BOUND_MS = 5_000L
+private const val LOCK_PROBE_TIMEOUT_MS = 200L
 private val SHORT_GATE_TIMEOUT = 200.milliseconds
 private val detachingRecord = LogRecord(
     LdkLogLevel.ERROR,
@@ -1297,6 +1299,8 @@ class LightningServiceTest : BaseUnitTest() {
         var failAdd = true
         doAnswer { if (failAdd) throw NodeException.PersistenceFailed("vss write failed") }
             .whenever(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
+        val lockFreeDuringSync = mutableListOf<Boolean>()
+        doAnswer { lockFreeDuringSync += isWatchOnlyLockFree() }.whenever(node).syncWallets()
 
         sut.sync()
         verify(node, times(1)).syncWallets()
@@ -1307,10 +1311,51 @@ class LightningServiceTest : BaseUnitTest() {
 
         verify(node, times(2)).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
         verify(node, times(2)).syncWallets()
+        assertEquals(listOf(true, true), lockFreeDuringSync)
 
         advanceTimeBy(60.seconds)
         runCurrent()
         verify(node, times(2)).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `stop ends the account retry before releasing the node`() = test {
+        val account = watchOnlyAccount(accountIndex = 1, walletIndex = 0, enabled = true)
+        whenever(watchOnlyAccountStore.loadReconciliationState()).thenReturn(
+            WatchOnlyAccountReconciliationState(listOf(account), emptyList()),
+        )
+        whenever(node.listOnchainWalletAccounts()).thenReturn(emptyList())
+        whenever(node.onchainPayment()).thenReturn(mock<OnchainPayment>())
+        doThrow(NodeException.PersistenceFailed("vss write failed"))
+            .whenever(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
+
+        sut.sync()
+        sut.stop()
+        advanceTimeBy(60.seconds)
+        runCurrent()
+
+        verify(node, times(1)).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
+        verify(node, times(1)).syncWallets()
+    }
+
+    @Test
+    fun `reconciliation skips a node that was released while it waited`() = test {
+        val account = watchOnlyAccount(accountIndex = 1, walletIndex = 0, enabled = true)
+        whenever(watchOnlyAccountStore.loadReconciliationState()).thenAnswer {
+            sut.node = null
+            WatchOnlyAccountReconciliationState(listOf(account), emptyList())
+        }
+
+        sut.reconcileWatchOnlyAccounts(syncAfterReconcile = false)
+
+        verify(node, never()).listOnchainWalletAccounts()
+        verify(node, never()).addOnchainWalletAccount(any(), any(), any())
+    }
+
+    // Mutex.withLock on a free mutex returns without suspending; a held one times out.
+    private fun isWatchOnlyLockFree(): Boolean = runBlocking {
+        withTimeoutOrNull(LOCK_PROBE_TIMEOUT_MS) { watchOnlyAccountLifecycleCoordinator.withLock { true } } ?: false
     }
 
     private fun buildConfig(accounts: List<OnchainWalletAccountConfig>) = Config(
