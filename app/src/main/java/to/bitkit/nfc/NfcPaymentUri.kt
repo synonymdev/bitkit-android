@@ -57,6 +57,11 @@ fun scannedPaymentRequest(text: String): String {
     val singletons = keys.filter { it in SINGLETON_KEYS }
     if (singletons.size != singletons.toSet().size) return trimmed
     if (keys.count { it == "lightning" } > 1) return trimmed
+    // An `amount` key with no value is a malformed amount, not a missing one.
+    val hasEmptyAmount = pairs.any {
+        it.substringBefore('=').equals("amount", ignoreCase = true) && it.substringAfter('=', "").isEmpty()
+    }
+    if (hasEmptyAmount) return trimmed
     val params = pairs.mapNotNull {
         val key = it.substringBefore('=', missingDelimiterValue = "")
         val value = it.substringAfter('=', missingDelimiterValue = "")

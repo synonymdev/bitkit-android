@@ -138,6 +138,14 @@ class NfcPaymentUriTest {
     }
 
     @Test
+    fun `request with an empty amount is kept`() {
+        val invoice = PosNfcFixtures.SQUARE_INVOICE
+        for (empty in listOf("bitcoin:?amount=&lightning=$invoice", "bitcoin:?lightning=$invoice&amount")) {
+            assertEquals(empty, scannedPaymentRequest(empty))
+        }
+    }
+
+    @Test
     fun `request with a required parameter is kept`() {
         val invoice = PosNfcFixtures.SQUARE_INVOICE
         val required = "bitcoin:?lightning=$invoice&req-pop=callback%3a"
