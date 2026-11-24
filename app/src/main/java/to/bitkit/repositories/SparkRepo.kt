@@ -566,8 +566,8 @@ class SparkRepo @Inject constructor(
                 is SparkLightningSend.Found if earlier.status == PaymentStatus.PENDING ->
                     throw PaymentPendingException(paymentHash)
                 // Spark's list, synced or unreadable, can lack a send it made before the restore, as on the node's
-                // path, so the operators decide. Before Spark syncs, its list can't date an earlier attempt they show
-                // failed, which a send must start past, so that one is refused too.
+                // path, so the operators decide. Before Spark syncs, its list can lack an earlier attempt they show
+                // failed, so that one is refused too.
                 else -> refuseUnverifiedRestoredInvoice(
                     bolt11,
                     invoice.timestamp.toEpochSeconds(),
@@ -697,11 +697,10 @@ class SparkRepo @Inject constructor(
         val send = listedLightningSend(paymentHash, listing)
         val isSettled = when (send) {
             SparkLightningSend.NotFound -> isFinal
-            // A failure dated before the send started is an earlier attempt's, so it is final only when a missing
-            // send would be.
             is SparkLightningSend.Found if send.status == PaymentStatus.COMPLETED -> true
             // A pending send ends with its own payment event, or at its invoice's expiry.
             is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> isFinal
+            // Another attempt's failure is final only when a missing send would be.
             is SparkLightningSend.Found -> isFinal || hasOwnFailure(paymentHash, uncertain.attemptId, listing)
             SparkLightningSend.Unavailable -> false
         }
@@ -721,32 +720,43 @@ class SparkRepo @Inject constructor(
             }
             // Spark still runs a pending send past its invoice's expiry, so its own payment event reports it.
             is SparkLightningSend.Found if send.status == PaymentStatus.PENDING -> Unit
-            is SparkLightningSend.Found -> {
-                val payments = listing ?: runSuspendCatching { listPayments() }.getOrNull()
-                val deciding = payments?.latestSend(paymentHash)
-                // The send's own failure decides its row and outcome, also when another attempt failed later.
-                val own = payments?.firstOrNull { it.id == uncertain.attemptId }
-                val listed = own?.takeIf { deciding?.status == PaymentStatus.FAILED } ?: deciding
-                if (send.status == PaymentStatus.FAILED) {
-                    // Its row stayed pending while held, so it takes the failure now.
-                    listed?.let { recordActivity(it, isOwnAttempt = it === own) }
-                }
-                when {
-                    !isReported -> Unit
-                    listed == null -> settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
-                    // A retry started after the hold was taken reads as pending, and its own event reports it.
-                    listed.status == PaymentStatus.PENDING -> Unit
-                    // A retry that entered Spark's send call since the hold was taken reports its own outcome.
-                    listed.status == PaymentStatus.FAILED && isHeldFrom(listed) -> Unit
-                    // The send's own outcome is claimed, so Spark's event for the same payment reports nothing more.
-                    listed === own -> if (reportedSendIds.add(own.id)) own.toNodeEvent()?.let { _nodeEvents.emit(it) }
-                    // Another attempt's failure ends the send at its expiry, so it claims no payment.
-                    else -> listed.toNodeEvent()?.let { _nodeEvents.emit(it) }
-                }
-            }
+            is SparkLightningSend.Found -> reportListedSend(paymentHash, uncertain, send, listing, isReported)
             SparkLightningSend.Unavailable -> Unit
         }
         return true
+    }
+
+    private suspend fun reportListedSend(
+        paymentHash: String,
+        uncertain: UncertainSend,
+        send: SparkLightningSend.Found,
+        listing: List<Payment>?,
+        isReported: Boolean,
+    ) {
+        val payments = listing ?: runSuspendCatching { listPayments() }.getOrNull()
+        val deciding = payments?.latestSend(paymentHash)
+        // The send's own failure decides its row and outcome, also when another attempt failed later.
+        val own = payments?.firstOrNull { it.id == uncertain.attemptId }
+        val listed = own?.takeIf { deciding?.status == PaymentStatus.FAILED } ?: deciding
+        if (send.status == PaymentStatus.FAILED) {
+            // Its row stayed pending while held, so it takes the failure now.
+            listed?.let { recordActivity(it, isOwnAttempt = it === own) }
+        }
+        when {
+            !isReported -> Unit
+            listed == null -> settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
+            // A retry started after the hold was taken reads as pending, and its own event reports it.
+            listed.status == PaymentStatus.PENDING -> Unit
+            // A retry that entered Spark's send call since the hold was taken reports its own outcome.
+            listed.status == PaymentStatus.FAILED && isHeldFrom(listed) -> Unit
+            // The send's own outcome is claimed, so Spark's event for the same payment reports nothing more.
+            listed === own -> if (reportedSendIds.add(own.id)) own.toNodeEvent()?.let { _nodeEvents.emit(it) }
+            // A paid attempt is claimed, so Spark's event for the same payment reports nothing more.
+            listed.status == PaymentStatus.COMPLETED ->
+                if (reportedSendIds.add(listed.id)) listed.toNodeEvent()?.let { _nodeEvents.emit(it) }
+            // Another attempt's failure ends the send at its expiry, so it claims no payment.
+            else -> listed.toNodeEvent()?.let { _nodeEvents.emit(it) }
+        }
     }
 
     private suspend fun takeUncertainSend(

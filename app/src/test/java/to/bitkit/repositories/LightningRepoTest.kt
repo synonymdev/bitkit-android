@@ -2020,7 +2020,7 @@ class LightningRepoTest : BaseUnitTest() {
         startNodeForTesting()
         val first = async { spark.payInvoice("bolt11", 1_000uL) }
         runCurrent()
-        verify(sparkService).send(prepared)
+        verify(sparkService).send(eq(prepared), any())
         whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
 
         val retry = sut.payInvoice("bolt11", 1_000uL)

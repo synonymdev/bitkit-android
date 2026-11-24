@@ -5024,7 +5024,11 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
         whenever(sparkService.getInfo()).thenAnswer { info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()) }
-        val failed = sentPayment(fees = 0).copy(id = "some", status = PaymentStatus.FAILED, timestamp = sentAt.toULong())
+        val failed = sentPayment(fees = 0).copy(
+            id = "some",
+            status = PaymentStatus.FAILED,
+            timestamp = sentAt.toULong(),
+        )
         whenever(sparkService.listPayments()).thenReturn(listOf(failed))
         val sut = createSut(store)
         sut.start(0).getOrThrow()
