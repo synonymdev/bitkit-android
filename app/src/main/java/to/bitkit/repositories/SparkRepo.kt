@@ -179,6 +179,9 @@ class SparkRepo @Inject constructor(
     /** The invoice of each send still inside Spark's send call, by lowercase payment hash. */
     private val sendsInFlight = ConcurrentHashMap<String, String>()
 
+    /** Payment ids of failed attempts whose own details a failed write still has to save over an older row. */
+    private val unsavedOwnFailures = ConcurrentHashMap.newKeySet<String>()
+
     /** Sends taken back at start, whose outcome Spark settled while the app was closed, so none is reported again. */
     private val restoredAtStart = ConcurrentHashMap.newKeySet<String>()
 
@@ -318,6 +321,7 @@ class SparkRepo @Inject constructor(
         broadcastDeposits.clear()
         sendsRecordedWithoutFee.clear()
         unsavedPayments.clear()
+        unsavedOwnFailures.clear()
         sendsInFlight.clear()
         uncertainSends.clear()
         restoredAtStart.clear()
@@ -558,7 +562,10 @@ class SparkRepo @Inject constructor(
             val paymentHash = method.invoiceDetails.paymentHash
             val invoice = method.invoiceDetails
             val expiresAt = invoice.timestamp.safe() + invoice.expiry.safe()
-            when (val earlier = lightningSend(paymentHash)) {
+            // A caller asking for the invoice again waits for its outcome, also for a send settled while closed.
+            restoredAtStart.remove(paymentHash.lowercase())
+            val earlier = lightningSend(paymentHash)
+            when (earlier) {
                 is SparkLightningSend.Found if earlier.status == PaymentStatus.COMPLETED -> {
                     Logger.info("Skipped Spark send of '$paymentHash', already paid", context = TAG)
                     return@runSuspendCatching paymentHash
@@ -575,6 +582,10 @@ class SparkRepo @Inject constructor(
                     isFailedUnsent = canListPayments(),
                 )
             }
+            // A synced list that can't be read may hide a payment of the invoice, also one from another device.
+            if (earlier == SparkLightningSend.Unavailable && canListPayments()) {
+                throw SparkError.SendRefused("Spark could not list its payments to check the invoice")
+            }
             // A cancel, block or identity change can land while Spark prepares, so the last check runs right here.
             if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
             val isEntered = holdRestoreMutex.withLock {
@@ -585,7 +596,6 @@ class SparkRepo @Inject constructor(
             try {
                 // Spark keeps the key as this attempt's payment id, so only its own outcome settles the send.
                 val attemptId = UUID.randomUUID().toString()
-                restoredAtStart.remove(paymentHash.lowercase())
                 val sent = run {
                     sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
                     cacheStore.addSparkSendHash(paymentHash, expiresAt.toEpochSeconds())
@@ -707,12 +717,13 @@ class SparkRepo @Inject constructor(
         // Only the caller that takes the hash off settles it, so its outcome is reported once.
         if (!isSettled) return false
         if (!takeUncertainSend(paymentHash, uncertain, send)) return true
-        // A send that settled while the app was closed updates its row only, as nobody waits for it now.
+        // A send Spark settled while the app was closed updates its row only, as nobody waits for it now.
         val isReported = !restoredAtStart.remove(key)
         when (send) {
+            // A send Spark never recorded settles only at its expiry, so it is reported, as a caller may wait for it.
             SparkLightningSend.NotFound -> {
                 // A retry that entered Spark's send call since the hold was taken reports its own outcome.
-                if (isReported && !sendsInFlight.containsKey(key)) {
+                if (!sendsInFlight.containsKey(key)) {
                     _nodeEvents.emit(
                         Event.PaymentFailed(paymentHash, paymentHash, PaymentFailureReason.UNEXPECTED_ERROR)
                     )
@@ -740,10 +751,12 @@ class SparkRepo @Inject constructor(
         val listed = own?.takeIf { deciding?.status == PaymentStatus.FAILED } ?: deciding
         if (send.status == PaymentStatus.FAILED) {
             // Its row stayed pending while held, so it takes the failure now.
-            listed?.let { recordActivity(it, isOwnAttempt = it === own) }
+            // A retry that started since the hold was taken keeps its own row.
+            listed?.let { recordActivity(it, isOwnAttempt = it === own && !isHeldFrom(it)) }
         }
         when {
-            !isReported -> Unit
+            // Spark's event for the same payment, which can follow a reconnect, reports nothing either.
+            !isReported -> listed?.let { reportedSendIds.add(it.id) }
             listed == null -> settledSendEvent(paymentHash)?.let { _nodeEvents.emit(it) }
             // A retry started after the hold was taken reads as pending, and its own event reports it.
             listed.status == PaymentStatus.PENDING -> Unit
@@ -2081,7 +2094,7 @@ class SparkRepo @Inject constructor(
             holdRestoreMutex.withLock {
                 if (isFailed && isHeldFrom(payment)) return@withLock true
                 uncertainSends.remove(hash.lowercase())
-                restoredAtStart.remove(hash.lowercase())
+                if (restoredAtStart.remove(hash.lowercase())) reportedSendIds.add(payment.id)
                 cacheStore.removeSparkUncertainSend(hash)
                 if (isReleased) cacheStore.removeSparkSendHash(hash)
                 false
@@ -2110,6 +2123,7 @@ class SparkRepo @Inject constructor(
             return true
         }
         val id = lightning.htlcDetails.paymentHash
+        val isOwn = payment.status == PaymentStatus.FAILED && (isOwnAttempt || payment.id in unsavedOwnFailures)
         // A send in doubt or in Spark's send call shows as pending until Spark settles it, whatever another attempt on
         // its invoice failed with.
         if (payment.status == PaymentStatus.FAILED && !isOwnAttempt && isHeldFrom(payment)) {
@@ -2118,28 +2132,20 @@ class SparkRepo @Inject constructor(
         // A failed read would drop the stored note, contact and seen time, so the write waits for the next refresh.
         val stored = activityRepo.get().getActivity(id).getOrElse {
             unsavedPayments.add(payment.id)
+            if (isOwn) unsavedOwnFailures.add(payment.id)
             return false
         }
         val existing = (stored as? Activity.Lightning)?.v1
         // A receive sharing its hash with a channel send is a move to Spark, which Activity shows as that send;
         // the completed receive proves the send settled.
         if (payment.paymentType == SparkPaymentType.RECEIVE && existing?.txType == PaymentType.SENT) {
-            if (payment.status != PaymentStatus.COMPLETED || existing.status == PaymentState.SUCCEEDED) return true
-            val settled = Activity.Lightning(existing.copy(status = PaymentState.SUCCEEDED))
-            val saved = activityRepo.get().upsertActivity(settled)
-                .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
-            if (!saved) {
-                unsavedPayments.add(payment.id)
-                return false
-            }
-            unsavedPayments.remove(payment.id)
-            return true
+            return settleMoveToSpark(payment, existing)
         }
         // Another attempt of the same invoice, on either rail, already paid it.
         if (existing?.status == PaymentState.SUCCEEDED && payment.status != PaymentStatus.COMPLETED) return true
         // A failure, possibly an earlier attempt's, only fails the send's row, which keeps its own details.
         val failedRow = existing?.takeIf {
-            payment.status == PaymentStatus.FAILED && it.txType == PaymentType.SENT && !isOwnAttempt
+            payment.status == PaymentStatus.FAILED && it.txType == PaymentType.SENT && !isOwn
         }
         if (failedRow?.status == PaymentState.FAILED) return true
         val activity = failedRow?.copy(status = PaymentState.FAILED) ?: LightningActivity.create(
@@ -2167,14 +2173,29 @@ class SparkRepo @Inject constructor(
             .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
         if (!saved) {
             unsavedPayments.add(payment.id)
+            if (isOwn) unsavedOwnFailures.add(payment.id)
             return false
         }
         unsavedPayments.remove(payment.id)
+        unsavedOwnFailures.remove(payment.id)
         if (payment.paymentType == SparkPaymentType.SEND && payment.fees.toLong() == 0L) {
             sendsRecordedWithoutFee.add(payment.id)
         } else {
             sendsRecordedWithoutFee.remove(payment.id)
         }
+        return true
+    }
+
+    private suspend fun settleMoveToSpark(payment: Payment, send: LightningActivity): Boolean {
+        if (payment.status != PaymentStatus.COMPLETED || send.status == PaymentState.SUCCEEDED) return true
+        val settled = Activity.Lightning(send.copy(status = PaymentState.SUCCEEDED))
+        val saved = activityRepo.get().upsertActivity(settled)
+            .let { it.isSuccess || it.exceptionOrNull() is ActivityDeletedError }
+        if (!saved) {
+            unsavedPayments.add(payment.id)
+            return false
+        }
+        unsavedPayments.remove(payment.id)
         return true
     }
 
