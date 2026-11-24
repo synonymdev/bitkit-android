@@ -3,8 +3,9 @@ name: spark-regtest
 description: >
   This skill should be used when running a Bitkit dev build on Spark's regtest: building it for
   Spark, funding Savings or the Spark (Spending) balance, paying between dev builds, Move to Spark,
-  or Spark emergency exit tests. Triggers: "spark regtest", "fund spark", "spark faucet",
-  "ESPLORA_URL", "SPARK_LOCAL_CONFIG_B64", "./spark", "Lightspark regtest", "BREEZ_API_KEY".
+  or Spark emergency exit tests. Triggers: "spark regtest", "local spark", "fund spark",
+  "spark faucet", "spark deposit address", "Transfer Unavailable", "ESPLORA_URL",
+  "SPARK_LOCAL_CONFIG_B64", "./spark", "Lightspark regtest".
 version: 0.1.0
 ---
 
@@ -15,8 +16,8 @@ staging regtest (`stag0.blocktank.to`). Coins and Lightning payments never cross
 
 | | Lightspark hosted (default) | Local `./spark` (bitkit-docker) |
 | --- | --- | --- |
-| Use for | Quick checks, physical phones, two-device Spark payments | Lightning to or from an outside node, Move to Spark with a channel, emergency exits, offline E2E |
-| Lightning network | None. Builds pay each other only through Spark's provider | Alice, a Lightning node with a channel to the SSP |
+| Use for | Quick checks, physical phones, two-device Spark payments | Lightning to or from a node you control, Move to Spark with a channel, emergency exits, offline E2E |
+| Lightning | Only through Lightspark's provider; no node you control | Alice, a Lightning node with a channel to the provider |
 | Chain | Lightspark's own | bitkit-docker's local regtest (`spark-bitcoind` peers with `bitcoind`) |
 | Funding | Faucet | `./spark pay`, `./spark send` |
 | Docs | `scripts/spark-regtest-esplora.py`, `scripts/spark-regtest-fund.py` (headers) | `bitkit-docker/docs/spark-regtest.md` |
@@ -25,43 +26,47 @@ Read the named docs and script headers for details. The steps below are what is 
 
 ## Lightspark hosted regtest
 
-1. A dev build connects with no key. Without `ESPLORA_URL`, Savings stays on Blocktank's staging chain, so Spark never
-   sees a Transfer to Spending deposit and the Transfer Unavailable sheet shows.
-2. Put Savings on Spark's chain: run `python3 scripts/spark-regtest-esplora.py --port 3999` (`--bind 0.0.0.0` for a
-   phone), then build with `ESPLORA_URL=http://10.0.2.2:3999 ./gradlew assembleDevDebug` (a phone uses the host's LAN
-   IP). `ESPLORA_URL` is read from the environment, a Gradle property or `local.properties`.
+1. A dev build connects with no key. Without `ESPLORA_URL`, Savings stays on Blocktank's staging chain, so the app
+   shows the Transfer Unavailable sheet instead of Transfer to Spending (`Env.sparkSharesNodeChain`).
+2. Put Savings on Spark's chain: run `python3 scripts/spark-regtest-esplora.py --port 3999`, then build with
+   `ESPLORA_URL=http://10.0.2.2:3999 ./gradlew assembleDevDebug`.
+   - `ESPLORA_URL` has the same sources as `BREEZ_API_KEY` (environment, Gradle property, `local.properties`, keychain)
+     and applies to the dev flavor only.
+   - The proxy stops after `--max-seconds` (default 3 h). The build then loses its chain; restart the proxy.
+   - A phone: `adb reverse tcp:3999 tcp:3999` with `ESPLORA_URL=http://127.0.0.1:3999`, or `--bind 0.0.0.0` with the
+     host's LAN IP.
 3. Fund:
-   - Web faucet: https://app.lightspark.com/regtest-faucet, at most 50,000 sats per deposit. The user submits it in a
+   - Web faucet: https://app.lightspark.com/regtest-faucet, up to 50,000 sats per deposit. The user submits it in a
      browser.
    - Script: `SPARK_REGTEST_MNEMONIC=… uv run scripts/spark-regtest-fund.py <bcrt1… address> [sats]`. The mnemonic is a
      GitHub secret; ask the user, never print it.
    - Spark's deposit address is on Settings › Advanced › Lightning Connections › Spark. Fund it to fill Spending
      directly, or fund Savings to test Transfer to Spending.
-4. Lightspark mines about once a minute. A deposit is claimed after 1 confirmation.
-
-iOS has no `ESPLORA_URL`, so an iOS build on the hosted regtest can only fund Spark's deposit address directly.
+4. Lightspark mines about once a minute. Spark claims a deposit after 3 confirmations unless an Instant transfer claims
+   it early.
 
 ## Local `./spark` stack
 
-Run from a bitkit-docker checkout on `main`. The first `./spark up` builds Rust and Go images and generates operator
-keys; expect a long wait.
+Run `./spark up` from a bitkit-docker checkout on `main`. The app reads the local settings only in a debug, regtest,
+local-E2E build (`Env.localSparkSettings`), so the build needs `E2E=true` (`E2E_BACKEND` defaults to `local`). Without
+it, the build silently stays on the hosted regtest.
 
 ```bash
-./spark up
-# Android, from bitkit-android
-SPARK_LOCAL_CONFIG_B64="$(../bitkit-docker/spark config --base64)" \
+E2E=true SPARK_LOCAL_CONFIG_B64="$(../bitkit-docker/spark config --base64)" \
 SPARK_LOCAL_CHAIN_URL=http://127.0.0.1:23090/api ./gradlew assembleDevDebug
 for port in 23535 23536 23537 23049 23090 60001; do adb reverse tcp:$port tcp:$port; done
 ```
 
-- Both settings are environment variables only, read at build time. Unset, the build uses the hosted regtest.
+- `E2E=true` also points Savings at Electrum on `E2E_LOCAL_HOST:60001` (default `10.0.2.2`), bitkit-docker's chain.
+- On Android the local stack turns off Transfer to Spending and exit fees paid from Savings
+  (`Env.sparkSharesNodeChain`). Fund Spark with `./spark pay` or `./spark send` to its deposit address, and pay exit
+  funding with `./spark send`. iOS allows both when its URLs match the fixture.
+- A deposit is claimed after 1 block here.
 - Mine with `./spark mine`, not `./bitcoin-cli mine`: only `spark-bitcoind` relays Spark's v3 packages.
-- iOS reads the two settings only in a Debug regtest build that runs as E2E (`E2E_BUILD`, or launch env `E2E=true`)
-  with `E2E_BACKEND=local` (`Env.localSparkSettings`). bitkit-e2e-tests' `README.md` (Spark tests on local regtest)
-  builds both apps that way with `./scripts/local-backend spark-env`.
-- A physical phone needs `SPARK_PUBLIC_HOST=<host LAN IP> ./spark up` or `adb reverse` over USB or wireless adb.
+- A phone over adb: set `E2E_LOCAL_HOST=127.0.0.1` and keep the `adb reverse` loop. Over the LAN: start with
+  `SPARK_PUBLIC_HOST=<LAN IP> ./spark up`, and build with `E2E_LOCAL_HOST=<LAN IP>` and
+  `SPARK_LOCAL_CHAIN_URL=http://<LAN IP>:23090/api`.
+- bitkit-e2e-tests' `README.md` (Spark tests on local regtest) runs the same stack from its pinned
+  `BITKIT_DOCKER_REVISION`, not your checkout.
 
-## Mainnet builds
-
-Mainnet needs `BREEZ_API_KEY`, read from the environment, a Gradle property, `local.properties` or the macOS keychain
-item `BREEZ_API_KEY` (`README.md`, Build secrets). Regtest needs none. Never print the key.
+Regtest needs no `BREEZ_API_KEY`. For mainnet builds see `README.md`, "Breez API key".
