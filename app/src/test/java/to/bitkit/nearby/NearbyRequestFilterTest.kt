@@ -84,6 +84,14 @@ class NearbyRequestFilterTest {
     }
 
     @Test
+    fun `refuses a bitcoin uri without an address`() {
+        assertFalse(isNearbyPaymentRequest("bitcoin:"))
+        assertFalse(isNearbyPaymentRequest(" BITCOIN: "))
+        assertFalse(isNearbyPaymentRequest("bitcoin:not-an-address"))
+        assertNull(nearbyPaymentRequest("bitcoin:"))
+    }
+
+    @Test
     fun `hands over the rewritten payment request`() {
         assertEquals("lightning:$invoice", nearbyPaymentRequest(PosNfcFixtures.BIP321_URI))
         assertEquals("bitcoin:bcrt1qtest", nearbyPaymentRequest(" bitcoin:bcrt1qtest "))

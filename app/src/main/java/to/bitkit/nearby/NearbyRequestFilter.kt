@@ -37,6 +37,12 @@ internal fun isBolt11Invoice(value: String): Boolean {
     return checksum == 1
 }
 
+/** Whether a `bitcoin:` URI names an address, so the scanner can decode it instead of closing on an error. */
+private fun hasAddress(uri: String): Boolean {
+    val address = uri.removePrefix("bitcoin:").substringBefore('?')
+    return address.isNotEmpty() && address.all { it in 'a'..'z' || it in '0'..'9' }
+}
+
 /**
  * Whether [request], read from a nearby device over Bluetooth, is a payment request Bitkit serves:
  * a BIP21 `bitcoin:` URI with an address, a `lightning:` BOLT11 invoice, or a USDT `ethereum:` request.
@@ -52,10 +58,9 @@ fun isNearbyPaymentRequest(request: String): Boolean {
     return when {
         // No Bitkit flow fulfils a required (`req-`) parameter, and the decoder ignores one next to an address.
         hasRequiredParam(lowercase) -> false
-        lowercase.startsWith("bitcoin:?") -> false
         // The app decodes a unified URI's Lightning request, and decoding an LNURL contacts its server.
         // Every Lightning value is checked, since the decoder keeps the last one.
-        lowercase.startsWith("bitcoin:") -> lightningParams(lowercase).all(::isBolt11Invoice)
+        lowercase.startsWith("bitcoin:") -> hasAddress(lowercase) && lightningParams(lowercase).all(::isBolt11Invoice)
 
         lowercase.startsWith("ethereum:") -> true
         lowercase.startsWith("lightning:") -> isBolt11Invoice(lowercase.removePrefix("lightning:"))
