@@ -116,6 +116,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -4562,6 +4563,32 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertEquals(3, recoveryAttempts)
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    // Regression: a stop requested while the app went to the background wins over the recovery retry,
+    // which would otherwise cancel it and leave the node running with background payments off.
+    @Test
+    fun `restartWithElectrumServer recovery does not retry over a requested stop`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { throw busy }
+        var recoveryAttempts = 0
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                recoveryAttempts++
+                sut.stopDebounced()
+                throw busy
+            }
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(1, recoveryAttempts)
+        assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
 
     // Regression: a server that cannot work is rejected by the probe before the node is touched.

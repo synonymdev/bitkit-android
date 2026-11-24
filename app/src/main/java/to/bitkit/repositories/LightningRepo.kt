@@ -1302,9 +1302,14 @@ class LightningRepo @Inject constructor(
             var attempt = 1
             // The stopped node's VSS writes can keep retrying for minutes, past one build's wait for them.
             while (result.exceptionOrNull().isKvStoreSetupFailure() && attempt < RECOVERY_START_ATTEMPTS) {
+                // A stop requested while the app went to the background wins over the retry.
+                if (pendingStopJob.get() != null) {
+                    Logger.info("Skipped recovery start retry because a stop was requested", context = TAG)
+                    break
+                }
                 attempt++
                 Logger.warn("Retrying recovery start '$attempt/$RECOVERY_START_ATTEMPTS'", context = TAG)
-                result = start(shouldRetry = false)
+                result = startNode(shouldRetry = false, shouldCancelPendingStop = false)
             }
             result.onSuccess {
                 Logger.debug("Successfully started node with previous config", context = TAG)
