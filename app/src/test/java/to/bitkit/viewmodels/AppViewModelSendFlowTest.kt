@@ -11108,6 +11108,27 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `QuickPay falling back to review leaves a fixed invoice ready to swipe`() = test {
+        val bolt11 = "lnbcrt1fallbacktoreview"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        advanceUntilIdle()
+
+        sut.showScannerSheet()
+        sut.onScannerSheetResult(bolt11)
+        advanceUntilIdle()
+        assertNotNull(sut.quickPayData.value)
+
+        sut.fallBackFromQuickPay()
+        advanceUntilIdle()
+
+        assertNull(sut.quickPayData.value)
+        assertEquals(500uL, sut.sendUiState.value.amount)
+        assertTrue(sut.sendUiState.value.isAmountInputValid, "Swipe to Pay needs a valid amount")
+    }
+
+    @Test
     fun `lockOnBackground requires auth when PIN is enabled`() = test {
         settingsData.value = SettingsData(isPinEnabled = true)
         advanceUntilIdle()

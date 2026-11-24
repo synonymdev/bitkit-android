@@ -8347,6 +8347,18 @@ class AppViewModel @Inject constructor(
     fun resetQuickPay() = _quickPayData.update { null }
 
     /**
+     * Leaves QuickPay for the swipe review. QuickPay takes a fixed invoice before the scan validates its amount, so the
+     * amount is checked here, as the normal scan path does, or Swipe to Pay would stay disabled.
+     */
+    fun fallBackFromQuickPay() {
+        resetQuickPay()
+        viewModelScope.launch {
+            val isValid = validateAmount(_sendUiState.value.amount)
+            _sendUiState.update { it.copy(isAmountInputValid = isValid) }
+        }
+    }
+
+    /**
      * Whether the QuickPay screen may start paying [request] now: the wallet is unlocked and has not locked since
      * the scan that made the request. Otherwise whoever unlocked did not choose the payment, so it goes to review.
      */
