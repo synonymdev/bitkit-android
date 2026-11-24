@@ -80,6 +80,7 @@ import to.bitkit.data.MAX_SPARK_SEND_HASHES
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.SparkPayoutChain
+import to.bitkit.data.SparkSendAttempt
 import to.bitkit.env.Env
 import to.bitkit.ext.create
 import to.bitkit.ext.scopedActivityId
@@ -172,6 +173,9 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.success(Unit))
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.networkName).thenReturn("regtest")
+        whenever(sparkService.sendKey(any(), any())).thenAnswer {
+            "${it.getArgument<String>(0)}-${it.getArgument<Int>(1)}"
+        }
         whenever { sparkService.lightningSendStatus(any()) }.thenAnswer { sendStatus() }
         whenever { cacheStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
@@ -4337,7 +4341,8 @@ class SparkRepoTest : BaseUnitTest() {
             argThat { this is Activity.Lightning && v1.id == "hash" && v1.status == PaymentState.FAILED }
         )
         assertNull(sut.earlierLightningSend("lnbc1", "hash"))
-        whenever(sparkService.send(any(), anyOrNull())).thenReturn(sentPayment(fees = 0))
+        val sent = sentPayment(fees = 0)
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(sent)
         sut.payInvoice("lnbc1", 100uL)
         verify(sparkService, times(2)).send(any(), anyOrNull())
     }
@@ -5059,8 +5064,9 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a spark send is refused before it goes out while spark's synced list can't be read`() = test {
-        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+    fun `an older build's spark send refuses a retry while spark's synced list can't be read`() = test {
+        // An older build sent the invoice under a random key, which a retry's key can't match.
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkSendHashes = listOf("hash"))), clock)
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
@@ -5080,14 +5086,15 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a spark send is refused before spark's first sync while its list can't be read`() = test {
+    fun `an older build's spark send refuses a retry before the first sync while the list can't be read`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkSendHashes = listOf("hash"))), clock)
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
         // No wallet sync has succeeded yet, and Spark's local list can't be read either.
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = null))
         val prepared = unexpiredPrepared()
         whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
-        val sut = createSut()
+        val sut = createSut(store)
         sut.start(0).getOrThrow()
         advanceUntilIdle()
         whenever(sparkService.listPayments()).thenAnswer { throw SdkException.Generic("storage") }
@@ -5112,6 +5119,92 @@ class SparkRepoTest : BaseUnitTest() {
         assertEquals("hash", sut.payInvoice("lnbc1", 100uL).getOrThrow())
 
         verify(sparkService, never()).send(any(), anyOrNull())
+    }
+
+    @Test
+    fun `a spark send goes out under its first attempt's key while spark's list can't be read`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        // No wallet sync has succeeded yet, as right after a restore, and Spark's local list can't be read either.
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = null))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val sent = sentPayment(fees = 0)
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(sent)
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+        whenever(sparkService.listPayments()).thenAnswer { throw SdkException.Generic("storage") }
+
+        assertEquals("hash", sut.payInvoice("lnbc1", 100uL).getOrThrow())
+
+        // A payment an earlier attempt committed under this key comes back from Spark instead of paying again.
+        assertEquals("hash-0", sentKey())
+        assertEquals(0, store.data.first().sparkSendAttempts["hash"]?.attempt)
+    }
+
+    @Test
+    fun `a spark retry reuses its attempt's key until spark lists that attempt failed`() = test {
+        val kept = AppCacheData(sparkSendAttempts = mapOf("hash" to SparkSendAttempt(1, now.epochSeconds + 3_600)))
+        val store = CacheStore(InMemoryDataStore(kept), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val sent = sentPayment(fees = 0)
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(sent)
+        // The first attempt failed; the second one's outcome isn't listed.
+        val failed = sentPayment(fees = 0).copy(id = "hash-0", status = PaymentStatus.FAILED)
+        whenever(sparkService.listPayments()).thenReturn(listOf(failed))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        sut.payInvoice("lnbc1", 100uL).getOrThrow()
+
+        assertEquals("hash-1", sentKey())
+        assertEquals(1, store.data.first().sparkSendAttempts["hash"]?.attempt)
+    }
+
+    @Test
+    fun `a spark retry takes the next attempt's key once spark lists its attempt failed`() = test {
+        val kept = AppCacheData(sparkSendAttempts = mapOf("hash" to SparkSendAttempt(0, now.epochSeconds + 3_600)))
+        val store = CacheStore(InMemoryDataStore(kept), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val sent = sentPayment(fees = 0)
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(sent)
+        val failed = sentPayment(fees = 0).copy(id = "hash-0", status = PaymentStatus.FAILED)
+        whenever(sparkService.listPayments()).thenReturn(listOf(failed))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        sut.payInvoice("lnbc1", 100uL).getOrThrow()
+
+        // A failed key can't send again, so the retry takes a new one.
+        assertEquals("hash-1", sentKey())
+        assertEquals(1, store.data.first().sparkSendAttempts["hash"]?.attempt)
+    }
+
+    @Test
+    fun `a short balance under a reused spark key keeps the send held`() = test {
+        val kept = AppCacheData(sparkSendAttempts = mapOf("hash" to SparkSendAttempt(0, now.epochSeconds + 3_600)))
+        val store = CacheStore(InMemoryDataStore(kept), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        // Spark picks leaves before the operators see the key, so the earlier attempt's transfer can't come back.
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw SdkException.InsufficientFunds(null) }
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        assertEquals("hash-0", sentKey())
+        assertTrue("hash" in store.data.first().sparkSendHashes, "the node could pay the invoice again")
+        assertTrue("hash" in store.data.first().sparkUncertainSends)
     }
 
     @Test

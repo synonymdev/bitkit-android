@@ -2143,6 +2143,7 @@ class LightningRepoTest : BaseUnitTest() {
         val sparkService = mock<SparkService>()
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.sendKey(any(), any())).thenReturn("key")
         val details = mock<Bolt11InvoiceDetails> { on { paymentHash } doReturn "hash" }
         val prepared = PrepareSendPaymentResponse(
             paymentMethod = SendPaymentMethod.Bolt11Invoice(details, null, 1uL),
