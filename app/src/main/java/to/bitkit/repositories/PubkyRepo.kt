@@ -545,9 +545,7 @@ class PubkyRepo @Inject constructor(
                 if (notifyFailure && it.isPaykitIdentityError() && hasSavedSession()) {
                     _sessionRestorationFailed.update { true }
                 }
-                if (notifyFailure && it.isPaykitStateFromNewerVersion()) {
-                    _sessionRestorationNeedsUpdate.update { true }
-                }
+                if (it.isPaykitStateFromNewerVersion()) _sessionRestorationNeedsUpdate.update { true }
             }.getOrElse { return false }
 
             if (notifyFailure) _sessionRestorationFailed.update { false }
@@ -581,10 +579,8 @@ class PubkyRepo @Inject constructor(
                         clearRestorationFailure = notifyFailure,
                         preserveStoredIdentity = true,
                     )
-                    if (notifyFailure) {
-                        _sessionRestorationFailed.update { result == InitResult.RestorationFailed }
-                        _sessionRestorationNeedsUpdate.update { result == InitResult.RestorationNeedsUpdate }
-                    }
+                    if (notifyFailure) _sessionRestorationFailed.update { result == InitResult.RestorationFailed }
+                    if (result == InitResult.RestorationNeedsUpdate) _sessionRestorationNeedsUpdate.update { true }
                 }
             }
             deferredRestoreGeneration = signInGeneration.get().takeIf { result == InitResult.RestorationDeferred }

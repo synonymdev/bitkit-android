@@ -3700,6 +3700,22 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `deferred restoration asks for an update when it finds newer paykit state`() = test {
+        val restore = stubSavedSessionRestore()
+        restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+        sut.initialize()
+        restore.answer = {
+            throw PaykitException.Storage("storage_error", "unsupported SDK state blob version 6, expected 4")
+        }
+
+        sut.retryDeferredSessionRestoration()
+
+        assertTrue(sut.sessionRestorationNeedsUpdate.value)
+        assertFalse(sut.sessionRestorationFailed.value)
+        assertNull(sut.publicKey.value)
+    }
+
+    @Test
     fun `deferred restoration shares in-flight work with foreground callers`() = test {
         val restore = stubSavedSessionRestore()
         restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
