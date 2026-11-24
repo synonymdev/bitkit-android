@@ -111,7 +111,6 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.UrlValidator
-import to.bitkit.utils.isStoppedAtSubmission
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -1784,11 +1783,8 @@ class LightningRepo @Inject constructor(
         }
         try {
             ldkSendsInFlight += key
-            val record = ldkSendRecords.incrementAndGet()
-            val previousRecord = ldkSendRecordedAt.put(key, record)
-            val wasHashKept = key in cacheStore.data.first().ldkSendHashes
-            val expiresAt = invoiceExpiresAt(bolt11)
-            cacheStore.addLdkSendHash(key, expiresAt)
+            ldkSendRecordedAt[key] = ldkSendRecords.incrementAndGet()
+            cacheStore.addLdkSendHash(key, invoiceExpiresAt(bolt11))
             runCatching {
                 if (isAuthorizedAtSubmission == null) {
                     lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat)
@@ -1804,11 +1800,6 @@ class LightningRepo @Inject constructor(
             }
                 .also { ldkSendsInFlight -= key }
                 .onSuccess { recordSendRail(it, LightningRail.Ldk) }
-                .onFailure {
-                    if (it.isStoppedAtSubmission()) {
-                        forgetStoppedSend(key, record, previousRecord, wasHashKept, expiresAt)
-                    }
-                }
                 .also { syncState() }
         } finally {
             releaseSend(key)
@@ -1820,28 +1811,6 @@ class LightningRepo @Inject constructor(
      * goes out: refused while the other rail holds one, or Spark does, as it doesn't refuse a repeat, or
      * [isSentSinceChecks] says a send was recorded since the checks. The node refuses its own repeats.
      */
-    /**
-     * Takes back what a node send of [key] stopped before submission recorded, so a later payment of the invoice is
-     * not refused as an earlier node send. Only this attempt's own records go: the record and kept hash of an earlier
-     * send of the invoice stay, and so does the hash of one that started meanwhile.
-     */
-    private suspend fun forgetStoppedSend(
-        key: String,
-        record: Long,
-        previousRecord: Long?,
-        wasHashKept: Boolean,
-        expiresAt: Long?,
-    ) {
-        if (previousRecord != null) {
-            ldkSendRecordedAt.replace(key, record, previousRecord)
-            return
-        }
-        val isOnlyNodeSend = synchronized(admittedSends) { admittedSends[key]?.second == 1 }
-        if (wasHashKept || !isOnlyNodeSend || !ldkSendRecordedAt.remove(key, record)) return
-        cacheStore.removeLdkSendHash(key)
-        if (ldkSendRecordedAt.containsKey(key)) cacheStore.addLdkSendHash(key, expiresAt)
-    }
-
     private fun admitSend(key: String, rail: LightningRail, isSentSinceChecks: () -> Boolean): Boolean =
         synchronized(admittedSends) {
             val held = admittedSends[key]
