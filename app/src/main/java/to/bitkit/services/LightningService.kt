@@ -200,6 +200,10 @@ internal suspend fun buildAcceptingPaykitServerAccounts(config: Config, build: s
         throw LdkError(e)
     }
 
+/** Whether ldk-node rejected a Paykit Server account's xpub for this seed, which no retry can fix. */
+internal fun Throwable.isRejectedPaykitServerAccount(): Boolean =
+    generateSequence(this) { it.cause }.any { it is NodeException.InvalidSeedBytes }
+
 internal fun LdkAddressType.toBitkitAddressType(): AddressType = when (this) {
     LdkAddressType.LEGACY -> AddressType.P2PKH
     LdkAddressType.NESTED_SEGWIT -> AddressType.P2SH
@@ -561,8 +565,8 @@ class LightningService internal constructor(
                     }
                 }
 
-                // One account the node rejects must not keep the others from loading; the first failure is
-                // rethrown below so the reconciliation is retried.
+                // One account the node rejects must not keep the others from loading. A transient failure is rethrown
+                // ahead of a rejected xpub so the caller retries it.
                 val failures = desiredConfigs.mapNotNull { config ->
                     runSuspendCatching {
                         val isTracked = trackedAccounts.any {
@@ -580,7 +584,8 @@ class LightningService internal constructor(
                         Logger.error("Failed to load Paykit Server account ${config.accountIndex}", it, context = TAG)
                     }
                 }
-                failures.firstOrNull()?.let { throw it }
+                val retryable = failures.firstOrNull { !it.isRejectedPaykitServerAccount() }
+                (retryable ?: failures.firstOrNull())?.let { throw it }
 
                 if (syncAfterReconcile && desiredConfigs.isNotEmpty() && node.status().isRunning) {
                     node.syncWallets()
@@ -746,9 +751,12 @@ class LightningService internal constructor(
     suspend fun sync() {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        // A Paykit Server account the node rejects must not stop the wallet from syncing; the next sync retries it.
-        runSuspendCatching { reconcileWatchOnlyAccounts(syncAfterReconcile = false) }
+        // A Paykit Server account that fails to load must not stop the wallet from syncing. A transient failure is
+        // rethrown after the sync so the caller's retry loop runs it again; an xpub the node rejects
+        // (`InvalidSeedBytes`) stays rejected, so retrying it would only repeat full syncs.
+        val reconcileFailure = runSuspendCatching { reconcileWatchOnlyAccounts(syncAfterReconcile = false) }
             .onFailure { Logger.error("Failed to reconcile Paykit Server accounts before sync", it, context = TAG) }
+            .exceptionOrNull()
 
         Logger.verbose("Syncing LDK…", context = TAG)
         ServiceQueue.LDK.background(ldkQueue) {
@@ -758,6 +766,7 @@ class LightningService internal constructor(
         _syncStatusChanged.tryEmit(Unit)
 
         Logger.debug("LDK synced", context = TAG)
+        reconcileFailure?.takeUnless { it.isRejectedPaykitServerAccount() }?.let { throw it }
     }
 
     suspend fun sign(message: String): String {

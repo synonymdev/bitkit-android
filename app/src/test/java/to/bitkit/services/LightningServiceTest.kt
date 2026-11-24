@@ -90,6 +90,7 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PreparedOnchainSend
 import to.bitkit.repositories.PreparedOnchainSendRefused
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
@@ -1277,6 +1278,23 @@ class LightningServiceTest : BaseUnitTest() {
 
         sut.sync()
 
+        verify(node, times(1)).syncWallets()
+    }
+
+    @Test
+    fun `wallet sync reports a transient account failure after syncing so it is retried`() = test {
+        val account = watchOnlyAccount(accountIndex = 1, walletIndex = 0, enabled = true)
+        whenever(watchOnlyAccountStore.loadReconciliationState()).thenReturn(
+            WatchOnlyAccountReconciliationState(listOf(account), emptyList()),
+        )
+        whenever(node.listOnchainWalletAccounts()).thenReturn(emptyList())
+        whenever(node.onchainPayment()).thenReturn(mock<OnchainPayment>())
+        doThrow(NodeException.PersistenceFailed("vss write failed"))
+            .whenever(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
+
+        val error = assertFailsWith<AppError> { sut.sync() }
+
+        assertTrue(error.cause is NodeException.PersistenceFailed)
         verify(node, times(1)).syncWallets()
     }
 
