@@ -108,6 +108,7 @@ import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.services.SparkError
 import to.bitkit.utils.AppError
+import to.bitkit.utils.LdkError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.UrlValidator
@@ -1297,7 +1298,15 @@ class LightningRepo @Inject constructor(
 
             Logger.debug("Starting node with previous config for recovery", context = TAG)
 
-            start(shouldRetry = false).onSuccess {
+            var result = start(shouldRetry = false)
+            var attempt = 1
+            // The stopped node's VSS writes can keep retrying for minutes, past one build's wait for them.
+            while (result.exceptionOrNull().isKvStoreSetupFailure() && attempt < RECOVERY_START_ATTEMPTS) {
+                attempt++
+                Logger.warn("Retrying recovery start '$attempt/$RECOVERY_START_ATTEMPTS'", context = TAG)
+                result = start(shouldRetry = false)
+            }
+            result.onSuccess {
                 Logger.debug("Successfully started node with previous config", context = TAG)
             }.onFailure {
                 Logger.error("Failed starting node with previous config", it, context = TAG)
@@ -3264,6 +3273,9 @@ class LightningRepo @Inject constructor(
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private const val MSATS_PER_SAT = 1_000uL
 
+        /** Recovery starts while a stopped node's VSS writes keep the store busy; each build waits up to 60 s. */
+        private const val RECOVERY_START_ATTEMPTS = 5
+
         /** LDK's default routing fee limit is 1% of the amount, this divisor, plus [DEFAULT_ROUTING_FEE_BASE_MSAT]. */
         private const val DEFAULT_ROUTING_FEE_DIVISOR = 100uL
 
@@ -3488,3 +3500,6 @@ sealed interface EarlierSend {
 /** Spark invoices hold whole sats, so an exact msat amount the channels can't receive has nowhere to go. */
 class SubSatAmountUnsupportedError(amountMsats: ULong) :
     AppError("Spark can only receive whole sats, not '$amountMsats' msat, and the channels can't receive it")
+
+private fun Throwable?.isKvStoreSetupFailure() =
+    generateSequence(this) { it.cause }.any { (it as? LdkError)?.isKvStoreSetupFailed == true }
