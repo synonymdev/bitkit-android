@@ -663,6 +663,7 @@ class AppViewModel @Inject constructor(
      * Bumped each time the wallet locks (the background lock, a PIN reset or the setter), so a scan that was
      * already preparing can tell it crossed a lock.
      */
+    @Volatile
     private var lockGeneration = 0L
 
     /** [lockGeneration] when the scan now holding [scanMutex] started, or null outside a scan. */

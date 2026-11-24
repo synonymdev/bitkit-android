@@ -1148,6 +1148,26 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `authorization lapsing before dispatch falls back to review and releases`() = test {
+        val (bolt11, _) = testInvoice()
+        val proceeded = CompletableDeferred<Boolean>()
+        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
+            val ok = invocation.getArgument<suspend () -> Boolean>(2)()
+            proceeded.complete(ok)
+            if (!ok) Result.failure(PaymentAbortedBeforeSend()) else Result.success("pid")
+        }
+        val session = QuickPaySession()
+        sut.attach(session).test {
+            // The wallet locked while the invoice was being prepared.
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u), canDispatch = { false })
+            assertEquals(false, proceeded.await())
+            assertEquals(QuickPaySessionEvent.FallBackToConfirm, awaitItem())
+        }
+        assertEquals(0L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+    }
+
+    @Test
     fun `ambiguous failure before dispatch refunds and errors`() = test {
         val (bolt11, _) = testInvoice()
         whenever(lightningRepo.payInvoice(any(), anyOrNull(), any()))

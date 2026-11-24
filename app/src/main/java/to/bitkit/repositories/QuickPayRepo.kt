@@ -128,8 +128,13 @@ class QuickPayRepo @Inject constructor(
         unackedFailures.remove(session.id)
     }
 
-    fun pay(session: QuickPaySession, request: QuickPayPayRequest) {
-        scope.launch { payNow(session, request) }
+    /**
+     * Pays [request] for [session]. [canDispatch] is checked right before the payment is first submitted; when it is
+     * false (for example the wallet locked while the invoice was prepared), nothing is sent and the session falls back
+     * to the swipe review. A payment already submitted keeps being tracked.
+     */
+    fun pay(session: QuickPaySession, request: QuickPayPayRequest, canDispatch: () -> Boolean = { true }) {
+        scope.launch { payNow(session, request, canDispatch) }
     }
 
     suspend fun canApply(amountSats: ULong): Result<Boolean> = withContext(ioDispatcher) {
@@ -269,7 +274,11 @@ class QuickPayRepo @Inject constructor(
         mutex.withLock { reconcileLocked(rows) }
     }
 
-    internal suspend fun payNow(session: QuickPaySession, request: QuickPayPayRequest) {
+    internal suspend fun payNow(
+        session: QuickPaySession,
+        request: QuickPayPayRequest,
+        canDispatch: () -> Boolean = { true },
+    ) {
         val invoice = resolveInvoice(session, request) ?: return
         val invoiceHash = invoiceHashOrEmit(session, invoice) ?: return
         when (preparePay(session, invoice, invoiceHash)) {
@@ -277,7 +286,7 @@ class QuickPayRepo @Inject constructor(
             PreparePayResult.REJECTED -> return
             PreparePayResult.RECOVERED -> settleRecovered(invoiceHash)
             PreparePayResult.FRESH -> {
-                dispatchBolt11(invoice, invoiceHash)
+                dispatchBolt11(invoice, invoiceHash, canDispatch)
                 awaitCompletionOrPending(invoiceHash)
             }
         }
@@ -390,13 +399,32 @@ class QuickPayRepo @Inject constructor(
         }
     }
 
-    private suspend fun dispatchBolt11(invoice: ResolvedInvoice, invoiceHash: String) {
+    private suspend fun dispatchBolt11(invoice: ResolvedInvoice, invoiceHash: String, canDispatch: () -> Boolean) {
+        var isAuthorizationLapsed = false
         lightningRepo.payInvoice(bolt11 = invoice.bolt11, sats = null) {
-            tryMarkDispatched(invoiceHash)
+            isAuthorizationLapsed = !canDispatch()
+            !isAuthorizationLapsed && tryMarkDispatched(invoiceHash)
         }.fold(
             onSuccess = { onInvoiceAccepted(invoiceHash, it) },
-            onFailure = { onInvoiceRejected(invoiceHash, invoice.bolt11, it) },
+            onFailure = {
+                if (isAuthorizationLapsed) {
+                    fallBackBeforeDispatch(invoiceHash)
+                } else {
+                    onInvoiceRejected(invoiceHash, invoice.bolt11, it)
+                }
+            },
         )
+    }
+
+    /** Releases a payment that was never submitted and sends its session to the swipe review. */
+    private suspend fun fallBackBeforeDispatch(invoiceHash: String) {
+        mutex.withLock {
+            val current = opsByKey[invoiceHash]
+            if (current == null || current.dispatched) return@withLock
+            spend.release(invoiceHash)
+            removeOpLocked(current)
+            emitToSession(current.sessionId, QuickPaySessionEvent.FallBackToConfirm)
+        }
     }
 
     private suspend fun tryMarkDispatched(invoiceHash: String): Boolean = mutex.withLock {

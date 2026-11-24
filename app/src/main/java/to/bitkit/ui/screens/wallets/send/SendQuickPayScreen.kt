@@ -67,8 +67,9 @@ fun SendQuickPayScreen(
     )
     LaunchedEffect(quickPayData, canPay, isRequestActive) {
         if (isRequestActive && canPay) {
-            // Checked where the payment starts: navigation and waiting for funds can outlast a wallet lock.
-            if (canStart()) viewModel.pay(session, quickPayData) else onFallBackToConfirm()
+            // Checked where the payment starts and again at its first submission: navigation, waiting for funds and
+            // preparing the invoice can all outlast a wallet lock.
+            if (canStart()) viewModel.pay(session, quickPayData, canDispatch = canStart) else onFallBackToConfirm()
         }
     }
 
