@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import androidx.datastore.core.DataStore
 import app.cash.turbine.test
 import breez_sdk_spark.Bolt11InvoiceDetails
 import breez_sdk_spark.FeePolicy
@@ -25,6 +26,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -110,6 +112,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.UrlValidator
+import java.io.IOException
 import java.math.BigInteger
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
@@ -1604,6 +1607,31 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a node send of an invoice that ends keeps the hold of another node send of it still under way`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        // The first node send waits in the node's queue, unlisted; the second fails before it is submitted.
+        val queued = CompletableDeferred<String>()
+        var sends = 0
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            if (sends++ == 0) queued.await() else throw ServiceError.NodeNotStarted()
+        }
+        val first = launch { sut.payInvoiceWithNode("h") }
+        runCurrent()
+        assertTrue(sut.payInvoiceWithNode("h").isFailure)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+
+        sut.payInvoice("h", 1_000uL)
+
+        assertEquals(listOf("h"), store.data.first().ldkSendHashes, "an ended node send released a queued one's hold")
+        queued.complete("h")
+        first.join()
+    }
+
+    @Test
     fun `a node send of an invoice spark admitted is refused at submission`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
         sut = repoWith(store)
@@ -1861,6 +1889,62 @@ class LightningRepoTest : BaseUnitTest() {
         runCurrent()
 
         assertTrue(events.none { it is Event.PaymentFailed }, "an older node failure failed the Spark retry")
+    }
+
+    @Test
+    fun `a node send whose hash write fails releases its in-flight count`() = test {
+        sut = repoWith(CacheStore(failingOnceOnLdkHash("h")))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+
+        assertTrue(runCatching { sut.payInvoiceWithNode("h").getOrThrow() }.isFailure)
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("h"))
+
+        val result = sut.payInvoice("h", 1_000uL)
+
+        assertFalse(result.exceptionOrNull() is PaymentPendingException, "a node send that never left held the invoice")
+        verify(sparkRepo).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a failed hash write's in-flight count is released by the next node send of the invoice`() = test {
+        sut = repoWith(CacheStore(failingOnceOnLdkHash("h")))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenAnswer { throw AppError("Route not found") }
+
+        assertTrue(runCatching { sut.payInvoiceWithNode("h").getOrThrow() }.isFailure)
+        // The node retries and fails before anything leaves.
+        assertTrue(sut.payInvoiceWithNode("h").isFailure)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("h"))
+
+        val result = sut.payInvoice("h", 1_000uL)
+
+        assertFalse(result.exceptionOrNull() is PaymentPendingException, "a node send that never left held the invoice")
+        verify(sparkRepo).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    private fun failingOnceOnLdkHash(hash: String): DataStore<AppCacheData> = object : DataStore<AppCacheData> {
+        private val inner = InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true))
+        private var isArmed = true
+        override val data: Flow<AppCacheData> = inner.data
+        override suspend fun updateData(transform: suspend (t: AppCacheData) -> AppCacheData) =
+            inner.updateData { current ->
+                transform(current).also {
+                    if (isArmed && hash in it.ldkSendHashes && hash !in current.ldkSendHashes) {
+                        isArmed = false
+                        throw IOException("disk full")
+                    }
+                }
+            }
     }
 
     private fun nodeSend(hash: String, status: PaymentStatus) = PaymentDetails(
