@@ -1,11 +1,16 @@
 package to.bitkit.repositories
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Test
 import org.lightningdevkit.ldknode.AddressType
 import org.lightningdevkit.ldknode.Node
@@ -19,6 +24,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.async.ServiceQueue
 import to.bitkit.data.WatchOnlyAccountAllocationState
 import to.bitkit.data.WatchOnlyAccountData
 import to.bitkit.data.WatchOnlyAccountStore
@@ -556,6 +562,45 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `begin authorization without a node does not wait for the busy LDK queue`() = test {
+        val account = account().copy(isTrackingEnabled = false, setupState = WatchOnlyAccountSetupState.PendingDelivery)
+        var storedAccounts = listOf(account)
+        val store = mock<WatchOnlyAccountStore>()
+        val lightningService = mock<LightningService>()
+        whenever(store.data).thenReturn(flowOf(WatchOnlyAccountData(accounts = storedAccounts)))
+        whenever(store.load()).thenAnswer { storedAccounts }
+        whenever(store.update(any())).thenAnswer {
+            val transform = it.getArgument<(List<WatchOnlyAccountRecord>) -> List<WatchOnlyAccountRecord>>(0)
+            storedAccounts = transform(storedAccounts)
+            Unit
+        }
+        whenever(lightningService.node).thenReturn(null)
+        val sut = repository(store, lightningService)
+        val buildRunning = CompletableDeferred<Unit>()
+        val releaseBuild = CompletableDeferred<Unit>()
+        val build = launch(Dispatchers.Default) {
+            ServiceQueue.LDK.background {
+                buildRunning.complete(Unit)
+                runBlocking { releaseBuild.await() }
+            }
+        }
+
+        val finishedWhileQueueBusy = withContext(Dispatchers.Default) {
+            buildRunning.await()
+            val authorization = async { sut.beginAuthorization(account.id) }
+            val finished = withTimeoutOrNull(LDK_QUEUE_WAIT_BOUND_MS) { authorization.await() } != null
+            releaseBuild.complete(Unit)
+            authorization.await()
+            finished
+        }
+        build.join()
+
+        assertTrue(finishedWhileQueueBusy)
+        assertTrue(storedAccounts.single().isTrackingEnabled)
+        assertEquals(WatchOnlyAccountSetupState.Authorizing, storedAccounts.single().setupState)
+    }
+
+    @Test
     fun `cancel without a node resets the store for the next node start`() = test {
         val account = account().copy(setupState = WatchOnlyAccountSetupState.Authorizing)
         var storedAccounts = listOf(account)
@@ -684,6 +729,7 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
     )
 
     private companion object {
+        const val LDK_QUEUE_WAIT_BOUND_MS = 2_000L
         const val RESTORED_AUTH_URL =
             "pubkyauth://signin?relay=https%3A%2F%2Frelay.example&secret=backup&" +
                 "caps=%2Fpub%2Fpaykit%2Fv0%2Fbitkit%2Fserver%2F%3Arw&x-bitkit-claim=watch-only-account-v1"

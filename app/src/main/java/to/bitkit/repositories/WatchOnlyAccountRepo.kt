@@ -232,8 +232,19 @@ class WatchOnlyAccountRepo @Inject constructor(
      * Applies [enabled] to the running node. Without a node (stopped, or being rebuilt after the app returned to the
      * foreground) only the store changes: the next build loads tracked accounts from it, and
      * [LightningService.reconcileWatchOnlyAccounts] on start adds or removes any account the build missed.
+     *
+     * The node is checked before queueing because a rebuild holds the LDK queue for the whole build while the node is
+     * still null; checking only inside the queue would make the approval wait for the build.
      */
     private suspend fun setAccountTracking(
+        account: WatchOnlyAccountRecord,
+        enabled: Boolean,
+    ) {
+        if (lightningService.node == null) return
+        applyAccountTracking(account, enabled)
+    }
+
+    private suspend fun applyAccountTracking(
         account: WatchOnlyAccountRecord,
         enabled: Boolean,
     ) = ServiceQueue.LDK.background {
