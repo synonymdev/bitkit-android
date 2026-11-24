@@ -60,8 +60,8 @@ for port in 23535 23536 23537 23049 23090 60001; do adb reverse tcp:$port tcp:$p
 - `E2E=true` also points Savings at Electrum on `E2E_LOCAL_HOST:60001` (default `10.0.2.2`), bitkit-docker's chain.
   `ESPLORA_URL=` blanks a hosted proxy URL saved in another source, which Savings would otherwise use instead.
 - On Android the local stack turns off Transfer to Spending and exit fees paid from Savings
-  (`Env.sparkSharesNodeChain`). Fund Spark with `./spark pay` or `./spark send` to its deposit address, and pay exit
-  funding with `./spark send`. iOS allows both when its URLs match the fixture.
+  (`Env.sparkSharesNodeChain`). Fund Spark with `./spark send <deposit address> <sats>` or
+  `./spark pay <Spending invoice> [sats]`, and pay exit funding with `./spark send`. iOS allows both when its URLs match the fixture.
 - A deposit is claimed after 1 block here.
 - Mine with `./spark mine`, not `./bitcoin-cli mine`: only `spark-bitcoind` relays Spark's v3 packages.
 - A phone over adb: set `E2E_LOCAL_HOST=127.0.0.1` and keep the `adb reverse` loop. Over the LAN: start with
