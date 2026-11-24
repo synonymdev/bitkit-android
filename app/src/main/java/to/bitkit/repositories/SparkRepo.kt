@@ -586,10 +586,17 @@ class SparkRepo @Inject constructor(
             }
             // A list that can't be read may hide a payment of the invoice, which Spark would pay again under a new
             // key. Before Spark's first sync its local list is read here, as the synced one was above.
-            if (earlier == SparkLightningSend.Unavailable &&
-                (canListPayments() || runSuspendCatching { listPayments() }.isFailure)
-            ) {
-                throw SparkError.SendRefused("Spark could not list its payments to check the invoice")
+            if (earlier == SparkLightningSend.Unavailable) {
+                val local = (if (canListPayments()) null else runSuspendCatching { listPayments() }.getOrNull())
+                    ?: throw SparkError.SendRefused("Spark could not list its payments to check the invoice")
+                when (local.latestSend(paymentHash)?.status) {
+                    PaymentStatus.COMPLETED -> {
+                        Logger.info("Skipped Spark send of '$paymentHash', already paid", context = TAG)
+                        return@runSuspendCatching paymentHash
+                    }
+                    PaymentStatus.PENDING -> throw PaymentPendingException(paymentHash)
+                    else -> Unit
+                }
             }
             // A cancel, block or identity change can land while Spark prepares, so the last check runs right here.
             if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
@@ -721,10 +728,11 @@ class SparkRepo @Inject constructor(
         }
         // Only the caller that takes the hash off settles it, so its outcome is reported once.
         if (!isSettled) return false
-        if (!takeUncertainSend(paymentHash, uncertain, send)) return true
         // A send Spark settled while the app was closed updates its row only, as nobody waits for it now. Its marker
-        // stays until its payment is claimed, so Spark's event for it meanwhile claims it too.
+        // stays until its payment is claimed, so Spark's event for it meanwhile claims it too. It is read before the
+        // hold is taken, as that event can remove it right after.
         val isReported = key !in restoredAtStart
+        if (!takeUncertainSend(paymentHash, uncertain, send)) return true
         when (send) {
             // A send Spark never recorded settles only at its expiry, so it is reported, as a caller may wait for it.
             SparkLightningSend.NotFound -> {
@@ -1479,8 +1487,13 @@ class SparkRepo @Inject constructor(
             ).withBroadcastDeposits()
         }
         markClaimedDeposits(claimed)
+        // An own failure a write didn't save before a restart is kept in the cache, not in this process's list.
+        val unsavedOwnFailures = cacheStore.data.first().sparkUnsavedOwnFailures
         payments.decidingRows()
-            .filter { it.id in unsavedPayments || (it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0) }
+            .filter {
+                it.id in unsavedPayments || it.id in unsavedOwnFailures ||
+                    (it.id in sendsRecordedWithoutFee && it.fees.toLong() > 0)
+            }
             .forEach { recordActivity(it) }
         // Off the refresh, so a slow Electrum server never holds a send that waits for it.
         scope.launch { confirmMinedPayouts(payments) }

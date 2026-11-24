@@ -5095,6 +5095,23 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send before spark's first sync skips an invoice its local list shows paid`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = null))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.listPayments()).thenReturn(listOf(sentPayment(fees = 0)))
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertEquals("hash", sut.payInvoice("lnbc1", 100uL).getOrThrow())
+
+        verify(sparkService, never()).send(any(), anyOrNull())
+    }
+
+    @Test
     fun `a held spark send spark never recorded reports its failure at expiry after a restart`() = test {
         val sentAt = now.epochSeconds
         // The app saved the hold, then died before Spark recorded the send.

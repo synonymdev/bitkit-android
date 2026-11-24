@@ -1604,6 +1604,31 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a node send of an invoice that ends keeps the hold of another node send of it still under way`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        // The first node send waits in the node's queue, unlisted; the second fails before it is submitted.
+        val queued = CompletableDeferred<String>()
+        var sends = 0
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            if (sends++ == 0) queued.await() else throw ServiceError.NodeNotStarted()
+        }
+        val first = launch { sut.payInvoiceWithNode("h") }
+        runCurrent()
+        assertTrue(sut.payInvoiceWithNode("h").isFailure)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+
+        sut.payInvoice("h", 1_000uL)
+
+        assertEquals(listOf("h"), store.data.first().ldkSendHashes, "an ended node send released a queued one's hold")
+        queued.complete("h")
+        first.join()
+    }
+
+    @Test
     fun `a node send of an invoice spark admitted is refused at submission`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
         sut = repoWith(store)
