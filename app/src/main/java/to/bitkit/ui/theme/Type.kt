@@ -21,26 +21,29 @@ val DamionFontFamily = FontFamily(
     Font(R.font.damion_regular, FontWeight.Normal),
 )
 
-val Typography = Typography(
-    // Default Text:
-    bodyLarge = TextStyle(
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        letterSpacing = 0.4.sp,
-    ),
-    bodyMedium = TextStyle(
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 14.sp,
-    ),
-    bodySmall = TextStyle(
-        fontFamily = InterFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 12.sp,
-    ),
-    labelLarge = AppTextStyles.BodySSB, // Buttons Text
-)
+// Lazy, so loading AppTextStyles first, which reads InterFontFamily here, never reads its BodySSB before it is set.
+val Typography by lazy {
+    Typography(
+        // Default Text:
+        bodyLarge = TextStyle(
+            fontFamily = InterFontFamily,
+            fontWeight = FontWeight.Normal,
+            fontSize = 16.sp,
+            letterSpacing = 0.4.sp,
+        ),
+        bodyMedium = TextStyle(
+            fontFamily = InterFontFamily,
+            fontWeight = FontWeight.Normal,
+            fontSize = 14.sp,
+        ),
+        bodySmall = TextStyle(
+            fontFamily = InterFontFamily,
+            fontWeight = FontWeight.Normal,
+            fontSize = 12.sp,
+        ),
+        labelLarge = AppTextStyles.BodySSB, // Buttons Text
+    )
+}
 
 object AppTextStyles {
     val Display = TextStyle(

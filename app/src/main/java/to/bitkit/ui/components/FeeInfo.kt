@@ -11,7 +11,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import to.bitkit.repositories.shownUnit
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.theme.Colors
 
 @Composable
@@ -21,12 +24,13 @@ fun RowScope.FeeInfo(
     modifier: Modifier = Modifier,
     prefix: String? = null,
     isLoading: Boolean = false,
+    topPadding: Dp = 16.dp,
 ) {
     Column(
         modifier = modifier
             .fillMaxHeight()
             .weight(1f)
-            .padding(top = 16.dp)
+            .padding(top = topPadding)
     ) {
         Caption13Up(
             text = label,
@@ -43,7 +47,7 @@ fun RowScope.FeeInfo(
                         .size(16.dp),
                 )
             } else {
-                MoneySSB(sats = amount, showSymbol = true)
+                MoneySSB(sats = amount, unit = LocalCurrencies.current.shownUnit, showSymbol = true)
             }
         }
         Spacer(modifier = Modifier.weight(1f))

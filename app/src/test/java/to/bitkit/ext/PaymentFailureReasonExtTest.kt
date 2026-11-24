@@ -9,6 +9,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.models.SendFailureDetails
+import to.bitkit.repositories.MoveToSparkError
 import to.bitkit.services.SparkError
 import to.bitkit.utils.LdkError
 import kotlin.test.assertEquals
@@ -69,6 +70,14 @@ class PaymentFailureReasonExtTest {
 
         assertEquals(message, refused.toSendFailureMessage(context))
         assertEquals(message, SdkException.Generic("insufficient funds").toSendFailureMessage(context))
+    }
+
+    @Test
+    fun `a failed spending balance update shows the existing payment failure copy`() {
+        val message = "Generic payment failed"
+        whenever(context.getString(R.string.wallet__payment_failed_description)).thenReturn(message)
+
+        assertEquals(message, MoveToSparkError.UpdateFallsShort(50_000uL).toSendFailureMessage(context))
     }
 
     @Test

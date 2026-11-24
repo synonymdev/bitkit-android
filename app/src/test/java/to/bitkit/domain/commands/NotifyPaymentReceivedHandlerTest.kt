@@ -71,6 +71,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
+        whenever { moveToSparkRepo.isMovePayment(any()) }.thenReturn(false)
         whenever(context.getString(R.string.notification__received__title)).thenReturn("Payment Received")
         whenever(context.getString(any(), any())).thenReturn("Received amount")
         whenever(settingsStore.data).thenReturn(settingsData)

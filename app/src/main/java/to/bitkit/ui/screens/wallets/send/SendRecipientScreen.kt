@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Context
 import android.net.Uri
 import android.os.Build
-import android.view.View.LAYER_TYPE_HARDWARE
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -117,11 +116,7 @@ fun SendRecipientScreen(
     // Camera state
     var isFlashlightOn by remember { mutableStateOf(false) }
     var isCameraInitialized by remember { mutableStateOf(false) }
-    val previewView = remember {
-        PreviewView(context).apply {
-            setLayerType(LAYER_TYPE_HARDWARE, null)
-        }
-    }
+    val previewView = remember { PreviewView(context) }
     val preview = remember { CameraPreview.Builder().build() }
     var camera by remember { mutableStateOf<Camera?>(null) }
     val executor = remember { Executors.newSingleThreadExecutor() }

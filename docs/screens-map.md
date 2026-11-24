@@ -129,18 +129,18 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| FundingScreen.kt | `todo` |
-| SavingsAdvancedScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings select funds |
-| SavingsAvailabilityScreen.kt | Transfer to Savings (Channel Closure) › Transfer warning |
-| SavingsConfirmScreen.kt | Transfer to Savings (Channel Closure) › Transfer all funds to savings review |
-| SavingsIntroScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings |
-| SavingsProgressScreen.kt | Transfer to Savings (Channel Closure) › Transfer to savings progress 2 |
+| FundingScreen.kt | Lightning Onboarding From Suggestion Card › Fund Spending Balance / No Bitkit Savings |
+| SavingsAdvancedScreen.kt | Transfer to Savings (Channel Closure or Spark transfer) › Advanced |
+| SavingsAvailabilityScreen.kt | Transfer to Savings (Channel Closure or Spark transfer) › Network Fee & Availability |
+| SavingsConfirmScreen.kt | Transfer to Savings (Channel Closure or Spark transfer) › Review Transfer to Savings |
+| SavingsIntroScreen.kt | Transfer to Savings (Channel Closure or Spark transfer) › Transfer to Savings Intro |
+| SavingsProgressScreen.kt | Transfer to Savings (Channel Closure or Spark transfer) › Funds In Transfer |
 | SettingUpScreen.kt | Funds In Transfer (spark) › Transfer - Processing Payment |
-| SpendingAmountScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Input |
-| SpendingConfirmScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Confirm |
-| SpendingIntroScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Intro |
-| TransferIntroScreen.kt | Lightning Onboarding From Suggestion Card › Lightning onboarding Intro |
-| TransferLearnMoreScreen.kt | Transfer to Spending Balance From Savings (Channel Opening) › Transfer to Spending Receiving Capacity |
+| SpendingAmountScreen.kt | Transfer to Spending Balance From Savings (Spark) › Transfer to Spending / Transfer to Spending Balance From HW Device (spark) › Transfer to Spending |
+| SpendingConfirmScreen.kt | Transfer to Spending Balance From Savings (Spark) › Review |
+| SpendingIntroScreen.kt | Transfer to Spending Balance From Savings (Spark) › Introduction |
+| TransferIntroScreen.kt | Lightning Onboarding From Suggestion Card › Introduction |
+| TransferLearnMoreScreen.kt | Transfer to Spending Balance From Savings (Spark) › Learn More |
 
 ## ui/screens/transfer/external
 
@@ -156,8 +156,8 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| SpendingHwSignScreen.kt | Transfer to Spending Balance From HW Device › Transfer to Spending Confirm HW |
-| SpendingHwSignedScreen.kt | Transfer to Spending Balance From HW Device › Transfer to Spending Confirmed HW |
+| SpendingHwSignScreen.kt | Transfer to Spending Balance From HW Device (spark) › Review & Sign |
+| SpendingHwSignedScreen.kt | Transfer to Spending Balance From HW Device (spark) › Transfer Confirmed (TX  signed) |
 
 ## ui/screens/trezor
 
@@ -189,7 +189,6 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | - | - |
 | EditInvoiceScreen.kt | Send (Contact) (Lightning) › Edit invoice populated |
 | ReceiveQrScreen.kt | Receive Lightning Active › Receive Auto (Unified QR) |
-| TransferUnavailableScreen.kt | `todo` |
 
 ## ui/screens/wallets/send
 
@@ -316,14 +315,14 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | ChannelDetailScreen.kt | Settings > Advanced › Connection details |
 | CloseConnectionScreen.kt | Settings > Advanced › Close connection |
 | LightningConnectionsScreen.kt | Settings > Advanced › Lightning Connections overview |
-| MoveToSparkScreen.kt | `todo` |
-| SparkDetailScreen.kt | `todo` |
-| SparkExitConfirmScreen.kt | `todo` |
+| SparkDetailScreen.kt | Settings > Advanced › Connection details Spark |
+| SparkExitConfirmScreen.kt | Force transfer to Savings (Spark emercency exit) › Force Transfer to Savings Confirm |
 | SparkExitFeeBumpScreen.kt | `todo` |
-| SparkExitFundingScreen.kt | `todo` |
-| SparkExitIntroScreen.kt | `todo` |
-| SparkExitProgressScreen.kt | `todo` |
-| SparkExitQuoteScreen.kt | `todo` |
+| SparkExitFundingScreen.kt | Force transfer to Savings (Spark emercency exit) › Force Transfer to Savings Emercency fees / Force Transfer to Savings Emercency fees External |
+| SparkExitIntroScreen.kt | Force transfer to Savings (Spark emercency exit) › Force Transfer to Savings |
+| SparkExitPayScreen.kt | Force transfer to Savings (Spark emercency exit) › Force Transfer to Savings Confirm External |
+| SparkExitProgressScreen.kt | Force transfer to Savings (Spark emercency exit) › Force Transfer to Savings Progress |
+| SparkExitQuoteScreen.kt | Force transfer to Savings (Spark emercency exit) › Force Transfer to Savings Costs |
 
 ## ui/settings/pin
 
@@ -369,3 +368,7 @@ Amount entry stays in dollars with a BTC equivalent; QR and shared payment amoun
 `UsdtIntroSheet.kt` implements [New: USDT](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=50228-146387). `SettingsScreen.kt` includes the [USDT (Tether) switch](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=48063-277709). Both are covered by `journeys/usdt-opt-in.xml`.
 
 `UsdtNetworkPicker.kt` shares the receive network rows with the [send network sheet](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=50231-146880); all available routes remain scrollable.
+
+### Update spending balance
+
+`MoveToSparkSheet.kt` implements [Modal Update Spending Balance](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=52052-404808) and [Spending Balance Updated](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=52052-409823) in Wallet Lightning - Transfer to Spending Balance. Its in-flight and failed states have no frame and keep their earlier copy in the same sheet. Covered by `journeys/transfer/move-to-spark.xml`; the update before a payment is covered by `journeys/send/update-spending-balance-payment.xml`.

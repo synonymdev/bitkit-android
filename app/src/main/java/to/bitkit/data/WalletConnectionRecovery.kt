@@ -284,13 +284,17 @@ class WalletConnectionRecovery @Inject constructor(
         val electrum: String? = null,
         val rgs: RgsChoice? = null,
     ) {
+        // A record saved before a default server was retired holds that server; it applies and matches as the
+        // current default, the same way settings read it.
+        private val resolvedElectrum get() = electrum?.let(::replaceRetiredElectrumServer)
+
         fun applyTo(settings: SettingsData) = settings.copy(
-            electrumServer = electrum ?: settings.electrumServer,
+            electrumServer = resolvedElectrum ?: settings.electrumServer,
             rgsServerUrl = if (rgs != null) rgs.value else settings.rgsServerUrl,
         )
 
         fun matches(settings: SettingsData) =
-            (electrum == null || settings.electrumServer == electrum) &&
+            (resolvedElectrum == null || settings.electrumServer == resolvedElectrum) &&
                 (rgs == null || settings.rgsServerUrl == rgs.value)
     }
 }

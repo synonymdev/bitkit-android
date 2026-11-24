@@ -237,6 +237,11 @@ fun SendSheet(
                 if (!reviewing) return@LaunchedEffect
                 lifecycle.withPaymentReview(appViewModel::beginPaymentReview)
             }
+            // The entry is null until navigation settles, also after the activity is recreated
+            val hasEntry = entry != null
+            LaunchedEffect(hasEntry, reviewing, appViewModel) {
+                if (hasEntry) appViewModel.onSendReviewVisible(reviewing)
+            }
             fun showHardwareSuccess(txId: String, amountSats: ULong, walletId: String, isShopPayment: Boolean) {
                 appViewModel.onSendSuccess(
                     details = NewTransactionSheetDetails(
@@ -325,6 +330,10 @@ fun SendSheet(
                         is SendEffect.NavigateToScan -> navController.navigateTo(SendRoute.QrScanner)
                         is SendEffect.NavigateToCoinSelection -> navController.navigateToCoinSelection()
                         is SendEffect.NavigateToConfirm -> navController.navigateTo(SendRoute.Confirm)
+                        is SendEffect.ResetConfirm ->
+                            navController.currentBackStackEntry
+                                ?.savedStateHandle
+                                ?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
                         is SendEffect.NavigateToUsdtReview -> navController.navigateTo(SendRoute.UsdtReview)
                         is SendEffect.ShowPaykitConfirmation -> {
                             // Replace the other asset's confirmation, so Back never returns to its stale terms.
@@ -535,6 +544,8 @@ fun SendSheet(
                         initialSubscriptionId?.let(appViewModel::subscription)
                     }
 
+                    // Leaving the review of a prepared fee cancels that send instead of editing it
+                    BackHandler(enabled = uiState.isPreparedFeeReview) { appViewModel.hideSheet() }
                     SendConfirmScreen(
                         savedStateHandle = it.savedStateHandle,
                         uiState = uiState,
@@ -547,13 +558,17 @@ fun SendSheet(
                         syncNodeVariant = syncNodeVariant,
                         canGoBack = navController.previousBackStackEntry != null,
                         onBack = {
-                            val didPopToAmount = navController.popBackStack(SendRoute.Amount, inclusive = false)
-                            if (!didPopToAmount && !navController.popBackStack()) {
-                                appViewModel.hideSheet()
-                            }
+                            val didPop = !uiState.isPreparedFeeReview && (
+                                navController.popBackStack(SendRoute.Amount, inclusive = false) ||
+                                    navController.popBackStack()
+                                )
+                            if (!didPop) appViewModel.hideSheet()
                         },
                         onEvent = { e -> appViewModel.setSendEvent(e) },
-                        onClickAddTag = { navController.navigateTo(SendRoute.AddTag) },
+                        onClickAddTag = {
+                            // The prepared send under review already saved its tags
+                            if (!uiState.isPreparedFeeReview) navController.navigateTo(SendRoute.AddTag)
+                        },
                         onClickTag = { tag -> appViewModel.removeTag(tag) },
                         onNavigateToPin = { navController.navigateTo(SendRoute.PinCheck) },
                         autoPayContent = initialSubscription?.let { subscription ->
@@ -791,6 +806,7 @@ fun SendSheet(
                             )
                         },
                         onPaymentSuccess = { paymentHash, amountWithFee ->
+                            // A success shown before the send went pending is the same payment, so it shows again.
                             appViewModel.onSendSuccess(
                                 NewTransactionSheetDetails(
                                     type = NewTransactionSheetType.LIGHTNING,
@@ -798,6 +814,7 @@ fun SendSheet(
                                     paymentHashOrTxId = paymentHash,
                                     sats = amountWithFee,
                                 ),
+                                allowDuplicateHash = true,
                             )
                         },
                         onPaymentError = { failure ->

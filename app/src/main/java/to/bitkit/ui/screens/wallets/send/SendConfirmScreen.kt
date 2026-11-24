@@ -114,6 +114,18 @@ private val EXPIRY_REFRESH_INTERVAL = 60.seconds
 private const val PROVIDER_KEY_LENGTH = 12
 const val SEND_CONFIRM_RESET_RESULT_KEY = "SEND_CONFIRM_RESET_RESULT_KEY"
 
+/**
+ * Calls [onReset] for each reset [SEND_CONFIRM_RESET_RESULT_KEY] carries. The key goes back to false rather than
+ * away, since removing it detaches this collector from any later reset.
+ */
+internal suspend fun SavedStateHandle.collectConfirmResets(onReset: () -> Unit) {
+    getStateFlow(SEND_CONFIRM_RESET_RESULT_KEY, false).collect {
+        if (!it) return@collect
+        onReset()
+        set(SEND_CONFIRM_RESET_RESULT_KEY, false)
+    }
+}
+
 @Composable
 fun SendConfirmScreen(
     savedStateHandle: SavedStateHandle,
@@ -154,12 +166,7 @@ fun SendConfirmScreen(
     }
 
     LaunchedEffect(savedStateHandle) {
-        savedStateHandle.getStateFlow(SEND_CONFIRM_RESET_RESULT_KEY, false)
-            .collect {
-                if (!it) return@collect
-                isLoading = false
-                savedStateHandle.remove<Boolean>(SEND_CONFIRM_RESET_RESULT_KEY)
-            }
+        savedStateHandle.collectConfirmResets { isLoading = false }
     }
 
     // Confirm with pin or bio if required
@@ -185,6 +192,11 @@ fun SendConfirmScreen(
 
     LaunchedEffect(uiState.initialSubscriptionPaymentNeedsConfirmation) {
         if (uiState.initialSubscriptionPaymentNeedsConfirmation) isLoading = false
+    }
+
+    // The prepared send costs more than the fee approved, so the swipe is offered again on its actual fee
+    LaunchedEffect(uiState.isPreparedFeeReview) {
+        if (uiState.isPreparedFeeReview) isLoading = false
     }
 
     SendConfirmContent(
@@ -367,6 +379,10 @@ private fun ContentRunning(
     onSwipeToConfirm: () -> Unit = {},
 ) {
     var showDetails by rememberSaveable(initialShowDetails) { mutableStateOf(initialShowDetails) }
+    // The update fee sits in the details: each new quote opens them, and the swipe waits for the quote.
+    LaunchedEffect(uiState.sparkUpdateQuote) {
+        if (uiState.sparkUpdateQuote != null) showDetails = true
+    }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
     val isPreparing = preparingRequest != null
     val isLnurlPay = !isPreparing && uiState.paysLnurl
@@ -544,6 +560,7 @@ private fun ContentRunning(
 private fun SendUiState.canSwipeToPay() = isAmountInputValid &&
     !isFundingSourceLoading &&
     isHardwareFeeReady &&
+    !isSparkUpdateQuoting &&
     !(payMethod == SendMethod.ONCHAIN && onchainFeeUi.isLoading)
 
 @Composable
@@ -878,6 +895,8 @@ private fun LightningDetails(
             }
         }
 
+        UpdateFeeCell(uiState.sparkUpdateQuote?.feeSats)
+
         val swapRoute = uiState.paykitSwapRoute
         val swapQuote = swapRoute?.quote
         if (swapQuote != null) {
@@ -886,14 +905,6 @@ private fun LightningDetails(
             SendCell(caption = stringResource(R.string.wallet__send_swap_route)) {
                 BodySSB(
                     text = stringResource(R.string.wallet__send_swap_route_provider, provider),
-                    maxLines = 1,
-                    modifier = Modifier.testTag("ReviewSwapRoute")
-                )
-            }
-        } else if (uiState.routedPaykitRoute?.serviceLeg != null) {
-            SendCell(caption = stringResource(R.string.wallet__send_swap_route)) {
-                BodySSB(
-                    text = stringResource(R.string.wallet__send_swap_route_spark),
                     maxLines = 1,
                     modifier = Modifier.testTag("ReviewSwapRoute")
                 )
@@ -1001,6 +1012,8 @@ private fun LnurlPayDetails(
                     } ?: BodySSB(text = stringResource(R.string.fee__instant__title))
             }
         }
+
+        UpdateFeeCell(uiState.sparkUpdateQuote?.feeSats)
 
         if (lnurlPay.data.commentAllowed()) {
             LnurlCommentSection(uiState, onEvent)
@@ -1363,5 +1376,20 @@ private fun PreviewNodeNotRunning() {
                 modifier = Modifier.sheetHeight(),
             )
         }
+    }
+}
+
+/** The fee of the spending balance update a payment that fits only across the channels and Spark runs first. */
+@Composable
+private fun UpdateFeeCell(feeSats: ULong?) {
+    if (feeSats == null) return
+    SendCell(caption = stringResource(R.string.wallet__send_update_fee)) {
+        BodySSB(
+            text = (rememberMoneyText(feeSats.toLong(), showSymbol = true) ?: "").withAccent(
+                accentColor = Colors.White
+            ),
+            maxLines = 1,
+            modifier = Modifier.testTag("ReviewUpdateFee")
+        )
     }
 }

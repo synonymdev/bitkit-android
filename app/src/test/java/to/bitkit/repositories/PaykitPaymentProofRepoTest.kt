@@ -1195,6 +1195,30 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `a lightning proof the node failed is kept while spark reads its retry pending`() = test {
+        val failed = mock<PaymentDetails> {
+            on { id } doReturn PAYMENT_HASH
+            on { direction } doReturn PaymentDirection.OUTBOUND
+            on { status } doReturn PaymentStatus.FAILED
+        }
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(listOf(failed)))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue, "bitkit").getOrThrow()
+        // Spark reads the retry pending, then, once its success event ended the hold, only the earlier failure.
+        whenever(lightningRepo.sparkLightningSend(PAYMENT_HASH)).thenReturn(
+            SparkLightningSend.Found(SparkPaymentStatus.PENDING, null),
+            SparkLightningSend.Found(SparkPaymentStatus.FAILED, null),
+        )
+
+        paymentProofRepo().reconcile()
+
+        assertEquals(PAYMENT_HASH, storedProofs.single().paymentIdentifier)
+    }
+
+    @Test
     fun `lightning proof is removed when spark failed the send`() = test {
         whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))

@@ -59,16 +59,9 @@ fun SavingsIntroScreen(
                 .padding(horizontal = 16.dp)
                 .align(Alignment.BottomCenter)
         ) {
-            Display(
-                text = stringResource(R.string.lightning__savings_intro__title).withAccent(),
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
+            Display(stringResource(R.string.lightning__savings_intro__title).withAccent())
             Spacer(modifier = Modifier.height(8.dp))
-            BodyM(
-                text = stringResource(R.string.lightning__savings_intro__text),
-                color = Colors.White64,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
+            BodyM(stringResource(R.string.lightning__savings_intro__text), color = Colors.White64)
 
             Spacer(modifier = Modifier.height(32.dp))
             PrimaryButton(

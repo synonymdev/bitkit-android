@@ -143,21 +143,11 @@ private fun SavingsAdvancedContent(
                 text = stringResource(R.string.lightning__savings_advanced__text),
                 color = Colors.White64,
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             LazyColumn(
                 modifier = Modifier.weight(1f)
             ) {
-                sparkItem?.let { spark ->
-                    item(key = SPARK_ITEM_KEY) {
-                        ChannelItem(
-                            channelName = stringResource(R.string.lightning__spark),
-                            balanceSat = spark.balance,
-                            iSelected = spark.isSelected,
-                            onClick = onSparkItemClick,
-                        )
-                    }
-                }
                 itemsIndexed(
                     items = channelItems.sortedBy { it.channelId },
                     key = { _, channel -> channel.channelId },
@@ -168,6 +158,16 @@ private fun SavingsAdvancedContent(
                         iSelected = channel.isSelected,
                         onClick = { onChannelItemClick(channel.channelId) },
                     )
+                }
+                sparkItem?.let { spark ->
+                    item(key = SPARK_ITEM_KEY) {
+                        ChannelItem(
+                            channelName = stringResource(R.string.lightning__spark),
+                            balanceSat = spark.balance,
+                            iSelected = spark.isSelected,
+                            onClick = onSparkItemClick,
+                        )
+                    }
                 }
             }
 

@@ -42,6 +42,7 @@ import to.bitkit.services.MigrationService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
+import to.bitkit.ui.settings.lightning.MoveToSparkManager
 import javax.inject.Provider
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -74,6 +75,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val wakeRepo = mock<WakeRepo>()
     private val paykitSdkService = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { mock() }
     private val privatePaykitRepoProvider = Provider { privatePaykitRepo }
+    private val moveToSparkManager = mock<MoveToSparkManager>()
 
     private lateinit var sut: WipeWalletUseCase
 
@@ -122,6 +124,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             paykitSdkService = paykitSdkService,
             connectionRecovery = connectionRecoveryFixture(settingsStore),
             wakeRepo = wakeRepo,
+            moveToSparkManager = Provider { moveToSparkManager },
         )
     }
 
@@ -154,6 +157,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             privatePaykitAddressReservationRepo,
             migrationService,
             wakeRepo,
+            moveToSparkManager,
         )
         inOrder.verify(backupRepo).setWiping(true)
         inOrder.verify(lightningRepo).setWiping(true)
@@ -181,6 +185,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(blocktankRepo).resetState()
         inOrder.verify(activityRepo).resetState()
         inOrder.verify(hwWalletRepo).resetState()
+        inOrder.verify(moveToSparkManager).resetForWipe()
         inOrder.verify(migrationService).markMigrationChecked()
         assertTrue(onWipeCalled)
         assertTrue(onSetWalletExistsStateCalled)

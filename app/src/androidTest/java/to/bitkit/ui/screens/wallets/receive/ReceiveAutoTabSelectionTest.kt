@@ -32,7 +32,6 @@ class ReceiveAutoTabSelectionTest {
     fun keepsTabPickedByTapWhenAutoBecomesAvailable() {
         setContent()
 
-        composeTestRule.onNodeWithTag("Tab-spending").performClick()
         composeTestRule.onNodeWithTag("Tab-savings").performClick()
         composeTestRule.waitForIdle()
 
@@ -58,7 +57,6 @@ class ReceiveAutoTabSelectionTest {
                     walletState = WALLET_STATE,
                     lightningState = lightningState,
                     onClickEditInvoice = { editedTabs += it },
-                    onClickReceiveCjit = {},
                 )
             }
         }

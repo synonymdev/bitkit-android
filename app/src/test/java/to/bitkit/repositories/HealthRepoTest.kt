@@ -28,6 +28,7 @@ class HealthRepoTest : BaseUnitTest() {
     private val connectivityRepo = mock<ConnectivityRepo>()
     private val lightningRepo = mock<LightningRepo>()
     private val sparkRepo = mock<SparkRepo>()
+    private val sparkExitRepo = mock<SparkExitRepo>()
     private val cacheStore = mock<CacheStore>()
     private val clock: Clock = mock()
 
@@ -40,6 +41,7 @@ class HealthRepoTest : BaseUnitTest() {
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState()))
+        whenever(sparkExitRepo.state).thenReturn(MutableStateFlow(SparkExitState()))
         whenever(cacheStore.backupStatuses).thenReturn(flowOf(emptyMap()))
         whenever(clock.now()).thenReturn(fixedTime)
     }
@@ -50,6 +52,7 @@ class HealthRepoTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             lightningRepo = lightningRepo,
             sparkRepo = sparkRepo,
+            sparkExitRepo = sparkExitRepo,
             cacheStore = cacheStore,
             clock = clock,
         )
@@ -235,6 +238,63 @@ class HealthRepoTest : BaseUnitTest() {
             assertEquals(false, offline.isLightningViaSpark)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `app status counts spark`() = test {
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        val sparkState = MutableStateFlow(SparkState(isSupported = true, isReady = true))
+        whenever(sparkRepo.state).thenReturn(sparkState)
+
+        sut = createSut()
+
+        sut.healthState.test {
+            assertEquals(HealthState.READY, awaitItem().app)
+            sparkState.value = SparkState(isSupported = true)
+            assertEquals(HealthState.PENDING, awaitItem().app)
+            sparkState.value = SparkState(isSupported = true, hasStartFailed = true)
+            assertEquals(HealthState.ERROR, awaitItem().app)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `app status is pending while a force transfer to savings runs`() = test {
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState(isSupported = true, hasStartFailed = true)))
+        val exitState = MutableStateFlow(SparkExitState(record = SparkExitFixtures.record()))
+        whenever(sparkExitRepo.state).thenReturn(exitState)
+
+        sut = createSut()
+
+        sut.healthState.test {
+            val state = awaitItem()
+            assertEquals(true, state.isSparkExiting)
+            assertEquals(HealthState.ERROR, state.spark)
+            assertEquals(HealthState.PENDING, state.app)
+            exitState.value = SparkExitState(record = SparkExitFixtures.record(SparkExitRecord.Phase.Done))
+            val ended = awaitItem()
+            assertEquals(false, ended.isSparkExiting)
+            assertEquals(HealthState.ERROR, ended.app)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `app status ignores spark where it is unsupported`() {
+        val state = AppHealthState(spark = null)
+
+        assertEquals(HealthState.READY, state.computeApp())
+        assertEquals(HealthState.READY, state.copy(isSparkExiting = true).computeApp())
+    }
+
+    @Test
+    fun `app status is pending while ready spark runs a force transfer`() {
+        val state = AppHealthState(spark = HealthState.READY, isSparkExiting = true)
+
+        assertEquals(HealthState.PENDING, state.computeApp())
     }
 
     @Test

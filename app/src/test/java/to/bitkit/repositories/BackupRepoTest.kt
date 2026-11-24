@@ -97,10 +97,12 @@ import to.bitkit.models.WidgetsBackupV1
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkService
+import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
 import java.io.File
+import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -239,6 +241,7 @@ class BackupRepoTest : BaseUnitTest() {
         whenever { sparkRepo.restoreExitBackup(any(), any()) }.thenReturn(Result.success(Unit))
         whenever { sparkRepo.mergeRemoteExitBackup(anyOrNull()) }.thenReturn(Result.success(Unit))
         whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(true)
+        whenever { sparkRepo.importStagedExitState() }.thenReturn(StagedExitImport.NothingStaged)
         whenever(sparkRepo.exitStateGeneration).thenReturn(exitStateGeneration)
         whenever(sparkRepo.state).thenReturn(MutableStateFlow(SparkState()))
 
@@ -418,6 +421,230 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `stored spark exit data spark can't import is kept apart and the upload goes through`() = test {
+        val stored = json.encodeToString(SparkExitBackupV1(createdAt = 500, network = "regtest", exitState = "v9"))
+            .toByteArray()
+        whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(false)
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name))
+            .thenReturn(Result.success(VssItem(key = BackupCategory.SPARK_EXIT.name, value = stored, version = 1)))
+        whenever(sparkRepo.mergeRemoteExitBackup(anyOrNull()))
+            .thenReturn(Result.failure(SparkError.ExitStateUnimportable()))
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "fresh"))
+        )
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        inOrder(sparkRepo, vssBackupClient) {
+            verify(vssBackupClient).putObject(BackupRepo.rejectedExitKey(stored), stored)
+            verify(sparkRepo).skipUnimportableRemoteExitState("v9")
+            verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+        }
+    }
+
+    @Test
+    fun `stored spark exit data that doesn't parse is kept apart and the upload goes through`() = test {
+        val stored = "not exit data".toByteArray()
+        whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(false)
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name))
+            .thenReturn(Result.success(VssItem(key = BackupCategory.SPARK_EXIT.name, value = stored, version = 1)))
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "fresh"))
+        )
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        verify(vssBackupClient).putObject(BackupRepo.rejectedExitKey(stored), stored)
+        verify(sparkRepo, never()).mergeRemoteExitBackup(anyOrNull())
+        verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+    }
+
+    @Test
+    fun `a rejected spark exit copy already set aside is not uploaded again`() = test {
+        val stored = "not exit data".toByteArray()
+        stubUnreadableStoredExit(stored)
+        val key = BackupRepo.rejectedExitKey(stored)
+        whenever(
+            vssBackupClient.getObject(key)
+        ).thenReturn(Result.success(VssItem(key = key, value = stored, version = 1)))
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        verify(vssBackupClient, never()).putObject(argThat { startsWith(BackupRepo.SPARK_EXIT_REJECTED_KEY) }, any())
+        verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+    }
+
+    @Test
+    fun `each rejected spark exit copy goes under its own digest key and never the plain key`() = test {
+        val stored = "not exit data".toByteArray()
+        stubUnreadableStoredExit(stored)
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        val digest = MessageDigest.getInstance("SHA-256").digest(stored).joinToString("") { "%02x".format(it) }
+        verify(vssBackupClient).putObject("${BackupRepo.SPARK_EXIT_REJECTED_KEY}_${digest.take(16)}", stored)
+        verify(vssBackupClient, never()).putObject(eq(BackupRepo.SPARK_EXIT_REJECTED_KEY), any())
+    }
+
+    private suspend fun stubUnreadableStoredExit(stored: ByteArray) {
+        whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(false)
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name))
+            .thenReturn(Result.success(VssItem(key = BackupCategory.SPARK_EXIT.name, value = stored, version = 1)))
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "fresh"))
+        )
+    }
+
+    @Test
+    fun `staged exit data spark rejects is set aside as the stored backup that holds it`() = test {
+        val stored = json.encodeToString(SparkExitBackupV1(createdAt = 500, network = "regtest", exitState = "v9"))
+            .toByteArray()
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name))
+            .thenReturn(Result.success(VssItem(key = BackupCategory.SPARK_EXIT.name, value = stored, version = 1)))
+        whenever(sparkRepo.importStagedExitState()).thenReturn(StagedExitImport.Rejected("v9", "regtest"))
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "fresh"))
+        )
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        inOrder(sparkRepo, vssBackupClient) {
+            verify(vssBackupClient).putObject(BackupRepo.rejectedExitKey(stored), stored)
+            verify(sparkRepo).discardStagedExitState("v9")
+            verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+        }
+    }
+
+    @Test
+    fun `staged exit data spark rejects is set aside on its own once the stored backup moved on`() = test {
+        val stored = json.encodeToString(SparkExitBackupV1(createdAt = 500, network = "regtest", exitState = "newer"))
+            .toByteArray()
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name))
+            .thenReturn(Result.success(VssItem(key = BackupCategory.SPARK_EXIT.name, value = stored, version = 1)))
+        whenever(sparkRepo.importStagedExitState()).thenReturn(StagedExitImport.Rejected("v9", "regtest"))
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "fresh"))
+        )
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        val kept = argumentCaptor<ByteArray>()
+        verify(
+            vssBackupClient
+        ).putObject(argThat { startsWith("${BackupRepo.SPARK_EXIT_REJECTED_KEY}_") }, kept.capture())
+        assertEquals(
+            SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "v9"),
+            json.decodeFromString<SparkExitBackupV1>(String(kept.firstValue)),
+        )
+        verify(sparkRepo).discardStagedExitState("v9")
+        verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+    }
+
+    @Test
+    fun `staged exit data spark rejects merges the stored backup another device replaced before the upload`() = test {
+        val newer = SparkExitBackupV1(createdAt = 500, network = "regtest", exitState = "newer")
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name)).thenReturn(
+            Result.success(
+                VssItem(
+                    key = BackupCategory.SPARK_EXIT.name,
+                    value = json.encodeToString(newer).toByteArray(),
+                    version = 2
+                )
+            )
+        )
+        // A merge already ran in this session, before another device stored newer exit data.
+        mergeFlagFollowsDiscard(hasMerged = true)
+        whenever(sparkRepo.importStagedExitState()).thenReturn(StagedExitImport.Rejected("v9", "regtest"))
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "fresh"))
+        )
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        inOrder(sparkRepo, vssBackupClient) {
+            verify(sparkRepo).mergeRemoteExitBackup(newer)
+            verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+        }
+    }
+
+    @Test
+    fun `a rejected staged copy dropped before a failed merge still merges on the next upload`() = test {
+        val newer = SparkExitBackupV1(createdAt = 500, network = "regtest", exitState = "other device")
+        val stored = VssItem(
+            key = BackupCategory.SPARK_EXIT.name,
+            value = json.encodeToString(newer).toByteArray(),
+            version = 2
+        )
+        mergeFlagFollowsDiscard(hasMerged = true)
+        whenever(sparkRepo.importStagedExitState())
+            .thenReturn(StagedExitImport.Rejected("v9", "regtest"), StagedExitImport.NothingStaged)
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "fresh"))
+        )
+        // The copy is set aside and dropped, then the read for the merge fails.
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name)).thenReturn(
+            Result.success(stored),
+            Result.failure(IllegalStateException("offline")),
+            Result.success(stored),
+        )
+        assertTrue(sut.triggerBackup(BackupCategory.SPARK_EXIT).isFailure)
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        inOrder(sparkRepo, vssBackupClient) {
+            verify(sparkRepo).mergeRemoteExitBackup(newer)
+            verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+        }
+    }
+
+    @Test
+    fun `stored exit data replaced while unreadable data was set aside is merged before the upload`() = test {
+        val unreadable = "not exit data".toByteArray()
+        val replaced = SparkExitBackupV1(createdAt = 600, network = "regtest", exitState = "other device")
+        whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(false)
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name)).thenReturn(
+            Result.success(VssItem(key = BackupCategory.SPARK_EXIT.name, value = unreadable, version = 1)),
+            Result.success(
+                VssItem(
+                    key = BackupCategory.SPARK_EXIT.name,
+                    value = json.encodeToString(replaced).toByteArray(),
+                    version = 2
+                )
+            ),
+        )
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "fresh"))
+        )
+
+        sut.triggerBackup(BackupCategory.SPARK_EXIT).getOrThrow()
+
+        inOrder(sparkRepo, vssBackupClient) {
+            verify(vssBackupClient).putObject(BackupRepo.rejectedExitKey(unreadable), unreadable)
+            verify(sparkRepo).mergeRemoteExitBackup(replaced)
+            verify(vssBackupClient).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+        }
+        verify(sparkRepo, never()).skipUnimportableRemoteExitState(anyOrNull())
+    }
+
+    @Test
+    fun `a spark exit merge that fails for another reason still blocks the upload`() = test {
+        val stored = json.encodeToString(SparkExitBackupV1(createdAt = 500, network = "regtest", exitState = "v1"))
+            .toByteArray()
+        whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(false)
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name))
+            .thenReturn(Result.success(VssItem(key = BackupCategory.SPARK_EXIT.name, value = stored, version = 1)))
+        whenever(sparkRepo.mergeRemoteExitBackup(anyOrNull())).thenReturn(Result.failure(AppError("not connected")))
+        whenever(sparkRepo.exitBackup()).thenReturn(
+            Result.success(SparkExitBackupV1(createdAt = 1_000, network = "regtest", exitState = "fresh"))
+        )
+
+        assertTrue(sut.triggerBackup(BackupCategory.SPARK_EXIT).isFailure)
+
+        verify(vssBackupClient, never()).putObject(argThat { startsWith(BackupRepo.SPARK_EXIT_REJECTED_KEY) }, any())
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+    }
+
+    @Test
     fun `spark exit backup never replaces a stored one it could not read`() = test {
         whenever(sparkRepo.hasMergedRemoteExitState).thenReturn(false)
         whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name))
@@ -430,6 +657,20 @@ class BackupRepoTest : BaseUnitTest() {
 
         verify(sparkRepo, never()).mergeRemoteExitBackup(anyOrNull())
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.SPARK_EXIT.name), any())
+    }
+
+    @Test
+    fun `a restore sets aside spark exit data it can't read and reports it not restored`() = test {
+        val stored = "not exit data".toByteArray()
+        whenever(vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name))
+            .thenReturn(Result.success(VssItem(key = BackupCategory.SPARK_EXIT.name, value = stored, version = 1)))
+
+        val failed = sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertTrue(BackupCategory.SPARK_EXIT in failed)
+        verify(vssBackupClient).putObject(BackupRepo.rejectedExitKey(stored), stored)
+        verify(sparkRepo, never()).restoreExitBackup(any(), any())
+        verify(cacheStore, never()).updateBackupStatus(eq(BackupCategory.SPARK_EXIT), any())
     }
 
     @Test
@@ -1939,6 +2180,51 @@ class BackupRepoTest : BaseUnitTest() {
             SparkExitEarlierAddressBackupV1("bcrt1qcancelled", "m/84'/1'/7797'/0/0", "cancelledFunding", 2L),
         )
         assertEquals(mapOf(sparkWalletKey to expected), payload.sparkExitEarlierAddresses)
+    }
+
+    @Test
+    fun `a metadata backup carries the move to spark hashes lowercase and sorted`() = test {
+        stubMetadataBackupReads()
+        cacheData.value = cacheData.value.copy(moveToSparkHashes = listOf("bb", "AA"))
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        sut.triggerBackup(BackupCategory.METADATA)
+
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture()) }
+        val payload = json.decodeFromString<MetadataBackupV1>(dataCaptor.firstValue.decodeToString())
+        assertEquals(listOf("aa", "bb"), payload.moveToSparkPaymentHashes)
+    }
+
+    @Test
+    fun `a metadata backup leaves the move to spark hashes out with none`() = test {
+        stubMetadataBackupReads()
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        sut.triggerBackup(BackupCategory.METADATA)
+
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture()) }
+        assertFalse("moveToSparkPaymentHashes" in dataCaptor.firstValue.decodeToString())
+    }
+
+    @Test
+    fun `a metadata restore adds the backed-up move to spark hashes to the device's`() = test {
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+        cacheData.value = cacheData.value.copy(moveToSparkHashes = listOf("dd"))
+        val envelope = json.encodeToString(
+            MetadataBackupV1(
+                createdAt = 123,
+                tagMetadata = emptyList(),
+                cache = AppCacheData(moveToSparkHashes = listOf("cc")),
+                moveToSparkPaymentHashes = listOf("AA"),
+            )
+        )
+        stubMetadataRestore(envelope = envelope)
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertEquals(setOf("dd", "cc", "aa"), cacheData.value.moveToSparkHashes.toSet())
     }
 
     @Test
@@ -3608,4 +3894,14 @@ class BackupRepoTest : BaseUnitTest() {
         isTrackingEnabled = true,
         setupState = WatchOnlyAccountSetupState.Authorizing,
     )
+
+    private fun mergeFlagFollowsDiscard(hasMerged: Boolean) {
+        var merged = hasMerged
+        whenever(sparkRepo.hasMergedRemoteExitState).thenAnswer { merged }
+        whenever { sparkRepo.discardStagedExitState(any()) }.doSuspendableAnswer { merged = false }
+        whenever { sparkRepo.mergeRemoteExitBackup(anyOrNull()) }.thenAnswer {
+            merged = true
+            Result.success(Unit)
+        }
+    }
 }

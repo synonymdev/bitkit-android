@@ -1,15 +1,17 @@
 <journey name="move to spark">
   <description>
-    Verifies the post-update "Move to Spark" sheet and the move itself. With an LDK channel that can send at least
-    1,000 sats and Spark connected, Home shows the "Move To Spark" sheet once (testTag "MoveToSparkIntro"); Spending
-    and Lightning Connections show a "Move To Spark" button (testTag "MoveToSpark") while the channel can still send.
-    The move quotes the routing fee over the channel only, pays the amount to a new invoice of the user's own Spark
-    wallet, and then offers to close the emptied connection. A wallet without such a channel never gets the sheet or
-    the button.
+    Verifies the "Update Spending Balance" modal and the move behind it. With an LDK channel that can send at least
+    1,000 sats and Spark connected, Home shows the modal once (testTag "UpdateSpendingBalance"); Spending and Lightning
+    Connections show a "Move To Spark" button (testTag "MoveToSpark") that opens the same modal while the channel can
+    still send. The modal quotes the routing fee over the channel only and shows it as "Update fee: " in the primary
+    currency (testTag "UpdateSpendingBalanceUpdate" is the Update button, loading while it quotes and moves). Update
+    pays the whole balance to new invoices of the user's own Spark wallet, splitting it into parts by itself when one
+    payment does not route, and shows "Spending Balance Updated" (testTag "SpendingBalanceUpdated"). Once the move
+    settles, the app closes the emptied channel cooperatively in the background, which writes a transfer to
+    Savings. A wallet without such a channel never gets the modal or the button.
 
-    The "too large to route" state (testTag "MoveToSparkTrySmaller") needs a route that cannot carry the balance; on a
-    direct channel to the Spark service provider every amount routes, so it is covered by the quote's unit tests and the
-    PR's manual test rather than here.
+    A split needs a route that cannot carry the balance in one payment; on a direct channel to the Spark service
+    provider every amount routes, so the split is covered by the repository's unit tests rather than here.
 
     Precondition: dev build pointed at a local Spark regtest (spark-sdk regtest/local), and a wallet with an open
     channel to that stack's SSP Lightning node that holds most of its capacity on the wallet's side (open it from
@@ -17,13 +19,15 @@
     app freshly launched.
   </description>
   <actions>
-    <action>Wait on Home and verify the "Move To Spark" sheet (testTag "MoveToSparkIntro") shows, saying Blocktank is closing its Lightning connections</action>
-    <action>Tap "Later" (testTag "MoveToSparkIntroLater") and verify the sheet closes</action>
-    <action>Relaunch the app, wait on Home and verify the sheet does not show again</action>
+    <action>Wait on Home and verify the "Update Spending Balance" modal (testTag "UpdateSpendingBalance") shows "UPDATE SPENDING BALANCE" and "Bitkit is switching Lightning providers. Update your spending balance to continue making instant, cheap payments." followed by "Update fee: " and an amount</action>
+    <action>Tap "Later" (testTag "UpdateSpendingBalanceLater") and verify the modal closes</action>
+    <action>Relaunch the app, wait on Home and verify the modal does not show again</action>
     <action>Open the Spending wallet and verify the "Move To Spark" button (testTag "MoveToSpark") shows</action>
-    <action>Tap "Move To Spark" and verify the screen shows an amount (testTag "MoveToSparkAmount") and a routing fee (testTag "MoveToSparkFee")</action>
-    <action>Swipe to move (testTag "MoveToSparkSwipe") and verify "Moved to Spark" shows the moved amount (testTag "MoveToSparkMoved") and "Close" (testTag "MoveToSparkClose")</action>
-    <action>Tap "Close" (testTag "MoveToSparkClose"), then "Close" on the close confirmation, and verify Lightning Connections shows no open connection and the Spark balance grew by the moved amount</action>
-    <action>Go back to Home, open Spending and verify the "Move To Spark" button is gone</action>
+    <action>Tap "Move To Spark" and verify the "Update Spending Balance" modal opens and shows "Update fee: " with an amount once the Update button (testTag "UpdateSpendingBalanceUpdate") stops loading</action>
+    <action>Tap "Update" and verify the modal titled "Spending Balance Updated" (testTag "SpendingBalanceUpdated") shows "SPENDING BALANCE UPDATED" and "Your spending balance has been successfully migrated to Spark, Bitkit’s new Lightning service provider."</action>
+    <action>Tap "OK" (testTag "SpendingBalanceUpdatedOk") and verify the modal closes</action>
+    <action>Open Settings › Advanced › Lightning Connections and verify the channel is closing or closed, and that it shows no channel under OPEN CONNECTIONS, only Spark via Breez, whose balance grew by the moved amount</action>
+    <action>Go back to Home and verify Activity lists a "Move to Spark" transfer row with the moved amount plus the routing fee, whose detail screen is titled "Move to Spark", and a transfer to Savings for the closed channel</action>
+    <action>Open Spending and verify the "Move To Spark" button is gone</action>
   </actions>
 </journey>

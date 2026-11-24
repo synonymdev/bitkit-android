@@ -51,19 +51,19 @@ fun TransferIntroScreen(
                 .fillMaxWidth()
         )
         AppTopBar(
-            titleText = null,
+            titleText = stringResource(R.string.lightning__funding__nav_title),
             onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
         )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 32.dp)
+                .padding(horizontal = 16.dp)
                 .align(Alignment.BottomCenter)
         ) {
             Display(stringResource(R.string.lightning__transfer_intro__title).withAccent(accentColor = Colors.Purple))
             Spacer(modifier = Modifier.height(8.dp))
-            BodyM(stringResource(R.string.lightning__transfer_intro__text), color = Colors.White64)
+            BodyM(stringResource(R.string.lightning__transfer_intro__text_spark), color = Colors.White64)
 
             Spacer(modifier = Modifier.height(32.dp))
             PrimaryButton(

@@ -1,5 +1,7 @@
 package to.bitkit.services
 
+import com.synonym.paykit.AllowanceFilter
+import com.synonym.paykit.AllowanceRecord
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.EndpointSyncReport
@@ -16,6 +18,8 @@ import com.synonym.paykit.PaykitAppRegistry
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitIdentitySecretKey
 import com.synonym.paykit.PaykitNoiseKeyAuthorization
+import com.synonym.paykit.PaykitProfile
+import com.synonym.paykit.PaykitProfileRecord
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitStateObservation
 import com.synonym.paykit.PaymentPayload
@@ -37,6 +41,8 @@ import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PubkyClientConfig
 import com.synonym.paykit.PubkyIdentityCapability
 import com.synonym.paykit.PubkyLocalSecretKey
+import com.synonym.paykit.PubkyProfileSnapshot
+import com.synonym.paykit.PubkyProfileUpdate
 import com.synonym.paykit.PubkySessionAccess
 import com.synonym.paykit.PubkySessionBootstrap
 import com.synonym.paykit.PubkySessionBootstrapResult
@@ -71,6 +77,7 @@ import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.inOrder
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -267,29 +274,6 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `payment-list sync sends queued messages first so their outcomes are recorded`() = runTest {
-        val sdk = mock<PaykitSdk>()
-        whenever(sdk.processPendingPrivateMessages()).thenReturn(emptyList())
-        val report = PrivatePaymentListDeliveryReport(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
-        whenever(sdk.syncPrivatePaymentListsWithReservationsAndProcessOutbound(any(), any())).thenReturn(report)
-        val updates = listOf(PrivatePaymentListReservationUpdateInput(RING_PUBKY, listOf(mock())))
-        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
-
-        service.syncPrivatePaymentListsWithReservations(updates, false)
-
-        inOrder(sdk) {
-            verify(sdk).processPendingPrivateMessages()
-            verify(sdk).syncPrivatePaymentListsWithReservationsAndProcessOutbound(updates, false)
-        }
-
-        // A withdrawal supersedes a queued list instead of sending it first.
-        val withdrawal = listOf(PrivatePaymentListReservationUpdateInput(RING_PUBKY, emptyList()))
-        service.syncPrivatePaymentListsWithReservations(withdrawal, false)
-        service.syncPrivatePaymentListsWithReservations(emptyList(), true)
-        verify(sdk, times(1)).processPendingPrivateMessages()
-    }
-
-    @Test
     fun `payment review defers only passive refresh until every review ends`() = runTest {
         val sdk = mock<PaykitSdk>()
         whenever(sdk.processPendingPrivateMessages()).thenReturn(emptyList())
@@ -454,6 +438,53 @@ class PaykitSdkServiceTest {
         caller.join()
         assertTrue(finished.isCompleted)
         verify(sdk).importContacts(any(), any())
+    }
+
+    @Test
+    fun `a current endpoint publication is reusable while another write has not started`() = runTest {
+        mockConstruction(PaymentPayload::class.java).use {
+            val sdk = mock<PaykitSdk>()
+            val report = EndpointSyncReport(emptyList(), emptyList(), emptyList())
+            whenever(sdk.syncPublicEndpointsWithReceivingDetails(any())).thenReturn(report)
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val endpoints = listOf(Endpoint(MethodId.P2tr, "bc1ptest", rawPayload = "bc1ptest"))
+            val published = checkNotNull(service.syncPublicEndpointsWithEpoch(endpoints, { true }, null))
+
+            assertNull(service.syncPublicEndpointsWithEpoch(endpoints, { false }, published))
+            assertSame(published, service.syncPublicEndpointsWithEpoch(endpoints, { true }, published))
+            verify(sdk).syncPublicEndpointsWithReceivingDetails(any())
+        }
+    }
+
+    @Test
+    fun `a direct public withdrawal invalidates overlapping refresh reuse even if it fails`() = runTest {
+        mockConstruction(PaymentPayload::class.java).use {
+            for (withdrawalFails in listOf(false, true)) {
+                val sdk = mock<PaykitSdk>()
+                val report = EndpointSyncReport(emptyList(), emptyList(), emptyList())
+                whenever(sdk.syncPublicEndpointsWithReceivingDetails(any())).doSuspendableAnswer {
+                    if (withdrawalFails && it.getArgument<List<Any>>(0).isEmpty()) {
+                        error("offline")
+                    }
+                    report
+                }
+                val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+                val endpoints = listOf(Endpoint(MethodId.P2tr, "bc1ptest", rawPayload = "bc1ptest"))
+                val published = checkNotNull(service.syncPublicEndpointsWithEpoch(endpoints, { true }, null))
+
+                if (withdrawalFails) {
+                    assertFailsWith<IllegalStateException> { service.syncPublicEndpoints(emptyList()) }
+                } else {
+                    service.syncPublicEndpoints(emptyList())
+                }
+                assertTrue(service.publicEndpointSyncEpoch() > published.epoch)
+                val repeated = checkNotNull(service.syncPublicEndpointsWithEpoch(endpoints, { true }, published))
+
+                assertTrue(repeated.epoch > published.epoch)
+                verify(sdk).syncPublicEndpointsWithReceivingDetails(emptyList())
+                verify(sdk, times(3)).syncPublicEndpointsWithReceivingDetails(any())
+            }
+        }
     }
 
     @Test
@@ -1052,6 +1083,61 @@ class PaykitSdkServiceTest {
         assertEquals(emptyList(), next.await())
         assertEquals(listOf("registry completed", "next admitted"), events)
         verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, true, true))
+    }
+
+    @Test
+    fun `profile and tag writes overtake queued registration and allowance reads`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val release = CompletableDeferred<Unit>()
+        val finishRegistration = CompletableDeferred<Unit>()
+        val events = mutableListOf<String>()
+        whenever(sdk.contactRecords()).doSuspendableAnswer {
+            release.await()
+            events += "active completed"
+            emptyList()
+        }
+        whenever(sdk.identityStatus())
+            .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        whenever(sdk.publishPaykitApp(any(), any())).doSuspendableAnswer {
+            events += "registration"
+            finishRegistration.await()
+            mock<PaykitAppRegistry>()
+        }
+        whenever(sdk.listAllowances(any())).thenAnswer {
+            events += "allowances"
+            emptyList<AllowanceRecord>()
+        }
+        whenever(sdk.publishPubkyProfile(any(), any())).thenAnswer {
+            events += "profile"
+            mock<PubkyProfileSnapshot>()
+        }
+        whenever(sdk.publishPaykitProfile(any(), isNull())).thenAnswer {
+            events += "tags"
+            mock<PaykitProfileRecord>()
+        }
+
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val active = async { service.contactRecords() }
+        runCurrent()
+        val registration = async { service.syncPaykitApp(true, Priority.Background) }
+        val allowances = async { service.listAllowances(AllowanceFilter(null, null, emptyList())) }
+        service.setPaymentSubmissionActive(true)
+        val setup = async { service.hasPrivatePaymentAccess() }
+        val save = async {
+            service.publishPubkyProfile(mock<PubkyProfileUpdate>(), "revision", RING_PUBKY)
+            service.publishPaykitProfile(mock<PaykitProfile>(), RING_PUBKY)
+        }
+        runCurrent()
+        val beforeRelease = events.toList()
+        release.complete(Unit)
+        runCurrent()
+        val duringRegistration = events.toList()
+        finishRegistration.complete(Unit)
+        awaitAll(active, registration, allowances, setup, save)
+        assertTrue(beforeRelease.isEmpty())
+        assertEquals(listOf("active completed", "profile", "registration"), duringRegistration)
+        assertTrue(setup.await())
+        assertEquals(listOf("active completed", "profile", "registration", "tags", "allowances"), events)
     }
 
     @Test

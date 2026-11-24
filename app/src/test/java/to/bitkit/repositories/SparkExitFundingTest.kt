@@ -7,17 +7,18 @@ import breez_sdk_spark.ExitTransactionStatus
 import breez_sdk_spark.PerBranchFunding
 import breez_sdk_spark.RecoveryFunding
 import breez_sdk_spark.RecoveryTxKind
-import breez_sdk_spark.SkippedLeaf
-import breez_sdk_spark.SkippedLeafReason
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.models.FeeRate
+import to.bitkit.utils.SignedTransactionId
+import kotlin.random.Random
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
@@ -35,7 +36,6 @@ class SparkExitFundingTest {
         assertEquals(91_000uL, quote.receiveSats)
         assertEquals(20_000uL, quote.fundingSats)
         assertEquals(111_000uL, quote.incomingSats)
-        assertEquals(300uL, quote.leftBehindSats)
         assertEquals(listOf("leaf-1"), quote.leafIds)
         assertTrue(quote.isWorthExiting)
     }
@@ -169,6 +169,91 @@ class SparkExitFundingTest {
         // Listed again, it counts once.
         val relisted = SparkExitFixtures.recovery(listOf(cooperative) + rebuilt.transactions)
         assertEquals(95_000uL, SparkExitMath.receivedSats(record.copy(recovery = relisted)))
+    }
+
+    @Test
+    fun `the funding the sweep returns counts as fees, not spending balance`() {
+        val address = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+        val destination = AddressScript.of(address)
+        val unspent = "aa".repeat(32)
+        val refund = "bb".repeat(32)
+        val child = rawTx(listOf(unspent to 0), listOf(3_000L to byteArrayOf()))
+        val childTxid = SignedTransactionId.fromHex(child)
+        val sweep = SparkExitFixtures.tx("s", kind = RecoveryTxKind.SWEEP).copy(
+            txHex = rawTx(listOf(refund to 0, unspent to 1, childTxid to 0), listOf(96_500L to destination)),
+        )
+        val record = SparkExitFixtures.record(SparkExitRecord.Phase.Done).copy(
+            destination = address,
+            funding = listOf(
+                SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", unspent, 1u, 4_000uL)
+            ),
+            recovery = SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n", cpfp = child), sweep)),
+            earlierReceivedSats = mapOf("c" to 5_000uL),
+            sweptLeftover = listOf(SparkExitRecord.SweptLeftover("l", 1_000uL)),
+        )
+
+        // The unspent funding UTXO and the CPFP child's change; the refund's output is the exited value.
+        assertEquals(7_000uL, SparkExitMath.returnedFundingSats(record))
+        assertEquals(SparkExitReturned(spendingSats = 94_500uL, feesSats = 8_000uL), SparkExitMath.returned(record))
+    }
+
+    @Test
+    fun `a replaced generation keeps the funding its confirmed sweep returned`() {
+        val address = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+        val destination = AddressScript.of(address)
+        val unspent = "aa".repeat(32)
+        val refund = "bb".repeat(32)
+        val sweep = SparkExitFixtures.tx(
+            "s",
+            kind = RecoveryTxKind.SWEEP,
+            status = ExitTransactionStatus.Confirmed(900u),
+        ).copy(txHex = rawTx(listOf(refund to 0, unspent to 0), listOf(54_000L to destination)))
+        val cooperative = SparkExitFixtures.tx("c", kind = RecoveryTxKind.COOPERATIVE).copy(
+            txHex = rawTx(listOf(refund to 1), listOf(10_000L to destination)),
+        )
+        val swept = SparkExitFixtures.record(SparkExitRecord.Phase.Done).copy(
+            destination = address,
+            funding = listOf(
+                SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", unspent, 0u, 4_000uL)
+            ),
+            recovery = SparkExitFixtures.recovery(listOf(sweep)),
+        )
+
+        // A retry for leaves the sweep left behind recovers them cooperatively only.
+        val retried = swept.adopt(SparkExitFixtures.recovery(listOf(cooperative)), atMillis = 0L)
+
+        assertEquals(mapOf("s" to 4_000uL), retried.earlierReturnedFundingSats)
+        assertEquals(SparkExitReturned(spendingSats = 60_000uL, feesSats = 4_000uL), SparkExitMath.returned(retried))
+        val restored = SparkExitJson.decode(SparkExitJson.encode(retried))
+        assertEquals(retried.earlierReturnedFundingSats, restored.earlierReturnedFundingSats)
+    }
+
+    @Test
+    fun `the returned split always adds up to what reached savings`() {
+        val address = "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"
+        val unspent = "aa".repeat(32)
+        val random = Random(7)
+        repeat(200) {
+            val received = random.nextLong(1L, 200_000L)
+            val funding = random.nextLong(0L, 300_000L).toULong()
+            val leftover = random.nextLong(0L, 50_000L).toULong()
+            val sweep = SparkExitFixtures.tx("s", kind = RecoveryTxKind.SWEEP).copy(
+                txHex = rawTx(listOf(unspent to 0), listOf(received to AddressScript.of(address))),
+            )
+            val record = SparkExitFixtures.record(SparkExitRecord.Phase.Done).copy(
+                destination = address,
+                funding = listOf(
+                    SparkExitRecord.Funding(0u, SparkExitFixtures.FUNDING_ADDRESS, "02ab", unspent, 0u, funding),
+                ),
+                recovery = SparkExitFixtures.recovery(listOf(sweep)),
+                sweptLeftover = listOf(SparkExitRecord.SweptLeftover("l", leftover)),
+            )
+
+            val returned = assertNotNull(SparkExitMath.returned(record))
+
+            assertEquals(received.toULong() + leftover, returned.spendingSats + returned.feesSats)
+            assertEquals(received.toULong() - minOf(funding, received.toULong()), returned.spendingSats)
+        }
     }
 
     @Test
@@ -420,8 +505,8 @@ class SparkExitFundingTest {
     fun `progress waits for a payment from savings and asks only for what is still missing`() {
         val record = SparkExitFixtures.record().copy(fundingPaymentTxid = "paid")
         val paidPending = listOf(SparkExitFixtures.utxo("paid", value = 20_000uL, confirmed = false))
-        assertEquals(SparkExitFundingState.Paid("paid"), SparkExitMath.fundingState(record, paidPending))
-        assertEquals(SparkExitFundingState.Paid("paid"), SparkExitMath.fundingState(record, utxos = null))
+        assertEquals(SparkExitFundingState.Paid, SparkExitMath.fundingState(record, paidPending))
+        assertEquals(SparkExitFundingState.Paid, SparkExitMath.fundingState(record, utxos = null))
         // Confirmed but short: only the rest is asked for, with the input fee of the coin that pays it.
         val paidShort = listOf(SparkExitFixtures.utxo("paid", value = 15_000uL))
         assertEquals(
@@ -440,7 +525,7 @@ class SparkExitFundingTest {
     fun `progress waits for an external payment seen in the mempool`() {
         val record = SparkExitFixtures.record()
         val seen = listOf(SparkExitFixtures.utxo("ext", value = 20_000uL, confirmed = false))
-        assertEquals(SparkExitFundingState.Seen("ext"), SparkExitMath.fundingState(record, seen))
+        assertEquals(SparkExitFundingState.Seen, SparkExitMath.fundingState(record, seen))
         val partial = listOf(SparkExitFixtures.utxo("ext", value = 8_000uL, confirmed = false))
         assertEquals(
             SparkExitFundingState.Ask(12_136uL, 8_000uL, 20_136uL),
@@ -472,12 +557,6 @@ class SparkExitFundingTest {
         )
         assertEquals(3_392uL, SparkExitMath.staysOnSparkSats(68_928uL, older))
         assertEquals(3_392uL, SparkExitMath.staysOnSparkSats(3_392uL, older))
-
-        val small = SkippedLeaf("small", 3_392uL, SkippedLeafReason.FeeExceedsValue)
-        val prepared = SparkExitFixtures.prepared(leaves = emptyList(), skipped = listOf(small))
-        val quote = SparkExitQuote(prepared, lostLeafSats = listOf(65_536uL, 65_536uL))
-        assertEquals(3_392uL, quote.copy(sparkBalanceSats = 68_928uL).unexitableSats)
-        assertEquals(3_392uL, quote.copy(sparkBalanceSats = 3_392uL).unexitableSats)
     }
 
     @Test
@@ -493,17 +572,6 @@ class SparkExitFundingTest {
         // Another wallet sent 8,000: savings sends the rest, plus the input fee its own payment adds.
         assertEquals(12_136uL, SparkExitMath.savingsFundingSats(20_000uL, 1, 8_000uL, 2uL), "savings pays it again")
         assertEquals(0uL, SparkExitMath.savingsFundingSats(20_000uL, 1, 20_000uL, 2uL))
-    }
-
-    @Test
-    fun `quote names what it skips and spark's balance beyond every leaf it lists`() {
-        val prepared = SparkExitFixtures.prepared()
-        val beyond = SparkExitQuote(prepared, sparkBalanceSats = 150_000uL)
-        assertEquals(50_000uL, beyond.unexitableSats)
-        assertEquals(49_700uL, beyond.beyondLeavesSats)
-        assertEquals(300uL, SparkExitQuote(prepared, sparkBalanceSats = 100_300uL).unexitableSats)
-        assertEquals(300uL, SparkExitQuote(prepared).unexitableSats)
-        assertNull(SparkExitQuote(SparkExitFixtures.prepared(skipped = emptyList())).unexitableSats)
     }
 
     @Test
@@ -594,12 +662,11 @@ class SparkExitFundingTest {
     }
 
     @Test
-    fun `a per-node quote names how many parts the funding is split into`() {
+    fun `a per-node quote asks for the whole funding`() {
         val entries = List(3) { PerBranchFunding("leaf-$it", 2_000uL) }
         val prepared = SparkExitFixtures.prepared().let {
             it.copy(funding = RecoveryFunding(7_000uL, entries, CpfpFundingStrategy.PER_NODE))
         }
-        assertEquals(3, SparkExitQuote(prepared).fundedSteps)
         assertEquals(7_000uL, SparkExitQuote(prepared).fundingSats)
     }
 
@@ -779,5 +846,19 @@ class SparkExitFundingTest {
 
         assertEquals(SparkExitMath.FUNDING_SCAN_MAX_ADDRESSES.toUInt(), next)
         assertEquals(SparkExitMath.FUNDING_SCAN_MAX_ADDRESSES, reads)
+    }
+
+    private fun rawTx(inputs: List<Pair<String, Int>>, outputs: List<Pair<Long, ByteArray>>): String {
+        fun le(
+            value: Long,
+            size: Int
+        ) = (0 until size).joinToString("") { "%02x".format((value shr (8 * it)) and 0xff) }
+        val ins = inputs.joinToString("") { (txid, vout) ->
+            txid.chunked(2).reversed().joinToString("") + le(vout.toLong(), 4) + "00" + "ffffffff"
+        }
+        val outs = outputs.joinToString("") { (value, script) ->
+            le(value, 8) + "%02x".format(script.size) + script.toHexString()
+        }
+        return "02000000" + "%02x".format(inputs.size) + ins + "%02x".format(outputs.size) + outs + le(0, 4)
     }
 }

@@ -27,7 +27,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
+import to.bitkit.ext.isWebLink
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -40,11 +42,15 @@ private val LINK_SUGGESTIONS = persistentListOf(
     "Twitch", "Pinterest", "TikTok", "Spotify",
 )
 
+/** Suggestions whose links are not web links, which social v1 profiles reject. */
+private val NON_WEB_SUGGESTIONS = setOf("Email", "Phone")
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddLinkSheet(
     onDismiss: () -> Unit,
     onSave: (label: String, url: String) -> Unit,
+    webLinksOnly: Boolean = false,
 ) {
     var label by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
@@ -68,7 +74,11 @@ fun AddLinkSheet(
         if (showSuggestions) {
             SuggestionsContent(
                 title = stringResource(R.string.profile__suggestions_to_add),
-                suggestions = LINK_SUGGESTIONS,
+                suggestions = if (webLinksOnly) {
+                    LINK_SUGGESTIONS.filterNot { it in NON_WEB_SUGGESTIONS }.toImmutableList()
+                } else {
+                    LINK_SUGGESTIONS
+                },
                 onSelect = {
                     dismissKeyboard()
                     label = it
@@ -87,7 +97,7 @@ fun AddLinkSheet(
                     dismissKeyboard()
                     onSave(label, url)
                 },
-                isSaveEnabled = label.isNotBlank() && url.isNotBlank(),
+                isSaveEnabled = label.isNotBlank() && url.isNotBlank() && (!webLinksOnly || url.isWebLink()),
             )
         }
     }

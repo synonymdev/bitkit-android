@@ -87,6 +87,7 @@ import to.bitkit.models.toLdkNetwork
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkService
+import to.bitkit.services.SparkError
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -716,17 +717,71 @@ class BackupRepo @Inject constructor(
      * read, so a failed or skipped restore never loses the stored exit data.
      */
     private suspend fun uploadSparkExitBackup(): Result<Unit> = runSuspendCatching {
+        val staged = sparkRepo.importStagedExitState()
+        if (staged is StagedExitImport.Rejected) {
+            setAsideRejectedExitBackup(rejectedStagedExitCopy(staged))
+            sparkRepo.discardStagedExitState(staged.exitState)
+        }
+        // Dropping a rejected staged copy asks for the stored backup to be merged again, until a merge succeeds.
         if (!sparkRepo.hasMergedRemoteExitState) {
             sparkRepo.exitBackup().getOrThrow() ?: throw SparkExitBackupDeferred()
-            val remote = vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name).getOrThrow()?.value
-                ?.let { json.decodeFromString<SparkExitBackupV1>(String(it)) }
-            sparkRepo.mergeRemoteExitBackup(remote).getOrThrow()
+            mergeStoredExitBackup()
         }
         val backup = sparkRepo.exitBackup().getOrThrow() ?: throw SparkExitBackupDeferred()
         vssBackupClient.putObject(
             key = BackupCategory.SPARK_EXIT.name,
             data = json.encodeToString(backup).toByteArray(),
         ).getOrThrow()
+    }
+
+    /**
+     * Merges the stored exit backup into Spark. One Spark can't import is set aside, and replaced only when it is still
+     * the stored one after that, so exit data another device stored meanwhile is merged first.
+     */
+    private suspend fun mergeStoredExitBackup() {
+        var stored = vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name).getOrThrow()?.value
+        repeat(EXIT_MERGE_ATTEMPTS) {
+            val remote = stored?.let { bytes ->
+                runCatching { json.decodeFromString<SparkExitBackupV1>(String(bytes)) }.getOrNull()
+            }
+            val merged = if (stored != null && remote == null) {
+                Result.failure(SparkError.ExitStateUnimportable())
+            } else {
+                sparkRepo.mergeRemoteExitBackup(remote)
+            }
+            val error = merged.exceptionOrNull() ?: return
+            val unimportable = stored
+            if (error !is SparkError.ExitStateUnimportable || unimportable == null) throw error
+            setAsideRejectedExitBackup(unimportable)
+            val current = vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name).getOrThrow()?.value
+            if (current.contentEquals(unimportable)) {
+                sparkRepo.skipUnimportableRemoteExitState(remote?.exitState)
+                return
+            }
+            stored = current
+        }
+        throw SparkExitBackupChanged()
+    }
+
+    private suspend fun rejectedStagedExitCopy(staged: StagedExitImport.Rejected): ByteArray {
+        val stored = vssBackupClient.getObject(BackupCategory.SPARK_EXIT.name).getOrThrow()?.value
+        val remote = stored?.let { bytes ->
+            runCatching { json.decodeFromString<SparkExitBackupV1>(String(bytes)) }.getOrNull()
+        }
+        if (stored != null && remote?.exitState == staged.exitState) return stored
+        val copy = SparkExitBackupV1(
+            createdAt = currentTimeMillis(),
+            network = remote?.network ?: staged.network,
+            exitState = staged.exitState,
+        )
+        return json.encodeToString(copy).toByteArray()
+    }
+
+    private suspend fun setAsideRejectedExitBackup(data: ByteArray) {
+        val key = rejectedExitKey(data)
+        if (vssBackupClient.getObject(key).getOrThrow() != null) return
+        vssBackupClient.putObject(key = key, data = data).getOrThrow()
+        Logger.warn("Set Spark exit data Spark can't import aside as '$key'", context = TAG)
     }
 
     suspend fun persistWalletBackup(): Result<Unit> =
@@ -921,6 +976,8 @@ class BackupRepo @Inject constructor(
             pubkyContactProfileOverrides = pubkyContactProfileOverrides,
             hwWalletNames = hwWalletNames,
             sparkExitEarlierAddresses = sparkExitEarlierAddressesBackup(),
+            moveToSparkPaymentHashes = cacheData.moveToSparkHashes.map { it.lowercase() }.distinct().sorted()
+                .takeIf { it.isNotEmpty() },
         )
 
         json.encodeToString(payload).toByteArray()
@@ -1131,7 +1188,13 @@ class BackupRepo @Inject constructor(
                 connectionSession.replay()
                 // Before the slower categories, so the exit data is staged before Spark connects and syncs.
                 performRestore(BackupCategory.SPARK_EXIT, failedCategories) { dataBytes ->
-                    val parsed = json.decodeFromString<SparkExitBackupV1>(String(dataBytes))
+                    val parsed = runCatching { json.decodeFromString<SparkExitBackupV1>(String(dataBytes)) }
+                        .getOrElse {
+                            // A layout this app can't read never becomes readable here, so it is kept for one that can,
+                            // and the restore reports the exit data as not restored, its backup status untouched.
+                            if (it is IllegalArgumentException) setAsideRejectedExitBackup(dataBytes)
+                            throw it
+                        }
                     sparkRepo.restoreExitBackup(parsed, backupWalletIndex()).getOrThrow()
                     parsed.createdAt
                 }
@@ -1265,11 +1328,20 @@ class BackupRepo @Inject constructor(
                 // The exit then looks once for funding addresses that still hold coins and nothing watches: each one
                 // below the index, and those a scan forward from it finds used, which also moves the index past them.
                 sparkExitFundingRecoveryPending = it.sparkExitFundingRecoveryPending + restoredIndexKeys,
+                // Both apps back the moves up beside the cache; the device's own stay.
+                moveToSparkHashes = (
+                    it.moveToSparkHashes + cleanCache.moveToSparkHashes + parsed.moveToSparkPaymentHashes.orEmpty()
+                    ).map { hash -> hash.lowercase() }.distinct(),
             )
         }
         runCatching { restoreSparkExitEarlierAddresses(parsed.sparkExitEarlierAddresses) }
             .onFailure { Logger.warn("Failed to restore the earlier Spark exit addresses", it, context = TAG) }
-        Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)
+        // Payment history stays out of the log, as support requests attach it.
+        val logged = parsed.cache.copy(
+            cachedRates = emptyList(),
+            moveToSparkHashes = emptyList(),
+        )
+        Logger.debug("Restored caches: ${jsonLogOf(logged)}", TAG)
         onCacheRestored()
         val persisted = preActivityMetadataRepo.upsertPreActivityMetadata(parsed.tagMetadata)
             .onFailure { Logger.warn("Failed to restore pre-activity metadata", it, context = TAG) }
@@ -1555,8 +1627,24 @@ class BackupRepo @Inject constructor(
         private const val MINUTE_IN_MS = 60_000
         private const val BACKUP_DEBOUNCE = 5000L // 5 seconds
 
+        /**
+         * The remote key of exit data Spark can never import, shared with bitkit-ios. A later, different copy goes
+         * under this key plus `_` and the first 16 hex digits of its SHA-256; an existing copy is never replaced.
+         */
+        internal const val SPARK_EXIT_REJECTED_KEY = "SPARK_EXIT_REJECTED"
+        private const val REJECTED_DIGEST_HEX_DIGITS = 16
+
+        /** Where exit data Spark can't import is kept: one key per copy, so none replaces another. */
+        internal fun rejectedExitKey(data: ByteArray): String {
+            val digest = MessageDigest.getInstance("SHA-256").digest(data).joinToString("") { "%02x".format(it) }
+            return SPARK_EXIT_REJECTED_KEY + "_" + digest.take(REJECTED_DIGEST_HEX_DIGITS)
+        }
+
         /** Spark's exit data can reach several MB and changes with every payment, so its uploads are spaced out. */
         private const val SPARK_EXIT_BACKUP_DEBOUNCE = 60_000L
+
+        /** How many times the exit backup merges stored data another device replaced meanwhile before it gives up. */
+        private const val EXIT_MERGE_ATTEMPTS = 3
 
         /** Maximum captures before deferring a changing wallet to the next scheduled backup. */
         private const val WALLET_SNAPSHOT_ATTEMPTS = 3
@@ -1587,6 +1675,8 @@ class BackupRepo @Inject constructor(
 internal class WalletBackupSnapshotChanged : AppError("Private payment state changed during wallet snapshot")
 
 internal class SparkExitBackupDeferred : AppError("Spark has not connected and synced yet")
+
+internal class SparkExitBackupChanged : AppError("Stored Spark exit backup kept changing while it was merged")
 
 private class PublicAddressRestoreFailed(cause: Throwable) : AppError(
     "Failed to retain public address exclusion during restore",
