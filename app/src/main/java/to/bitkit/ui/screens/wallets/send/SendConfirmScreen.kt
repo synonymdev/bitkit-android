@@ -112,6 +112,9 @@ import kotlin.time.Duration.Companion.seconds
 
 private val EXPIRY_REFRESH_INTERVAL = 60.seconds
 
+/** How long the confirm stays locked after a swipe once nothing runs for it, before it frees the screen. */
+private val SWIPE_IDLE_RELEASE = 1.seconds
+
 /** Characters of a swap provider's pubky shown on the confirm screen. */
 private const val PROVIDER_KEY_LENGTH = 12
 const val SEND_CONFIRM_RESET_RESULT_KEY = "SEND_CONFIRM_RESET_RESULT_KEY"
@@ -140,7 +143,7 @@ fun SendConfirmScreen(
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,
     onNavigateToPin: () -> Unit,
-    isLocked: Boolean = false,
+    isSwipeRunning: Boolean = false,
     onLockChange: (Boolean) -> Unit = {},
     syncNodeVariant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
     autoPayContent: (@Composable () -> Unit)? = null,
@@ -202,6 +205,17 @@ fun SendConfirmScreen(
     LaunchedEffect(uiState.isPreparedFeeReview) {
         if (uiState.isPreparedFeeReview) isLoading = false
     }
+
+    // A swipe with nothing running for it any more, such as one stopped before paying, no longer holds the screen
+    var isSwipeIdle by remember { mutableStateOf(false) }
+    LaunchedEffect(isLoading, isSwipeRunning, uiState.shouldConfirmPay) {
+        isSwipeIdle = false
+        if (!isLoading || isSwipeRunning || uiState.shouldConfirmPay) return@LaunchedEffect
+        delay(SWIPE_IDLE_RELEASE)
+        isSwipeIdle = true
+    }
+    val isLocked = isLoading && !isSwipeIdle && !uiState.isPreparedFeeReview &&
+        uiState.showSanityWarningDialog == null
 
     // A running swipe holds the sheet too, until it moves on or returns here
     DisposableEffect(isLocked) {
@@ -462,7 +476,7 @@ private fun ContentRunning(
                 VerticalSpacer(if (isPreparing || uiState.isPaymentRequest) 24.dp else 44.dp)
 
                 if (isLnurlPay && !uiState.isPaymentRequest) {
-                    LnurlPayDetails(uiState = uiState, onEvent = onEvent)
+                    LnurlPayDetails(uiState = uiState, isLoading = isLoading, onEvent = onEvent)
                 } else if (showDetails && !isPreparing) {
                     when (uiState.payMethod) {
                         SendMethod.ONCHAIN -> {
@@ -489,7 +503,7 @@ private fun ContentRunning(
                             )
                             val lnurlPay = uiState.lnurl as? LnurlParams.LnurlPay
                             if (uiState.paysLnurl && lnurlPay?.data?.commentAllowed() == true) {
-                                LnurlCommentSection(uiState, onEvent)
+                                LnurlCommentSection(uiState, onEvent, enabled = !isLoading)
                             }
                         }
                     }
@@ -581,6 +595,7 @@ private fun SendUiState.canSwipeToPay() = isAmountInputValid &&
 private fun LnurlCommentSection(
     uiState: SendUiState,
     onEvent: (SendEvent) -> Unit,
+    enabled: Boolean,
 ) {
     Spacer(modifier = Modifier.height(16.dp))
     Caption13Up(stringResource(R.string.wallet__lnurl_pay_confirm__comment), color = Colors.White64)
@@ -592,6 +607,7 @@ private fun LnurlCommentSection(
         onValueChange = { onEvent(SendEvent.CommentChange(it)) },
         minLines = 3,
         maxLines = 3,
+        enabled = enabled,
         modifier = Modifier
             .fillMaxWidth()
             .testTag("CommentInput")
@@ -979,6 +995,7 @@ private val SendUiState.confirmationRequestNote: String?
 @Composable
 private fun LnurlPayDetails(
     uiState: SendUiState,
+    isLoading: Boolean,
     onEvent: (SendEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1030,7 +1047,7 @@ private fun LnurlPayDetails(
         UpdateFeeCell(uiState.sparkUpdateQuote?.feeSats)
 
         if (lnurlPay.data.commentAllowed()) {
-            LnurlCommentSection(uiState, onEvent)
+            LnurlCommentSection(uiState, onEvent, enabled = !isLoading)
         }
     }
 }

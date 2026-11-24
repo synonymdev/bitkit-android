@@ -532,7 +532,7 @@ fun SendSheet(
                     }
                     val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
-                    val isConfirmLocked by appViewModel.isSendConfirmLocked.collectAsStateWithLifecycle()
+                    val isSwipeRunning by appViewModel.isSendSwipeRunning.collectAsStateWithLifecycle()
                     val initialSubscriptionId = uiState.incomingPaymentRequestId
                         ?.takeIf { uiState.isInitialSubscriptionPayment }
                         ?.let { id -> PaykitSubscriptionId(id.paymentRequestId, id.counterparty) }
@@ -567,7 +567,7 @@ fun SendSheet(
                         },
                         onClickTag = { tag -> appViewModel.removeTag(tag) },
                         onNavigateToPin = { navController.navigateTo(SendRoute.PinCheck) },
-                        isLocked = isConfirmLocked,
+                        isSwipeRunning = isSwipeRunning,
                         onLockChange = onConfirmLockChange,
                         autoPayContent = initialSubscription?.let { subscription ->
                             {

@@ -446,12 +446,12 @@ class AppViewModel @Inject constructor(
     /** Bumped only when a new send starts, unlike [sendStateGeneration], which edits within one send also bump. */
     private var sendSession = 0L
 
-    /** Swipes and payments still running from the confirm screen; see [isSendConfirmLocked]. */
-    private var sendConfirmLocks = 0
-    private val _isSendConfirmLocked = MutableStateFlow(false)
+    /** Swipes and payments still running from the confirm screen; see [isSendSwipeRunning]. */
+    private var sendSwipeRuns = 0
+    private val _isSendSwipeRunning = MutableStateFlow(false)
 
-    /** True from the confirm swipe until it moves on to the payment or returns to confirm; the screen can't be left. */
-    val isSendConfirmLocked = _isSendConfirmLocked.asStateFlow()
+    /** True while a confirm swipe, or the payment it confirmed, still runs; the confirm stays locked meanwhile. */
+    val isSendSwipeRunning = _isSendSwipeRunning.asStateFlow()
 
     fun setSendEvent(event: SendEvent) {
         if ((currentSheet.value as? Sheet.Send)?.preparingRequest != null) return
@@ -6777,30 +6777,30 @@ class AppViewModel @Inject constructor(
         if (!_sendUiState.value.isAmountInputValid || !_sendUiState.value.isHardwareFeeReady) return
         _sendUiState.update { it.copy(approvedSparkUpdateQuote = it.sparkUpdateQuote) }
         viewModelScope.launch {
-            withSendConfirmLocked {
+            whileSendSwipeRuns {
                 val review = preparedFeeReview
-                if (review == null && !prepareCoinSelection()) return@withSendConfirmLocked
+                if (review == null && !prepareCoinSelection()) return@whileSendSwipeRuns
                 val amount = _sendUiState.value.amount
 
                 handleSanityChecks(amount, preparedFeeSats = review?.feeSats)
                 // await for dialog UI interaction
-                if (_sendUiState.value.showSanityWarningDialog != null) return@withSendConfirmLocked
+                if (_sendUiState.value.showSanityWarningDialog != null) return@whileSendSwipeRuns
 
-                if (preparedFeeReview !== review) return@withSendConfirmLocked
+                if (preparedFeeReview !== review) return@whileSendSwipeRuns
                 review?.isSwiped = true
                 _sendUiState.update { it.copy(shouldConfirmPay = true) }
             }
         }
     }
 
-    private suspend fun withSendConfirmLocked(block: suspend () -> Unit) {
-        sendConfirmLocks++
-        _isSendConfirmLocked.update { true }
+    private suspend fun whileSendSwipeRuns(block: suspend () -> Unit) {
+        sendSwipeRuns++
+        _isSendSwipeRunning.update { true }
         try {
             block()
         } finally {
-            sendConfirmLocks--
-            _isSendConfirmLocked.update { sendConfirmLocks > 0 }
+            sendSwipeRuns--
+            _isSendSwipeRunning.update { sendSwipeRuns > 0 }
         }
     }
 
@@ -9570,7 +9570,7 @@ class AppViewModel @Inject constructor(
             val finishSubmission = beginPaymentSubmission()
             try {
                 _sendUiState.update { it.copy(shouldConfirmPay = false) }
-                withSendConfirmLocked { proceedWithPayment(contactPaymentContext) }
+                whileSendSwipeRuns { proceedWithPayment(contactPaymentContext) }
             } finally {
                 finishSubmission()
                 if (confirmedPaymentSubmission === submission) releaseConfirmedPaymentSubmission()

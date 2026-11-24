@@ -21754,7 +21754,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `the confirm stays locked while the swipe quotes the update again`() = test {
+    fun `the swipe keeps running while it quotes the update again`() = test {
         val bolt11 = "lnbcrt1lockedrequote"
         val quoted = CompletableDeferred<Result<MoveToSparkQuote>>()
         whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
@@ -21771,14 +21771,45 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.sendEffect.test {
             sut.setSendEvent(SendEvent.PayConfirmed)
             advanceUntilIdle()
-            assertTrue(sut.isSendConfirmLocked.value)
+            assertTrue(sut.isSendSwipeRunning.value)
 
             quoted.complete(Result.success(UPDATE_QUOTE))
             advanceUntilIdle()
 
             assertEquals(SendEffect.ResetConfirm, awaitItem())
         }
-        assertFalse(sut.isSendConfirmLocked.value)
+        assertFalse(sut.isSendSwipeRunning.value)
+    }
+
+    @Test
+    fun `an update quote failing after the send closed shows no error`() = test {
+        val bolt11 = "lnbcrt1closedrequote"
+        val quoted = CompletableDeferred<Result<MoveToSparkQuote>>()
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).doSuspendableAnswer { quoted.await() }
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        runCurrent()
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 60_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+                sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
+            ),
+        )
+        val effects = mutableListOf<SendEffect>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { sut.sendEffect.collect { effects += it } }
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+        sut.hideSheet()
+        quoted.complete(Result.failure(MoveToSparkError.NothingToMove()))
+        advanceUntilIdle()
+
+        assertTrue(effects.none { it is SendEffect.NavigateToError })
+        assertFalse(sut.isSendSwipeRunning.value)
     }
 
     @Test
