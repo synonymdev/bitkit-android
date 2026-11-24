@@ -174,16 +174,30 @@ class CacheStore internal constructor(
         }
     }
 
-    /** Keeps Spark's send of [paymentHash] as one whose outcome Spark didn't report, since [failedAt] epoch seconds. */
-    suspend fun addSparkUncertainSend(paymentHash: String, failedAt: Long) {
+    /**
+     * Keeps Spark's send of [paymentHash] as one whose outcome Spark didn't report, started at [startedAt] epoch
+     * seconds as the attempt Spark knows by [attemptId].
+     */
+    suspend fun addSparkUncertainSend(paymentHash: String, startedAt: Long, attemptId: String) {
         val hash = paymentHash.lowercase()
-        store.updateData { it.copy(sparkUncertainSends = it.sparkUncertainSends + (hash to failedAt)) }
+        store.updateData {
+            it.copy(
+                sparkUncertainSends = it.sparkUncertainSends + (hash to startedAt),
+                sparkSendAttemptIds = it.sparkSendAttemptIds + (hash to attemptId),
+            )
+        }
     }
 
     suspend fun removeSparkUncertainSend(paymentHash: String) {
         val hash = paymentHash.lowercase()
-        if (hash !in store.data.first().sparkUncertainSends) return
-        store.updateData { it.copy(sparkUncertainSends = it.sparkUncertainSends - hash) }
+        val data = store.data.first()
+        if (hash !in data.sparkUncertainSends && hash !in data.sparkSendAttemptIds) return
+        store.updateData {
+            it.copy(
+                sparkUncertainSends = it.sparkUncertainSends - hash,
+                sparkSendAttemptIds = it.sparkSendAttemptIds - hash,
+            )
+        }
     }
 
     suspend fun addMoveToSparkHash(paymentHash: String) {
@@ -371,10 +385,15 @@ data class AppCacheData(
     /** Invoice expiry in epoch seconds of the [sparkSendHashes] that know it. */
     val sparkSendExpiries: Map<String, Long> = mapOf(),
     /**
-     * Spark's sends whose outcome it didn't report, by hash, with when they failed in epoch seconds, so a restart
-     * never reads a retry's earlier failed attempt as its outcome.
+     * Spark's sends whose outcome it didn't report, by hash, with when they started in epoch seconds, kept across a
+     * restart until Spark settles them.
      */
     val sparkUncertainSends: Map<String, Long> = mapOf(),
+    /**
+     * The idempotency key each of the [sparkUncertainSends] passed, which Spark keeps as that attempt's payment id, so
+     * only its own outcome settles it. A hold without one waits for a paid attempt or its invoice's expiry.
+     */
+    val sparkSendAttemptIds: Map<String, String> = mapOf(),
     /**
      * Payment hashes of the moves to Spark, kept across restarts so neither leg of a move is announced as a payment and
      * Activity shows the move as one.
