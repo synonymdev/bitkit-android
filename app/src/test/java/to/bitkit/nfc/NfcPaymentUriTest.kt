@@ -126,7 +126,11 @@ class NfcPaymentUriTest {
         val address = "bitkit://bitcoin:bcrt1qtest?amount=0.001"
         assertNull(nfcPaymentRequest("$address&bitkit://req-pop=callback"))
         assertNull(nfcPaymentRequest("$address&rebitkit://q-pop=callback"))
-        assertNull(nfcPaymentRequest("bitkit://bitkit://bitcoin:bcrt1qtest?REBITKIT://Q-POP=callback"))
+        // The decoder deletes only lowercase `bitkit://`, so a mixed-case one stays part of an optional key.
+        val mixedCase = "bitkit://bitkit://bitcoin:bcrt1qtest?REBITKIT://Q-POP=callback"
+        assertEquals(mixedCase, nfcPaymentRequest(mixedCase))
+        val optional = "bitkit://bitcoin:bcrt1qtest?amount=0.001&reBitkit://q-x=1"
+        assertEquals(optional, nfcPaymentRequest(optional))
         // The decoder deletes them again while the text starts with `bitkit://`, so a nested one is removed too.
         val required = "bitcoin:bcrt1qtest?amount=0.001&req-pop=x"
         assertNull(nfcPaymentRequest("bitkit://bitbitkit://kit://$required"))

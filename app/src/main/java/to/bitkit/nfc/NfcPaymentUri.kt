@@ -88,8 +88,7 @@ fun hasRequiredParam(uri: String): Boolean {
         val wrapper = DECODER_WRAPPERS.firstOrNull { decoded.startsWith(it, ignoreCase = true) }
         decoded = when {
             wrapper != null -> decoded.substring(wrapper.length).coreTrim()
-            decoded.startsWith(DEEPLINK_SCHEME, ignoreCase = true) ->
-                decoded.replace(DEEPLINK_SCHEME, "", ignoreCase = true).coreTrim()
+            decoded.startsWith(DEEPLINK_SCHEME) -> decoded.replace(DEEPLINK_SCHEME, "").coreTrim()
             else -> break
         }
     }
