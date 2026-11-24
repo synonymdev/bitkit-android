@@ -563,6 +563,7 @@
     <string name="profile__nav_title">Προφίλ</string>
     <string name="profile__retry_load">Προσπαθήστε Ξανά</string>
     <string name="profile__suggestions">Προτάσεις</string>
+    <string name="profile__update_required">Αυτό το προφίλ χρειάζεται νεότερη έκδοση του Bitkit. Ενημέρωσε την εφαρμογή για να το χρησιμοποιήσεις.</string>
     <string name="security__backup_button">Αντίγραφο ασφαλείας</string>
     <string name="security__backup_funds">Τώρα που έχεις κεφάλαια στο πορτοφόλι σου, ήρθε η ώρα να δημιουργήσεις αντίγραφο ασφαλείας των χρημάτων σου!</string>
     <string name="security__backup_funds_no">Δεν υπάρχουν ακόμα κεφάλαια στο πορτοφόλι σου, αλλά μπορείς να δημιουργήσεις αντίγραφο ασφαλείας αν το επιθυμείς.</string>

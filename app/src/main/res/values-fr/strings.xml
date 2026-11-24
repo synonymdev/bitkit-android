@@ -563,6 +563,7 @@
     <string name="profile__unlink_error_title">Impossible de dissocier le pubky</string>
     <string name="profile__unlink_pubky">Dissocier le pubky</string>
     <string name="profile__unlink_success">Pubky dissocié</string>
+    <string name="profile__update_required">Ce profil nécessite une version plus récente de Bitkit. Mettez l\'application à jour pour l\'utiliser.</string>
     <string name="profile__your_name">Votre nom</string>
     <string name="other__update_text">Veuillez mettre à jour Bitkit à la dernière version pour bénéficier des nouvelles fonctionnalités et des corrections de bugs !</string>
     <string name="other__update_button">Mise à jour</string>

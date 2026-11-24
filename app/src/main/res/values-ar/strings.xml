@@ -563,6 +563,7 @@
     <string name="profile__nav_title">الملف الشخصي</string>
     <string name="profile__retry_load">حاول مرة أخرى</string>
     <string name="profile__suggestions">اقتراحات</string>
+    <string name="profile__update_required">يحتاج هذا الملف الشخصي إلى إصدار أحدث من Bitkit. حدّث التطبيق لاستخدامه.</string>
     <string name="security__backup_button">نسخ احتياطي</string>
     <string name="security__backup_funds">الآن بعد أن لديك بعض الأموال في محفظتك، حان وقت عمل نسخة احتياطية!</string>
     <string name="security__backup_funds_no">لا توجد أموال في محفظتك بعد، لكن يمكنك إنشاء نسخة احتياطية إذا أردت.</string>

@@ -859,6 +859,7 @@
     <string name="profile__unlink_error_title">Unable to Unlink Pubky</string>
     <string name="profile__unlink_pubky">Unlink pubky</string>
     <string name="profile__unlink_success">Pubky unlinked</string>
+    <string name="profile__update_required">This profile needs a newer version of Bitkit. Update the app to use it.</string>
     <string name="profile__your_name">Your Name</string>
     <string name="profile__your_pubky">Your Pubky</string>
     <string name="pubky_auth__already_signed_in">Already signed in</string>

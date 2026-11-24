@@ -582,6 +582,7 @@
     <string name="profile__unlink_error_title">Propojení pubky nelze zrušit</string>
     <string name="profile__unlink_pubky">Zrušit propojení pubky</string>
     <string name="profile__unlink_success">Propojení pubky zrušeno</string>
+    <string name="profile__update_required">Tento profil vyžaduje novější verzi Bitkitu. Aktualizujte aplikaci, abyste ho mohli používat.</string>
     <string name="profile__your_name">Vaše jméno</string>
     <string name="security__backup_button">Zálohování</string>
     <string name="security__backup_funds">Nyní, když máte v peněžence nějaké prostředky, je čas je zálohovat!</string>

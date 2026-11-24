@@ -577,6 +577,7 @@
     <string name="profile__unlink_error_title">Kan pubky niet ontkoppelen</string>
     <string name="profile__unlink_pubky">pubky ontkoppelen</string>
     <string name="profile__unlink_success">pubky ontkoppeld</string>
+    <string name="profile__update_required">Dit profiel vereist een nieuwere versie van Bitkit. Werk de app bij om het te gebruiken.</string>
     <string name="profile__your_name">Uw Naam</string>
     <string name="security__backup_button">Back-up maken</string>
     <string name="security__backup_funds">Nu je wat geld in je wallet hebt, is het tijd om een back-up te maken van je geld!</string>
