@@ -4591,6 +4591,28 @@ class LightningRepoTest : BaseUnitTest() {
         assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
 
+    // Regression: a stop requested during the failed change's build is kept by recovery, whose first
+    // start would otherwise cancel it before any retry could see it.
+    @Test
+    fun `restartWithElectrumServer recovery does not start over a stop requested before it`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                sut.stopDebounced()
+                throw busy
+            }
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, never()).setup(any(), isNull(), isNull(), anyOrNull())
+        assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
     // Regression: a server that cannot work is rejected by the probe before the node is touched.
     // Tearing the node down for one is what leaves its electrum tasks wedged, so that a later
     // free_node blocks for tens of seconds instead of milliseconds.
