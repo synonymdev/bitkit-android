@@ -1827,7 +1827,6 @@
     <string name="watch_only_accounts__empty_title">Κανένας λογαριασμός διακομιστή</string>
     <string name="watch_only_accounts__error_invalid_name">Εισήγαγε όνομα λογαριασμού από 1 έως 64 χαρακτήρες.</string>
     <string name="watch_only_accounts__error_invalid_xpub">Το Bitkit δεν μπόρεσε να δημιουργήσει έγκυρο xpub λογαριασμού.</string>
-    <string name="watch_only_accounts__error_node_unavailable">Το πορτοφόλι πρέπει να εκτελείται για να δημιουργηθεί λογαριασμός.</string>
     <string name="watch_only_accounts__name">ΟΝΟΜΑ</string>
     <string name="watch_only_accounts__name_placeholder">Όνομα λογαριασμού</string>
     <string name="watch_only_accounts__name_saved">Το όνομα λογαριασμού αποθηκεύτηκε</string>

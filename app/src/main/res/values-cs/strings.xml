@@ -1830,7 +1830,6 @@
     <string name="watch_only_accounts__empty_title">Žádné účty serverů</string>
     <string name="watch_only_accounts__error_invalid_name">Zadejte název účtu o délce 1 až 64 znaků.</string>
     <string name="watch_only_accounts__error_invalid_xpub">Bitkit nemohl vytvořit platný xpub účtu.</string>
-    <string name="watch_only_accounts__error_node_unavailable">Před vytvořením účtu musí být peněženka spuštěná.</string>
     <string name="watch_only_accounts__name">NÁZEV</string>
     <string name="watch_only_accounts__name_placeholder">Název účtu</string>
     <string name="watch_only_accounts__name_saved">Název účtu uložen</string>

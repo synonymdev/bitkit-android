@@ -1827,7 +1827,6 @@
     <string name="watch_only_accounts__empty_title">Keine Serverkonten</string>
     <string name="watch_only_accounts__error_invalid_name">Gib einen Kontonamen mit 1 bis 64 Zeichen ein.</string>
     <string name="watch_only_accounts__error_invalid_xpub">Bitkit konnte keinen gültigen Konto-xpub erstellen.</string>
-    <string name="watch_only_accounts__error_node_unavailable">Das Wallet muss laufen, bevor ein Konto erstellt werden kann.</string>
     <string name="watch_only_accounts__name">NAME</string>
     <string name="watch_only_accounts__name_placeholder">Kontoname</string>
     <string name="watch_only_accounts__name_saved">Kontoname gespeichert</string>

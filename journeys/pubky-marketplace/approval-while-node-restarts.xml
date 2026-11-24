@@ -1,0 +1,19 @@
+<journey name="paykit server approval while the node restarts">
+  <description>
+    Verifies that a Bitcoin watch-only Paykit Server setup approved while the Lightning node is stopped or
+    being rebuilt completes on the first Authorize, and that the node tracks the new account once it starts.
+    Precondition: an isolated wallet with a Pubky identity, on the integration fixture runtime described in the
+    suite README, and a fresh setup auth URL with x-bitkit-claim=watch-only-account-v1 from the Shop's
+    Connect Bitkit dialog or the Paykit Server setup fixture.
+  </description>
+  <actions>
+    <action>Record the current wallet's watch-only account names and derivation paths</action>
+    <action>Send Bitkit to the background with the home button and wait 10 seconds so the node stops</action>
+    <action>Open the fixture setup auth URL in the wallet with adb</action>
+    <action>Without waiting for the wallet to finish syncing, tap Approve on the receiving-details introduction, then Authorize, and complete PIN or biometrics if asked</action>
+    <action>Verify the success screen appears and no "The wallet must be running before an account can be created" toast is shown</action>
+    <action>Verify the Shop dialog or the fixture reports the setup as complete</action>
+    <action>Wait for the wallet to finish syncing, then open the watch-only accounts list in Settings</action>
+    <action>Verify exactly one new account was added, named after the requesting service, with tracking on</action>
+  </actions>
+</journey>

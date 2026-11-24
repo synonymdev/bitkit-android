@@ -1828,7 +1828,6 @@
     <string name="watch_only_accounts__empty_title">No hay cuentas de servidor</string>
     <string name="watch_only_accounts__error_invalid_name">Introduce un nombre de cuenta de entre 1 y 64 caracteres.</string>
     <string name="watch_only_accounts__error_invalid_xpub">Bitkit no pudo crear un xpub de cuenta válido.</string>
-    <string name="watch_only_accounts__error_node_unavailable">El monedero debe estar en funcionamiento antes de poder crear una cuenta.</string>
     <string name="watch_only_accounts__name">NOMBRE</string>
     <string name="watch_only_accounts__name_placeholder">Nombre de la cuenta</string>
     <string name="watch_only_accounts__name_saved">Nombre de la cuenta guardado</string>

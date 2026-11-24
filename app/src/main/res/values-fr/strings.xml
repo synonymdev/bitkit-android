@@ -1829,7 +1829,6 @@
     <string name="watch_only_accounts__empty_title">Aucun compte serveur</string>
     <string name="watch_only_accounts__error_invalid_name">Saisissez un nom de compte de 1 à 64 caractères.</string>
     <string name="watch_only_accounts__error_invalid_xpub">Bitkit n\'a pas pu créer de xpub de compte valide.</string>
-    <string name="watch_only_accounts__error_node_unavailable">Le portefeuille doit être en cours d\'exécution pour pouvoir créer un compte.</string>
     <string name="watch_only_accounts__name">NOM</string>
     <string name="watch_only_accounts__name_placeholder">Nom du compte</string>
     <string name="watch_only_accounts__name_saved">Nom du compte enregistré</string>

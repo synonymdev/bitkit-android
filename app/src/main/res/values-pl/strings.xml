@@ -1829,7 +1829,6 @@
     <string name="watch_only_accounts__empty_title">Brak kont serwerów</string>
     <string name="watch_only_accounts__error_invalid_name">Wprowadź nazwę konta o długości od 1 do 64 znaków.</string>
     <string name="watch_only_accounts__error_invalid_xpub">Bitkit nie mógł utworzyć prawidłowego xpub konta.</string>
-    <string name="watch_only_accounts__error_node_unavailable">Portfel musi być uruchomiony, zanim będzie można utworzyć konto.</string>
     <string name="watch_only_accounts__name">NAZWA</string>
     <string name="watch_only_accounts__name_placeholder">Nazwa konta</string>
     <string name="watch_only_accounts__name_saved">Nazwa konta zapisana</string>

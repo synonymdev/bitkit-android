@@ -34,6 +34,5 @@ private fun Throwable.pubkyAuthMessageResource() = when (this) {
     is WatchOnlyAccountError.AuthorizationAccountMissing -> R.string.watch_only_accounts__setup_not_finished
     is WatchOnlyAccountError.InvalidAccountName -> R.string.watch_only_accounts__error_invalid_name
     is WatchOnlyAccountError.InvalidExtendedPublicKey -> R.string.watch_only_accounts__error_invalid_xpub
-    is WatchOnlyAccountError.NodeUnavailable -> R.string.watch_only_accounts__error_node_unavailable
     else -> null
 }

@@ -487,9 +487,11 @@ class LightningService internal constructor(
         Logger.info("Node started", context = TAG)
     }
 
+    // No wallet sync here: it holds the watch-only lock and the LDK queue for the whole Electrum round trip, which
+    // delays the node start and any Pubky auth approval waiting on that lock. The initial sync after start covers it.
     private suspend fun reconcileWatchOnlyAccountsBestEffort() {
         runSuspendCatching {
-            reconcileWatchOnlyAccounts()
+            reconcileWatchOnlyAccounts(syncAfterReconcile = false)
         }.onFailure { error ->
             Logger.error("Failed to reconcile Paykit Server accounts during startup", error, context = TAG)
         }

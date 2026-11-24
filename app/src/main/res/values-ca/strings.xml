@@ -1828,7 +1828,6 @@
     <string name="watch_only_accounts__empty_title">No hi ha comptes de servidor</string>
     <string name="watch_only_accounts__error_invalid_name">Introdueix un nom de compte d\'entre 1 i 64 caràcters.</string>
     <string name="watch_only_accounts__error_invalid_xpub">Bitkit no ha pogut crear un xpub de compte vàlid.</string>
-    <string name="watch_only_accounts__error_node_unavailable">La cartera ha d\'estar en funcionament abans de poder crear un compte.</string>
     <string name="watch_only_accounts__name">NOM</string>
     <string name="watch_only_accounts__name_placeholder">Nom del compte</string>
     <string name="watch_only_accounts__name_saved">Nom del compte desat</string>
