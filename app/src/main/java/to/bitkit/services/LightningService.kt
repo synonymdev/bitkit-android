@@ -575,14 +575,15 @@ class LightningService internal constructor(
         }
         // A stop can leave tasks detached, e.g. a VSS write that keeps retrying. ldk-node keeps their runtime
         // alive until they end, but the release returns before that, so a rebuilt node could run while the old
-        // node's work still writes. In the background, kill the process instead; a cold start restores
-        // everything. In the foreground, release as before.
-        if (monitor.hasDetachedWork && isAppInBackground() && exitBeforeRuntimeShutdown()) return@withContext
+        // node's work still runs. Building the next node waits up to 60 s for the old node's VSS writes in
+        // flight and drops any it starts later. In the background, kill the process instead; a cold start
+        // restores everything. In the foreground, release as before.
+        if (monitor.hasDetachedWork && isAppInBackground() && exitBeforeDetachedWorkOverlaps()) return@withContext
         releaseHandle(node)
         Logger.info("Node stopped", context = TAG)
     }
 
-    private suspend fun exitBeforeRuntimeShutdown(): Boolean {
+    private suspend fun exitBeforeDetachedWorkOverlaps(): Boolean {
         Logger.warn("Exiting process: node stop left ldk_node tasks detached while in background", context = TAG)
         delay(EXIT_LOG_FLUSH_DELAY)
         if (!isAppInBackground()) {
@@ -597,11 +598,12 @@ class LightningService internal constructor(
      * Releases the rust handle instead of leaving it to the GC finalizer, keeping it off the
      * single-threaded LDK queue and off the lifecycle critical path.
      *
-     * `free_node` only returns once the node's background tasks drain, which takes tens of seconds
-     * when a failed start left them wedged, so the wait is bounded and the release is joined rather
-     * than run inline: cancelling a blocking FFI call does nothing, but abandoning the join lets the
-     * caller continue while the release finishes on its own. [awaitNodeRelease] gates the next
-     * rebuild or destructive storage work on the same job so native lifetimes never overlap.
+     * `free_node` waits a bounded time for the node's background tasks to drain, which can take tens
+     * of seconds when a failed start left them wedged, so the wait here is bounded too and the release
+     * is joined rather than run inline: cancelling a blocking FFI call does nothing, but abandoning the
+     * join lets the caller continue while the release finishes on its own. [awaitNodeRelease] gates
+     * the next rebuild or destructive storage work on the same job. After a timed-out stop, `free_node`
+     * can return while detached work of the old node still runs.
      */
     private suspend fun releaseHandle(node: Node) {
         val release = launch(ioDispatcher) {
@@ -616,10 +618,10 @@ class LightningService internal constructor(
     }
 
     /**
-     * Blocks until the previous node's release ([releaseHandle] / `free_node`) has finished, so a
-     * rebuild or destructive storage operation never overlaps the old node's native lifetime. The
-     * wait is bounded: a stuck free_node throws rather than proceeding (which would overlap) or
-     * blocking forever (which would brick every future rebuild).
+     * Blocks until the previous node's release ([releaseHandle] / `free_node`) has returned. It does
+     * not wait for the old node's detached work, which can still run after a timed-out stop. The wait
+     * is bounded: a stuck free_node throws rather than proceeding or blocking forever (which would
+     * brick every future rebuild).
      */
     suspend fun awaitNodeRelease(timeout: Duration = NODE_RELEASE_GATE_TIMEOUT) {
         val release = releaseJob ?: return

@@ -35,12 +35,13 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
 
     override val message get() = inner.message ?: super.message
     val compactType get() = inner.compactType
+    val isKvStoreSetupFailed get() = (inner as? LdkException.Build)?.exception is BuildException.KvStoreSetupFailed
 
     sealed interface LdkException {
         val message: String?
         val compactType: String?
 
-        class Build(exception: BuildException) : LdkException {
+        class Build(val exception: BuildException) : LdkException {
             override val compactType = exception::class.simpleName
             override val message = when (exception) {
                 is BuildException.InvalidChannelMonitor -> "Invalid channel monitor."
