@@ -861,6 +861,18 @@ class AppViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            pubkyRepo.sessionRestorationNeedsUpdate.collect { needsUpdate ->
+                if (needsUpdate) {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.common__error),
+                        description = context.getString(R.string.profile__update_required),
+                    )
+                    pubkyRepo.clearSessionRestorationNeedsUpdate()
+                }
+            }
+        }
+        viewModelScope.launch {
             pubkyRepo.adoptedSourceLost.collect { lost ->
                 if (lost) {
                     ToastEventBus.send(

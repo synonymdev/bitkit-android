@@ -828,6 +828,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { migrationService.isMigrationChecked() }.thenReturn(true)
         whenever { widgetsRepo.refreshEnabledWidgets() }.thenReturn(Unit)
         whenever(pubkyRepo.sessionRestorationFailed).thenReturn(MutableStateFlow(false))
+        whenever(pubkyRepo.sessionRestorationNeedsUpdate).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.adoptedSourceLost).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contactImportFailure).thenReturn(pubkyContactImportFailure)
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
