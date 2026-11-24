@@ -1269,6 +1269,22 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a node send stopped at submission keeps an earlier send of the invoice`() = test {
+        // An earlier node send of this invoice is pending or paid, so its hash is kept.
+        val cache = AppCacheData(ldkSendHashesSeeded = true, ldkSendHashes = listOf("bolt11"))
+        val store = CacheStore(InMemoryDataStore(cache))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenAnswer { throw AppError(ServiceError.PaymentStoppedAtSubmission()) }
+
+        sut.payInvoiceAuthorizedAtSubmission("bolt11", 1_000uL, { false }) { true }
+
+        assertEquals(listOf("bolt11"), store.data.first().ldkSendHashes, "The earlier send's hash must stay")
+    }
+
+    @Test
     fun `a node-only payment fails instead of falling back to spark`() = test {
         startNodeForTesting()
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
