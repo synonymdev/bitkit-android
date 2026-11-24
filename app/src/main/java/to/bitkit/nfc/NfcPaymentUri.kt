@@ -83,13 +83,13 @@ fun hasRequiredParam(uri: String): Boolean {
     // The app and the decoder strip the Lightning wrappers from the front. While the text starts with `bitkit://`, the
     // decoder deletes every `bitkit://` in it, which can turn a key into `req-`, and decodes again. Follow the same
     // steps and check the `bitcoin:` request the decoder would receive.
-    var decoded = uri.trim()
+    var decoded = uri.coreTrim()
     while (true) {
         val wrapper = DECODER_WRAPPERS.firstOrNull { decoded.startsWith(it, ignoreCase = true) }
         decoded = when {
-            wrapper != null -> decoded.substring(wrapper.length).trim()
+            wrapper != null -> decoded.substring(wrapper.length).coreTrim()
             decoded.startsWith(DEEPLINK_SCHEME, ignoreCase = true) ->
-                decoded.replace(DEEPLINK_SCHEME, "", ignoreCase = true).trim()
+                decoded.replace(DEEPLINK_SCHEME, "", ignoreCase = true).coreTrim()
             else -> break
         }
     }
@@ -98,6 +98,9 @@ fun hasRequiredParam(uri: String): Boolean {
         .split('&')
         .any { it.substringBefore('=').lowercase().startsWith(REQUIRED_PARAM_PREFIX) }
 }
+
+/** Trims like the decoder's Rust `trim()`, which also removes U+0085 (NEL) that Kotlin's `trim()` keeps. */
+private fun String.coreTrim() = trim { it.isWhitespace() || it == '\u0085' }
 
 /** The request to hand to the scanner for [text] read from an NFC tag, or null when it is refused. */
 fun nfcPaymentRequest(text: String): String? = scannedPaymentRequest(text).takeUnless(::hasRequiredParam)

@@ -135,6 +135,9 @@ class NfcPaymentUriTest {
         val payable = "bitcoin:bcrt1qtest?amount=0.001&bitbitkit://kit://req-pop=x"
         assertEquals(payable, nfcPaymentRequest(payable))
         assertEquals("bitkit://$payable", nfcPaymentRequest("bitkit://$payable"))
+        // The decoder's trim also removes U+0085 (NEL), which Kotlin's `trim()` keeps.
+        assertNull(nfcPaymentRequest("\u0085$required"))
+        assertNull(nfcPaymentRequest("bitkit://\u0085$required"))
     }
 
     @Test
