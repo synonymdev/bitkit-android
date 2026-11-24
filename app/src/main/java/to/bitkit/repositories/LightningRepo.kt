@@ -111,6 +111,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.UrlValidator
+import to.bitkit.utils.isStoppedAtSubmission
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -1800,6 +1801,13 @@ class LightningRepo @Inject constructor(
             }
                 .also { ldkSendsInFlight -= key }
                 .onSuccess { recordSendRail(it, LightningRail.Ldk) }
+                .onFailure {
+                    // Stopped on the node's queue before anything was submitted: no send of this invoice to remember.
+                    if (it.isStoppedAtSubmission()) {
+                        ldkSendRecordedAt.remove(key)
+                        cacheStore.removeLdkSendHash(key)
+                    }
+                }
                 .also { syncState() }
         } finally {
             releaseSend(key)

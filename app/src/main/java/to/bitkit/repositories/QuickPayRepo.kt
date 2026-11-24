@@ -49,8 +49,8 @@ import to.bitkit.models.safe
 import to.bitkit.services.SparkError
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
-import to.bitkit.utils.ServiceError
 import to.bitkit.utils.asNodeException
+import to.bitkit.utils.isStoppedAtSubmission
 import java.math.BigDecimal
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -460,9 +460,6 @@ class QuickPayRepo @Inject constructor(
             emitToSession(current.sessionId, QuickPaySessionEvent.FallBackToConfirm)
         }
     }
-
-    private fun Throwable.isStoppedAtSubmission(): Boolean =
-        generateSequence(this) { it.cause }.any { it is ServiceError.PaymentStoppedAtSubmission }
 
     private suspend fun tryMarkDispatched(invoiceHash: String): Boolean {
         val settings = readSettings()

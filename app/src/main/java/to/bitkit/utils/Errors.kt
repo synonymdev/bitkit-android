@@ -138,3 +138,7 @@ fun Throwable.asNodeException(): NodeException? = when (this) {
 // endregion
 
 fun Throwable.isTxSyncTimeout(): Boolean = this is NodeException.TxSyncTimeout || cause is NodeException.TxSyncTimeout
+
+/** Whether this, or an error it wraps, is [ServiceError.PaymentStoppedAtSubmission]: nothing reached the node. */
+fun Throwable.isStoppedAtSubmission(): Boolean =
+    generateSequence(this) { it.cause }.any { it is ServiceError.PaymentStoppedAtSubmission }

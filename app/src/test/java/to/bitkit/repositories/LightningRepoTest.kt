@@ -1254,6 +1254,21 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a node send stopped at submission leaves no record of a send`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenAnswer { throw AppError(ServiceError.PaymentStoppedAtSubmission()) }
+
+        val result = sut.payInvoiceAuthorizedAtSubmission("bolt11", 1_000uL, { false }) { true }
+
+        assertTrue(result.isFailure)
+        assertTrue(store.data.first().ldkSendHashes.isEmpty(), "Nothing reached the node, so no send is recorded")
+    }
+
+    @Test
     fun `a node-only payment fails instead of falling back to spark`() = test {
         startNodeForTesting()
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
