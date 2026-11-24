@@ -19,6 +19,7 @@ import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -1930,6 +1931,45 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertFalse(result.exceptionOrNull() is PaymentPendingException, "a node send that never left held the invoice")
         verify(sparkRepo).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a node send recorded while a spark check releases the invoice keeps its hash`() = test {
+        val inner = InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true, ldkSendHashes = listOf("h")))
+        val entered = CompletableDeferred<Unit>()
+        val queued = CompletableDeferred<String>()
+        var isArmed = true
+        var node: Job? = null
+        // The node starts another send of the invoice once the Spark path decided to release its earlier one.
+        val store = CacheStore(
+            object : DataStore<AppCacheData> by inner {
+                override suspend fun updateData(transform: suspend (t: AppCacheData) -> AppCacheData): AppCacheData {
+                    val current = inner.data.first()
+                    if (isArmed && "h" in current.ldkSendHashes && "h" !in transform(current).ldkSendHashes) {
+                        isArmed = false
+                        node = launch { sut.payInvoiceWithNode("h") }
+                        entered.await()
+                    }
+                    return inner.updateData(transform)
+                }
+            }
+        )
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            entered.complete(Unit)
+            queued.await()
+        }
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+
+        val result = sut.payInvoice("h", 1_000uL)
+
+        assertIs<PaymentPendingException>(result.exceptionOrNull())
+        assertEquals(listOf("h"), store.data.first().ldkSendHashes, "a Spark check released a node send's hold")
+        queued.complete("h")
+        node?.join()
     }
 
     private fun failingOnceOnLdkHash(hash: String): DataStore<AppCacheData> = object : DataStore<AppCacheData> {

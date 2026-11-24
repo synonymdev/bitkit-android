@@ -325,10 +325,12 @@ class CacheStore internal constructor(
         return kept to expiries.filterKeys { it in kept }
     }
 
-    suspend fun removeLdkSendHash(paymentHash: String) {
+    /** Drops the node's send of [paymentHash] unless [isKept] holds inside the write, as for a send recorded since. */
+    suspend fun removeLdkSendHash(paymentHash: String, isKept: () -> Boolean = { false }) {
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().ldkSendHashes) return
         store.updateData {
+            if (isKept()) return@updateData it
             it.copy(ldkSendHashes = it.ldkSendHashes - hash, ldkSendExpiries = it.ldkSendExpiries - hash)
         }
     }

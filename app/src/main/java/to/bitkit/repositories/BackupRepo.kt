@@ -1336,10 +1336,12 @@ class BackupRepo @Inject constructor(
         }
         runCatching { restoreSparkExitEarlierAddresses(parsed.sparkExitEarlierAddresses) }
             .onFailure { Logger.warn("Failed to restore the earlier Spark exit addresses", it, context = TAG) }
-        // Payment history stays out of the log, as support requests attach it.
+        // Payment history and Spark attempt ids stay out of the log, as support requests attach it.
         val logged = parsed.cache.copy(
             cachedRates = emptyList(),
             moveToSparkHashes = emptyList(),
+            sparkSendAttemptIds = emptyMap(),
+            sparkUnsavedOwnFailures = emptySet(),
         )
         Logger.debug("Restored caches: ${jsonLogOf(logged)}", TAG)
         onCacheRestored()

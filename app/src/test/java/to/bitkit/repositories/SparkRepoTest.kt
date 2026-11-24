@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -93,7 +94,9 @@ import to.bitkit.test.InMemoryDataStore
 import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
 import java.io.File
+import java.io.IOException
 import java.math.BigInteger
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -5385,6 +5388,122 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess, "refused with '${result.exceptionOrNull()}'")
         verify(sparkService).send(any(), anyOrNull())
+    }
+
+    @Test
+    fun `a spark send that returns failed reports it when keeping its unsaved failure fails too`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).doSuspendableAnswer {
+            sentPayment(fees = 3).copy(id = it.getArgument(1), status = PaymentStatus.FAILED)
+        }
+        whenever { activityRepo.upsertActivity(any()) }.thenReturn(Result.failure(SdkException.Generic("storage")))
+        // The cache can't keep the failure whose row didn't save either.
+        val sut = createSut(ownFailureWriteFailingStore(AppCacheData()))
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        sut.start(0).getOrThrow()
+
+        sut.payInvoice("lnbc1", 100uL)
+        advanceUntilIdle()
+
+        assertEquals("hash", assertIs<Event.PaymentFailed>(events.single()).paymentHash)
+    }
+
+    @Test
+    fun `a sync whose own failure cleanup fails still ends a paid hold`() = test {
+        val sentAt = now.epochSeconds
+        // A superseded own failure whose cache entry can't be dropped, next to a held send Spark has since paid.
+        val store = ownFailureWriteFailingStore(
+            AppCacheData(
+                sparkSendHashes = listOf("hash"),
+                sparkSendExpiries = mapOf("hash" to sentAt + 3_600),
+                sparkUncertainSends = mapOf("hash" to sentAt),
+                sparkSendAttemptIds = mapOf("hash" to "attempt"),
+                sparkUnsavedOwnFailures = setOf("earlier"),
+            )
+        )
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        whenever(sparkService.listPayments()).thenReturn(
+            listOf(
+                sentPayment(fees = 3).copy(id = "earlier", status = PaymentStatus.FAILED, timestamp = 1uL),
+                sentPayment(fees = 3).copy(id = "attempt", timestamp = 2uL),
+            )
+        )
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+
+        sparkEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+
+        assertEquals(emptyMap(), store.data.first().sparkUncertainSends)
+    }
+
+    @Test
+    fun `a pre-restore retry is sent when spark's first sync lands during its listing and the operators show failed`() =
+        test {
+            val restored = AppCacheData(sparkRestoredAt = now.epochSeconds)
+            val isSyncPending = AtomicBoolean(false)
+            lateinit var sut: SparkRepo
+            val backing = InMemoryDataStore(restored)
+            // Spark's first sync lands on the listing's first cache read, after the send's checks began.
+            val store = CacheStore(
+                object : DataStore<AppCacheData> by backing {
+                    override val data = backing.data.onStart {
+                        if (isSyncPending.compareAndSet(true, false)) {
+                            whenever { sparkService.getInfo() }
+                                .thenReturn(info(10_000uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+                            sparkEvents.emit(SdkEvent.Synced)
+                            repeat(100) { if (!sut.canListPayments()) delay(10) }
+                            assertTrue(sut.canListPayments(), "the first sync never landed")
+                        }
+                    }
+                },
+                clock,
+            )
+            whenever(sparkService.isConnected).thenReturn(true)
+            whenever { sparkService.getInfo() }.thenReturn(info(10_000uL).copy(lastSyncedAt = null))
+            val earlier = sentPayment(fees = 0).copy(id = "earlier", status = PaymentStatus.FAILED)
+            whenever { sparkService.listPayments() }.thenReturn(listOf(earlier))
+            whenever { sparkService.lightningSendStatus(any()) }.thenReturn(PaymentStatus.FAILED)
+            val prepared = prepared(feeSats = 0uL, createdAt = (now.epochSeconds - 600).toULong(), expirySecs = 3_600uL)
+            whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.doSuspendableAnswer {
+                isSyncPending.set(true)
+                prepared
+            }
+            whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(sentPayment(fees = 0))
+            sut = createSut(store)
+            sut.start(0).getOrThrow()
+            assertFalse(sut.canListPayments())
+
+            val result = sut.payInvoice("lnbc1280n1send", 128uL)
+
+            assertTrue(result.isSuccess, "refused with '${result.exceptionOrNull()}'")
+            verify(sparkService).send(any(), anyOrNull())
+        }
+
+    /** A cache whose writes of Spark's unsaved own failures fail, as on a full disk. */
+    private fun ownFailureWriteFailingStore(initial: AppCacheData): CacheStore {
+        val backing = InMemoryDataStore(initial)
+        return CacheStore(
+            object : DataStore<AppCacheData> {
+                override val data = backing.data
+
+                override suspend fun updateData(transform: suspend (t: AppCacheData) -> AppCacheData): AppCacheData =
+                    backing.updateData { current ->
+                        transform(current).also {
+                            if (it.sparkUnsavedOwnFailures != current.sparkUnsavedOwnFailures) {
+                                throw IOException("disk full")
+                            }
+                        }
+                    }
+            },
+            clock,
+        )
     }
 
     /** The idempotency key of the latest Spark send, which Spark keeps as that attempt's payment id. */
