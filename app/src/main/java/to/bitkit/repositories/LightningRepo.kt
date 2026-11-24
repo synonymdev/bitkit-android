@@ -1756,15 +1756,23 @@ class LightningRepo @Inject constructor(
             Logger.warn("Refused a node send of '$key', Spark sent it meanwhile", context = TAG)
             return@executeWhenNodeRunning Result.failure(PaymentPendingException(paymentHash ?: key))
         }
+        // Counted until the send returns, also when the hash write before it fails or is cancelled.
+        var isCounted = false
+        val uncount = { ldkSendsInFlight.computeIfPresent(key) { _, count -> (count - 1).takeIf { it > 0 } } }
         try {
             ldkSendsInFlight.merge(key, 1, Int::plus)
+            isCounted = true
             ldkSendRecordedAt[key] = ldkSendRecords.incrementAndGet()
             cacheStore.addLdkSendHash(key, invoiceExpiresAt(bolt11))
             runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }
-                .also { ldkSendsInFlight.computeIfPresent(key) { _, count -> (count - 1).takeIf { it > 0 } } }
+                .also {
+                    isCounted = false
+                    uncount()
+                }
                 .onSuccess { recordSendRail(it, LightningRail.Ldk) }
                 .also { syncState() }
         } finally {
+            if (isCounted) uncount()
             releaseSend(key)
         }
     }

@@ -5340,6 +5340,53 @@ class SparkRepoTest : BaseUnitTest() {
         )
     }
 
+    @Test
+    fun `an own failure kept in the cache is dropped once its row shows paid`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkUnsavedOwnFailures = setOf("a"))), clock)
+        val own = sentPayment(fees = 3).copy(id = "a", status = PaymentStatus.FAILED)
+        whenever(sparkService.listPayments()).thenReturn(listOf(own))
+        whenever { activityRepo.getActivity(eq("hash"), any()) }
+            .thenReturn(Result.success(Activity.Lightning(storedSend(PaymentState.SUCCEEDED))))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        sparkEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+
+        assertEquals(emptySet(), store.data.first().sparkUnsavedOwnFailures)
+    }
+
+    @Test
+    fun `a send whose first sync lands during the invoice check is not refused`() = test {
+        val restored = AppCacheData(sparkHistoryUnseededSince = now.epochSeconds, sparkRestoredAt = now.epochSeconds)
+        val store = CacheStore(InMemoryDataStore(restored), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever { sparkService.getInfo() }.thenReturn(info(10_000uL).copy(lastSyncedAt = null))
+        val prepared = prepared(feeSats = 0uL, createdAt = (now.epochSeconds - 600).toULong(), expirySecs = 3_600uL)
+        whenever { sparkService.prepareSend(any(), anyOrNull(), anyOrNull()) }.thenReturn(prepared)
+        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(sentPayment(fees = 0))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        assertFalse(sut.canListPayments())
+        // Spark's first sync lands while the operators are asked about the pre-restore invoice.
+        whenever { sparkService.lightningSendStatus(any()) }.doSuspendableAnswer {
+            whenever { sparkService.getInfo() }
+                .thenReturn(info(10_000uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+            sparkEvents.emit(SdkEvent.Synced)
+            repeat(100) { if (!sut.canListPayments()) delay(10) }
+            assertTrue(sut.canListPayments(), "the first sync never landed")
+            null
+        }
+
+        val result = sut.payInvoice("lnbc1280n1send", 128uL)
+
+        assertTrue(result.isSuccess, "refused with '${result.exceptionOrNull()}'")
+        verify(sparkService).send(any(), anyOrNull())
+    }
+
     /** The idempotency key of the latest Spark send, which Spark keeps as that attempt's payment id. */
     private suspend fun sentKey(): String =
         argumentCaptor<String>().apply { verify(sparkService, atLeastOnce()).send(any(), capture()) }.lastValue
