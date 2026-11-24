@@ -88,6 +88,9 @@ fun DevSettingsScreen(
 
             SectionHeader("SWAPS")
             SettingsButtonRow("Swaps") { navController.navigateTo(Routes.SwapsSettings) }
+            if (Env.isDebug) {
+                SettingsButtonRow("Cross-chain Demo") { navController.navigateTo(Routes.CrossChainDemo) }
+            }
             SettingsSwitchRow(
                 title = "Enable Savings Swap",
                 isChecked = isSavingsSwapEnabled,

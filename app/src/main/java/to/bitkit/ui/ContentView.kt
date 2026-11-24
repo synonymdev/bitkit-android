@@ -130,6 +130,7 @@ import to.bitkit.ui.screens.settings.DevSettingsScreen
 import to.bitkit.ui.screens.settings.FeeSettingsScreen
 import to.bitkit.ui.screens.settings.LdkDebugScreen
 import to.bitkit.ui.screens.settings.LegacyRnRecoveryScreen
+import to.bitkit.ui.screens.settings.CrossChainDemoScreen
 import to.bitkit.ui.screens.settings.ProbingToolScreen
 import to.bitkit.ui.screens.settings.VssDebugScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
@@ -1539,6 +1540,9 @@ private fun NavGraphBuilder.settings(
     deepLinkableComposable<Routes.ProbingTool> {
         ProbingToolScreen(navController)
     }
+    deepLinkableComposable<Routes.CrossChainDemo> {
+        CrossChainDemoScreen(navController)
+    }
     deepLinkableComposable<Routes.FeeSettings> {
         FeeSettingsScreen(navController)
     }
@@ -2704,6 +2708,9 @@ sealed interface Routes {
 
     @Serializable
     data object ProbingTool : Routes.DeepLinkable
+
+    @Serializable
+    data object CrossChainDemo : Routes.DeepLinkable
 
     @Serializable
     data object FeeSettings : Routes.DeepLinkable

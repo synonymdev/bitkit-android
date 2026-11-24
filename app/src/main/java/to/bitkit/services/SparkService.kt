@@ -14,6 +14,10 @@ import breez_sdk_spark.FeePolicy
 import breez_sdk_spark.FetchClaimDepositQuoteRequest
 import breez_sdk_spark.FetchClaimDepositQuoteResponse
 import breez_sdk_spark.FetchLightningSendStatusRequest
+import breez_sdk_spark.CrossChainConfig
+import breez_sdk_spark.CrossChainRouteFilter
+import breez_sdk_spark.CrossChainRoutePair
+import breez_sdk_spark.GetPaymentRequest
 import breez_sdk_spark.GetInfoRequest
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.ImportUnilateralExitStateRequest
@@ -98,6 +102,8 @@ class SparkService @Inject constructor(
                 proportionalPpm = null,
             )
             leafOptimizationConfig = leafOptimizationConfig.copy(autoEnabled = !isExiting)
+            // Demo only (spark-24): cross-chain sends through Flashnet Orchestra, which runs on mainnet only.
+            if (Env.isDebug && network == SparkNetwork.MAINNET) crossChainConfig = CrossChainConfig()
         }
 
         /** Applies the pinned operator settings and selects the fixture's mempool.space REST API. */
@@ -287,6 +293,28 @@ class SparkService @Inject constructor(
         }
         return requireSdk().sendPayment(SendPaymentRequest(prepared, options, idempotencyKey)).payment
     }
+
+    suspend fun parse(input: String): InputType = requireSdk().parse(input)
+
+    suspend fun crossChainRoutes(filter: CrossChainRouteFilter): List<CrossChainRoutePair> =
+        requireSdk().getCrossChainRoutes(filter)
+
+    suspend fun prepareCrossChain(
+        address: String,
+        route: CrossChainRoutePair,
+        amountSats: ULong,
+    ): PrepareSendPaymentResponse =
+        requireSdk().prepareSendPayment(
+            PrepareSendPaymentRequest(
+                paymentRequest = PaymentRequest.CrossChain(address, route, maxSlippageBps = null, targetOverpayBps = null),
+                amount = BigInteger.valueOf(amountSats.toLong()),
+                tokenIdentifier = null,
+                conversionOptions = null,
+                feePolicy = null,
+            ),
+        )
+
+    suspend fun getPayment(id: String): Payment = requireSdk().getPayment(GetPaymentRequest(id)).payment
 
     /** The fastest recommended fee rate, in sat/vB, from the SDK's own fee source. */
     suspend fun fastestFeeRate(): ULong = requireSdk().recommendedFees().fastestFee
