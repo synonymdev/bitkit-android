@@ -39,6 +39,7 @@ import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.AddressTypeBalance
 import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
@@ -115,6 +116,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -4537,6 +4539,79 @@ class LightningRepoTest : BaseUnitTest() {
 
         releaseRecovery.complete(Unit)
         testScheduler.advanceUntilIdle()
+    }
+
+    // Regression: a stopped node's VSS writes can keep retrying past one build's wait for them, so the
+    // recovery start retries while the build fails on the busy store instead of leaving the node offline.
+    @Test
+    fun `restartWithElectrumServer recovery retries while the vss store is busy`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { throw busy }
+        var recoveryAttempts = 0
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                recoveryAttempts++
+                if (recoveryAttempts < 3) throw busy
+            }
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(3, recoveryAttempts)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    // Regression: a stop requested while the app went to the background wins over the recovery retry,
+    // which would otherwise cancel it and leave the node running with background payments off.
+    @Test
+    fun `restartWithElectrumServer recovery does not retry over a requested stop`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { throw busy }
+        var recoveryAttempts = 0
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                recoveryAttempts++
+                sut.stopDebounced()
+                throw busy
+            }
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(1, recoveryAttempts)
+        assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    // Regression: a stop requested during the failed change's build is kept by recovery, whose first
+    // start would otherwise cancel it before any retry could see it.
+    @Test
+    fun `restartWithElectrumServer recovery does not start over a stop requested before it`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                sut.stopDebounced()
+                throw busy
+            }
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, never()).setup(any(), isNull(), isNull(), anyOrNull())
+        assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
 
     // Regression: a server that cannot work is rejected by the probe before the node is touched.
