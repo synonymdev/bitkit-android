@@ -1,5 +1,6 @@
 package to.bitkit.nearby
 
+import com.synonym.bitkitcore.validateBitcoinAddress
 import to.bitkit.nfc.hasRequiredParam
 import to.bitkit.nfc.scannedPaymentRequest
 
@@ -37,10 +38,13 @@ internal fun isBolt11Invoice(value: String): Boolean {
     return checksum == 1
 }
 
-/** Whether a `bitcoin:` URI names an address, so the scanner can decode it instead of closing on an error. */
-private fun hasAddress(uri: String): Boolean {
-    val address = uri.removePrefix("bitcoin:").substringBefore('?')
-    return address.isNotEmpty() && address.all { it in 'a'..'z' || it in '0'..'9' }
+/**
+ * Whether a `bitcoin:` URI names a valid address, checked with the decoder's own validation, so the scanner can
+ * decode it instead of resetting Send and closing on an error. [uri] keeps its case, as base58 addresses need it.
+ */
+private fun hasValidAddress(uri: String): Boolean {
+    val address = uri.substringAfter(':').substringBefore('?')
+    return address.isNotEmpty() && runCatching { validateBitcoinAddress(address) }.isSuccess
 }
 
 /**
@@ -54,13 +58,15 @@ private fun hasAddress(uri: String): Boolean {
  * BOLT11 invoice, since decoding an LNURL there would contact a server no one chose.
  */
 fun isNearbyPaymentRequest(request: String): Boolean {
-    val lowercase = request.trim().lowercase()
+    val trimmed = request.trim()
+    val lowercase = trimmed.lowercase()
     return when {
         // No Bitkit flow fulfils a required (`req-`) parameter, and the decoder ignores one next to an address.
         hasRequiredParam(lowercase) -> false
         // The app decodes a unified URI's Lightning request, and decoding an LNURL contacts its server.
         // Every Lightning value is checked, since the decoder keeps the last one.
-        lowercase.startsWith("bitcoin:") -> hasAddress(lowercase) && lightningParams(lowercase).all(::isBolt11Invoice)
+        lowercase.startsWith("bitcoin:") ->
+            hasValidAddress(trimmed) && lightningParams(lowercase).all(::isBolt11Invoice)
 
         lowercase.startsWith("ethereum:") -> true
         lowercase.startsWith("lightning:") -> isBolt11Invoice(lowercase.removePrefix("lightning:"))
