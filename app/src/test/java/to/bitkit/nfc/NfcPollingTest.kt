@@ -29,12 +29,12 @@ class CameraNfcStopTrackerTest {
     @Test
     fun `first camera opening stops polling and the last one closing resumes it`() {
         tracker.onCameraUnavailable("0", present)
-        assertTrue(tracker.isStopped)
+        assertTrue(tracker.isAnyCameraUnavailable)
         tracker.onCameraUnavailable("1", present)
         tracker.onCameraAvailable("0")
-        assertTrue(tracker.isStopped)
+        assertTrue(tracker.isAnyCameraUnavailable)
         tracker.onCameraAvailable("1")
-        assertFalse(tracker.isStopped)
+        assertFalse(tracker.isAnyCameraUnavailable)
     }
 
     @Test
@@ -42,36 +42,55 @@ class CameraNfcStopTrackerTest {
         tracker.onCameraUnavailable("0", present)
         tracker.onCameraUnavailable("0", present)
         tracker.onCameraAvailable("0")
-        assertFalse(tracker.isStopped)
+        assertFalse(tracker.isAnyCameraUnavailable)
     }
 
     @Test
     fun `available for a camera never seen keeps the stop of an open one`() {
         tracker.onCameraUnavailable("0", present)
         tracker.onCameraAvailable("1")
-        assertTrue(tracker.isStopped)
+        assertTrue(tracker.isAnyCameraUnavailable)
     }
 
     @Test
     fun `camera missing from the camera list counts as removed, not opened`() {
         tracker.onCameraUnavailable("9", present)
-        assertFalse(tracker.isStopped)
+        assertFalse(tracker.isAnyCameraUnavailable)
         tracker.onCameraUnavailable("0", present)
         tracker.onCameraUnavailable("0", present - "0")
-        assertFalse(tracker.isStopped)
+        assertFalse(tracker.isAnyCameraUnavailable)
     }
 
     @Test
     fun `cameras gone from the camera list on resume resume polling`() {
         tracker.onCameraUnavailable("0", present)
         tracker.retainPresent(setOf("1"))
-        assertFalse(tracker.isStopped)
+        assertFalse(tracker.isAnyCameraUnavailable)
     }
 
     @Test
     fun `retain keeps the stop while an open camera is still present`() {
         tracker.onCameraUnavailable("0", present)
         tracker.retainPresent(present)
-        assertTrue(tracker.isStopped)
+        assertTrue(tracker.isAnyCameraUnavailable)
+    }
+
+    @Test
+    fun `stop survives nfc turned off and on with a camera open`() {
+        tracker.onCameraUnavailable("0", present)
+        assertTrue(tracker.isNfcStopped(isNfcOn = true))
+        assertFalse(tracker.isNfcStopped(isNfcOn = false))
+        assertTrue(tracker.isNfcStopped(isNfcOn = true))
+    }
+
+    @Test
+    fun `nfc on with no camera open is not stopped`() {
+        assertFalse(tracker.isNfcStopped(isNfcOn = true))
+    }
+
+    @Test
+    fun `camera counts as present when the camera list cannot be read`() {
+        tracker.onCameraUnavailable("0", presentCameras = null)
+        assertTrue(tracker.isNfcStopped(isNfcOn = true))
     }
 }

@@ -46,6 +46,7 @@ import to.bitkit.nfc.ReaderModeOwner
 import to.bitkit.nfc.Type4TagEmulator
 import to.bitkit.nfc.deviceCameraStopsNfcPolling
 import to.bitkit.nfc.nfcPaymentRequest
+import to.bitkit.nfc.peekCameraStopsNfcPolling
 import to.bitkit.utils.Logger
 
 private const val TAG = "NfcEffects"
@@ -115,46 +116,41 @@ fun rememberNfcState(): NfcState {
 @Composable
 fun rememberNfcStoppedByCamera(nfcState: NfcState): Boolean {
     val override by NfcDevOverride.cameraStopsPolling.collectAsStateWithLifecycle()
-    val deviceStopsPolling by produceState(false) {
+    // A value read earlier in this process applies from the first frame.
+    val deviceStopsPolling by produceState(peekCameraStopsNfcPolling() ?: false) {
         value = withContext(Dispatchers.IO) { deviceCameraStopsNfcPolling() }
     }
     val cameraStopsPolling = override ?: deviceStopsPolling
-    val isEnabled = nfcState == NfcState.ON && cameraStopsPolling
-    val isStopped = rememberCameraNfcStop(enabled = isEnabled) && isEnabled
+    val tracker = rememberCameraNfcStopTracker(enabled = cameraStopsPolling)
+    val isStopped = cameraStopsPolling && tracker.isNfcStopped(isNfcOn = nfcState == NfcState.ON)
     LaunchedEffect(isStopped) {
         if (isStopped) Logger.info("Detected NFC polling stopped by an open camera", context = TAG)
     }
     return isStopped
 }
 
+/** Watches camera availability while [enabled], independent of NFC, so NFC turned on with a camera open is hidden. */
 @Composable
-private fun rememberCameraNfcStop(enabled: Boolean): Boolean {
+private fun rememberCameraNfcStopTracker(enabled: Boolean): CameraNfcStopTracker {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var isStopped by remember { mutableStateOf(false) }
+    val tracker = remember { CameraNfcStopTracker() }
 
     DisposableEffect(context, lifecycleOwner, enabled) {
         if (!enabled) return@DisposableEffect onDispose {}
-        val tracker = CameraNfcStopTracker()
         val cameraManager = context.cameraManager
-        fun presentCameras() = runCatching { cameraManager.cameraIdList.toSet() }.getOrDefault(emptySet())
+        fun presentCameras(): Set<String>? = runCatching { cameraManager.cameraIdList.toSet() }
+            .onFailure { Logger.warn("Failed to list cameras", it, context = TAG) }
+            .getOrNull()
 
         // Registered on the main looper, so the tracker is only touched from the main thread.
         val callback = object : CameraManager.AvailabilityCallback() {
-            override fun onCameraAvailable(cameraId: String) {
-                tracker.onCameraAvailable(cameraId)
-                isStopped = tracker.isStopped
-            }
+            override fun onCameraAvailable(cameraId: String) = tracker.onCameraAvailable(cameraId)
 
-            override fun onCameraUnavailable(cameraId: String) {
-                tracker.onCameraUnavailable(cameraId, presentCameras())
-                isStopped = tracker.isStopped
-            }
+            override fun onCameraUnavailable(cameraId: String) = tracker.onCameraUnavailable(cameraId, presentCameras())
         }
         val observer = LifecycleEventObserver { _, event ->
-            if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
-            tracker.retainPresent(presentCameras())
-            isStopped = tracker.isStopped
+            if (event == Lifecycle.Event.ON_RESUME) presentCameras()?.let(tracker::retainPresent)
         }
         val registered = runCatching {
             cameraManager.registerAvailabilityCallback(callback, Handler(Looper.getMainLooper()))
@@ -163,10 +159,10 @@ private fun rememberCameraNfcStop(enabled: Boolean): Boolean {
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             if (registered) cameraManager.unregisterAvailabilityCallback(callback)
-            isStopped = false
+            tracker.clear()
         }
     }
-    return isStopped
+    return tracker
 }
 
 /**

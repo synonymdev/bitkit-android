@@ -1,5 +1,8 @@
 package to.bitkit.nfc
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import to.bitkit.utils.Logger
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -23,6 +26,9 @@ internal fun cameraStopsNfcPolling(propertyValue: String?): Boolean =
 private val GETPROP_TIMEOUT: Duration = 2.seconds
 
 private val cachedCameraStopsNfcPolling = AtomicReference<Boolean?>(null)
+
+/** The cached [deviceCameraStopsNfcPolling] result, without reading the property; null until a read succeeds. */
+internal fun peekCameraStopsNfcPolling(): Boolean? = cachedCameraStopsNfcPolling.get()
 
 /**
  * Whether this phone stops NFC polling while a camera is open. Only a successful read is cached; a failed one
@@ -52,22 +58,36 @@ private fun readSystemProperty(name: String): String {
 /**
  * Treats NFC polling as stopped while any present camera is unavailable, on phones where [NOTIFY_NFC_PROPERTY] is
  * set. CameraServiceProxy stops polling when a camera becomes active and resumes it when none is, and an NFC
- * toggle hides the stop from apps until it is sent again, so this errs toward reporting NFC as not reading.
+ * toggle hides the stop from apps until it is sent again, so this errs toward reporting NFC as not reading. The
+ * camera state is kept across NFC toggles, and Compose observes it.
  *
  * Not thread safe: feed it from the main thread only.
  */
 internal class CameraNfcStopTracker {
-    private val unavailableCameras = mutableSetOf<String>()
+    private var unavailableCameras by mutableStateOf(emptySet<String>())
 
-    val isStopped get() = unavailableCameras.isNotEmpty()
+    val isAnyCameraUnavailable get() = unavailableCameras.isNotEmpty()
 
-    /** [presentCameras] is `CameraManager.cameraIdList`; a camera missing from it was removed, not opened. */
-    fun onCameraUnavailable(cameraId: String, presentCameras: Set<String>) {
-        if (cameraId in presentCameras) unavailableCameras.add(cameraId) else unavailableCameras.remove(cameraId)
+    fun isNfcStopped(isNfcOn: Boolean) = isNfcOn && isAnyCameraUnavailable
+
+    /**
+     * [presentCameras] is `CameraManager.cameraIdList`, or null when it could not be read. A camera missing from it
+     * was removed, not opened; without the list the camera counts as present.
+     */
+    fun onCameraUnavailable(cameraId: String, presentCameras: Set<String>?) {
+        unavailableCameras = if (presentCameras == null || cameraId in presentCameras) {
+            unavailableCameras + cameraId
+        } else {
+            unavailableCameras - cameraId
+        }
     }
 
-    fun onCameraAvailable(cameraId: String) = run { unavailableCameras.remove(cameraId) }
+    fun onCameraAvailable(cameraId: String) = run { unavailableCameras = unavailableCameras - cameraId }
 
     /** Drops cameras that left without an available callback, e.g. after the camera service restarted. */
-    fun retainPresent(presentCameras: Set<String>) = run { unavailableCameras.retainAll(presentCameras) }
+    fun retainPresent(presentCameras: Set<String>) = run {
+        unavailableCameras = unavailableCameras intersect presentCameras
+    }
+
+    fun clear() = run { unavailableCameras = emptySet() }
 }
