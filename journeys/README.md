@@ -172,7 +172,8 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `send/own-invoice-guard.xml` | not ported — iOS has no own-invoice guard |
 | `send/recovery-pin-system-back.xml` | not ported — iOS has no system Back button, and `SendPinScreen` already answers cancel in `onDisappear` |
 | `send/retry-original-dialog-style.xml` | not ported — iOS shows the two Retry original payment steps as native alerts |
-| `send/update-spending-balance-payment.xml`, `transfer/move-to-spark.xml` | port pending — the iOS Update Spending Balance modal and combined payment are not built yet; port both journeys with it, after synonymdev/bitkit-ios#1355 |
+| `send/update-spending-balance-payment.xml` | same file and journey name; the lock step presses system back and drags the sheet here, while iOS opens Confirm from a link as the sheet's root and only drags it |
+| `transfer/move-to-spark.xml` | port pending — port it with the iOS Update Spending Balance modal, after synonymdev/bitkit-ios#1355 |
 | `send/onchain-connecting-view.xml` | ported with another route — on iOS the LDK Debug Restart keeps the node in the running state and a launch shows home only once the node runs, so the iOS journey opens Send while the node is still starting |
 | `send/prepared-fee-recovery.md` | Same four manual fault cases and file on both platforms; the recipe records original-send versus replacement fee retention and iOS Max/identity-flow adaptations. These faults are not journey capabilities. |
 | `settings/electrum-server-error-toasts.xml` | not ported — iOS still shows one generic message for every manual Electrum connect failure |

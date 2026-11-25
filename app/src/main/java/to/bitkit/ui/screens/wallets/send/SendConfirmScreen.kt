@@ -256,9 +256,9 @@ fun SendConfirmScreen(
  */
 @Composable
 internal fun rememberConfirmLock(isLoading: Boolean, isSwipeRunning: Boolean, uiState: SendUiState): Boolean {
-    var isSwipeIdle by remember { mutableStateOf(false) }
+    // Keyed so a new run locks from its first composition, before the effect resets it.
+    var isSwipeIdle by remember(isLoading, isSwipeRunning, uiState.shouldConfirmPay) { mutableStateOf(false) }
     LaunchedEffect(isLoading, isSwipeRunning, uiState.shouldConfirmPay) {
-        isSwipeIdle = false
         if (!isLoading || isSwipeRunning || uiState.shouldConfirmPay) return@LaunchedEffect
         delay(SWIPE_IDLE_RELEASE)
         isSwipeIdle = true

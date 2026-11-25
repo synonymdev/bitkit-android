@@ -6,7 +6,8 @@
     Activity as a "Move to Spark" row, and the emptied channel closes in the background. If the payment fails after the
     move, the funds stay in Spark and the usual payment error shows. QuickPay never sends such a payment; it always
     opens the confirm screen. From the swipe until it moves on or returns to confirm, the confirm screen is locked: no
-    Back, no sheet dismiss and no edits.
+    Back, no sheet dismiss and no edits. Android also checks system back here; on iOS a confirm screen opened from a
+    link is the sheet's root, so only the sheet's drag applies there.
 
     Precondition: dev build pointed at a local Spark regtest (spark-sdk regtest/local), QuickPay off, a wallet with an
     open channel to that stack's SSP Lightning node that can send about 30 000 sats and a Spark balance of about

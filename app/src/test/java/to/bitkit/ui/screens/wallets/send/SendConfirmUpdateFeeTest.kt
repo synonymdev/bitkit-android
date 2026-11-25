@@ -27,6 +27,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 @RunWith(RobolectricTestRunner::class)
 class SendConfirmUpdateFeeTest {
@@ -113,6 +114,43 @@ class SendConfirmUpdateFeeTest {
         advanceBy(SWIPE_IDLE_RELEASE)
 
         assertFalse(isLocked)
+    }
+
+    @Config(sdk = [34])
+    @Test
+    fun `a pending pay confirmation with nothing running stays locked`() {
+        var isLocked = false
+        composeRule.setContent {
+            isLocked = rememberConfirmLock(
+                isLoading = true,
+                isSwipeRunning = false,
+                uiState = SendUiState(shouldConfirmPay = true),
+            )
+        }
+        advanceBy(5.seconds)
+
+        assertTrue(isLocked)
+    }
+
+    @Config(sdk = [34])
+    @Test
+    fun `a new run after the idle release locks from its first composition`() {
+        var isSwipeRunning by mutableStateOf(false)
+        val composed = mutableListOf<Pair<Boolean, Boolean>>()
+        composeRule.setContent {
+            val locked = rememberConfirmLock(isLoading = true, isSwipeRunning = isSwipeRunning, uiState = SendUiState())
+            composed += isSwipeRunning to locked
+        }
+        advanceBy(SWIPE_IDLE_RELEASE * 2)
+        assertEquals(false to false, composed.last())
+        val released = composed.size
+
+        composeRule.runOnUiThread { isSwipeRunning = true }
+        advanceBy(SWIPE_IDLE_RELEASE / 4)
+
+        val afterFlip = composed.drop(released)
+        assertTrue(afterFlip.isNotEmpty())
+        assertTrue(afterFlip.all { (running, locked) -> !running || locked }, "compositions after flip: $afterFlip")
     }
 
     private fun advanceBy(duration: Duration) {

@@ -21770,7 +21770,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.sendEffect.test {
             sut.setSendEvent(SendEvent.PayConfirmed)
-            advanceUntilIdle()
+            // Short of the update quote's time bound
+            advanceTimeBy(30.seconds)
             assertTrue(sut.isSendSwipeRunning.value)
 
             quoted.complete(Result.success(UPDATE_QUOTE))
@@ -21803,7 +21804,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { sut.sendEffect.collect { effects += it } }
 
         sut.setSendEvent(SendEvent.PayConfirmed)
-        advanceUntilIdle()
+        // Short of the update quote's time bound
+        advanceTimeBy(30.seconds)
         assertTrue(sut.isSendSwipeRunning.value)
         sut.hideSheet()
         // A payment still finishing for the closed send holds no later send's confirm
@@ -21813,6 +21815,51 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertTrue(effects.none { it is SendEffect.NavigateToError })
         assertFalse(sut.isSendSwipeRunning.value)
+    }
+
+    @Test
+    fun `a hardware confirm while the fee refreshes clears the pay confirmation`() = test {
+        setSendState(
+            SendUiState(
+                address = "bcrt1qverifyhardware",
+                amount = 60_000uL,
+                isAmountInputValid = true,
+                payMethod = SendMethod.ONCHAIN,
+                hardwareWalletId = "hardware-wallet",
+                onchainFeeUi = OnchainFeeUi(sats = 150, isLoading = true),
+                shouldConfirmPay = true,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+    }
+
+    @Test
+    fun `a stalled update quote ends the swipe with the payment error`() = test {
+        val bolt11 = "lnbcrt1stalledrequote"
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).doSuspendableAnswer { awaitCancellation() }
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 60_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+                sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
+            ),
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertTrue(awaitItem() is SendEffect.NavigateToError)
+        }
+        assertFalse(sut.isSendSwipeRunning.value)
+        verify(moveToSparkRepo, never()).updateToSend(any(), any(), any(), any())
     }
 
     @Test

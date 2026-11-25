@@ -8163,7 +8163,8 @@ class AppViewModel @Inject constructor(
         val state = _sendUiState.value
         if (!state.needsSparkUpdate()) return true
         val generation = sendStateGeneration
-        val result = moveToSparkRepo.quote()
+        val result = withTimeoutOrNull(SPARK_UPDATE_QUOTE_TIMEOUT) { moveToSparkRepo.quote() }
+            ?: Result.failure(MoveToSparkError.QuoteTimedOut())
         // A swipe from a send the user left neither pays nor shows its failure.
         if (generation != sendStateGeneration) return false
         val fresh = result.getOrElse {
@@ -9556,11 +9557,10 @@ class AppViewModel @Inject constructor(
             if (review.isSwiped) review.answer.complete(true)
             return
         }
-        if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive) {
+        if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive || !_sendUiState.value.isHardwareFeeReady) {
             _sendUiState.update { it.copy(shouldConfirmPay = false) }
             return
         }
-        if (!_sendUiState.value.isHardwareFeeReady) return
 
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         if (_sendUiState.value.isPaymentRequest && contactPaymentContext?.incomingPaymentRequest == null) {
@@ -10589,6 +10589,9 @@ class AppViewModel @Inject constructor(
         private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
         private const val PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS = 5_000L
         private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL = 10.seconds
+
+        /** Bounds the re-quote after the swipe, which keeps Confirm locked while it runs. */
+        private val SPARK_UPDATE_QUOTE_TIMEOUT = 60.seconds
         private val PAYKIT_MAINTENANCE_INTERVALS = listOf(30.seconds, 60.seconds)
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS = List(14) { 2.seconds }
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_INTERVAL = 120.seconds
