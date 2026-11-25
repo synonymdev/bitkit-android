@@ -8204,6 +8204,8 @@ class AppViewModel @Inject constructor(
         var proofRequest = preparedPaymentProofRequest
         var createdMetadataPaymentId: String? = null
         val paymentHash = decodedInvoice.paymentHash.toHex()
+        // Paying again an invoice already paid this session shows its success again, so the swipe ends.
+        val wasPaidBefore = synchronized(processedPaymentsLock) { paymentHash in processedPayments }
         associateLightningPaymentProof(incomingPaymentRequest, paymentHash).onFailure {
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(proofRequest)
@@ -8274,6 +8276,7 @@ class AppViewModel @Inject constructor(
                     paymentHashOrTxId = actualPaymentHash,
                     sats = displayAmountSats.toLong(),
                 ),
+                allowDuplicateHash = wasPaidBefore,
             )
             lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
         }.onFailure { error ->
