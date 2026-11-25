@@ -1135,12 +1135,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a sent toast reaches the queue with its progress flag`() = test {
+    fun `a sent toast reaches the queue with its replace key`() = test {
         val progressToast = Toast(
             type = Toast.ToastType.INFO,
             title = "Applying changes",
             autoHide = false,
-            replacedByNext = true,
+            replaceKey = "AddressType",
         )
         clearInvocations(toastManager)
 
