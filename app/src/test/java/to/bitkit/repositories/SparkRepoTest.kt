@@ -5294,6 +5294,21 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a paid spark send stays paid when its hold can't be removed from storage`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(sentPayment(fees = 0))
+        whenever(cacheStore.removeSparkUncertainSend(any())).thenAnswer { throw IOException("disk full") }
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertEquals("hash", sut.payInvoice("lnbc1", 100uL).getOrThrow())
+    }
+
+    @Test
     fun `a spark send refused before reaching spark is refused again on retry`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))

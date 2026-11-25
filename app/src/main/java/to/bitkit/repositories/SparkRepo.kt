@@ -700,12 +700,16 @@ class SparkRepo @Inject constructor(
                 if (payment.status == PaymentStatus.PENDING) {
                     settleUncertainSend(paymentHash, expiresAt, attemptId)
                 } else {
-                    cacheStore.removeSparkUncertainSend(paymentHash)
+                    bestEffort("end the hold of Spark send '$paymentHash'") {
+                        cacheStore.removeSparkUncertainSend(paymentHash)
+                    }
                 }
                 // Spark's failure event during its send call was left to this result, so the result reports it.
                 if (payment.status == PaymentStatus.FAILED) {
                     // This attempt paid nothing, as when its outcome settles, so a retry isn't held as pending.
-                    cacheStore.removeSparkSendHash(paymentHash)
+                    bestEffort("drop the hash of Spark send '$paymentHash'") {
+                        cacheStore.removeSparkSendHash(paymentHash)
+                    }
                     recordActivity(payment, isOwnAttempt = true)
                     // A retry under a key whose failure was already reported, as when Spark's list couldn't be read to
                     // move past it, gets that failure back and no event, so the result reports it.
@@ -750,6 +754,11 @@ class SparkRepo @Inject constructor(
         return result
     }
 
+    /** Logs a failed cache write on a send's settlement path, so a storage error never changes the send's outcome. */
+    private suspend fun bestEffort(what: String, write: suspend () -> Unit) {
+        runSuspendCatching { write() }.onFailure { Logger.warn("Failed to $what", it, context = TAG) }
+    }
+
     private suspend fun nextSendAttempt(paymentHash: String, listing: List<Payment>?): Int {
         var attempt = cacheStore.data.first().sparkSendAttempts[paymentHash.lowercase()]?.attempt ?: 0
         val failed = listing?.filter { it.status == PaymentStatus.FAILED }?.mapTo(HashSet()) { it.id }
@@ -769,7 +778,10 @@ class SparkRepo @Inject constructor(
         val failedAt = clock.now().epochSeconds
         val startedAt = cacheStore.data.first().sparkUncertainSends[paymentHash.lowercase()] ?: failedAt
         uncertainSends[paymentHash.lowercase()] = UncertainSend(attemptId, failedAt.toULong(), expiresAt)
-        cacheStore.addSparkUncertainSend(paymentHash, startedAt, attemptId)
+        // Held in memory meanwhile, and the hash kept before the send still holds the invoice after a restart.
+        bestEffort("keep the hold of Spark send '$paymentHash'") {
+            cacheStore.addSparkUncertainSend(paymentHash, startedAt, attemptId)
+        }
         scope.launch {
             // The send screen tracks the hash as pending only once the send returns, and resolves tracked ones.
             withTimeoutOrNull(PENDING_TRACK_WAIT) {
