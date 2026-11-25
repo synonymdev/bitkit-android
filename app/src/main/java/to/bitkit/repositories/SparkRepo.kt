@@ -629,8 +629,8 @@ class SparkRepo @Inject constructor(
                 val previousAttempt = cacheStore.data.first().sparkSendAttempts[paymentHash.lowercase()]
                 val isReusedKey = previousAttempt?.attempt == attempt
 
-                // A send refused before anything reached Spark's operators leaves its key unused, so a retry refuses
-                // the same way.
+                // A refused send is taken as not having used its key, so a retry refuses the same way; a retry
+                // under the same key can't pay twice either way.
                 suspend fun forgetUnusedAttempt() {
                     if (!isReusedKey) cacheStore.restoreSparkSendAttempt(paymentHash, previousAttempt)
                 }
@@ -673,6 +673,14 @@ class SparkRepo @Inject constructor(
                     // it was read. Under a key an earlier attempt used, it can hide the transfer that attempt
                     // committed, so that send stays held.
                     if ((it is SdkException.InsufficientFunds || it.isLeafSelectionFailure()) && !isReusedKey) {
+                        // After an operator error the SDK can select leaves again, so this error can still follow a
+                        // committed transfer: the node stays off the invoice until Spark syncs and lists it. Kept
+                        // before the holds go, so no stop in between frees the invoice.
+                        cacheStore.addSparkRefusedSend(
+                            paymentHash,
+                            refusedAt = clock.now().epochSeconds,
+                            expiresAt = expiresAt.toEpochSeconds(),
+                        )
                         cacheStore.removeSparkUncertainSend(paymentHash)
                         cacheStore.removeSparkSendHash(paymentHash)
                         forgetUnusedAttempt()
@@ -1819,6 +1827,15 @@ class SparkRepo @Inject constructor(
                 send.value.equals(bolt11, ignoreCase = true) || send.key == paymentHash?.lowercase()
             }
             sendsInFlight.entries.firstOrNull(isOfInvoice)?.let { return@withContext EarlierSend.Pending(it.key) }
+            // A Spark send refused after it may have reached the operators holds the invoice until Spark syncs since.
+            val refused = paymentHash?.lowercase()?.let { hash ->
+                cacheStore.data.first().sparkRefusedSends[hash]
+                    ?.takeIf { it.expiresAt > clock.now().epochSeconds }
+                    ?.let { hash to it.refusedAt }
+            }
+            if (refused != null && !hasSyncedSince(refused.second.toULong())) {
+                return@withContext EarlierSend.Pending(refused.first)
+            }
             // A retry started, or recorded, while the listing below is read may still be pending, as may a send whose
             // outcome Spark didn't report until a sync settles it.
             val retried = {
@@ -1837,6 +1854,7 @@ class SparkRepo @Inject constructor(
                 null
             }
             if (payments == null) {
+                refused?.let { return@withContext EarlierSend.Pending(it.first) }
                 startedSend(paymentHash)?.let { return@withContext EarlierSend.Pending(it) }
                 refuseUnverifiedRestoredInvoice(bolt11, invoiceCreatedAt, invoiceExpiresAt)
                 return@withContext null
@@ -1847,6 +1865,11 @@ class SparkRepo @Inject constructor(
                     it.invoice.equals(bolt11, ignoreCase = true) ||
                         it.htlcDetails.paymentHash.equals(paymentHash, ignoreCase = true)
                 }
+            // Spark synced since the refusal, so this list shows any transfer that send committed, which keeps the
+            // refusal to hold the invoice when Spark can't list.
+            if (send == null || send.status == PaymentStatus.FAILED) {
+                refused?.let { cacheStore.removeSparkRefusedSend(it.first, it.second) }
+            }
             if (send == null) {
                 (retried() ?: paymentHash?.lowercase()?.takeIf { it in unlisted })
                     ?.let { return@withContext EarlierSend.Pending(it) }

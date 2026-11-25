@@ -4045,7 +4045,8 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertTrue(inFlightAtClear.isNotEmpty() && inFlightAtClear.all { it }, "a sync could take back the hold")
         assertFalse(sut.isSendInFlight("hash"))
-        assertNull(sut.earlierLightningSend("lnbc1", "hash"))
+        // The node stays off the invoice until Spark syncs and shows no transfer for it.
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1", "hash"))
     }
 
     @Test
@@ -5260,13 +5261,42 @@ class SparkRepoTest : BaseUnitTest() {
         assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
 
         verify(sparkService, times(4)).send(any(), anyOrNull())
-        assertFalse("hash" in store.data.first().sparkSendHashes)
         assertFalse("hash" in store.data.first().sparkUncertainSends)
+    }
+
+    @Test
+    fun `a spark send refused after a leaf failure keeps the node off its invoice until spark syncs`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = null))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw leafSelectionFailure() }
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        // The SDK may have selected leaves again after a committed transfer, which Spark shows only once it syncs.
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1280n1send", "hash"))
+
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong() + 1u))
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+        whenever(sparkService.listPayments()).thenAnswer { throw IllegalStateException("spark list") }
+        // Synced, but a list Spark can't read shows nothing of the transfer.
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1280n1send", "hash"))
+
+        doReturn(emptyList<Payment>()).whenever(sparkService).listPayments()
+        assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash"))
+        assertFalse("hash" in store.data.first().sparkRefusedSends)
     }
 
     @Test
     fun `a spark send refused before reaching spark is refused again on retry`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
         val prepared = unexpiredPrepared()
         whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
         whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw leafSelectionFailure() }
