@@ -116,6 +116,7 @@ Reports are generated in: `app/build/reports/detekt/`.
 The repo ships Claude Code plugins under `.claude/plugins/` to give Claude domain-specific skills for local development:
 
 - [**blocktank-api**](.claude/plugins/blocktank-api/README.md) — `/lsp` skill for Blocktank staging's regtest tools (mine, deposit, pay invoice) and lookups of existing orders.
+- [**spark-regtest**](.claude/plugins/spark-regtest/README.md) — build, fund and pay on Spark's regtest, hosted by Lightspark or local through bitkit-docker's `./spark`.
 
 Install or update all bundled plugins with:
 
@@ -271,6 +272,7 @@ Destructive operations like `rm -rf`, `git commit`, and `git push` still require
 Claude Code plugins provide specialized skills for development workflows. See [`.claude/plugins/`](.claude/plugins/) for available plugins.
 
 - [blocktank-api](.claude/plugins/blocktank-api/README.md) — Blocktank staging regtest tools and order lookups
+- [spark-regtest](.claude/plugins/spark-regtest/README.md) — Spark regtest builds and funding
 
 ## License
 
