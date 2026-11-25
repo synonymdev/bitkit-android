@@ -563,6 +563,7 @@
     <string name="other__shop__discover__refill__description">Recarregar seu telefone</string>
     <string name="other__shop__discover__travel__title">Viagem</string>
     <string name="other__shop__discover__travel__description">Suas férias ₿</string>
+    <string name="profile__update_required">Este perfil precisa de uma versão mais recente da Bitkit. Atualize a app para o utilizar.</string>
     <string name="security__backup_wallet">Backup da Carteira</string>
     <string name="security__backup_title">&lt;accent&gt;Armazene&lt;/accent&gt; seu Bitcoin com segurança</string>
     <string name="security__backup_funds">Agora que o você tem fundos na sua carteira, é hora de fazer o backup do seu dinheiro!</string>

@@ -579,6 +579,7 @@
     <string name="profile__unlink_error_title">Impossibile Scollegare il Pubky</string>
     <string name="profile__unlink_pubky">Scollega pubky</string>
     <string name="profile__unlink_success">Pubky scollegato</string>
+    <string name="profile__update_required">Questo profilo richiede una versione più recente di Bitkit. Aggiorna l\'app per usarlo.</string>
     <string name="profile__your_name">Tuo Nome</string>
     <string name="security__backup_button">Backup</string>
     <string name="security__backup_funds">Ora che ha dei fondi nel tuo wallet, è il momento di fare il backup!</string>

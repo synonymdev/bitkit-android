@@ -563,6 +563,7 @@
     <string name="profile__unlink_error_title">pubky-Verknüpfung kann nicht aufgehoben werden</string>
     <string name="profile__unlink_pubky">pubky-Verknüpfung aufheben</string>
     <string name="profile__unlink_success">pubky-Verknüpfung aufgehoben</string>
+    <string name="profile__update_required">Dieses Profil benötigt eine neuere Version von Bitkit. Aktualisiere die App, um es zu verwenden.</string>
     <string name="profile__your_name">Dein Name</string>
     <string name="other__update_text">Bitte aktualisiere Bitkit auf die neueste Version für neue Funktionen und Fehlerbehebungen!</string>
     <string name="other__update_button">Aktualisieren</string>

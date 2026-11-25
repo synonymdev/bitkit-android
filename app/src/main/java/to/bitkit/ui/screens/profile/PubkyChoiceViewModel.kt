@@ -25,6 +25,7 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.utils.profileErrorDescription
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -65,7 +66,7 @@ class PubkyChoiceViewModel @Inject constructor(
                             ToastEventBus.send(
                                 type = Toast.ToastType.ERROR,
                                 title = context.getString(R.string.common__error),
-                                description = it.message,
+                                description = it.profileErrorDescription(context),
                             )
                         }
                     }
@@ -86,7 +87,7 @@ class PubkyChoiceViewModel @Inject constructor(
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.profile__auth_error_title),
-                        description = it.message,
+                        description = it.profileErrorDescription(context),
                     )
                 }
         }

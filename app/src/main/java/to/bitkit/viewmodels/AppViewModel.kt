@@ -266,6 +266,7 @@ import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PubkyService
 import to.bitkit.services.SparkError
 import to.bitkit.ui.ID_NOTIFICATION_SKIPPED
+import to.bitkit.ui.MainActivity
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.AllowanceRoute
 import to.bitkit.ui.components.Sheet
@@ -858,6 +859,11 @@ class AppViewModel @Inject constructor(
                     )
                     pubkyRepo.clearSessionRestorationFailed()
                 }
+            }
+        }
+        viewModelScope.launch {
+            pubkyRepo.sessionRestorationNeedsUpdate.collect {
+                if (it && App.currentActivity?.value is MainActivity) showPaykitUpdatePrompt()
             }
         }
         viewModelScope.launch {
@@ -9377,16 +9383,7 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    fun toast(toast: Toast) {
-        toast(
-            type = toast.type,
-            title = toast.title,
-            description = toast.description,
-            autoHide = toast.autoHide,
-            visibilityTime = toast.visibilityTime,
-            testTag = toast.testTag,
-        )
-    }
+    fun toast(toast: Toast) = toastManager.enqueue(toast)
 
     fun hideToast() = toastManager.dismissCurrentToast()
 
@@ -10502,8 +10499,22 @@ class AppViewModel @Inject constructor(
 
     fun onAppResumed() {
         viewModelScope.launch {
+            if (pubkyRepo.sessionRestorationNeedsUpdate.value) showPaykitUpdatePrompt()
             if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.restoreSessionIfNeeded()
         }
+    }
+
+    private fun showPaykitUpdatePrompt() {
+        pubkyRepo.clearSessionRestorationNeedsUpdate()
+        toastManager.enqueue(
+            Toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.common__error),
+                description = context.getString(R.string.profile__update_required),
+                autoHide = true,
+                interruptible = false,
+            )
+        )
     }
 
     fun onHomeResumed() {

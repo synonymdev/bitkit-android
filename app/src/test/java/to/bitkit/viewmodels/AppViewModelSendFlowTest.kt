@@ -828,6 +828,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { migrationService.isMigrationChecked() }.thenReturn(true)
         whenever { widgetsRepo.refreshEnabledWidgets() }.thenReturn(Unit)
         whenever(pubkyRepo.sessionRestorationFailed).thenReturn(MutableStateFlow(false))
+        whenever(pubkyRepo.sessionRestorationNeedsUpdate).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.adoptedSourceLost).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contactImportFailure).thenReturn(pubkyContactImportFailure)
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
@@ -1115,6 +1116,36 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.onAppResumed()
         verify(pubkyRepo).restoreSessionIfNeeded()
+    }
+
+    @Test
+    fun `app resume shows a pending paykit update prompt`() = test {
+        val needsUpdate = MutableStateFlow(true)
+        whenever(pubkyRepo.sessionRestorationNeedsUpdate).thenReturn(needsUpdate)
+        whenever(pubkyRepo.clearSessionRestorationNeedsUpdate()).thenAnswer { needsUpdate.value = false }
+        whenever(context.getString(R.string.profile__update_required)).thenReturn("Update Bitkit")
+        clearInvocations(toastManager)
+
+        sut.onAppResumed()
+        runCurrent()
+
+        verify(toastManager).enqueue(check { assertEquals("Update Bitkit", it.description) })
+        assertFalse(needsUpdate.value)
+    }
+
+    @Test
+    fun `a sent toast reaches the queue with its progress flag`() = test {
+        val progressToast = Toast(
+            type = Toast.ToastType.INFO,
+            title = "Applying changes",
+            autoHide = false,
+            replacedByNext = true,
+        )
+        clearInvocations(toastManager)
+
+        sut.toast(progressToast)
+
+        verify(toastManager).enqueue(progressToast)
     }
 
     @Test

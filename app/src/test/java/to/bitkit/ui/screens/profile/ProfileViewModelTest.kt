@@ -89,6 +89,20 @@ class ProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `profile shows the update reason while restoration needs an update`() = test {
+        val needsUpdate = MutableStateFlow(true)
+        val sut = createSut(publicKey = null, restorationNeedsUpdate = needsUpdate)
+        sut.uiState.test {
+            advanceUntilIdle()
+            assertTrue(expectMostRecentItem().needsUpdate)
+
+            needsUpdate.value = false
+            advanceUntilIdle()
+            assertFalse(expectMostRecentItem().needsUpdate)
+        }
+    }
+
+    @Test
     fun `init loads the profile unless a profile load is in flight`() = test {
         val loaded = createProfile()
         listOf(
@@ -519,6 +533,7 @@ class ProfileViewModelTest : BaseUnitTest() {
         isLoadingFlow: MutableStateFlow<Boolean> = MutableStateFlow(isLoading),
         isRestoringFlow: MutableStateFlow<Boolean> = MutableStateFlow(false),
         cachedProfile: PubkyCachedProfile? = null,
+        restorationNeedsUpdate: MutableStateFlow<Boolean> = MutableStateFlow(false),
         onLoadProfile: () -> Unit = {},
         onRestore: suspend () -> Boolean = { false },
     ): ProfileViewModel {
@@ -531,6 +546,7 @@ class ProfileViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.isLoadingProfile).thenReturn(isLoadingFlow)
         whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringFlow)
         whenever(pubkyRepo.cachedProfile).thenReturn(MutableStateFlow(cachedProfile))
+        whenever(pubkyRepo.restorationNeedsUpdate).thenReturn(restorationNeedsUpdate)
         whenever { pubkyRepo.restoreSessionIfNeeded() }.doSuspendableAnswer { onRestore() }
         whenever { pubkyRepo.loadProfile() }.thenAnswer { onLoadProfile() }
         whenever { pubkyRepo.signOut() }.thenReturn(Result.success(Unit))

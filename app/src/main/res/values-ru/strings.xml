@@ -595,6 +595,7 @@
     <string name="profile__unlink_error_title">Не Удалось Отвязать pubky</string>
     <string name="profile__unlink_pubky">Отвязать pubky</string>
     <string name="profile__unlink_success">pubky отвязан</string>
+    <string name="profile__update_required">Для этого профиля нужна более новая версия Bitkit. Обновите приложение, чтобы использовать его.</string>
     <string name="profile__your_name">Ваше Имя</string>
     <string name="security__backup_button">Создать</string>
     <string name="security__backup_funds">Теперь, когда у вас есть средства в кошельке, пришло время создать их резервную копию!</string>

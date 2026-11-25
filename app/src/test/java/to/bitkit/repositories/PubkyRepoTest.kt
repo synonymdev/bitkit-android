@@ -3404,6 +3404,43 @@ class PubkyRepoTest : BaseUnitTest() {
         }
 
     @Test
+    fun `initialize should flag an update when the saved session hits newer paykit state`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("secret_key")
+        whenever(pubkyService.importSession("saved_session")).thenAnswer {
+            throw AppError(PaykitException.Storage("storage_error", "unsupported SDK state blob version 6, expected 4"))
+        }
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertTrue(repo.sessionRestorationNeedsUpdate.value)
+        assertFalse(repo.sessionRestorationFailed.value)
+        assertFalse(repo.isAuthenticated.value)
+        verify(pubkyService, never()).signIn(any())
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+    }
+
+    @Test
+    fun `later restores of the same identity keep the update reason without repeating the prompt`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.importSession("saved_session")).thenAnswer {
+            throw AppError(PaykitException.Storage("storage_error", "unsupported SDK state blob version 6, expected 4"))
+        }
+        val repo = createSut()
+        repo.awaitInitialization()
+        assertTrue(repo.sessionRestorationNeedsUpdate.value)
+        repo.clearSessionRestorationNeedsUpdate()
+
+        repo.restoreSessionIfNeeded()
+
+        verify(pubkyService, times(2)).importSession("saved_session")
+        assertFalse(repo.sessionRestorationNeedsUpdate.value)
+        assertTrue(repo.restorationNeedsUpdate.value)
+        assertFalse(repo.sessionRestorationFailed.value)
+    }
+
+    @Test
     fun `initialize should not flag session restoration failure on identity error without saved session`() = test {
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
         whenever(pubkyService.initialize()).thenAnswer {
@@ -3679,6 +3716,22 @@ class PubkyRepoTest : BaseUnitTest() {
         assertFalse(sut.sessionRestorationFailed.value)
         restore.answer = { VALID_SELF_KEY }
         assertTrue(sut.restoreSessionIfNeeded())
+    }
+
+    @Test
+    fun `deferred restoration asks for an update when it finds newer paykit state`() = test {
+        val restore = stubSavedSessionRestore()
+        restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+        sut.initialize()
+        restore.answer = {
+            throw PaykitException.Storage("storage_error", "unsupported SDK state blob version 6, expected 4")
+        }
+
+        sut.retryDeferredSessionRestoration()
+
+        assertTrue(sut.sessionRestorationNeedsUpdate.value)
+        assertFalse(sut.sessionRestorationFailed.value)
+        assertNull(sut.publicKey.value)
     }
 
     @Test

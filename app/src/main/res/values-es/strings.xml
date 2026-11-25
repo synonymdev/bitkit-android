@@ -577,6 +577,7 @@
     <string name="profile__unlink_error_title">No se pudo desvincular el pubky</string>
     <string name="profile__unlink_pubky">Desvincular pubky</string>
     <string name="profile__unlink_success">Pubky desvinculado</string>
+    <string name="profile__update_required">Este perfil necesita una versión más reciente de Bitkit. Actualice la app para usarlo.</string>
     <string name="profile__your_name">Su Nombre</string>
     <string name="other__update_text">Por favor, ¡actualice Bitkit a la última versión para nuevas funciones y corregir errores!</string>
     <string name="security__backup_wallet">Copia de seguridad de la cartera</string>

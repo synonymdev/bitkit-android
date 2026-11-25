@@ -60,4 +60,25 @@ class PaykitExceptionExtTest {
         assertFalse(transport.isPaykitRecoveryRequired())
         assertTrue(transport.isPaykitTemporarilyUnavailable())
     }
+
+    @Test
+    fun `shared state from a newer paykit is detected`() {
+        val newerVersion = AppError(
+            PaykitException.Storage("storage_error", "unsupported SDK state blob version 6, expected 4"),
+        )
+        val trailingBytes = AppError(PaykitException.Storage("storage_error", "SDK state blob contains trailing bytes"))
+
+        assertTrue(newerVersion.isPaykitStateFromNewerVersion())
+        assertTrue(trailingBytes.isPaykitStateFromNewerVersion())
+    }
+
+    @Test
+    fun `other storage failures are not newer paykit state`() {
+        val corrupted = AppError(
+            PaykitException.Storage("storage_error", "SDK state blob version 2 contains trailing bytes"),
+        )
+
+        assertFalse(corrupted.isPaykitStateFromNewerVersion())
+        assertFalse(AppError("SDK state blob contains trailing bytes").isPaykitStateFromNewerVersion())
+    }
 }
