@@ -40,7 +40,7 @@ siblings. Run `./spark` commands from bitkit-docker. Read the named docs and scr
    - Web faucet: https://app.lightspark.com/regtest-faucet, up to 50,000 sats per deposit. The user submits it in a
      browser.
    - Script: `SPARK_REGTEST_MNEMONIC=… uv run scripts/spark-regtest-fund.py <bcrt1… address> [sats]`. The mnemonic is a
-     GitHub secret; ask the user, never print it.
+     GitHub secret. Ask the developer to set it locally, or use the web faucet. Keep it out of chat.
    - Spark's deposit address is on Settings › Advanced › Lightning Connections › Spark. Fund it to fill Spending
      directly, or fund Savings to test Transfer to Spending.
 4. Lightspark mines about once a minute. Spark claims a deposit after 3 confirmations unless an Instant transfer claims
