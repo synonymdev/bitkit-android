@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import org.junit.Rule
@@ -17,10 +18,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowSystemClock
 import to.bitkit.repositories.MoveToSparkQuote
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.theme.AppThemeSurface
-import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import kotlin.test.assertEquals
@@ -28,6 +29,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.toJavaDuration
 
 @RunWith(RobolectricTestRunner::class)
 class SendConfirmUpdateFeeTest {
@@ -64,9 +66,29 @@ class SendConfirmUpdateFeeTest {
 
     @Config(sdk = [34], qualifiers = "w411dp-h891dp")
     @Test
-    fun `a running swipe hides back and keeps the amount as swiped`() {
-        val events = mutableListOf<SendEvent>()
+    fun `the lock hides back and blocks edits on its own`() {
+        val (backs, addTags) = renderConfirm(isLocked = true)
+
+        composeRule.onNodeWithTag("NavigationBack").assertDoesNotExist()
+        composeRule.onNodeWithTag("TagsAddSend").performScrollTo().performClick()
+
+        assertEquals(0, addTags.size)
+        assertEquals(0, backs.size)
+    }
+
+    @Config(sdk = [34], qualifiers = "w411dp-h891dp")
+    @Test
+    fun `an unlocked confirm takes edits`() {
+        val (_, addTags) = renderConfirm(isLocked = false)
+
+        composeRule.onNodeWithTag("TagsAddSend").performScrollTo().performClick()
+
+        assertEquals(1, addTags.size)
+    }
+
+    private fun renderConfirm(isLocked: Boolean): Pair<List<Unit>, List<Unit>> {
         val backs = mutableListOf<Unit>()
+        val addTags = mutableListOf<Unit>()
         composeRule.setContent {
             CompositionLocalProvider(LocalInspectionMode provides true) {
                 AppThemeSurface {
@@ -79,22 +101,21 @@ class SendConfirmUpdateFeeTest {
                             sparkUpdateQuote = MoveToSparkQuote("lnbcrt1spark", amountSats = 29_967uL, feeSats = 2uL),
                         ),
                         isNodeRunning = true,
-                        isLoading = true,
+                        // Off, so only the lock gates the rows that loading also disables
+                        isLoading = false,
                         showBiometrics = false,
-                        isLocked = true,
+                        isLocked = isLocked,
                         onBack = { backs += Unit },
-                        onEvent = { events += it },
+                        onClickAddTag = { addTags += Unit },
+                        initialShowDetails = true,
                         modifier = Modifier.sheetHeight()
                     )
                 }
             }
         }
-
-        composeRule.onNodeWithTag("NavigationBack").assertDoesNotExist()
-        composeRule.onNodeWithTag("ReviewAmount").performClick()
-
-        assertEquals(emptyList(), events)
-        assertEquals(emptyList(), backs)
+        // Past the click debounce, which reads the system clock
+        ShadowSystemClock.advanceBy(1.seconds.toJavaDuration())
+        return backs to addTags
     }
 
     @Config(sdk = [34])

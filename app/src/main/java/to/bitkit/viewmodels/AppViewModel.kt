@@ -8143,7 +8143,7 @@ class AppViewModel @Inject constructor(
     private suspend fun updateSpendingBalanceIfNeeded(bolt11: String, amountSats: ULong): Result<Unit> {
         if (!moveToSparkRepo.needsUpdateToSend(amountSats)) return Result.success(Unit)
         val shown = _sendUiState.value.approvedSparkUpdateQuote
-        val fresh = moveToSparkRepo.quote().getOrElse { return Result.failure(it) }
+        val fresh = quoteSparkUpdate().getOrElse { return Result.failure(it) }
         if (shown == null || fresh.feeSats > shown.feeSats) {
             _sendUiState.update { it.copy(sparkUpdateQuote = fresh) }
             return Result.failure(MoveToSparkError.UpdateFeeUnseen())
@@ -8163,8 +8163,7 @@ class AppViewModel @Inject constructor(
         val state = _sendUiState.value
         if (!state.needsSparkUpdate()) return true
         val generation = sendStateGeneration
-        val result = withTimeoutOrNull(SPARK_UPDATE_QUOTE_TIMEOUT) { moveToSparkRepo.quote() }
-            ?: Result.failure(MoveToSparkError.QuoteTimedOut())
+        val result = quoteSparkUpdate()
         // A swipe from a send the user left neither pays nor shows its failure.
         if (generation != sendStateGeneration) return false
         val fresh = result.getOrElse {
@@ -8179,6 +8178,12 @@ class AppViewModel @Inject constructor(
         setSendEffect(SendEffect.ResetConfirm)
         return false
     }
+
+    private suspend fun quoteSparkUpdate(): Result<MoveToSparkQuote> =
+        withTimeoutOrNull(SPARK_UPDATE_QUOTE_TIMEOUT) { moveToSparkRepo.quote() } ?: run {
+            Logger.warn("Timed out quoting the spending balance update after '$SPARK_UPDATE_QUOTE_TIMEOUT'", context = TAG)
+            Result.failure(MoveToSparkError.QuoteTimedOut())
+        }
 
     /** Whether this Lightning payment fits only once the spending balance update moves the channels to Spark. */
     private fun SendUiState.needsSparkUpdate(): Boolean {
