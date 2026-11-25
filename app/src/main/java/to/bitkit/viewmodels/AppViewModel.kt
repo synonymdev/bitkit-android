@@ -444,6 +444,7 @@ class AppViewModel @Inject constructor(
     private val sparkUpdateQuoteRun = AtomicLong(0L)
 
     /** Bumped only when a new send starts, unlike [sendStateGeneration], which edits within one send also bump. */
+    @Volatile
     private var sendSession = 0L
 
     /** Swipes and payments still running from the confirm screen, by [sendSession]; see [isSendSwipeRunning]. */

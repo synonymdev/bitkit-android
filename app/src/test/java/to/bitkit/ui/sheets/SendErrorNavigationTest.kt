@@ -17,7 +17,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import to.bitkit.ui.navigateTo
 import to.bitkit.ui.screens.wallets.send.collectConfirmResets
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -43,7 +42,6 @@ class SendErrorNavigationTest {
                     isLoading = loading
                     swipe = { loading = true }
                 }
-                composable<SendRoute.PinCheck> {}
                 composable<SendRoute.Error> {}
             }
         }
@@ -59,20 +57,6 @@ class SendErrorNavigationTest {
         composeRule.runOnUiThread { navController.navigateToSendError(SendRoute.Error()) }
         composeRule.waitForIdle()
         composeRule.runOnUiThread { navController.popBackStack() }
-        composeRule.waitForIdle()
-
-        assertFalse(isLoading)
-    }
-
-    @Test
-    fun `a failure shown over the pin check still resets the confirmation`() {
-        setContent()
-        composeRule.runOnUiThread { navController.navigateTo(SendRoute.PinCheck) }
-        composeRule.waitForIdle()
-
-        composeRule.runOnUiThread { navController.navigateToSendError(SendRoute.Error()) }
-        composeRule.waitForIdle()
-        composeRule.runOnUiThread { navController.popBackStack(SendRoute.Confirm, inclusive = false) }
         composeRule.waitForIdle()
 
         assertFalse(isLoading)

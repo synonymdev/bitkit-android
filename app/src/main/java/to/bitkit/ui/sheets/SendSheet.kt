@@ -149,9 +149,9 @@ internal fun NavController.navigateToCoinSelection() {
     navigateTo(SendRoute.CoinSelection)
 }
 
-/** Shows [route] after a failed swipe and resets the confirmation under it, so Back returns to one that takes a swipe. */
+/** Shows [route] after a failed swipe, resetting the confirmation it covers so Back finds it ready to swipe. */
 internal fun NavController.navigateToSendError(route: SendRoute.Error) {
-    runCatching { getBackStackEntry(SendRoute.Confirm) }.getOrNull()
+    currentBackStackEntry?.takeIf { it.destination.hasRoute<SendRoute.Confirm>() }
         ?.savedStateHandle
         ?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
     navigateTo(route)
