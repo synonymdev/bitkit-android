@@ -68,6 +68,26 @@ class ToastQueueManagerTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a result replaces its queued progress toast after the warning hides`() = test {
+        val sut = ToastQueueManager(backgroundScope)
+        val updateToast = Toast(type = Toast.ToastType.ERROR, title = "Update", autoHide = true, interruptible = false)
+        val onlineToast = Toast(type = Toast.ToastType.SUCCESS, title = "Back online", autoHide = true)
+        val progressToast = Toast(type = Toast.ToastType.INFO, title = "Applying changes", autoHide = false)
+        val resultToast = Toast(type = Toast.ToastType.SUCCESS, title = "Settings updated", autoHide = true)
+        sut.enqueue(updateToast)
+        sut.enqueue(onlineToast)
+        sut.enqueue(progressToast)
+        advanceTimeBy(Toast.VISIBILITY_TIME_DEFAULT + 1)
+        assertEquals(onlineToast, sut.currentToast.value)
+
+        sut.enqueue(resultToast)
+
+        assertEquals(resultToast, sut.currentToast.value)
+        advanceTimeBy(Toast.VISIBILITY_TIME_DEFAULT + 1)
+        assertNull(sut.currentToast.value)
+    }
+
+    @Test
     fun `loading toast returns after a toast that interrupts it`() = test {
         val sut = ToastQueueManager(backgroundScope)
         val infoToast = Toast(type = Toast.ToastType.SUCCESS, title = "Back online", autoHide = true)
