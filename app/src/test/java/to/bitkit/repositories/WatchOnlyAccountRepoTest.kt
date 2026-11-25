@@ -1,11 +1,16 @@
 package to.bitkit.repositories
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Test
 import org.lightningdevkit.ldknode.AddressType
 import org.lightningdevkit.ldknode.Node
@@ -19,6 +24,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.async.ServiceQueue
 import to.bitkit.data.WatchOnlyAccountAllocationState
 import to.bitkit.data.WatchOnlyAccountData
 import to.bitkit.data.WatchOnlyAccountStore
@@ -31,6 +37,7 @@ import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.services.LightningService
 import to.bitkit.services.WatchOnlyAccountLifecycleCoordinator
+import to.bitkit.services.WatchOnlyAccountXpubDeriver
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -41,6 +48,8 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WatchOnlyAccountRepoTest : BaseUnitTest() {
+    private val xpubDeriver = mock<WatchOnlyAccountXpubDeriver>()
+
     @Test
     fun `explicit watch-only request allocates a new account instead of reusing an active account`() = test {
         val active = account()
@@ -51,7 +60,7 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
         whenever(store.load()).thenReturn(listOf(active))
         whenever(store.reserveAccountIndex(any(), any())).thenReturn(2)
         whenever(lightningService.node).thenReturn(node)
-        whenever(node.exportOnchainWalletAccountXpub(AddressType.NATIVE_SEGWIT, 2u)).thenReturn(TEST_XPUB_ALTERNATE)
+        whenever(xpubDeriver.derive(2)).thenReturn(TEST_XPUB_ALTERNATE)
 
         val prepared = repository(store, lightningService).prepareUnsignedClaim(
             "pubkyauth://signin?secret=new&x-bitkit-claim=watch-only-account-v1",
@@ -175,7 +184,7 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
         }
         whenever(store.reserveAccountIndex(any(), any())).thenReturn(1)
         whenever(lightningService.node).thenReturn(node)
-        whenever(node.exportOnchainWalletAccountXpub(AddressType.NATIVE_SEGWIT, 1u)).thenReturn(TEST_XPUB)
+        whenever(xpubDeriver.derive(1)).thenReturn(TEST_XPUB)
         val sut = repository(store, lightningService)
 
         val first = sut.prepareUnsignedClaim(
@@ -195,7 +204,7 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
         assertEquals(first.account.xpub, retry.account.xpub)
         assertEquals("Renamed account", retry.account.name)
         assertFalse(retry.account.isTrackingEnabled)
-        verify(node, times(1)).exportOnchainWalletAccountXpub(AddressType.NATIVE_SEGWIT, 1u)
+        verify(xpubDeriver, times(1)).derive(1)
         verify(node, never()).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, TEST_XPUB)
     }
 
@@ -242,7 +251,7 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
         }
         whenever(lightningService.currentWalletIndex).thenReturn(0)
         whenever(lightningService.node).thenReturn(node)
-        whenever(node.exportOnchainWalletAccountXpub(AddressType.NATIVE_SEGWIT, 6u)).thenReturn(TEST_XPUB)
+        whenever(xpubDeriver.derive(6)).thenReturn(TEST_XPUB)
         val sut = repository(store, lightningService)
 
         val prepared = sut.prepareUnsignedClaim(RESTORED_AUTH_URL, "Restored server")
@@ -252,8 +261,8 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
         assertNotEquals(authorizingAccount.xpub, prepared.account.xpub)
         assertEquals(6, storedData.pendingAccountIndexByRequest[restoredRequestKey])
         assertEquals(listOf(5, 6), storedData.accounts.map(WatchOnlyAccountRecord::accountIndex))
-        verify(node).exportOnchainWalletAccountXpub(AddressType.NATIVE_SEGWIT, 6u)
-        verify(node, never()).exportOnchainWalletAccountXpub(AddressType.NATIVE_SEGWIT, 5u)
+        verify(xpubDeriver).derive(6)
+        verify(xpubDeriver, never()).derive(5)
     }
 
     @Test
@@ -298,7 +307,7 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
         }
         whenever(lightningService.currentWalletIndex).thenReturn(0)
         whenever(lightningService.node).thenReturn(node)
-        whenever(node.exportOnchainWalletAccountXpub(AddressType.NATIVE_SEGWIT, 6u)).thenReturn(TEST_XPUB)
+        whenever(xpubDeriver.derive(6)).thenReturn(TEST_XPUB)
         val sut = repository(store, lightningService)
 
         val prepared = sut.prepareUnsignedClaim(RESTORED_AUTH_URL, "Restored server")
@@ -309,8 +318,8 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
         assertEquals(6, storedData.pendingAccountIndexByRequest[restoredRequestKey])
         assertEquals(listOf(6), storedData.accounts.map(WatchOnlyAccountRecord::accountIndex))
         assertEquals(listOf(5), storedData.accountsPendingRemoval.map(WatchOnlyAccountRecord::accountIndex))
-        verify(node).exportOnchainWalletAccountXpub(AddressType.NATIVE_SEGWIT, 6u)
-        verify(node, never()).exportOnchainWalletAccountXpub(AddressType.NATIVE_SEGWIT, 5u)
+        verify(xpubDeriver).derive(6)
+        verify(xpubDeriver, never()).derive(5)
     }
 
     @Test
@@ -523,6 +532,95 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `prepare and begin authorization complete without a node`() = test {
+        var storedAccounts = emptyList<WatchOnlyAccountRecord>()
+        val store = mock<WatchOnlyAccountStore>()
+        val lightningService = mock<LightningService>()
+        whenever(store.data).thenReturn(flowOf(WatchOnlyAccountData(accounts = storedAccounts)))
+        whenever(store.load()).thenAnswer { storedAccounts }
+        whenever(store.save(any())).thenAnswer {
+            storedAccounts = it.getArgument(0)
+            Unit
+        }
+        whenever(store.update(any())).thenAnswer {
+            val transform = it.getArgument<(List<WatchOnlyAccountRecord>) -> List<WatchOnlyAccountRecord>>(0)
+            storedAccounts = transform(storedAccounts)
+            Unit
+        }
+        whenever(store.reserveAccountIndex(any(), any())).thenReturn(1)
+        whenever(lightningService.node).thenReturn(null)
+        whenever(xpubDeriver.derive(1)).thenReturn(TEST_XPUB)
+        val sut = repository(store, lightningService)
+
+        val prepared = sut.prepareUnsignedClaim(RESTORED_AUTH_URL, "Creator account")
+        sut.beginAuthorization(prepared.account.id)
+
+        val stored = storedAccounts.single()
+        assertEquals(TEST_XPUB, stored.xpub)
+        assertTrue(stored.isTrackingEnabled)
+        assertEquals(WatchOnlyAccountSetupState.Authorizing, stored.setupState)
+    }
+
+    @Test
+    fun `begin authorization without a node does not wait for the busy LDK queue`() = test {
+        val account = account().copy(isTrackingEnabled = false, setupState = WatchOnlyAccountSetupState.PendingDelivery)
+        var storedAccounts = listOf(account)
+        val store = mock<WatchOnlyAccountStore>()
+        val lightningService = mock<LightningService>()
+        whenever(store.data).thenReturn(flowOf(WatchOnlyAccountData(accounts = storedAccounts)))
+        whenever(store.load()).thenAnswer { storedAccounts }
+        whenever(store.update(any())).thenAnswer {
+            val transform = it.getArgument<(List<WatchOnlyAccountRecord>) -> List<WatchOnlyAccountRecord>>(0)
+            storedAccounts = transform(storedAccounts)
+            Unit
+        }
+        whenever(lightningService.node).thenReturn(null)
+        val sut = repository(store, lightningService)
+        val buildRunning = CompletableDeferred<Unit>()
+        val releaseBuild = CompletableDeferred<Unit>()
+        val build = launch(Dispatchers.Default) {
+            ServiceQueue.LDK.background {
+                buildRunning.complete(Unit)
+                runBlocking { releaseBuild.await() }
+            }
+        }
+
+        val finishedWhileQueueBusy = withContext(Dispatchers.Default) {
+            buildRunning.await()
+            val authorization = async { sut.beginAuthorization(account.id) }
+            val finished = withTimeoutOrNull(LDK_QUEUE_WAIT_BOUND_MS) { authorization.await() } != null
+            releaseBuild.complete(Unit)
+            authorization.await()
+            finished
+        }
+        build.join()
+
+        assertTrue(finishedWhileQueueBusy)
+        assertTrue(storedAccounts.single().isTrackingEnabled)
+        assertEquals(WatchOnlyAccountSetupState.Authorizing, storedAccounts.single().setupState)
+    }
+
+    @Test
+    fun `cancel without a node resets the store for the next node start`() = test {
+        val account = account().copy(setupState = WatchOnlyAccountSetupState.Authorizing)
+        var storedAccounts = listOf(account)
+        val store = mock<WatchOnlyAccountStore>()
+        val lightningService = mock<LightningService>()
+        whenever(store.data).thenReturn(flowOf(WatchOnlyAccountData(accounts = storedAccounts)))
+        whenever(store.load()).thenAnswer { storedAccounts }
+        whenever(store.save(any())).thenAnswer {
+            storedAccounts = it.getArgument(0)
+            Unit
+        }
+        whenever(lightningService.node).thenReturn(null)
+
+        repository(store, lightningService).cancelAuthorization(account.id)
+
+        assertFalse(storedAccounts.single().isTrackingEnabled)
+        assertEquals(WatchOnlyAccountSetupState.PendingDelivery, storedAccounts.single().setupState)
+    }
+
+    @Test
     fun `new account is removed when address revelation fails and original error is preserved`() = test {
         val account = account().copy(isTrackingEnabled = false, setupState = WatchOnlyAccountSetupState.PendingDelivery)
         var storedAccounts = listOf(account)
@@ -614,7 +712,7 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
     ): WatchOnlyAccountRepo {
         val xpubSerializer = mock<WatchOnlyAccountXpubSerializer>()
         whenever(xpubSerializer.serialize(any())).thenReturn(ByteArray(78))
-        return WatchOnlyAccountRepo(testDispatcher, store, lightningService, coordinator, xpubSerializer)
+        return WatchOnlyAccountRepo(testDispatcher, store, lightningService, coordinator, xpubSerializer, xpubDeriver)
     }
 
     private fun account() = WatchOnlyAccountRecord(
@@ -631,6 +729,7 @@ class WatchOnlyAccountRepoTest : BaseUnitTest() {
     )
 
     private companion object {
+        const val LDK_QUEUE_WAIT_BOUND_MS = 2_000L
         const val RESTORED_AUTH_URL =
             "pubkyauth://signin?relay=https%3A%2F%2Frelay.example&secret=backup&" +
                 "caps=%2Fpub%2Fpaykit%2Fv0%2Fbitkit%2Fserver%2F%3Arw&x-bitkit-claim=watch-only-account-v1"

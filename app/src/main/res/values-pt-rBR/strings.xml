@@ -1829,7 +1829,6 @@
     <string name="watch_only_accounts__empty_title">Nenhuma conta de servidor</string>
     <string name="watch_only_accounts__error_invalid_name">Digite um nome de conta entre 1 e 64 caracteres.</string>
     <string name="watch_only_accounts__error_invalid_xpub">A Bitkit não conseguiu criar um xpub de conta válido.</string>
-    <string name="watch_only_accounts__error_node_unavailable">A carteira precisa estar em execução antes que uma conta possa ser criada.</string>
     <string name="watch_only_accounts__name">NOME</string>
     <string name="watch_only_accounts__name_placeholder">Nome da conta</string>
     <string name="watch_only_accounts__name_saved">Nome da conta salvo</string>

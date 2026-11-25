@@ -1831,7 +1831,6 @@
     <string name="watch_only_accounts__empty_title">لا توجد حسابات خوادم</string>
     <string name="watch_only_accounts__error_invalid_name">أدخل اسم حساب بين 1 و64 حرفًا.</string>
     <string name="watch_only_accounts__error_invalid_xpub">تعذر على Bitkit إنشاء xpub صالح للحساب.</string>
-    <string name="watch_only_accounts__error_node_unavailable">يجب أن تكون المحفظة قيد التشغيل قبل إنشاء حساب.</string>
     <string name="watch_only_accounts__name">الاسم</string>
     <string name="watch_only_accounts__name_placeholder">اسم الحساب</string>
     <string name="watch_only_accounts__name_saved">تم حفظ اسم الحساب</string>

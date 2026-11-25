@@ -1842,7 +1842,6 @@
     <string name="watch_only_accounts__empty_title">Нет аккаунтов серверов</string>
     <string name="watch_only_accounts__error_invalid_name">Введите название аккаунта длиной от 1 до 64 символов.</string>
     <string name="watch_only_accounts__error_invalid_xpub">Bitkit не смог создать действительный xpub аккаунта.</string>
-    <string name="watch_only_accounts__error_node_unavailable">Кошелёк должен быть запущен, прежде чем можно будет создать аккаунт.</string>
     <string name="watch_only_accounts__name">НАЗВАНИЕ</string>
     <string name="watch_only_accounts__name_placeholder">Название аккаунта</string>
     <string name="watch_only_accounts__name_saved">Название аккаунта сохранено</string>
