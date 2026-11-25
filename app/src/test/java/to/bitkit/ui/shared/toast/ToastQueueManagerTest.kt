@@ -58,9 +58,14 @@ class ToastQueueManagerTest : BaseUnitTest() {
             type = Toast.ToastType.INFO,
             title = "Applying changes",
             autoHide = false,
-            replacedByNext = true,
+            replaceKey = "AddressType",
         )
-        val resultToast = Toast(type = Toast.ToastType.SUCCESS, title = "Settings updated", autoHide = true)
+        val resultToast = Toast(
+            type = Toast.ToastType.SUCCESS,
+            title = "Settings updated",
+            autoHide = true,
+            replaceKey = "AddressType",
+        )
         sut.enqueue(updateToast)
         sut.enqueue(progressToast)
         sut.enqueue(resultToast)
@@ -81,9 +86,14 @@ class ToastQueueManagerTest : BaseUnitTest() {
             type = Toast.ToastType.INFO,
             title = "Applying changes",
             autoHide = false,
-            replacedByNext = true,
+            replaceKey = "AddressType",
         )
-        val resultToast = Toast(type = Toast.ToastType.SUCCESS, title = "Settings updated", autoHide = true)
+        val resultToast = Toast(
+            type = Toast.ToastType.SUCCESS,
+            title = "Settings updated",
+            autoHide = true,
+            replaceKey = "AddressType",
+        )
         sut.enqueue(updateToast)
         sut.enqueue(onlineToast)
         sut.enqueue(progressToast)
@@ -129,9 +139,14 @@ class ToastQueueManagerTest : BaseUnitTest() {
             type = Toast.ToastType.WARNING,
             title = "Offline",
             autoHide = true,
-            replacedByNext = true,
+            replaceKey = "Connectivity",
         )
-        val onlineToast = Toast(type = Toast.ToastType.SUCCESS, title = "Back online", autoHide = true)
+        val onlineToast = Toast(
+            type = Toast.ToastType.SUCCESS,
+            title = "Back online",
+            autoHide = true,
+            replaceKey = "Connectivity",
+        )
         sut.enqueue(returnedToast)
 
         sut.enqueue(offlineToast)
@@ -141,6 +156,36 @@ class ToastQueueManagerTest : BaseUnitTest() {
         assertEquals(returnedToast, sut.currentToast.value)
         sut.dismissCurrentToast()
         assertEquals(onlineToast, sut.currentToast.value)
+    }
+
+    @Test
+    fun `only the latest connection status waits behind a toast that is not interruptible`() = test {
+        val sut = ToastQueueManager(backgroundScope)
+        val returnedToast = Toast(
+            type = Toast.ToastType.INFO,
+            title = "Payment returned",
+            autoHide = false,
+            interruptible = false,
+        )
+        val offlineToast = Toast(
+            type = Toast.ToastType.WARNING,
+            title = "Offline",
+            autoHide = true,
+            replaceKey = "Connectivity",
+        )
+        val onlineToast = offlineToast.copy(type = Toast.ToastType.SUCCESS, title = "Back online")
+        val resultToast = Toast(type = Toast.ToastType.SUCCESS, title = "Settings updated", autoHide = true)
+        sut.enqueue(returnedToast)
+
+        sut.enqueue(offlineToast)
+        sut.enqueue(onlineToast)
+        sut.enqueue(offlineToast.copy(description = "Again"))
+        sut.enqueue(resultToast)
+        sut.dismissCurrentToast()
+
+        assertEquals(offlineToast.copy(description = "Again"), sut.currentToast.value)
+        advanceTimeBy(Toast.VISIBILITY_TIME_DEFAULT + 1)
+        assertEquals(resultToast, sut.currentToast.value)
     }
 
     @Test

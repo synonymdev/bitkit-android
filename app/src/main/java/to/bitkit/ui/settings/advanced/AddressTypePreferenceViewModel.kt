@@ -33,6 +33,9 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
 
+/** The progress toast waiting in the queue is replaced by its result. */
+private const val ADDRESS_TYPE_TOAST_KEY = "AddressType"
+
 @HiltViewModel
 class AddressTypePreferenceViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -76,7 +79,7 @@ class AddressTypePreferenceViewModel @Inject constructor(
                 title = context.getString(R.string.settings__addr_type__applying),
                 autoHide = false,
                 testTag = "AddressTypeApplyingToast",
-                replacedByNext = true,
+                replaceKey = ADDRESS_TYPE_TOAST_KEY,
             )
 
             val currentMonitored = _uiState.value.monitoredTypes.toMutableSet()
@@ -100,12 +103,14 @@ class AddressTypePreferenceViewModel @Inject constructor(
                     description = context.getString(R.string.settings__addr_type__now_using)
                         .replace("{type}", typeName),
                     testTag = "AddressTypeSettingsUpdatedToast",
+                    replaceKey = ADDRESS_TYPE_TOAST_KEY,
                 )
             } else {
                 ToastEventBus.send(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.common__error),
                     description = result.exceptionOrNull()?.message,
+                    replaceKey = ADDRESS_TYPE_TOAST_KEY,
                 )
             }
         }
@@ -123,7 +128,7 @@ class AddressTypePreferenceViewModel @Inject constructor(
                 type = Toast.ToastType.INFO,
                 title = context.getString(R.string.settings__addr_type__applying),
                 autoHide = false,
-                replacedByNext = true,
+                replaceKey = ADDRESS_TYPE_TOAST_KEY,
             )
 
             val repoResult = lightningRepo.setMonitoring(addressType, enabled)
@@ -138,12 +143,14 @@ class AddressTypePreferenceViewModel @Inject constructor(
                 ToastEventBus.send(
                     type = Toast.ToastType.SUCCESS,
                     title = context.getString(R.string.settings__addr_type__settings_updated),
+                    replaceKey = ADDRESS_TYPE_TOAST_KEY,
                 )
             } else {
                 ToastEventBus.send(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.common__error),
                     description = monitoringErrorMessage(repoResult.exceptionOrNull()?.message),
+                    replaceKey = ADDRESS_TYPE_TOAST_KEY,
                 )
             }
         }
