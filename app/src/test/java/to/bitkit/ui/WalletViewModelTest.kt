@@ -298,6 +298,24 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `openReceive resets the receive request once per sheet presentation`() = test {
+        whenever(walletRepo.refreshReceiveState()).thenReturn(Result.success(Unit))
+
+        sut.openReceive("first")
+        advanceUntilIdle()
+        sut.openReceive("first")
+        advanceUntilIdle()
+
+        verify(walletRepo, times(1)).refreshReceiveState()
+        verify(walletRepo, times(1)).resetPreActivityMetadataTagsForCurrentInvoice()
+
+        sut.openReceive("second")
+        advanceUntilIdle()
+
+        verify(walletRepo, times(2)).refreshReceiveState()
+    }
+
+    @Test
     fun `updateBip21Invoice should pass the confirmed note to walletRepo`() = test {
         whenever(walletRepo.updateBip21Invoice(anyOrNull(), any())).thenReturn(Result.success(Unit))
 

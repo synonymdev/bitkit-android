@@ -8890,8 +8890,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `received lightning payment closes the active receive sheet after wallet invoice is cleared`() = test {
-        walletState.value = WalletState(bolt11 = "settled-invoice")
         sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "settled-invoice")
         advanceUntilIdle()
         walletState.value = WalletState(bolt11 = "")
         advanceUntilIdle()
@@ -8915,8 +8916,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `late payment of a refreshed receive invoice closes the receive sheet and resets the request`() = test {
-        walletState.value = WalletState(bolt11 = "first-invoice", bolt11PaymentHash = "first-hash")
         sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "first-invoice", bolt11PaymentHash = "first-hash")
         advanceUntilIdle()
         walletState.value = WalletState(bolt11 = "refreshed-invoice", bolt11PaymentHash = "refreshed-hash")
         advanceUntilIdle()
@@ -9000,6 +9002,62 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 details = TransactionDetails(amountSats = 4_000L, inputs = emptyList(), outputs = emptyList()),
             ),
             settledReceiveAddress = SettledReceiveAddress("bcrt1qrotated"),
+        )
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `payment of the invoice cached before receive opened preserves the receive sheet`() = test {
+        walletState.value = WalletState(
+            bolt11 = "cached-invoice",
+            bolt11PaymentHash = "cached-hash",
+            onchainAddress = "bcrt1qfirst",
+        )
+        val sheet = Sheet.Receive()
+        sut.showSheet(sheet)
+        advanceUntilIdle()
+        walletState.value = walletState.value.copy(onchainAddress = "bcrt1qrotated")
+        advanceUntilIdle()
+        walletState.value = WalletState(
+            bolt11 = "opened-invoice",
+            bolt11PaymentHash = "opened-hash",
+            onchainAddress = "bcrt1qrotated",
+        )
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "cached-hash",
+                amountMsat = 4_000_000uL,
+                customRecords = emptyList(),
+            ),
+        )
+        advanceUntilIdle()
+
+        assertEquals(sheet, sut.currentSheet.value)
+        verify(walletRepo, never()).resetReceiveRequest()
+    }
+
+    @Test
+    fun `onchain payment seen only in the outputs closes the receive sheet after the address rotated`() = test {
+        walletState.value = WalletState(onchainAddress = "bcrt1qfirst")
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        walletState.value = WalletState(onchainAddress = "bcrt1qrotated")
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            event = Event.OnchainTransactionReceived(
+                txid = "txid",
+                details = TransactionDetails(
+                    amountSats = 4_000L,
+                    inputs = emptyList(),
+                    outputs = listOf(TxOutput("", null, "bcrt1qfirst", 4_000L, 0u)),
+                ),
+            ),
         )
         advanceUntilIdle()
 
@@ -9758,8 +9816,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             processingStarted.complete(Unit)
             resumeProcessing.await()
         }
-        walletState.value = WalletState(bolt11 = "settled-invoice")
         sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "settled-invoice")
         advanceUntilIdle()
 
         emitNodeEvent(
@@ -9791,9 +9850,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             processingStarted.complete(Unit)
             resumeProcessing.await()
         }
-        walletState.value = WalletState(bolt11 = "settled-invoice")
         val receiveSheet = Sheet.Receive()
         sut.showSheet(receiveSheet)
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "settled-invoice")
         advanceUntilIdle()
 
         emitNodeEvent(

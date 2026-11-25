@@ -556,15 +556,20 @@ class AppViewModel @Inject constructor(
 
     private data class ReceiveSheetContext(
         val sheet: Sheet.Receive,
+        val cachedBolt11: String = "",
         val bolt11s: Set<String> = emptySet(),
         val paymentHashes: Set<String> = emptySet(),
         val onchainAddresses: Set<String> = emptySet(),
     ) {
-        fun withRequest(bolt11: String, paymentHash: String, onchainAddress: String) = copy(
-            bolt11s = bolt11s + setOfNotNull(bolt11.takeIf { it.isNotEmpty() }),
-            paymentHashes = paymentHashes + setOfNotNull(paymentHash.takeIf { bolt11.isNotEmpty() && it.isNotEmpty() }),
-            onchainAddresses = onchainAddresses + setOfNotNull(onchainAddress.takeIf { it.isNotEmpty() }),
-        )
+        fun withRequest(bolt11: String, paymentHash: String, onchainAddress: String): ReceiveSheetContext {
+            // The invoice cached before this visit is replaced on open and never shown, so its payment is not ours
+            val isIssuedInVisit = bolt11.isNotEmpty() && bolt11 != cachedBolt11
+            return copy(
+                bolt11s = bolt11s + setOfNotNull(bolt11.takeIf { isIssuedInVisit }),
+                paymentHashes = paymentHashes + setOfNotNull(paymentHash.takeIf { isIssuedInVisit && it.isNotEmpty() }),
+                onchainAddresses = onchainAddresses + setOfNotNull(onchainAddress.takeIf { it.isNotEmpty() }),
+            )
+        }
 
         fun isSettledBy(update: NodeEventUpdate): Boolean = when (val event = update.event) {
             is Event.PaymentReceived ->
@@ -9435,9 +9440,9 @@ class AppViewModel @Inject constructor(
             }
             if (!canPresent()) return@launch
             receiveSheetContext = (sheetType as? Sheet.Receive)?.let { receiveSheet ->
-                ReceiveSheetContext(receiveSheet).withRequest(
-                    bolt11 = walletRepo.getBolt11(),
-                    paymentHash = walletRepo.walletState.value.bolt11PaymentHash,
+                ReceiveSheetContext(receiveSheet, cachedBolt11 = walletRepo.getBolt11()).withRequest(
+                    bolt11 = "",
+                    paymentHash = "",
                     onchainAddress = walletRepo.getOnchainAddress(),
                 )
             }

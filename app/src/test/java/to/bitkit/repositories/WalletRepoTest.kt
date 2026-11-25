@@ -200,6 +200,7 @@ class WalletRepoTest : BaseUnitTest() {
         sparkRepo = spark,
         sparkExitRepo = sparkExitRepo,
         backupRepo = backupRepo,
+        invoiceParser = { bolt11 -> "parsedHashOf$bolt11" },
     )
 
     private fun lightningInvoice(bolt11: String, isExpired: Boolean = false) = LightningInvoice(
@@ -2290,6 +2291,16 @@ class WalletRepoTest : BaseUnitTest() {
 
         assertEquals("", sut.walletState.value.bolt11)
         assertEquals("", sut.walletState.value.bolt11PaymentHash)
+    }
+
+    @Test
+    fun `loadFromCache parses the payment hash of an invoice cached without one`() = test {
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(bolt11 = INVOICE, onchainAddress = ADDRESS)))
+        sut = createSut()
+
+        sut.loadFromCache()
+
+        assertEquals("parsedHashOf$INVOICE", sut.walletState.value.bolt11PaymentHash)
     }
 
     private suspend fun stubReceiveInvoices(vararg invoices: String) {

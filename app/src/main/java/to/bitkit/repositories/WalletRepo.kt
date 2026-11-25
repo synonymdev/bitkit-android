@@ -83,6 +83,7 @@ class WalletRepo @Inject constructor(
     private val sparkRepo: SparkRepo,
     private val sparkExitRepo: SparkExitRepo,
     private val backupRepo: BackupRepo,
+    private val invoiceParser: QuickPayInvoiceParser,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
 
@@ -228,11 +229,14 @@ class WalletRepo @Inject constructor(
                     cacheStore.update { it.invalidateReceiveOnchainAddress() }
                 }
                 committedReceiveBip21 = cacheData.bip21
+                val paymentHash = cacheData.bolt11PaymentHash.ifEmpty {
+                    cacheData.bolt11.takeIf { it.isNotEmpty() }?.let { invoiceParser.parse(it) }.orEmpty()
+                }
                 _walletState.update {
                     it.copy(
                         onchainAddress = cacheData.onchainAddress,
                         bolt11 = cacheData.bolt11,
-                        bolt11PaymentHash = cacheData.bolt11PaymentHash,
+                        bolt11PaymentHash = paymentHash,
                         bip21 = cacheData.bip21,
                     )
                 }

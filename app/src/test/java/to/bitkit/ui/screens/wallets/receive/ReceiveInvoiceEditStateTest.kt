@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.receive
 
+import androidx.compose.runtime.saveable.SaverScope
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -82,5 +83,19 @@ class ReceiveInvoiceEditStateTest {
 
         state.beginHardwareEdit(note = "coffee")
         assertEquals("coffee", state.note)
+    }
+
+    @Test
+    fun `saver keeps the edit across an activity recreation`() {
+        val state = ReceiveInvoiceEditState()
+        state.beginHardwareEdit(note = "coffee")
+        state.updateNote("coffee and cake")
+
+        val saved = with(ReceiveInvoiceEditState.Saver) { SaverScope { true }.save(state) }
+        val restored = ReceiveInvoiceEditState.Saver.restore(requireNotNull(saved))
+
+        assertEquals("coffee and cake", restored?.note)
+        assertEquals(true, restored?.isHardwareInvoice)
+        assertEquals(ReceiveTab.HARDWARE, restored?.initialTab(hardwareWalletId = null))
     }
 }

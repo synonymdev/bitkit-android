@@ -837,6 +837,7 @@ class WalletViewModel @Inject constructor(
             }
     }
 
+    private var openedReceivePresentationId: String? = null
     private var swapEventsCollected = false
     private var swapUpdatesJob: Job? = null
 
@@ -1034,6 +1035,14 @@ class WalletViewModel @Inject constructor(
                 description = error.message ?: context.getString(R.string.common__error_body)
             )
         }
+    }
+
+    /** Resets the receive request once per sheet [presentationId], so an activity recreation keeps the open one. */
+    fun openReceive(presentationId: String) {
+        if (openedReceivePresentationId == presentationId) return
+        openedReceivePresentationId = presentationId
+        resetPreActivityMetadataTagsForCurrentInvoice()
+        refreshReceiveState()
     }
 
     fun refreshReceiveState() = viewModelScope.launch {

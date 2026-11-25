@@ -15,6 +15,8 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -61,6 +63,7 @@ fun ReceiveSheet(
     appViewModel: AppViewModel,
     walletState: WalletState,
     isOffline: Boolean,
+    presentationId: String,
     startRoute: ReceiveRoute = ReceiveRoute.QR,
     initialTab: ReceiveTab? = null,
     onBlockingChange: (Boolean) -> Unit = {},
@@ -76,7 +79,7 @@ fun ReceiveSheet(
     val currencies = LocalCurrencies.current
 
     LaunchedEffect(Unit) { editInvoiceAmountViewModel.clearInput() }
-    val invoiceEditState = remember { ReceiveInvoiceEditState() }
+    val invoiceEditState = rememberSaveable(saver = ReceiveInvoiceEditState.Saver) { ReceiveInvoiceEditState() }
 
     LaunchedEffect(startRoute) {
         navController.navigateToReceiveStart(startRoute)
@@ -122,10 +125,7 @@ fun ReceiveSheet(
         }
     }
 
-    LaunchedEffect(Unit) {
-        wallet.resetPreActivityMetadataTagsForCurrentInvoice()
-        wallet.refreshReceiveState()
-    }
+    LaunchedEffect(presentationId) { wallet.openReceive(presentationId) }
 
     Box(
         modifier = Modifier
@@ -349,6 +349,20 @@ internal class ReceiveInvoiceEditState {
     }
 
     fun updateNote(text: String) = run { note = text }
+
+    companion object {
+        /** Keeps the edit across an activity recreation such as a dark mode or font scale change. */
+        val Saver = listSaver<ReceiveInvoiceEditState, Any?>(
+            save = { listOf(it.isHardwareInvoice, it.returnTab?.name, it.note) },
+            restore = { saved ->
+                ReceiveInvoiceEditState().apply {
+                    isHardwareInvoice = saved[0] as Boolean
+                    returnTab = (saved[1] as String?)?.let(ReceiveTab::valueOf)
+                    note = saved[2] as String
+                }
+            },
+        )
+    }
 
     fun initialTab(hardwareWalletId: String?): ReceiveTab? =
         returnTab ?: ReceiveTab.HARDWARE.takeIf { hardwareWalletId != null || isHardwareInvoice }
