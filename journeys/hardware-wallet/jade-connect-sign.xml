@@ -30,7 +30,7 @@
       Tap "Finish" (testTag "HardwareWalletPairedFinish") and verify the home screen shows the Jade tile (testTag "ActivityHardware") with a green connection indicator
     </action>
     <action>
-      Tap Receive (testTag "Receive"), select the "Jade" tab (testTag "Tab-jade"), tap "Show Details" if the address is hidden behind it, then tap "Verify on Device" (testTag "HardwareVerifyAddress") and verify no error appears and the shown address starts with "bcrt1"
+      Tap Receive (testTag "Receive"), select the "Jade" tab (testTag "Tab-hardware"), tap "Show Details" if the address is hidden behind it, then tap "Verify on Device" (testTag "HardwareVerifyAddress") and verify no error appears and the shown address starts with "bcrt1"
     </action>
     <action>
       Close the receive sheet. Tap Send (testTag "Send"), enter a regtest address of the bitkit-docker node manually, and on the amount screen select the Jade as the funding source (testTag "AssetButton-switch")

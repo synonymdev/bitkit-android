@@ -81,6 +81,14 @@ the other three rely on, and `passphrase-settings-remove.xml` removes it again.
 | `send-onchain.xml` | Normal Send flow funded by Trezor: source selection, guarded preparation, device signing, broadcast, success, and activity |
 | `scan-onchain-amount-over-spendable.xml` | Scanned on-chain amount the Trezor balance covers but not after fees: Insufficient Savings toast instead of a locked Amount screen |
 | `jade-connect-sign.xml` | Jade emulator: Hardware suggestion → Found (PIN hint) → Paired, receive-address verification, send signed with Jade |
+| `jade-uninitialized.xml` | Jade emulator with no wallet: Found shows the not-set-up message |
+| `jade-wrong-pin.xml` | Interactive Jade emulator: wrong PIN on the device → Found shows the wrong-PIN message, retry pairs |
+| `jade-network-mismatch.xml` | Jade emulator restricted to mainnet: Found shows the network message |
+| `jade-device-locked.xml` | Interactive Jade logged out on the device after pairing: Verify on Device shows the busy message |
+| `jade-psbt-too-large.xml` | Jade with about 200 small inputs: sending all of it shows the too-large message |
+| `jade-sign-on-device.xml` | Interactive Jade: decline on the device keeps the payment unsent, approve sends it |
+| `jade-wallet-mismatch.xml` | Paired Jade reseeded: Verify on Device shows the different-wallet message |
+| `jade-passphrase.xml` | Interactive Jade asking for a passphrase: pairing adds the passphrase wallet next to the Jade's own |
 | `receive-onchain.xml` | Trezor Receive tab: current address and QR display plus exact on-device address verification |
 | `passphrase-pairing.xml` | Passphrase button on Paired → Enter Passphrase → Passphrase Funds Found; second home tile, own label, no passphrase in logs |
 | `passphrase-duplicate.xml` | Re-entering a watched passphrase reports "already added" and adds no tile |
@@ -164,6 +172,14 @@ device.
 
 The seed is the Trezor emulator's, so the Jade sees the same regtest history and funds. Each
 `start` wipes the device back to that seed and PIN; `JADE_MNEMONIC=` (empty) leaves it
-uninitialised. USB and Bluetooth transports, typing the PIN on the device, a wrong PIN and the
-device's own screens still need a physical Jade; unit tests (`JadeRepoTest.kt`,
+uninitialised. USB and Bluetooth transports still need a physical Jade; unit tests (`JadeRepoTest.kt`,
 `JadeTransportTest.kt`, `JadeEmulatorTransportTest.kt`, `HwWalletRepoTest.kt`) cover the rest.
+
+The error journeys start the emulator in another state first: `jade-uninitialized.xml`
+(`JADE_MNEMONIC=`), `jade-wrong-pin.xml` (`JADE_MODE=interactive`, where the device shows its
+own PIN pad and `./scripts/jade-emulator pin` types on it) and `jade-network-mismatch.xml`
+(`JADE_NETWORK=mainnet`), and `jade-device-locked.xml` logs the interactive device out after
+pairing (Android reports the locked Jade as busy; iOS asks for the PIN on the device again and retries,
+so its copy of the journey checks that); `jade-psbt-too-large.xml` needs the app on the bitkit-docker Electrum and about 200 small
+inputs on the Jade. `jade-sign-on-device.xml` declines and then approves a payment on the interactive
+device's own screens. `jade-wallet-mismatch.xml` restarts the emulator with another seed after pairing. `jade-passphrase.xml` starts it with `JADE_PASSPHRASE=always` and pairs the wallet a passphrase typed on the device opens (`./scripts/jade-emulator passphrase`). The bitkit-docker `docs/jade-emulator.md` lists the modes and recipes.

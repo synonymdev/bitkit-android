@@ -87,7 +87,7 @@ class JadeEmulatorTransport(
             }
             ok()
         } catch (e: IOException) {
-            Logger.warn("Jade emulator write failed", e, context = TAG)
+            Logger.warn("Failed to write to Jade emulator", e, context = TAG)
             fail(e.message ?: "Emulator write failed", JadeTransportErrorCode.DISCONNECTED)
         }
     }
@@ -106,7 +106,7 @@ class JadeEmulatorTransport(
             // Nothing received yet is the normal state while the device works or waits.
             readOk(byteArrayOf())
         } catch (e: IOException) {
-            Logger.warn("Jade emulator read failed", e, context = TAG)
+            Logger.warn("Failed to read from Jade emulator", e, context = TAG)
             readFail(e.message ?: "Emulator read failed", JadeTransportErrorCode.DISCONNECTED)
         }
     }
@@ -116,7 +116,10 @@ class JadeEmulatorTransport(
     private fun connect(): Socket {
         val host = address.substringBeforeLast(':')
         val port = address.substringAfterLast(':').toInt()
-        return Socket().apply { connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS) }
+        val socket = Socket()
+        return runCatching { socket.apply { connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS) } }
+            .onFailure { runCatching { socket.close() } }
+            .getOrThrow()
     }
 
     private fun ok() = JadeTransportResult(success = true, error = "", errorCode = null)

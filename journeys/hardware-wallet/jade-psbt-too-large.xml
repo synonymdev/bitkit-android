@@ -1,0 +1,26 @@
+<journey name="Jade Transaction Too Large">
+  <description>
+    Sends the whole balance of a Jade whose funds sit in many small inputs and checks the message
+    for a transaction too large to sign. Requires `./scripts/jade-emulator start` in
+    `bitkit-docker`, a regtest debug build with the Jade emulator enabled (see the README) and a
+    paired Jade. Settings, Advanced, Electrum Server must point at the `bitkit-docker` Electrum,
+    and the Jade's receive address must hold about 200 inputs: run
+    `for i in $(seq 200); do ./bitcoin-cli sendtoaddress <jade address> 0.0002; done; ./bitcoin-cli -generate 1`
+    in `bitkit-docker`. Over the client's 16 KiB PSBT limit, Bitkit refuses before the device
+    sees the transaction.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and verify the home screen shows the Jade tile (testTag "ActivityHardware") with a balance of at least 4 000 000 sats
+    </action>
+    <action>
+      Tap Send (testTag "Send"), enter a regtest address of the bitkit-docker node manually, select the Jade as the funding source on the amount screen (testTag "AssetButton-switch") and tap the available balance (testTag "AvailableAmount") to send all of it
+    </action>
+    <action>
+      Tap Continue (testTag "ContinueAmount"), swipe to confirm, and confirm the dialog about sending over half the balance if it appears
+    </action>
+    <action>
+      Tap "Sign With Jade" (testTag "HardwareSendOpenTrezorConnect") and verify an error toast reads "This transaction is too large for Jade to sign. Try sending a smaller amount." and no payment appears in recent activity
+    </action>
+  </actions>
+</journey>

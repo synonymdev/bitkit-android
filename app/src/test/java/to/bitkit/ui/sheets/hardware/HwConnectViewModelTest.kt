@@ -33,6 +33,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -215,6 +216,21 @@ class HwConnectViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.isConnecting)
         assertEquals(CONNECT_ERROR, sut.uiState.value.errorMessage)
         assertEquals("dev1", sut.uiState.value.foundDeviceId)
+    }
+
+    @Test
+    fun `onFoundRoute keeps the connect error when it reopens the same device`() = test {
+        givenDeviceFound()
+        runCurrent()
+        whenever(hwWalletRepo.connect("dev1")).thenReturn(Result.failure(AppError("connect failed")))
+        sut.onConnectClick()
+        runCurrent()
+
+        sut.onFoundRoute(deviceId = "dev1", deviceModel = "Trezor Safe 5")
+        assertEquals(CONNECT_ERROR, sut.uiState.value.errorMessage)
+
+        sut.onFoundRoute(deviceId = "dev2", deviceModel = "Trezor Safe 5")
+        assertNull(sut.uiState.value.errorMessage)
     }
 
     @Test

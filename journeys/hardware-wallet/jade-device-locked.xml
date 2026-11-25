@@ -1,0 +1,28 @@
+<journey name="Jade Locked On Device">
+  <description>
+    Logs the paired Jade out on the device itself and checks the message the app shows when it
+    next needs the Jade. Requires `JADE_MODE=interactive ./scripts/jade-emulator start` in
+    `bitkit-docker`, a regtest debug build with the Jade emulator enabled (see the README) and no
+    Jade paired. The device answers the next request with HW_LOCKED, which the app reports as busy.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Open the menu (testTag "HeaderMenu"), tap Settings (testTag "DrawerSettings"), tap "Hardware Wallets" (testTag "HardwareWalletsSettings") and tap "Add Hardware Wallet" (testTag "AddHardwareWallet")
+    </action>
+    <action>
+      Tap "Continue" (testTag "HardwareWalletIntroContinue") and verify the "Found Device" step (testTag "HardwareWalletFoundScreen") headed "Found Jade" appears within 15 seconds
+    </action>
+    <action>
+      Tap "Connect" (testTag "HardwareWalletFoundConnect"), run `./scripts/jade-emulator pin 012345` in `bitkit-docker`, verify the "Device Connected" step (testTag "HardwareWalletPairedScreen") appears within 30 seconds and tap "Finish" (testTag "HardwareWalletPairedFinish")
+    </action>
+    <action>
+      Run `./scripts/jade-emulator press front right front` in `bitkit-docker` to choose Session, then Log Out, on the device
+    </action>
+    <action>
+      Tap Receive (testTag "Receive"), select the Jade tab, tap "Show Details" if the address is hidden behind it, then tap "Verify on Device" (testTag "HardwareVerifyAddress") and verify a toast reads "Your Jade is busy. Finish what is shown on the device, then try again."
+    </action>
+  </actions>
+</journey>
