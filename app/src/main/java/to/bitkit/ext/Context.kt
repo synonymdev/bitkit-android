@@ -13,6 +13,7 @@ import android.content.Context.NOTIFICATION_SERVICE
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager.PERMISSION_GRANTED
+import android.hardware.camera2.CameraManager
 import android.hardware.usb.UsbManager
 import android.net.ConnectivityManager
 import android.os.PowerManager
@@ -50,6 +51,9 @@ val Context.usbManager: UsbManager
 
 val Context.bluetoothManager: BluetoothManager
     get() = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+
+val Context.cameraManager: CameraManager
+    get() = getSystemService(Context.CAMERA_SERVICE) as CameraManager
 
 val Context.isBluetoothEnabled: Boolean
     get() = bluetoothManager.adapter?.isEnabled == true

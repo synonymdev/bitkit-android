@@ -14,8 +14,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import to.bitkit.async.ServiceQueue
 import to.bitkit.models.msatCeilOf
+import to.bitkit.nfc.NfcDevOverride
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.ProbeOutcome
+import to.bitkit.ui.shared.effects.NfcState
 import to.bitkit.utils.Logger
 import kotlin.time.Duration.Companion.seconds
 import to.bitkit.repositories.ProbeReadiness as NodeProbeReadiness
@@ -67,6 +69,7 @@ private sealed interface DevCommand {
             ProbeNode.METHOD -> ProbeNode.parse(arg)
             ProbeReadiness.METHOD -> ProbeReadiness
             ResetScores.METHOD -> ResetScores
+            OverrideNfc.METHOD -> OverrideNfc.parse(arg)
             else -> null
         }
     }
@@ -175,6 +178,23 @@ private sealed interface DevCommand {
 
         override suspend fun execute(deps: DevToolsProvider.Dependencies): DevResult =
             DevResult.ProbeReadiness.from(deps.lightningRepo().probeReadiness())
+    }
+
+    data class OverrideNfc(val args: Args) : DevCommand {
+        companion object {
+            const val METHOD = "overrideNfc"
+            fun parse(arg: String?) = OverrideNfc(arg.deserialize<Args>())
+        }
+
+        /** Null fields clear the override. */
+        @Serializable
+        data class Args(val adapterState: NfcState? = null, val cameraStopsPolling: Boolean? = null)
+
+        override suspend fun execute(deps: DevToolsProvider.Dependencies): DevResult {
+            Logger.info("Overriding NFC '$args' via devtools", context = TAG)
+            NfcDevOverride.set(args.adapterState, args.cameraStopsPolling)
+            return DevResult.Ack()
+        }
     }
 
     data object ResetScores : DevCommand {

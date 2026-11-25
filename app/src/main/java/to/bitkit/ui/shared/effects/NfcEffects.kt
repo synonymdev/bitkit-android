@@ -1,10 +1,13 @@
 package to.bitkit.ui.shared.effects
 
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.hardware.camera2.CameraManager
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.cardemulation.CardEmulation
@@ -15,23 +18,32 @@ import android.provider.Settings
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import to.bitkit.androidServices.NdefTagService
+import to.bitkit.ext.cameraManager
 import to.bitkit.nfc.NdefCodec
+import to.bitkit.nfc.NfcDevOverride
 import to.bitkit.nfc.NfcReadDispatcher
 import to.bitkit.nfc.NfcRepeatGuard
 import to.bitkit.nfc.NfcTagEmitter
 import to.bitkit.nfc.READER_FLAGS
 import to.bitkit.nfc.ReaderModeOwner
 import to.bitkit.nfc.Type4TagEmulator
+import to.bitkit.nfc.deviceCameraStopsNfcPolling
 import to.bitkit.nfc.nfcPaymentRequest
 import to.bitkit.utils.Logger
 
@@ -62,20 +74,83 @@ fun rememberCanEmitNfc(): Boolean {
     return nfcState == NfcState.ON && supportsCardEmulation
 }
 
-/** NFC availability, refreshed every time the screen resumes (e.g. after the user turns NFC on). */
+/** NFC availability, refreshed when the screen resumes and whenever the adapter turns on or off. */
 @Composable
 fun rememberNfcState(): NfcState {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var state by remember { mutableStateOf(context.nfcState()) }
-    DisposableEffect(lifecycleOwner) {
+    val override by NfcDevOverride.adapterState.collectAsStateWithLifecycle()
+    DisposableEffect(context, lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) state = context.nfcState()
         }
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context, intent: Intent) {
+                state = context.nfcState()
+            }
+        }
+        // The NFC service, not the system server, sends this protected broadcast, so the receiver must be exported.
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            IntentFilter(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED),
+            ContextCompat.RECEIVER_EXPORTED,
+        )
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            context.unregisterReceiver(receiver)
+        }
     }
-    return state
+    return override ?: state
+}
+
+/**
+ * Whether NFC polling is off because a camera is open, on phones that switch it off then (see
+ * [to.bitkit.nfc.NOTIFY_NFC_PROPERTY]). Pass [enabled] only while NFC is on.
+ */
+@Composable
+fun rememberNfcStoppedByCamera(enabled: Boolean): Boolean {
+    val override by NfcDevOverride.cameraStopsPolling.collectAsStateWithLifecycle()
+    val deviceStopsPolling by produceState(false) {
+        value = withContext(Dispatchers.IO) { deviceCameraStopsNfcPolling }
+    }
+    val cameraStopsPolling = override ?: deviceStopsPolling
+    val isCameraOpen = rememberIsAnyCameraOpen(enabled = enabled && cameraStopsPolling)
+    val isStopped = enabled && cameraStopsPolling && isCameraOpen
+    LaunchedEffect(isStopped) {
+        if (isStopped) Logger.info("Detected NFC polling stopped by an open camera", context = TAG)
+    }
+    return isStopped
+}
+
+@Composable
+private fun rememberIsAnyCameraOpen(enabled: Boolean): Boolean {
+    val context = LocalContext.current
+    var openCameras by remember { mutableStateOf(emptySet<String>()) }
+    DisposableEffect(context, enabled) {
+        if (!enabled) return@DisposableEffect onDispose {}
+        val cameraManager = context.cameraManager
+        // Registered on the main looper, so the set is only touched from the main thread.
+        val callback = object : CameraManager.AvailabilityCallback() {
+            override fun onCameraAvailable(cameraId: String) {
+                openCameras = openCameras - cameraId
+            }
+
+            override fun onCameraUnavailable(cameraId: String) {
+                openCameras = openCameras + cameraId
+            }
+        }
+        val registered = runCatching {
+            cameraManager.registerAvailabilityCallback(callback, Handler(Looper.getMainLooper()))
+        }.onFailure { Logger.warn("Failed to watch camera availability", it, context = TAG) }.isSuccess
+        onDispose {
+            if (registered) cameraManager.unregisterAvailabilityCallback(callback)
+            openCameras = emptySet()
+        }
+    }
+    return openCameras.isNotEmpty()
 }
 
 /**
