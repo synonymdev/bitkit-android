@@ -484,11 +484,17 @@
     <string name="other__high_balance__nav_title">Υψηλό υπόλοιπο</string>
     <string name="other__high_balance__text">&lt;accent&gt;Το υπόλοιπο του πορτοφολιού σου υπερβαίνει τα $500.&lt;/accent&gt;\nΓια την ασφάλειά σου, σκέψου να μεταφέρεις μέρος των αποταμιεύσεών σου σε ένα offline πορτοφόλι.</string>
     <string name="other__high_balance__title">Υψηλό\n&lt;accent&gt;υπόλοιπο&lt;/accent&gt;</string>
+    <string name="other__lnurl_auth_auth_prompt">Επαλήθευση στο {domain};</string>
+    <string name="other__lnurl_auth_auth_title">Επαλήθευση</string>
     <string name="other__lnurl_auth_error">Αποτυχία σύνδεσης (LNURL)</string>
     <string name="other__lnurl_auth_error_msg">Παρουσιάστηκε σφάλμα κατά την προσπάθεια σύνδεσης. {raw}</string>
+    <string name="other__lnurl_auth_link_prompt">Σύνδεση λογαριασμού με το {domain};</string>
+    <string name="other__lnurl_auth_link_title">Σύνδεση λογαριασμού</string>
     <string name="other__lnurl_auth_login_button">Σύνδεση</string>
     <string name="other__lnurl_auth_login_prompt">Σύνδεση στο {domain};</string>
     <string name="other__lnurl_auth_login_title">Σύνδεση</string>
+    <string name="other__lnurl_auth_register_prompt">Εγγραφή στο {domain};</string>
+    <string name="other__lnurl_auth_register_title">Εγγραφή</string>
     <string name="other__lnurl_auth_success_msg_domain">Συνδέθηκες επιτυχώς στο {domain}.</string>
     <string name="other__lnurl_auth_success_msg_no_domain">Συνδέθηκες επιτυχώς.</string>
     <string name="other__lnurl_auth_success_title">Συνδεδεμένος</string>

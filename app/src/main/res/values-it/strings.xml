@@ -489,11 +489,17 @@
     <string name="other__high_balance__nav_title">Saldo Elevato</string>
     <string name="other__high_balance__text">&lt;accent&gt;Il saldo del tuo portafoglio supera $ 500.&lt;/accent&gt;\nPer la tua sicurezza, valuta la possibilità di spostare parte dei tuoi risparmi su un portafoglio offline.</string>
     <string name="other__high_balance__title">Saldo\n&lt;accent&gt;elevato&lt;/accent&gt;</string>
+    <string name="other__lnurl_auth_auth_prompt">Autenticarsi su {domain}?</string>
+    <string name="other__lnurl_auth_auth_title">Autentica</string>
     <string name="other__lnurl_auth_error">Accesso non riuscito (LNURL)</string>
     <string name="other__lnurl_auth_error_msg">Si è verificato un errore durante il tentativo di accesso. {raw}</string>
+    <string name="other__lnurl_auth_link_prompt">Collegare l\'account a {domain}?</string>
+    <string name="other__lnurl_auth_link_title">Collega</string>
     <string name="other__lnurl_auth_login_button">Accedi</string>
     <string name="other__lnurl_auth_login_prompt">Accedi a {domain}?</string>
     <string name="other__lnurl_auth_login_title">Accedi</string>
+    <string name="other__lnurl_auth_register_prompt">Registrarsi su {domain}?</string>
+    <string name="other__lnurl_auth_register_title">Registrati</string>
     <string name="other__lnurl_auth_success_msg_domain">Hai effettuato l\'accesso a {domain}.</string>
     <string name="other__lnurl_auth_success_msg_no_domain">Hai effettuato l\'accesso con successo.</string>
     <string name="other__lnurl_auth_success_title">Accesso effettuato</string>

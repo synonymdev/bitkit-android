@@ -491,11 +491,17 @@
     <string name="other__high_balance__nav_title">Vysoký zůstatek</string>
     <string name="other__high_balance__text">&lt;accent&gt;Zůstatek ve vaší peněžence přesahuje $500.&lt;/accent&gt;\nPro svou bezpečnost zvažte přesunutí části svých úspor do offline peněženky.</string>
     <string name="other__high_balance__title">Vysoký\n&lt;accent&gt;zůstatek&lt;/accent&gt;</string>
+    <string name="other__lnurl_auth_auth_prompt">Ověřit se u {domain}?</string>
+    <string name="other__lnurl_auth_auth_title">Ověřit</string>
     <string name="other__lnurl_auth_error">Přihlášení se nezdařilo (LNURL)</string>
     <string name="other__lnurl_auth_error_msg">Při pokusu o přihlášení došlo k chybě. {raw}</string>
+    <string name="other__lnurl_auth_link_prompt">Propojit účet s {domain}?</string>
+    <string name="other__lnurl_auth_link_title">Propojit</string>
     <string name="other__lnurl_auth_login_button">Přihlásit se</string>
     <string name="other__lnurl_auth_login_prompt">Přihlásit se do {domain}?</string>
     <string name="other__lnurl_auth_login_title">Přihlásit se</string>
+    <string name="other__lnurl_auth_register_prompt">Registrovat se na {domain}?</string>
+    <string name="other__lnurl_auth_register_title">Registrovat</string>
     <string name="other__lnurl_auth_success_msg_domain">Úspěšně jste se přihlásili do {domain}.</string>
     <string name="other__lnurl_auth_success_msg_no_domain">Úspěšně jste se přihlásili.</string>
     <string name="other__lnurl_auth_success_title">Přihlášeno</string>
