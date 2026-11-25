@@ -10513,12 +10513,16 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun showPaykitUpdatePrompt() {
+    private fun showPaykitUpdatePrompt() {
         pubkyRepo.clearSessionRestorationNeedsUpdate()
-        ToastEventBus.send(
-            type = Toast.ToastType.ERROR,
-            title = context.getString(R.string.common__error),
-            description = context.getString(R.string.profile__update_required),
+        toastManager.enqueue(
+            Toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.common__error),
+                description = context.getString(R.string.profile__update_required),
+                autoHide = true,
+                interruptible = false,
+            )
         )
     }
 

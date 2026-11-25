@@ -37,6 +37,20 @@ class ToastQueueManagerTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a toast waits behind a shown toast that is not interruptible`() = test {
+        val sut = ToastQueueManager(backgroundScope)
+        val updateToast = Toast(type = Toast.ToastType.ERROR, title = "Update", autoHide = true, interruptible = false)
+        val infoToast = Toast(type = Toast.ToastType.SUCCESS, title = "Back online", autoHide = true)
+        sut.enqueue(updateToast)
+        sut.enqueue(infoToast)
+        assertEquals(updateToast, sut.currentToast.value)
+
+        advanceTimeBy(Toast.VISIBILITY_TIME_DEFAULT + 1)
+
+        assertEquals(infoToast, sut.currentToast.value)
+    }
+
+    @Test
     fun `loading toast returns after a toast that interrupts it`() = test {
         val sut = ToastQueueManager(backgroundScope)
         val infoToast = Toast(type = Toast.ToastType.SUCCESS, title = "Back online", autoHide = true)
