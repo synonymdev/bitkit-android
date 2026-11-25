@@ -55,14 +55,16 @@ local-E2E build (`Env.localSparkSettings`), so the build needs `E2E=true` (`E2E_
 it, the build silently stays on the hosted regtest.
 
 ```bash
+../bitkit-docker/spark up && \
 CFG="$(../bitkit-docker/spark config --base64)" && \
 ESPLORA_URL= E2E=true E2E_BACKEND=local SPARK_LOCAL_CONFIG_B64="$CFG" \
 SPARK_LOCAL_CHAIN_URL=http://127.0.0.1:23090/api ./gradlew assembleDevDebug && \
 for port in 23535 23536 23537 23049 23090 60001; do adb reverse tcp:$port tcp:$port; done
 ```
 
-- The `&&` chain stops at the first failure. `spark config` fails when the stack is not up or the `bitkit-docker` path
-  is wrong; inline, Gradle would still run with an empty config, and Spark refuses to start.
+- The `&&` chain stops at the first failure. `spark up` can fail while a config from an earlier run survives, and
+  `spark config` fails when the stack is not up or the `bitkit-docker` path is wrong; inline, Gradle would still run with
+  an empty config, and Spark refuses to start.
 - `E2E=true` also points Savings at Electrum on `E2E_LOCAL_HOST:60001` (default `10.0.2.2`), bitkit-docker's chain.
   `ESPLORA_URL=` blanks a hosted proxy URL saved in another source, which Savings would otherwise use instead.
 - An existing dev install keeps the Electrum server saved in its settings, which includes the old default. Uninstall
