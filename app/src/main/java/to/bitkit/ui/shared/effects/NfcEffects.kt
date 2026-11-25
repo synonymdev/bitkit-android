@@ -35,6 +35,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import to.bitkit.androidServices.NdefTagService
 import to.bitkit.ext.cameraManager
+import to.bitkit.nfc.CameraNfcStopTracker
 import to.bitkit.nfc.NdefCodec
 import to.bitkit.nfc.NfcDevOverride
 import to.bitkit.nfc.NfcReadDispatcher
@@ -108,17 +109,17 @@ fun rememberNfcState(): NfcState {
 
 /**
  * Whether NFC polling is off because a camera is open, on phones that switch it off then (see
- * [to.bitkit.nfc.NOTIFY_NFC_PROPERTY]). Pass [enabled] only while NFC is on.
+ * [to.bitkit.nfc.NOTIFY_NFC_PROPERTY] and [CameraNfcStopTracker]).
  */
 @Composable
-fun rememberNfcStoppedByCamera(enabled: Boolean): Boolean {
+fun rememberNfcStoppedByCamera(nfcState: NfcState): Boolean {
     val override by NfcDevOverride.cameraStopsPolling.collectAsStateWithLifecycle()
     val deviceStopsPolling by produceState(false) {
         value = withContext(Dispatchers.IO) { deviceCameraStopsNfcPolling }
     }
     val cameraStopsPolling = override ?: deviceStopsPolling
-    val isCameraOpen = rememberIsAnyCameraOpen(enabled = enabled && cameraStopsPolling)
-    val isStopped = enabled && cameraStopsPolling && isCameraOpen
+    val stoppedByCamera = rememberCameraNfcStop(enabled = cameraStopsPolling, isNfcOn = nfcState == NfcState.ON)
+    val isStopped = nfcState == NfcState.ON && cameraStopsPolling && stoppedByCamera
     LaunchedEffect(isStopped) {
         if (isStopped) Logger.info("Detected NFC polling stopped by an open camera", context = TAG)
     }
@@ -126,31 +127,51 @@ fun rememberNfcStoppedByCamera(enabled: Boolean): Boolean {
 }
 
 @Composable
-private fun rememberIsAnyCameraOpen(enabled: Boolean): Boolean {
+private fun rememberCameraNfcStop(enabled: Boolean, isNfcOn: Boolean): Boolean {
     val context = LocalContext.current
-    var openCameras by remember { mutableStateOf(emptySet<String>()) }
-    DisposableEffect(context, enabled) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val tracker = remember(enabled) { CameraNfcStopTracker() }
+    var isStopped by remember(enabled) { mutableStateOf(false) }
+
+    // Cameras that open while NFC is off still stop polling once it is back on, so the tracker runs regardless.
+    LaunchedEffect(tracker, isNfcOn) {
+        if (isNfcOn) return@LaunchedEffect
+        tracker.onNfcOff()
+        isStopped = tracker.isStopped
+    }
+
+    DisposableEffect(context, lifecycleOwner, tracker) {
         if (!enabled) return@DisposableEffect onDispose {}
         val cameraManager = context.cameraManager
-        // Registered on the main looper, so the set is only touched from the main thread.
+        fun presentCameras() = runCatching { cameraManager.cameraIdList.toSet() }.getOrDefault(emptySet())
+
+        // Registered on the main looper, so the tracker is only touched from the main thread.
         val callback = object : CameraManager.AvailabilityCallback() {
             override fun onCameraAvailable(cameraId: String) {
-                openCameras = openCameras - cameraId
+                tracker.onCameraAvailable(cameraId)
+                isStopped = tracker.isStopped
             }
 
             override fun onCameraUnavailable(cameraId: String) {
-                openCameras = openCameras + cameraId
+                tracker.onCameraUnavailable(cameraId, presentCameras())
+                isStopped = tracker.isStopped
             }
+        }
+        val observer = LifecycleEventObserver { _, event ->
+            if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
+            tracker.retainPresent(presentCameras())
+            isStopped = tracker.isStopped
         }
         val registered = runCatching {
             cameraManager.registerAvailabilityCallback(callback, Handler(Looper.getMainLooper()))
         }.onFailure { Logger.warn("Failed to watch camera availability", it, context = TAG) }.isSuccess
+        lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
             if (registered) cameraManager.unregisterAvailabilityCallback(callback)
-            openCameras = emptySet()
         }
     }
-    return openCameras.isNotEmpty()
+    return isStopped
 }
 
 /**

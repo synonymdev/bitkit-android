@@ -98,7 +98,7 @@ fun rememberNearbyScanSources(
     val isPaused = isNearbyPaused()
     var refreshKey by remember { mutableIntStateOf(0) }
     val nfcState = rememberNfcState()
-    val isNfcStoppedByCamera = rememberNfcStoppedByCamera(enabled = nfcState == NfcState.ON)
+    val isNfcStoppedByCamera = rememberNfcStoppedByCamera(nfcState)
     val bluetoothState = rememberBluetoothState(NearbyRole.SCAN, refreshKey)
 
     var permissionRequested by remember { mutableStateOf(false) }
