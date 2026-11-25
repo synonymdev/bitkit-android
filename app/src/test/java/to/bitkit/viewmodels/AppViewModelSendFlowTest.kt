@@ -1134,6 +1134,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a sent toast reaches the queue with its progress flag`() = test {
+        val progressToast = Toast(
+            type = Toast.ToastType.INFO,
+            title = "Applying changes",
+            autoHide = false,
+            replacedByNext = true,
+        )
+        clearInvocations(toastManager)
+
+        sut.toast(progressToast)
+
+        verify(toastManager).enqueue(progressToast)
+    }
+
+    @Test
     fun `foreground refreshes contacts once and repeats only after resume or reconnect`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey

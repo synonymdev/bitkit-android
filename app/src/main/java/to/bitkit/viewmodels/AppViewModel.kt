@@ -9383,16 +9383,7 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    fun toast(toast: Toast) {
-        toast(
-            type = toast.type,
-            title = toast.title,
-            description = toast.description,
-            autoHide = toast.autoHide,
-            visibilityTime = toast.visibilityTime,
-            testTag = toast.testTag,
-        )
-    }
+    fun toast(toast: Toast) = toastManager.enqueue(toast)
 
     fun hideToast() = toastManager.dismissCurrentToast()
 
