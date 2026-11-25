@@ -1725,6 +1725,7 @@ internal fun AppCacheData.withoutPaymentDetails() = copy(
     bolt11 = "",
     bolt11PaymentHash = "",
     bip21 = "",
+    usdtDisplayBalance = null,
     deletedActivities = emptyList(),
     detachedActivityContacts = emptySet(),
     pendingBoostActivities = emptyList(),

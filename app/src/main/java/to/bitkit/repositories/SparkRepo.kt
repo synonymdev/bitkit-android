@@ -909,8 +909,10 @@ class SparkRepo @Inject constructor(
         // finds it settled.
         return holdRestoreMutex.withLock {
             if (!uncertainSends.remove(key, uncertain)) return@withLock null
-            cacheStore.removeSparkUncertainSend(paymentHash)
-            if (isFailed && !sendsInFlight.containsKey(key)) cacheStore.removeSparkSendHash(paymentHash)
+            bestEffort("end the hold of Spark send '$paymentHash'") { cacheStore.removeSparkUncertainSend(paymentHash) }
+            if (isFailed && !sendsInFlight.containsKey(key)) {
+                bestEffort("drop the hash of Spark send '$paymentHash'") { cacheStore.removeSparkSendHash(paymentHash) }
+            }
             key !in restoredAtStart
         }
     }
@@ -2247,8 +2249,10 @@ class SparkRepo @Inject constructor(
                 if (isFailed && isHeldFrom(payment)) return@withLock true
                 uncertainSends.remove(hash.lowercase())
                 if (restoredAtStart.remove(hash.lowercase())) reportedSendIds.add(payment.id)
-                cacheStore.removeSparkUncertainSend(hash)
-                if (isReleased) cacheStore.removeSparkSendHash(hash)
+                bestEffort("end the hold of Spark send '$hash'") { cacheStore.removeSparkUncertainSend(hash) }
+                if (isReleased) {
+                    bestEffort("drop the hash of Spark send '$hash'") { cacheStore.removeSparkSendHash(hash) }
+                }
                 false
             }
         } ?: false

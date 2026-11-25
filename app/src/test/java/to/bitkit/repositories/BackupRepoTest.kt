@@ -51,6 +51,7 @@ import to.bitkit.R
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
+import to.bitkit.data.CachedUsdtBalance
 import to.bitkit.data.HwWalletData
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.PaykitOutboundDeliveryStore
@@ -3877,6 +3878,7 @@ class BackupRepoTest : BaseUnitTest() {
             bolt11 = id,
             bolt11PaymentHash = id,
             bip21 = id,
+            usdtDisplayBalance = CachedUsdtBalance(address = id, network = "regtest", balance = 1u),
             deletedActivities = listOf(id),
             detachedActivityContacts = setOf(id),
             pendingLightningMessages = mapOf(id to id),
