@@ -125,7 +125,12 @@ class ToastQueueManagerTest : BaseUnitTest() {
             autoHide = false,
             interruptible = false,
         )
-        val offlineToast = Toast(type = Toast.ToastType.WARNING, title = "Offline", autoHide = true)
+        val offlineToast = Toast(
+            type = Toast.ToastType.WARNING,
+            title = "Offline",
+            autoHide = true,
+            replacedByNext = true,
+        )
         val onlineToast = Toast(type = Toast.ToastType.SUCCESS, title = "Back online", autoHide = true)
         sut.enqueue(returnedToast)
 
@@ -135,7 +140,7 @@ class ToastQueueManagerTest : BaseUnitTest() {
 
         assertEquals(returnedToast, sut.currentToast.value)
         sut.dismissCurrentToast()
-        assertEquals(offlineToast, sut.currentToast.value)
+        assertEquals(onlineToast, sut.currentToast.value)
     }
 
     @Test

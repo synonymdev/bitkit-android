@@ -42,6 +42,8 @@ fun IsOnlineTracker(
                     type = Toast.ToastType.WARNING,
                     title = resources.getString(R.string.other__connection_issue),
                     description = resources.getString(R.string.other__connection_issue_explain),
+                    // A warning still waiting behind another toast is out of date once the connection is back.
+                    replacedByNext = true,
                 )
             }
 

@@ -9355,6 +9355,7 @@ class AppViewModel @Inject constructor(
         autoHide: Boolean = true,
         visibilityTime: Long = Toast.VISIBILITY_TIME_DEFAULT,
         testTag: String? = null,
+        replacedByNext: Boolean = false,
     ) {
         toastManager.enqueue(
             Toast(
@@ -9364,6 +9365,7 @@ class AppViewModel @Inject constructor(
                 autoHide = autoHide,
                 visibilityTime = visibilityTime,
                 testTag = testTag,
+                replacedByNext = replacedByNext,
             )
         )
     }
