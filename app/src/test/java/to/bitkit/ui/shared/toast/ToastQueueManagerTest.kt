@@ -117,6 +117,45 @@ class ToastQueueManagerTest : BaseUnitTest() {
     }
 
     @Test
+    fun `later toasts wait until a shown toast that is not interruptible is dismissed`() = test {
+        val sut = ToastQueueManager(backgroundScope)
+        val returnedToast = Toast(
+            type = Toast.ToastType.INFO,
+            title = "Payment returned",
+            autoHide = false,
+            interruptible = false,
+        )
+        val offlineToast = Toast(type = Toast.ToastType.WARNING, title = "Offline", autoHide = true)
+        val onlineToast = Toast(type = Toast.ToastType.SUCCESS, title = "Back online", autoHide = true)
+        sut.enqueue(returnedToast)
+
+        sut.enqueue(offlineToast)
+        sut.enqueue(onlineToast)
+        advanceTimeBy(Toast.VISIBILITY_TIME_DEFAULT * 2)
+
+        assertEquals(returnedToast, sut.currentToast.value)
+        sut.dismissCurrentToast()
+        assertEquals(offlineToast, sut.currentToast.value)
+    }
+
+    @Test
+    fun `a toast that is not interruptible is shown once when sent twice`() = test {
+        val sut = ToastQueueManager(backgroundScope)
+        val returnedToast = Toast(
+            type = Toast.ToastType.INFO,
+            title = "Payment returned",
+            autoHide = false,
+            interruptible = false,
+        )
+        sut.enqueue(returnedToast)
+
+        sut.enqueue(returnedToast.copy())
+        sut.dismissCurrentToast()
+
+        assertNull(sut.currentToast.value)
+    }
+
+    @Test
     fun `loading toast returns after a toast that interrupts it`() = test {
         val sut = ToastQueueManager(backgroundScope)
         val infoToast = Toast(type = Toast.ToastType.SUCCESS, title = "Back online", autoHide = true)
