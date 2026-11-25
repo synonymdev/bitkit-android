@@ -8208,7 +8208,10 @@ class AppViewModel @Inject constructor(
             }
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(proofRequest)
-            finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
+            // A refused Spark send that may have committed a transfer can still settle, and its event settles the
+            // allowance attempt then.
+            val mayHaveSent = (error as? SparkError.SendRefused)?.mayHaveReachedSpark == true
+            finishManualAllowancePayment(allowanceAttemptId, succeeded = if (mayHaveSent) null else false)
             createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
             lnurlComment?.let { activityRepo.clearPendingLightningMessage(paymentHash) }
             if (error is MoveToSparkError.UpdateFeeUnseen) {

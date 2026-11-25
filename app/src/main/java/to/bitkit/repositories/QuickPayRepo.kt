@@ -1081,9 +1081,10 @@ internal data class SpendSnapshot(
 )
 
 internal fun classifyDispatchError(error: Throwable): QuickPayDispatchClass {
-    // Spark refuses only before anything leaves the wallet, as PaykitPaymentProofRepo reads it.
-    if (generateSequence(error) { it.cause }.any { it is SparkError.SendRefused }) {
-        return QuickPayDispatchClass.PRE_DISPATCH_REJECTION
+    // Spark refuses before anything leaves the wallet, as PaykitPaymentProofRepo reads it, unless the refusal may
+    // follow a transfer Spark committed.
+    generateSequence(error) { it.cause }.filterIsInstance<SparkError.SendRefused>().firstOrNull()?.let {
+        return if (it.mayHaveReachedSpark) QuickPayDispatchClass.AMBIGUOUS else QuickPayDispatchClass.PRE_DISPATCH_REJECTION
     }
     return when (error.asNodeException()) {
         is NodeException.InvalidInvoice,

@@ -807,6 +807,13 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark refusal that may follow a committed transfer is ambiguous`() {
+        val refusal = SparkError.SendRefused("Spark could not select leaves", mayHaveReachedSpark = true)
+
+        assertEquals(QuickPayDispatchClass.AMBIGUOUS, classifyDispatchError(to.bitkit.utils.AppError(refusal)))
+    }
+
+    @Test
     fun `classifies wrapped and unwrapped ldk errors`() {
         assertEquals(
             QuickPayDispatchClass.PRE_DISPATCH_REJECTION,

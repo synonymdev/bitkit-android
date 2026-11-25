@@ -657,7 +657,7 @@ class SparkRepo @Inject constructor(
                             forgetUnusedAttempt()
                             throw it
                         }
-                        sendRetryingLeafSelection(prepared, attemptId, paymentDeadlineAt)
+                        sendRetryingLeafSelection(prepared, attemptId, paymentDeadlineAt, onBeforeSend)
                     }
                 }
                 val payment = sent.getOrElse {
@@ -689,7 +689,7 @@ class SparkRepo @Inject constructor(
                         } else {
                             "Spark balance can't cover the payment"
                         }
-                        throw SparkError.SendRefused(reason, it)
+                        throw SparkError.SendRefused(reason, it, mayHaveReachedSpark = true)
                     }
                     Logger.warn("Failed to learn the outcome of Spark send '$paymentHash'", it, context = TAG)
                     settleUncertainSend(paymentHash, expiresAt, attemptId)
@@ -737,6 +737,7 @@ class SparkRepo @Inject constructor(
         prepared: PrepareSendPaymentResponse,
         attemptId: String,
         paymentDeadlineAt: Instant?,
+        onBeforeSend: suspend () -> Boolean,
     ): Result<Payment> {
         var result = runSuspendCatching { sparkService.send(prepared, attemptId) }
         val canRetry = {
@@ -749,7 +750,8 @@ class SparkRepo @Inject constructor(
             if (result.exceptionOrNull()?.isLeafSelectionFailure() != true || !canRetry()) return result
             Logger.info("Retrying Spark send '$attemptId' as Spark could not select its leaves", context = TAG)
             delay(LEAF_SELECTION_RETRY_DELAY)
-            if (!canRetry()) return result
+            // A cancel, block or identity change can land during the delay, so each resend is checked again.
+            if (!canRetry() || !onBeforeSend()) return result
             result = runSuspendCatching { sparkService.send(prepared, attemptId) }
         }
         return result
@@ -1842,12 +1844,17 @@ class SparkRepo @Inject constructor(
                 send.value.equals(bolt11, ignoreCase = true) || send.key == paymentHash?.lowercase()
             }
             sendsInFlight.entries.firstOrNull(isOfInvoice)?.let { return@withContext EarlierSend.Pending(it.key) }
-            // A Spark send refused after it may have reached the operators holds the invoice until it expires: a
-            // transfer it committed can stay unlisted after a sync and still go out, as an unknown send's can.
-            val refusals = cacheStore.data.first().sparkRefusedSends
-            paymentHash?.lowercase()
-                ?.takeIf { hash -> refusals[hash]?.let { it.expiresAt > clock.now().epochSeconds } == true }
-                ?.let { return@withContext EarlierSend.Pending(it) }
+            // A Spark send refused after it may have reached the operators keeps the node off the invoice until it
+            // expires: a transfer it committed can stay unlisted after a sync and still go out, as an unknown send's
+            // can. Unless an earlier send reads pending or paid, the node send is refused, not held pending, as no
+            // event would resolve a pending screen.
+            val refusal = cacheStore.data.first().sparkRefusedSends[paymentHash?.lowercase()]
+            val noEarlierSend = {
+                if (refusal != null && refusal.expiresAt > clock.now().epochSeconds) {
+                    throw SparkError.SendRefused("Spark may still send this invoice", mayHaveReachedSpark = true)
+                }
+                null
+            }
             // A retry started, or recorded, while the listing below is read may still be pending, as may a send whose
             // outcome Spark didn't report until a sync settles it.
             val retried = {
@@ -1868,7 +1875,7 @@ class SparkRepo @Inject constructor(
             if (payments == null) {
                 startedSend(paymentHash)?.let { return@withContext EarlierSend.Pending(it) }
                 refuseUnverifiedRestoredInvoice(bolt11, invoiceCreatedAt, invoiceExpiresAt)
-                return@withContext null
+                return@withContext noEarlierSend()
             }
             seedSendHashes(payments)
             val send = payments
@@ -1880,7 +1887,7 @@ class SparkRepo @Inject constructor(
                 (retried() ?: paymentHash?.lowercase()?.takeIf { it in unlisted })
                     ?.let { return@withContext EarlierSend.Pending(it) }
                 refuseUnverifiedRestoredInvoice(bolt11, invoiceCreatedAt, invoiceExpiresAt)
-                return@withContext null
+                return@withContext noEarlierSend()
             }
             if (send.status == PaymentStatus.FAILED) {
                 retried()?.let { return@withContext EarlierSend.Pending(it) }
@@ -1890,7 +1897,7 @@ class SparkRepo @Inject constructor(
             when (send.status) {
                 PaymentStatus.PENDING -> EarlierSend.Pending(hash)
                 PaymentStatus.COMPLETED -> EarlierSend.Paid(hash)
-                PaymentStatus.FAILED -> null
+                PaymentStatus.FAILED -> noEarlierSend()
             }
         }
 

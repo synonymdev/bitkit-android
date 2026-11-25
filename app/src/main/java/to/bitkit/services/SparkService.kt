@@ -420,9 +420,14 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
     /**
      * Spark refused a Lightning payment before anything left the wallet: it was not connected, could not prepare the
      * payment, or its fee was over the caller's limit; or the node refused one because Spark hadn't listed its earlier
-     * sends yet. A Paykit request or allowance attempt can then end as failed.
+     * sends yet. A Paykit request or allowance attempt can then end as failed, unless [mayHaveReachedSpark]: Spark
+     * refused it after a transfer it may have committed, which can still go out until the invoice expires.
      */
-    open class SendRefused(message: String, cause: Throwable? = null) : SparkError(message, cause)
+    open class SendRefused(
+        message: String,
+        cause: Throwable? = null,
+        val mayHaveReachedSpark: Boolean = false,
+    ) : SparkError(message, cause)
 
     /** Spark refused to pay an expired Lightning invoice, before anything left the wallet. */
     class InvoiceExpired(cause: Throwable? = null) : SendRefused("The Lightning invoice has expired", cause)

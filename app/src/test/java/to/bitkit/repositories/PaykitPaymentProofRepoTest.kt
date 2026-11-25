@@ -1502,6 +1502,18 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `a spark refusal that may follow a committed transfer keeps the proof`() = test {
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue, "bitkit").getOrThrow()
+        val refusal = SparkError.SendRefused("Spark could not select leaves", mayHaveReachedSpark = true)
+
+        assertFalse(repo.failLightningPayment(PAYMENT_HASH, refusal))
+        assertFalse(storedProofs.isEmpty())
+    }
+
+    @Test
     fun `onchain proof uses selected endpoint and transaction id`() = test {
         val txid = "ab".repeat(32)
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
