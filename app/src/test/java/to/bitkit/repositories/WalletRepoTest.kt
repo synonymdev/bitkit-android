@@ -2159,6 +2159,125 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `refreshBip21 keeps the request and creates a new invoice for its amount`() = test {
+        stubReceiveInvoices(INVOICE, INVOICE_REPLACEMENT)
+        sut.setOnchainAddress(ADDRESS)
+        sut.addTagToSelected(ACTIVITY_TAG).getOrThrow()
+        sut.updateBip21Invoice(SATS, "note").getOrThrow()
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
+
+        sut.refreshBip21().getOrThrow()
+
+        val state = sut.walletState.value
+        assertEquals(SATS, state.bip21AmountSats)
+        assertEquals("note", state.bip21Description)
+        assertEquals(listOf(ACTIVITY_TAG), state.selectedTags)
+        assertEquals(INVOICE_REPLACEMENT, state.bolt11)
+        assertEquals("bitcoin:$ADDRESS?amount=0.00001&message=note&lightning=$INVOICE_REPLACEMENT", state.bip21)
+        assertFalse(state.hasReceiveInvoiceError)
+        verify(lightningRepo, times(2)).createInvoice(eq(SATS), eq("note"), any(), any())
+        verify(lightningRepo, never()).createInvoice(eq(null), any(), any(), any())
+    }
+
+    @Test
+    fun `refreshBip21 keeps a cleared amount cleared`() = test {
+        stubReceiveInvoices(INVOICE, INVOICE_REPLACEMENT, INVOICE)
+        sut.setOnchainAddress(ADDRESS)
+        sut.updateBip21Invoice(SATS, "note").getOrThrow()
+        sut.updateBip21Invoice(0uL, "").getOrThrow()
+
+        sut.refreshBip21().getOrThrow()
+
+        val state = sut.walletState.value
+        assertEquals(0uL, state.bip21AmountSats)
+        assertEquals("", state.bip21Description)
+        assertEquals(INVOICE, state.bolt11)
+        verify(lightningRepo, times(1)).createInvoice(eq(SATS), any(), any(), any())
+        verify(lightningRepo, times(2)).createInvoice(eq(0uL), eq(""), any(), any())
+    }
+
+    @Test
+    fun `refreshBip21 creates an amountless invoice after the request is reset`() = test {
+        stubReceiveInvoices(INVOICE, INVOICE_REPLACEMENT)
+        sut.setOnchainAddress(ADDRESS)
+        sut.updateBip21Invoice(SATS, "note").getOrThrow()
+
+        sut.resetReceiveRequest()
+        sut.refreshBip21().getOrThrow()
+
+        val state = sut.walletState.value
+        assertEquals(null, state.bip21AmountSats)
+        assertEquals("", state.bip21Description)
+        assertEquals(INVOICE_REPLACEMENT, state.bolt11)
+        assertEquals("bitcoin:$ADDRESS?lightning=$INVOICE_REPLACEMENT", state.bip21)
+        verify(lightningRepo).createInvoice(eq(null), eq(""), any(), any())
+    }
+
+    @Test
+    fun `refreshBip21 creates an amountless invoice after the paid request is closed`() = test {
+        stubReceiveInvoices(INVOICE, INVOICE_REPLACEMENT)
+        sut.setOnchainAddress(ADDRESS)
+        sut.updateBip21Invoice(SATS, "note").getOrThrow()
+
+        sut.refreshBip21ForEvent(
+            Event.PaymentReceived(
+                paymentId = "testPaymentId",
+                paymentHash = "testPaymentHash",
+                amountMsat = 1_000_000uL,
+                customRecords = emptyList(),
+            ),
+            settledReceiveInvoice = SettledReceiveInvoice(INVOICE),
+        )
+        assertEquals("", sut.walletState.value.bolt11)
+        sut.resetReceiveRequest()
+        sut.refreshBip21().getOrThrow()
+
+        val state = sut.walletState.value
+        assertEquals(null, state.bip21AmountSats)
+        assertEquals(INVOICE_REPLACEMENT, state.bolt11)
+        assertEquals("bitcoin:$ADDRESS?lightning=$INVOICE_REPLACEMENT", state.bip21)
+        verify(lightningRepo, times(1)).createInvoice(eq(SATS), any(), any(), any())
+    }
+
+    @Test
+    fun `refreshReceiveState resets the request of a previous sheet`() = test {
+        stubReceiveInvoices(INVOICE, INVOICE_REPLACEMENT)
+        sut.setOnchainAddress(ADDRESS)
+        sut.updateBip21Invoice(SATS, "note").getOrThrow()
+
+        sut.refreshReceiveState().getOrThrow()
+
+        val state = sut.walletState.value
+        assertEquals(null, state.bip21AmountSats)
+        assertEquals("", state.bip21Description)
+        assertEquals("bitcoin:$ADDRESS?lightning=$INVOICE_REPLACEMENT", state.bip21)
+    }
+
+    @Test
+    fun `refreshBip21 flags the error and keeps the request when the new invoice fails`() = test {
+        stubReceiveInvoices(INVOICE)
+        sut.setOnchainAddress(ADDRESS)
+        sut.updateBip21Invoice(SATS, "note").getOrThrow()
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any(), any())).thenReturn(Result.failure(error))
+
+        assertTrue(sut.refreshBip21().isFailure)
+
+        val state = sut.walletState.value
+        assertTrue(state.hasReceiveInvoiceError)
+        assertEquals(SATS, state.bip21AmountSats)
+        assertEquals("note", state.bip21Description)
+    }
+
+    private suspend fun stubReceiveInvoices(vararg invoices: String) {
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any(), any()))
+            .thenReturn(Result.success(invoices.first()), *invoices.drop(1).map { Result.success(it) }.toTypedArray())
+    }
+
+    @Test
     fun `wipeWallet should call use case`() = test {
         whenever(wipeWalletUseCase.invoke(any(), any(), any())).thenReturn(Result.success(Unit))
 

@@ -126,6 +126,9 @@ fun ReceiveSheet(
         wallet.resetPreActivityMetadataTagsForCurrentInvoice()
         wallet.refreshReceiveState()
     }
+    DisposableEffect(wallet) {
+        onDispose { wallet.resetReceiveRequest() }
+    }
 
     Box(
         modifier = Modifier

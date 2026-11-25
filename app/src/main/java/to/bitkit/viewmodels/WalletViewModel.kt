@@ -1118,6 +1118,8 @@ class WalletViewModel @Inject constructor(
         walletRepo.setBip21AmountSats(amountSats?.takeIf { it > 0uL })
     }
 
+    fun resetReceiveRequest() = walletRepo.resetReceiveRequest()
+
     suspend fun handleHideBalanceOnOpen() {
         val hideBalanceOnOpen = settingsStore.data.map { it.hideBalanceOnOpen }.first()
         if (hideBalanceOnOpen) {

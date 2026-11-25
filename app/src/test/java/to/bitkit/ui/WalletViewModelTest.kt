@@ -298,6 +298,13 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `resetReceiveRequest should call walletRepo resetReceiveRequest`() = test {
+        sut.resetReceiveRequest()
+
+        verify(walletRepo).resetReceiveRequest()
+    }
+
+    @Test
     fun `updateBip21Description should call walletRepo updateBip21Description`() = test {
         sut.updateBip21Description("test_description")
 
