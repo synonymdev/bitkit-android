@@ -11,7 +11,11 @@ import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
 import com.synonym.bitkitcore.JadeTransportErrorCode
 import com.synonym.bitkitcore.JadeTransportKind
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -23,8 +27,10 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import java.net.ServerSocket
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
+import kotlin.concurrent.thread
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -62,6 +68,26 @@ class JadeTransportTest {
         assertEquals("USB permission missing for '$USB_PATH'", result.error)
         assertEquals(JadeTransportErrorCode.PERMISSION_DENIED, result.errorCode)
         verify(usbManager, never()).requestPermission(eq(device), any<PendingIntent>())
+    }
+
+    @Test
+    fun `a closed emulator socket reports the jade as disconnected`() {
+        ServerSocket(0).use { server ->
+            val path = "tcp:127.0.0.1:${server.localPort}"
+            thread { server.accept().close() }
+            val sut = createSut(JadeEmulatorTransport(address = "127.0.0.1:${server.localPort}", enabled = true))
+            assertTrue(sut.openDevice(path).success)
+
+            val disconnected = runBlocking {
+                val event = async(start = CoroutineStart.UNDISPATCHED) { sut.externalDisconnect.first() }
+                val read = sut.readChunk(path, 1_000u)
+                assertEquals(JadeTransportErrorCode.DISCONNECTED, read.errorCode)
+                withTimeout(1_000) { event.await() }
+            }
+
+            assertEquals(path, disconnected)
+            assertEquals(JadeTransportErrorCode.NOT_CONNECTED, sut.readChunk(path, 10u).errorCode)
+        }
     }
 
     @Test
@@ -347,10 +373,9 @@ class JadeTransportTest {
         return waiters
     }
 
-    private fun createSut() = JadeTransport(
-        context = context,
-        emulatorTransport = JadeEmulatorTransport(address = "127.0.0.1:1", enabled = false),
-    )
+    private fun createSut(
+        emulatorTransport: JadeEmulatorTransport = JadeEmulatorTransport(address = "127.0.0.1:1", enabled = false),
+    ) = JadeTransport(context = context, emulatorTransport = emulatorTransport)
 
     private fun usbDevice(
         vendorId: Int,

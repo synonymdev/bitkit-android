@@ -333,13 +333,15 @@ class JadeTransport @Inject constructor(
     }
 
     override fun writeChunk(path: String, data: ByteArray): JadeTransportResult = when {
-        emulatorTransport.isEmulatorPath(path) -> emulatorTransport.writeChunk(path, data)
+        emulatorTransport.isEmulatorPath(path) ->
+            emulatorTransport.writeChunk(path, data).also { onEmulatorResult(path, it.errorCode) }
         path.isBlePath() -> writeBleChunk(path, data)
         else -> writeUsbChunk(path, data)
     }
 
     override fun readChunk(path: String, timeoutMs: UInt): JadeTransportReadResult = when {
-        emulatorTransport.isEmulatorPath(path) -> emulatorTransport.readChunk(path, timeoutMs)
+        emulatorTransport.isEmulatorPath(path) ->
+            emulatorTransport.readChunk(path, timeoutMs).also { onEmulatorResult(path, it.errorCode) }
         path.isBlePath() -> readBleChunk(path, timeoutMs)
         else -> readUsbChunk(path, timeoutMs)
     }
@@ -949,6 +951,13 @@ class JadeTransport @Inject constructor(
             connection.writeStatus = status
             connection.writeLatch?.countDown()
         }
+    }
+
+    /** A closed emulator socket counts as the device going away, as a USB detach or BLE drop does. */
+    private fun onEmulatorResult(path: String, errorCode: JadeTransportErrorCode?) {
+        if (errorCode != JadeTransportErrorCode.DISCONNECTED) return
+        emulatorTransport.closeDevice(path)
+        emitExternalDisconnect(path)
     }
 
     private fun emitExternalDisconnect(path: String) {
