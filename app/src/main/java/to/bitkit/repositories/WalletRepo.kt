@@ -995,12 +995,16 @@ class WalletRepo @Inject constructor(
     suspend fun updateBip21Invoice(
         amountSats: ULong? = walletState.value.bip21AmountSats,
         description: String = walletState.value.bip21Description,
-    ): Result<Unit> = updateReceiveState(
-        beforeLock = {
-            _walletState.update { it.copy(bip21AmountSats = amountSats, bip21Description = description) }
-        },
-    ) {
-        updateBip21InvoiceLocked(amountSats, description)
+    ): Result<Unit> {
+        // An amount cleared to zero is a request for any amount, not an invoice for zero
+        val requestedAmount = amountSats?.takeIf { it > 0uL }
+        return updateReceiveState(
+            beforeLock = {
+                _walletState.update { it.copy(bip21AmountSats = requestedAmount, bip21Description = description) }
+            },
+        ) {
+            updateBip21InvoiceLocked(requestedAmount, description)
+        }
     }
 
     private suspend fun updateBip21InvoiceLocked(

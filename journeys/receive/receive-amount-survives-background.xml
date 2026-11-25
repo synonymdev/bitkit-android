@@ -10,18 +10,18 @@
   </description>
   <actions>
     <action>Launch Bitkit, tap Receive (testTag "Receive") and verify the Receive sheet is visible (testTag "ReceiveScreen")</action>
-    <action>Select Auto, tap Edit (testTag "SpecifyInvoiceButton"), enter 4 000 sats, type the note "coffee" (testTag "ReceiveNote") and tap Show QR Code (testTag "ShowQrReceive")</action>
+    <action>Select Auto, tap Edit (testTag "SpecifyInvoiceButton"), enter 4 000 sats, type the note "coffee" (testTag "ReceiveNote") and tap QR Code (testTag "ShowQrReceive")</action>
     <action>Wait for the QR code (testTag "QRCode") to finish loading, copy its URI and verify it contains amount=0.00004, message=coffee and a lightning invoice of 4 000 sats; keep the invoice</action>
     <action>Run adb shell input keyevent KEYCODE_HOME and wait 10 seconds</action>
     <action>Run adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity and verify the Receive sheet is still visible (testTag "ReceiveScreen")</action>
     <action>Wait for the QR code to finish loading, copy its URI and verify it still contains amount=0.00004 and message=coffee</action>
     <action>Verify the lightning invoice in the URI is for 4 000 sats, is not expired and differs from the invoice kept before backgrounding</action>
     <action>Tap Edit and verify the amount shows 4 000 sats and the note shows "coffee"</action>
-    <action>Change the note to "tea" without tapping Show QR Code, repeat the KEYCODE_HOME and am start steps, and verify the note field still shows "tea"</action>
+    <action>Change the note to "tea" without tapping QR Code, repeat the KEYCODE_HOME and am start steps, and verify the note field still shows "tea"</action>
     <action>Go back to the QR code without confirming, copy its URI and verify it still contains message=coffee; tap Edit and verify the note shows "coffee"</action>
-    <action>Clear the amount to 0, tap Show QR Code, then repeat the KEYCODE_HOME and am start steps</action>
+    <action>Clear the amount to 0, tap QR Code, then repeat the KEYCODE_HOME and am start steps</action>
     <action>Wait for the QR code to finish loading and verify its URI has no fixed amount and its lightning invoice is amountless</action>
-    <action>Tap Edit, enter 4 000 sats again and tap Show QR Code; close the Receive sheet and open Receive again</action>
+    <action>Tap Edit, enter 4 000 sats again and tap QR Code; close the Receive sheet and open Receive again</action>
     <action>Wait for the QR code to finish loading and verify its URI has no amount and no message, its lightning invoice is amountless, and Edit shows an empty amount and note</action>
   </actions>
 </journey>

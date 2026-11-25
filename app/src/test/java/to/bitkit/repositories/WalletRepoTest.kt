@@ -2190,11 +2190,13 @@ class WalletRepoTest : BaseUnitTest() {
         sut.refreshBip21().getOrThrow()
 
         val state = sut.walletState.value
-        assertEquals(0uL, state.bip21AmountSats)
+        assertEquals(null, state.bip21AmountSats)
         assertEquals("", state.bip21Description)
         assertEquals(INVOICE, state.bolt11)
+        assertEquals("bitcoin:$ADDRESS?lightning=$INVOICE", state.bip21)
         verify(lightningRepo, times(1)).createInvoice(eq(SATS), any(), any(), any())
-        verify(lightningRepo, times(2)).createInvoice(eq(0uL), eq(""), any(), any())
+        verify(lightningRepo, times(2)).createInvoice(eq(null), eq(""), any(), any())
+        verify(lightningRepo, never()).createInvoice(eq(0uL), any(), any(), any())
     }
 
     @Test
