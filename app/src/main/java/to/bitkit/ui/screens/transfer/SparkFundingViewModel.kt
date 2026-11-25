@@ -47,6 +47,7 @@ import to.bitkit.repositories.SparkClaimSpeed
 import to.bitkit.repositories.SparkDepositClaim
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.repositories.shownUnit
 import to.bitkit.ui.screens.transfer.SparkFundingContract.Quote
 import to.bitkit.ui.screens.transfer.SparkFundingContract.SideEffect
 import to.bitkit.ui.screens.transfer.SparkFundingContract.UiState
@@ -329,7 +330,9 @@ class SparkFundingViewModel @Inject constructor(
             }
             val walletId = shown.hwWalletId
             if (walletId == null) {
-                send(quote)
+                // A max transfer can reach spending with a higher Instant claim fee than the one swiped, so the early
+                // claim approves at most the fee shown, and asks first for more.
+                send(quote.copy(instantFeeSats = minOf(quote.instantFeeSats, shownQuote.instantFeeSats)))
                 return@launch
             }
             _uiState.update { it.copy(isSending = false) }
@@ -609,8 +612,10 @@ class SparkFundingViewModel @Inject constructor(
 
     private fun formatPrimaryAmount(sats: Long): String {
         val state = currencyRepo.currencyState.value
-        val fiat = currencyRepo.convertSatsToFiat(sats).getOrNull()
-        if (state.primaryDisplay == PrimaryDisplay.FIAT && fiat != null) return fiat.formattedWithSymbol()
+        // Like the fee grid, bitcoin while fiat has no usable rate, so a change never reads as zero.
+        if (state.shownUnit == PrimaryDisplay.FIAT) {
+            currencyRepo.convertSatsToFiat(sats).getOrNull()?.let { return it.formattedWithSymbol() }
+        }
         return "$BITCOIN_SYMBOL ${sats.formatMoney(state.displayUnit)}"
     }
 }

@@ -1,0 +1,1 @@
+Moving the spending balance to Spark now runs from one Update modal, closes the channels it empties and lets a Lightning payment combine both balances with one swipe; the CJIT receive card is removed.

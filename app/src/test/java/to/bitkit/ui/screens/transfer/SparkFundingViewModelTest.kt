@@ -26,7 +26,10 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BalanceState
+import to.bitkit.models.ConvertedAmount
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.WalletScope
@@ -55,6 +58,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.transfer.SparkFundingContract.SideEffect
 import to.bitkit.ui.shared.toast.ToastEventBus
+import java.math.BigDecimal
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -213,6 +217,36 @@ class SparkFundingViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a fee rise reads in bitcoin while fiat has no usable rate`() = test {
+        whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_network))
+            .thenReturn("rose {amount}")
+        whenever(
+            currencyRepo.currencyState
+        ).thenReturn(MutableStateFlow(CurrencyState(primaryDisplay = PrimaryDisplay.FIAT)))
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
+            .thenReturn(Result.success(ConvertedAmount(BigDecimal.ZERO, "0.00", "$", "USD", "", 200L)))
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
+            )
+        }.thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 700uL))))
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+
+        val toasts = collectToasts { sut.onConfirm() }
+
+        assertEquals("rose $BITCOIN_SYMBOL 200", toasts.single().description)
+    }
+
+    @Test
     fun `a fixed amount whose prepared fee rose is refused and priced again at that fee`() = test {
         whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_network))
             .thenReturn("rose {amount}")
@@ -292,6 +326,33 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         val toasts = collectToasts { sut.onConfirm() }
 
         assertEquals("Changed", toasts.single().title)
+    }
+
+    @Test
+    fun `swipe on a max transfer approves no higher instant claim fee than the one shown`() = test {
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
+            )
+        }.thenReturn(Result.success(OnchainSendOutcome.Accepted("txid", 99_700uL)))
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(sut.uiState.value.maxSats)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        // The network fee fell more than the claim fee rose, so more reaches spending and the swipe sends.
+        whenever { lightningRepo.estimateSendAllFee(any(), any(), any()) }.thenReturn(Result.success(300uL))
+        whenever { sparkRepo.estimateDepositClaimFeeSats(any()) }.thenReturn(Result.success(1_400uL))
+
+        sut.onConfirm()
+        advanceUntilIdle()
+
+        verify(sparkRepo).followDepositClaim("txid", SparkClaimSpeed.Instant, 1_350uL)
     }
 
     @Test

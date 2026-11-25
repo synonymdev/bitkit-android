@@ -4,8 +4,10 @@ import kotlinx.serialization.encodeToString
 import org.junit.Test
 import to.bitkit.data.SettingsData
 import to.bitkit.di.json
+import to.bitkit.env.Env
 import to.bitkit.test.BaseUnitTest
 import java.io.ByteArrayInputStream
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class SettingsSerializerTest : BaseUnitTest() {
@@ -22,5 +24,16 @@ class SettingsSerializerTest : BaseUnitTest() {
 
         assertTrue(result.publicPaykitLightningEnabled)
         assertTrue(result.publicPaykitOnchainEnabled)
+    }
+
+    @Test
+    fun `read replaces a stored retired default Electrum server`() = test {
+        val stored = SettingsData(electrumServer = "ssl://fulcrum.bitkit.blocktank.to:8900")
+
+        val result = SettingsSerializer.readFrom(
+            ByteArrayInputStream(json.encodeToString(stored).encodeToByteArray())
+        )
+
+        assertEquals(Env.electrumServerUrl, result.electrumServer)
     }
 }

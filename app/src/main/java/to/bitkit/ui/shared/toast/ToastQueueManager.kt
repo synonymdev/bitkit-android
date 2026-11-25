@@ -37,16 +37,20 @@ class ToastQueueManager(private val scope: CoroutineScope) {
     private var isPaused = false
 
     /**
-     * Add toast to queue. If queue is full, drops oldest. A shown or queued loading toast returns after the new one.
+     * Add toast to queue. If queue is full, drops oldest. A shown or queued loading toast returns after the new one,
+     * and a shown toast that is not interruptible stays until it hides. A queued progress toast is replaced by the new
+     * one, as it would have been on screen.
      */
     fun enqueue(toast: Toast) {
-        val interruptedLoading = _currentToast.value?.takeIf { it.isLoading }
+        val isCurrentInterruptible = _currentToast.value?.interruptible != false
+        val interruptedLoading = _currentToast.value?.takeIf { it.isLoading && isCurrentInterruptible }
         _queue.update { current ->
             val (loading, others) = current.partition { it.isLoading }
             // Drop oldest when queue full
-            (others + toast + loading + listOfNotNull(interruptedLoading)).takeLast(MAX_QUEUE_SIZE)
+            val waiting = others.filterNot { it.replacedByNext }
+            (waiting + toast + loading + listOfNotNull(interruptedLoading)).takeLast(MAX_QUEUE_SIZE)
         }
-        dismissCurrentToast()
+        if (isCurrentInterruptible) dismissCurrentToast()
     }
 
     /**

@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import app.cash.turbine.test
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
@@ -155,6 +156,27 @@ class CurrencyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `convertFiatToSats refuses a zero, negative or out of range result`() = test {
+        val usd = testRates.first { it.quote == "USD" }
+        val rates = testRates.map { if (it.quote == "EUR") it.copy(lastPrice = "0") else it } +
+            usd.copy(quote = "GBP", lastPrice = "-50000")
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(cachedRates = rates)))
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(selectedCurrency = "EUR")))
+
+        sut = createSut()
+
+        sut.currencyState.take(1).test(timeout = 1000.milliseconds) {
+            awaitItem()
+
+            assertTrue(sut.convertFiatToSats(BigDecimal("45.00"), "EUR").isFailure, "converted at a zero rate")
+            assertTrue(sut.convertFiatToSats(BigDecimal("45.00"), "GBP").isFailure, "converted at a negative rate")
+            assertTrue(sut.convertFiatToSats(BigDecimal("-45.00"), "USD").isFailure, "wrapped negative sats")
+            assertTrue(sut.convertFiatToSats(BigDecimal("1e30"), "USD").isFailure, "wrapped an out of range amount")
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun `getCurrentRate should match by quote currency`() = test {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(cachedRates = testRates)))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(selectedCurrency = "EUR")))
@@ -293,6 +315,35 @@ class CurrencyRepoTest : BaseUnitTest() {
         } finally {
             releaseCollector.countDown()
         }
+    }
+
+    @Test
+    fun `switching to fiat needs a rate for the selected currency, switching back does not`() {
+        val rated = CurrencyState(rates = testRates.toImmutableList(), selectedCurrency = "EUR")
+        assertTrue(rated.canSwitchUnit)
+        assertFalse(rated.copy(selectedCurrency = "JPY").canSwitchUnit, "switched to fiat with no rate")
+        assertTrue(CurrencyState(primaryDisplay = PrimaryDisplay.FIAT).canSwitchUnit, "kept in fiat with no rate")
+        val zeroPrice = testRates.map { it.copy(lastPrice = "0") }.toImmutableList()
+        assertFalse(rated.copy(rates = zeroPrice).canSwitchUnit, "switched to fiat with a zero rate")
+    }
+
+    @Test
+    fun `amounts show in bitcoin while fiat is selected without a usable rate`() {
+        val fiat = CurrencyState(
+            rates = testRates.toImmutableList(),
+            selectedCurrency = "EUR",
+            primaryDisplay = PrimaryDisplay.FIAT
+        )
+        assertEquals(PrimaryDisplay.FIAT, fiat.shownUnit)
+        assertEquals(PrimaryDisplay.BITCOIN, fiat.copy(selectedCurrency = "JPY").shownUnit, "blank fiat with no rate")
+        val zeroPrice = testRates.map { it.copy(lastPrice = "0") }.toImmutableList()
+        assertEquals(PrimaryDisplay.BITCOIN, fiat.copy(rates = zeroPrice).shownUnit, "blank fiat with a zero rate")
+        assertEquals(PrimaryDisplay.BITCOIN, fiat.copy(primaryDisplay = PrimaryDisplay.BITCOIN).shownUnit)
+        val eur = testRates.first { it.quote == "EUR" }
+        val zeroFirst = (listOf(eur.copy(lastPrice = "0")) + testRates).toImmutableList()
+        assertEquals(PrimaryDisplay.BITCOIN, fiat.copy(rates = zeroFirst).shownUnit, "fiat from a later ticker")
+        val infinite = testRates.map { if (it.quote == "EUR") it.copy(lastPrice = "1e400") else it }.toImmutableList()
+        assertEquals(PrimaryDisplay.BITCOIN, fiat.copy(rates = infinite).shownUnit, "fiat at an infinite rate")
     }
 }
 

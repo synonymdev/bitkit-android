@@ -174,16 +174,46 @@ class CacheStore internal constructor(
         }
     }
 
-    /** Keeps Spark's send of [paymentHash] as one whose outcome Spark didn't report, since [failedAt] epoch seconds. */
-    suspend fun addSparkUncertainSend(paymentHash: String, failedAt: Long) {
+    /**
+     * Keeps Spark's send of [paymentHash] as one whose outcome Spark didn't report, started at [startedAt] epoch
+     * seconds as the attempt Spark knows by [attemptId].
+     */
+    suspend fun addSparkUncertainSend(paymentHash: String, startedAt: Long, attemptId: String) {
         val hash = paymentHash.lowercase()
-        store.updateData { it.copy(sparkUncertainSends = it.sparkUncertainSends + (hash to failedAt)) }
+        store.updateData {
+            it.copy(
+                sparkUncertainSends = it.sparkUncertainSends + (hash to startedAt),
+                sparkSendAttemptIds = it.sparkSendAttemptIds + (hash to attemptId),
+            )
+        }
     }
 
     suspend fun removeSparkUncertainSend(paymentHash: String) {
         val hash = paymentHash.lowercase()
-        if (hash !in store.data.first().sparkUncertainSends) return
-        store.updateData { it.copy(sparkUncertainSends = it.sparkUncertainSends - hash) }
+        val data = store.data.first()
+        if (hash !in data.sparkUncertainSends && hash !in data.sparkSendAttemptIds) return
+        store.updateData {
+            it.copy(
+                sparkUncertainSends = it.sparkUncertainSends - hash,
+                sparkSendAttemptIds = it.sparkSendAttemptIds - hash,
+            )
+        }
+    }
+
+    suspend fun addSparkUnsavedOwnFailure(paymentId: String) {
+        if (paymentId in store.data.first().sparkUnsavedOwnFailures) return
+        store.updateData { it.copy(sparkUnsavedOwnFailures = it.sparkUnsavedOwnFailures + paymentId) }
+    }
+
+    suspend fun removeSparkUnsavedOwnFailure(paymentId: String) {
+        if (paymentId !in store.data.first().sparkUnsavedOwnFailures) return
+        store.updateData { it.copy(sparkUnsavedOwnFailures = it.sparkUnsavedOwnFailures - paymentId) }
+    }
+
+    suspend fun addMoveToSparkHash(paymentHash: String) {
+        val hash = paymentHash.lowercase()
+        if (hash in store.data.first().moveToSparkHashes) return
+        store.updateData { it.copy(moveToSparkHashes = it.moveToSparkHashes + hash) }
     }
 
     /** Keeps [paymentHash] with its invoice's expiry in epoch seconds, [expiresAt], when known. */
@@ -245,12 +275,19 @@ class CacheStore internal constructor(
     /**
      * Drops the node's sends a listing showed as [failed] only, or as [paid] with an expired invoice, ones it didn't
      * show ([listed] is every hash it shows) whose invoice expired past [UNLISTED_SEND_SETTLE_SECS], and past the cap
-     * the oldest paid or unlisted ones with no known expiry. A send that may be pending ([live]) always stays.
+     * the oldest paid or unlisted ones with no known expiry. A send that may be pending ([live], or [isLive] inside
+     * the write, as for one recorded since the listing) always stays.
      */
-    suspend fun trimLdkSendHashes(paid: Set<String>, failed: Set<String>, listed: Set<String>, live: Set<String>) {
+    suspend fun trimLdkSendHashes(
+        paid: Set<String>,
+        failed: Set<String>,
+        listed: Set<String>,
+        live: Set<String>,
+        isLive: (String) -> Boolean = { false },
+    ) {
         store.updateData {
-            val (hashes, expiries) =
-                withoutSettled(it.ldkSendHashes, it.ldkSendExpiries, SendListing(paid, failed, listed, live))
+            val listing = SendListing(paid, failed, listed, live + it.ldkSendHashes.filter(isLive))
+            val (hashes, expiries) = withoutSettled(it.ldkSendHashes, it.ldkSendExpiries, listing)
             it.copy(ldkSendHashes = hashes, ldkSendExpiries = expiries)
         }
     }
@@ -295,10 +332,12 @@ class CacheStore internal constructor(
         return kept to expiries.filterKeys { it in kept }
     }
 
-    suspend fun removeLdkSendHash(paymentHash: String) {
+    /** Drops the node's send of [paymentHash] unless [isKept] holds inside the write, as for a send recorded since. */
+    suspend fun removeLdkSendHash(paymentHash: String, isKept: () -> Boolean = { false }) {
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().ldkSendHashes) return
         store.updateData {
+            if (isKept()) return@updateData it
             it.copy(ldkSendHashes = it.ldkSendHashes - hash, ldkSendExpiries = it.ldkSendExpiries - hash)
         }
     }
@@ -365,10 +404,25 @@ data class AppCacheData(
     /** Invoice expiry in epoch seconds of the [sparkSendHashes] that know it. */
     val sparkSendExpiries: Map<String, Long> = mapOf(),
     /**
-     * Spark's sends whose outcome it didn't report, by hash, with when they failed in epoch seconds, so a restart
-     * never reads a retry's earlier failed attempt as its outcome.
+     * Spark's sends whose outcome it didn't report, by hash, with when they started in epoch seconds, kept across a
+     * restart until Spark settles them.
      */
     val sparkUncertainSends: Map<String, Long> = mapOf(),
+    /**
+     * The idempotency key each of the [sparkUncertainSends] passed, which Spark keeps as that attempt's payment id, so
+     * only its own outcome settles it. A hold without one waits for a paid attempt or its invoice's expiry.
+     */
+    val sparkSendAttemptIds: Map<String, String> = mapOf(),
+    /**
+     * Payment ids of Spark send attempts whose own failure a failed Activity write still has to save over an earlier
+     * attempt's row, kept across a restart until it saves.
+     */
+    val sparkUnsavedOwnFailures: Set<String> = setOf(),
+    /**
+     * Payment hashes of the moves to Spark, kept across restarts so neither leg of a move is announced as a payment and
+     * Activity shows the move as one.
+     */
+    val moveToSparkHashes: List<String> = listOf(),
     /** Hashes of the Lightning sends the node started, so Spark holds off while the node can't list them. */
     val ldkSendHashes: List<String> = listOf(),
     /** Invoice expiry in epoch seconds of the [ldkSendHashes] that know it. */

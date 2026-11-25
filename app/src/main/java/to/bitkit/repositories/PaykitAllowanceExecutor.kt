@@ -5,6 +5,7 @@ import com.synonym.paykit.AllowanceAccountingBlock
 import com.synonym.paykit.AllowanceAccountingHistory
 import com.synonym.paykit.AllowanceAccountingReconciliation
 import com.synonym.paykit.AllowanceAccountingState
+import com.synonym.paykit.AllowanceAssociationRecord
 import com.synonym.paykit.AllowanceLifecycleState
 import com.synonym.paykit.AllowanceSelectionInput
 import com.synonym.paykit.PaymentAttemptDecision
@@ -18,10 +19,20 @@ import com.synonym.paykit.PaymentOutcomeReport
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestScope
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -197,13 +208,24 @@ class PaykitAllowanceExecutor @Inject constructor(
     private var accountingAmount: (String, String) -> AccountingAmount = ::AccountingAmount
     private val stateMutex = Mutex()
     private val settleMutex = Mutex()
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
     /** Held from an automatic payment's ended check to its handoff, and from saving an End to the SDK's End. */
     private val handoffMutex = Mutex()
-    private val inFlightRequestIds = ConcurrentHashMap.newKeySet<PaykitPaymentRequestId>()
+    private val _inFlightRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
+
+    /** Requests an automatic payment is handling now, from its first check until it is handed to the node. */
+    val inFlightRequestIds: StateFlow<Set<PaykitPaymentRequestId>> = _inFlightRequestIds.asStateFlow()
     private val liveAttemptIds = ConcurrentHashMap.newKeySet<String>()
+
+    /** Requests whose live attempt already sent its acceptance on failure, so autoPay does not send it again. */
+    private val acceptanceSentRequestIds = ConcurrentHashMap.newKeySet<PaykitPaymentRequestId>()
     private val _events = MutableSharedFlow<PaykitAllowanceEvent>(extraBufferCapacity = 16)
     val events: SharedFlow<PaykitAllowanceEvent> = _events.asSharedFlow()
+    private val _spendBackups = Channel<Unit>(Channel.CONFLATED)
+
+    /** Fires when an automatic payment is about to leave the wallet. Conflated, so a busy collector never loses one. */
+    val spendBackups: Flow<Unit> = _spendBackups.receiveAsFlow()
 
     @Volatile
     var activeIdentity: String? = null
@@ -263,7 +285,16 @@ class PaykitAllowanceExecutor @Inject constructor(
         change(localState(identity)).also { store.save(identity, it) }
     }
 
-    fun isHandling(requestId: PaykitPaymentRequestId): Boolean = requestId in inFlightRequestIds
+    private fun startHandling(requestId: PaykitPaymentRequestId): Boolean {
+        var started = false
+        _inFlightRequestIds.update { ids ->
+            started = requestId !in ids
+            if (started) ids + requestId else ids
+        }
+        return started
+    }
+
+    fun isHandling(requestId: PaykitPaymentRequestId): Boolean = requestId in _inFlightRequestIds.value
 
     /**
      * Trusted time for eligibility: the real clock, never earlier than the last value given to the SDK, because the
@@ -458,7 +489,10 @@ class PaykitAllowanceExecutor @Inject constructor(
             return
         }
         val before = applyJournalStage(attemptId, stage, identity) ?: return
-        if (stage == Stage.FAILED && before.isAutomatic) releasePaymentList(before, identity)
+        if (stage == Stage.FAILED && before.isAutomatic) {
+            sendQueuedAcceptance(before)
+            releasePaymentList(before, identity)
+        }
     }
 
     /**
@@ -582,8 +616,22 @@ class PaykitAllowanceExecutor @Inject constructor(
             PaymentOutcome.FAILED -> Stage.FAILED
             PaymentOutcome.UNKNOWN -> Stage.UNKNOWN
         }
-        applyJournalStage(attemptId, stage, identity)
+        val before = applyJournalStage(attemptId, stage, identity)
         _events.tryEmit(PaykitAllowanceEvent.LedgerChanged)
+        if (outcome == PaymentOutcome.FAILED && before?.isAutomatic == true) {
+            sendQueuedAcceptance(before)
+            if (attemptId in liveAttemptIds) acceptanceSentRequestIds.add(before.requestId)
+        }
+    }
+
+    /**
+     * No proof follows a failed automatic payment, so its queued acceptance is sent now, whichever path recorded the
+     * failure, without holding up the settlement or recovery that recorded it.
+     */
+    private fun sendQueuedAcceptance(entry: JournalEntry?) {
+        if (entry?.isAutomatic != true) return
+        val counterparty = entry.requestId.counterparty
+        scope.launch { sendQueuedMessages(counterparty) }
     }
 
     /**
@@ -639,7 +687,7 @@ class PaykitAllowanceExecutor @Inject constructor(
                     it.lifecycleState == AllowanceLifecycleState.ACCEPTED &&
                     PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty)
             }
-        if (!isCovered || !inFlightRequestIds.add(request.id)) {
+        if (!isCovered || !startHandling(request.id)) {
             return@withContext PaykitAllowanceAutoPayResult.NOT_COVERED
         }
 
@@ -658,7 +706,7 @@ class PaykitAllowanceExecutor @Inject constructor(
                 PaykitAllowanceAutoPayResult.MANUAL
             }
         } finally {
-            inFlightRequestIds.remove(request.id)
+            _inFlightRequestIds.update { it - request.id }
         }
     }
 
@@ -772,9 +820,24 @@ class PaykitAllowanceExecutor @Inject constructor(
                 admit = { if (!admits(activation)) throw PaykitAllowanceError.Unavailable },
             )
         }.getOrThrow()
-        sendQueuedMessages(request)
+        // A paid request's proof delivery sends the queued acceptance with it, so only a request left unpaid sends now.
+        val result = runSuspendCatching { reserveAndPay(request, amountSats, payment, association, identity) }
+        val isAcceptanceSent = acceptanceSentRequestIds.remove(request.id)
+        if (result.getOrNull() != PaykitAllowanceAutoPayResult.STARTED && !isAcceptanceSent) {
+            sendQueuedMessages(request.counterparty)
+        }
+        return result.getOrThrow()
+    }
 
-        val occurrence = PaymentOccurrence(scope, billingPeriod = null)
+    private suspend fun reserveAndPay(
+        request: PaykitPaymentRequest,
+        amountSats: ULong,
+        payment: PrivatePaykitAllowancePayment,
+        association: AllowanceAssociationRecord,
+        identity: String,
+    ): PaykitAllowanceAutoPayResult {
+        val endpointIdentifier = payment.endpoint.methodId.rawValue
+        val occurrence = PaymentOccurrence(request.scope(), billingPeriod = null)
         val reservation = paykitSdkService.reserveAutomaticPayment(
             occurrence = occurrence,
             expectedAssociationRevision = association.revisions.lastOrNull()?.revision ?: 1uL,
@@ -911,6 +974,8 @@ class PaykitAllowanceExecutor @Inject constructor(
             failUnsent(attemptId, identity)
             throw it
         }
+        // Back up the spend now, so a wallet restored later still counts it.
+        _spendBackups.trySend(Unit)
         val sats = amountSats.takeUnless { payment.lightningInvoiceHasAmount }
         // Routing fees fall outside the allowance's accounting, so they are capped at 1% of the requested amount.
         val maxRoutingFeeMsat = amountSats.safe() * MAX_ROUTING_FEE_MSAT_PER_SAT.safe()
@@ -960,8 +1025,9 @@ class PaykitAllowanceExecutor @Inject constructor(
 
     /**
      * Reports a user-approved payment of an incoming request to the shared ledger before it leaves the wallet.
-     * Fails with [PaykitAllowanceError.PaymentAlreadyRecorded] when another live attempt exists for the request, so
-     * the same request is never paid twice. Any other problem leaves the payment unreported and returns null.
+     * Fails with [PaykitAllowanceError.PaymentAlreadyRecorded] when another live attempt exists for the request,
+     * or this wallet's records show it already paid the request, so the same request is never paid twice.
+     * Any other problem leaves the payment unreported and returns null.
      * A Lightning payment passes its [paymentHash], so a backup taken before the send still lets the node settle it.
      */
     suspend fun beginManualPayment(
@@ -978,6 +1044,11 @@ class PaykitAllowanceExecutor @Inject constructor(
             request.direction != PaykitPaymentRequestDirection.Incoming
         ) {
             return@withContext Result.success(null)
+        }
+        // A ledger read back older than this wallet's records may offer the request again; it is never paid twice.
+        if (localState(identity).hasSentPayment(request.id)) {
+            Logger.info("Stopped a manual payment: this wallet already paid the request", context = TAG)
+            return@withContext Result.failure(PaykitAllowanceError.PaymentAlreadyRecorded)
         }
         val result = runSuspendCatching {
             reportManualPayment(
@@ -1151,9 +1222,9 @@ class PaykitAllowanceExecutor @Inject constructor(
         recurrenceEligible = true,
     )
 
-    private suspend fun sendQueuedMessages(request: PaykitPaymentRequest) {
+    private suspend fun sendQueuedMessages(counterparty: String) {
         runSuspendCatching {
-            paykitSdkService.processOutboundPrivateMessages(request.counterparty)
+            paykitSdkService.processOutboundPrivateMessages(counterparty)
         }.onFailure { Logger.warn("Failed to send the automatic acceptance right away", it, context = TAG) }
     }
 
@@ -1263,6 +1334,33 @@ private fun PaykitAllowanceLocalState.isAutoPaid(requestId: PaykitPaymentRequest
 private fun PaykitAllowanceLocalState.hasPaid(requestId: PaykitPaymentRequestId) = isAutoPaid(requestId) ||
     journal.any {
         it.stage != Stage.FAILED && it.requestId.paymentRequestId == requestId.paymentRequestId &&
+            PubkyPublicKeyFormat.matches(it.requestId.counterparty, requestId.counterparty)
+    }
+
+/** Whether the automatic payment of [requestId] failed and nothing else was sent for it, so it is the user's to pay. */
+internal fun PaykitAllowanceLocalState.hasFailedAutomaticPayment(requestId: PaykitPaymentRequestId): Boolean {
+    val entries = journal.filter {
+        it.requestId.paymentRequestId == requestId.paymentRequestId &&
+            PubkyPublicKeyFormat.matches(it.requestId.counterparty, requestId.counterparty)
+    }
+    return entries.any { it.isAutomatic && it.stage == Stage.FAILED } && entries.all { it.stage == Stage.FAILED }
+}
+
+/** Whether an automatic payment of [requestId] has left the wallet and not settled yet. */
+internal fun PaykitAllowanceLocalState.isPayingAutomatically(requestId: PaykitPaymentRequestId) = journal.any {
+    it.isAutomatic && it.stage in IN_FLIGHT_STAGES && it.requestId.paymentRequestId == requestId.paymentRequestId &&
+        PubkyPublicKeyFormat.matches(it.requestId.counterparty, requestId.counterparty)
+}
+
+/** Stages of a payment that may have left the wallet and has not settled yet. */
+private val IN_FLIGHT_STAGES = setOf(Stage.SENDING, Stage.SENT, Stage.UNKNOWN)
+
+/** Stages after which the payment may have left the wallet. */
+private val MONEY_LEFT_STAGES = setOf(Stage.SENDING, Stage.SENT, Stage.UNKNOWN, Stage.SUCCEEDED)
+
+internal fun PaykitAllowanceLocalState.hasSentPayment(requestId: PaykitPaymentRequestId) = isAutoPaid(requestId) ||
+    journal.any {
+        it.stage in MONEY_LEFT_STAGES && it.requestId.paymentRequestId == requestId.paymentRequestId &&
             PubkyPublicKeyFormat.matches(it.requestId.counterparty, requestId.counterparty)
     }
 

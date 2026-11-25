@@ -16,6 +16,7 @@ The companion journey is shared with iOS; only platform build instructions diffe
 
 - `paykit-only-approval.xml` checks Paykit-only consent and cancellation without account creation.
 - `paykit-reconnect.xml` checks Paykit-only reconnect consent and cancellation without changing the existing service account.
+- `approval-while-node-restarts.xml` checks that a Bitcoin watch-only setup approved while the node is stopped or rebuilding completes on the first Authorize and is tracked once the node starts.
 
 These visible consent and cancel checks require valid auth URL fixtures but do not authorize a
 network session. The reconnect journey additionally needs a known active, tracked account in the

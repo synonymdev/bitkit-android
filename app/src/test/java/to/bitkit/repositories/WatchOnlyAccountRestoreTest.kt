@@ -25,11 +25,14 @@ import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.services.LightningService
 import to.bitkit.services.WatchOnlyAccountLifecycleCoordinator
+import to.bitkit.services.WatchOnlyAccountXpubDeriver
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.LoggerLdk
 import kotlin.test.assertEquals
 
 class WatchOnlyAccountRestoreTest : BaseUnitTest() {
+    private val xpubDeriver = mock<WatchOnlyAccountXpubDeriver>()
+
     @Test
     fun `retry and reconciliation use the restored incomplete account`() = test {
         val restoredAccount = account(id = "restored-account", accountIndex = 5, createdAt = 1)
@@ -56,7 +59,14 @@ class WatchOnlyAccountRestoreTest : BaseUnitTest() {
         val lightningService = lightningService(store, node, coordinator)
         val xpubSerializer = mock<WatchOnlyAccountXpubSerializer>()
         whenever(xpubSerializer.serialize(TEST_XPUB)).thenReturn(ByteArray(78))
-        val sut = WatchOnlyAccountRepo(testDispatcher, store, lightningService, coordinator, xpubSerializer)
+        val sut = WatchOnlyAccountRepo(
+            testDispatcher,
+            store,
+            lightningService,
+            coordinator,
+            xpubSerializer,
+            xpubDeriver,
+        )
 
         val prepared = sut.prepareUnsignedClaim(AUTH_URL, restoredAccount.name)
         lightningService.reconcileWatchOnlyAccounts(syncAfterReconcile = false)
@@ -65,7 +75,7 @@ class WatchOnlyAccountRestoreTest : BaseUnitTest() {
         assertEquals(restoredAccount.id, prepared.account.id)
         assertEquals(restoredAccount.accountIndex, prepared.account.accountIndex)
         verify(store, never()).reserveAccountIndex(any(), any())
-        verify(node, never()).exportOnchainWalletAccountXpub(any(), any())
+        verify(xpubDeriver, never()).derive(any())
         verify(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 5u, TEST_XPUB)
         verify(onchainPayment).revealReceiveAddressesToAccount(
             AddressType.NATIVE_SEGWIT,

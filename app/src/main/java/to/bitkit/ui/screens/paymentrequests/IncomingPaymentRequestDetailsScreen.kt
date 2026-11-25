@@ -76,11 +76,12 @@ fun IncomingPaymentRequestDetailsScreen(
     onBack: () -> Unit,
 ) {
     val pending by appViewModel.pendingPaymentRequests.collectAsStateWithLifecycle()
+    val allPending by appViewModel.allPendingPaymentRequests.collectAsStateWithLifecycle()
     val receipts by appViewModel.paykitUsdtPayments.receipts.collectAsStateWithLifecycle()
     val history by appViewModel.paymentRequestHistory.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val requestedPaymentRequestId by appViewModel.requestedPaymentRequestId.collectAsStateWithLifecycle()
-    val request = pending.firstOrNull { it.id == id } ?: history.firstOrNull { it.id == id }
+    val request = allPending.firstOrNull { it.id == id } ?: history.firstOrNull { it.id == id }
     val contact = request?.let { paymentRequest ->
         contacts.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, paymentRequest.counterparty) }
             ?: PubkyProfile.placeholder(paymentRequest.counterparty)
@@ -92,6 +93,7 @@ fun IncomingPaymentRequestDetailsScreen(
         receipt = request?.let { paymentRequest -> receipts.lastOrNull { it.matches(paymentRequest) } },
         contact = contact,
         isPending = isPending,
+        isStatusPending = allPending.any { it.id == id },
         isPreparing = requestedPaymentRequestId == id,
         onBack = onBack,
         onPay = { appViewModel.openIncomingPaymentRequestWithTags(id, it) },
@@ -105,6 +107,8 @@ internal fun IncomingPaymentRequestDetailsContent(
     receipt: PaykitUsdtReceipt? = null,
     contact: PubkyProfile?,
     isPending: Boolean,
+    // A request an allowance is handling is still pending, though it offers no Pay or Dismiss.
+    isStatusPending: Boolean = isPending,
     isPreparing: Boolean,
     onBack: () -> Unit,
     onPay: (List<String>) -> Unit,
@@ -163,7 +167,7 @@ internal fun IncomingPaymentRequestDetailsContent(
                 }
             }
             BodyM(
-                text = paymentRequestStatus(request, isPending = isPending, receipt = receipt),
+                text = paymentRequestStatus(request, isPending = isStatusPending, receipt = receipt),
                 color = Colors.White64,
                 modifier = Modifier.testTag("PaymentRequestDetailsStatus")
             )

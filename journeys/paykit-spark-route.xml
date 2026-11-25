@@ -19,7 +19,7 @@
     <action>Verify the amount screen (tag "send_amount_screen") offers SPENDING as the source</action>
     <action>Enter 20000 and tap Continue (tag "ContinueAmount")</action>
     <action>Verify the Confirm screen (tag "SendConfirm") is visible, then tap Show Details (tag "SendConfirmToggleDetails")</action>
-    <action>Verify FROM is SPENDING, TO is the contact, and ROUTE (tag "ReviewSwapRoute") reads "Spark"</action>
+    <action>Verify FROM is SPENDING, TO is the contact, and no ROUTE row (tag "ReviewSwapRoute") shows</action>
     <action>Swipe to pay (tag "GRAB")</action>
     <action>Verify the Bitcoin Sent screen (tag "SendSuccess") shows 20 000</action>
     <action>Verify Lightspark's regtest mempool shows the withdrawal transaction paying exactly 20 000 sats to the fixture-issuer's address</action>

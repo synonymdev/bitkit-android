@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -176,6 +177,34 @@ internal fun enabledOnchainWalletAccountConfigs(
         )
     }
 
+/**
+ * Builds with [config], and when ldk-node rejects a configured Paykit Server account (its xpub does not match the
+ * seed, which fails the whole build) builds again without those accounts, so the wallet still starts. The reconcile on
+ * start then adds each account the node accepts.
+ */
+internal suspend fun buildAcceptingPaykitServerAccounts(config: Config, build: suspend (Config) -> Node): Node =
+    try {
+        build(config)
+    } catch (e: BuildException.InvalidSeedBytes) {
+        if (config.onchainWalletAccounts.isEmpty()) throw LdkError(e)
+        Logger.error(
+            "Node rejected Paykit Server accounts at build, building without them",
+            e,
+            context = "LightningService",
+        )
+        try {
+            build(config.copy(onchainWalletAccounts = emptyList()))
+        } catch (retryError: BuildException) {
+            throw LdkError(retryError)
+        }
+    } catch (e: BuildException) {
+        throw LdkError(e)
+    }
+
+/** Whether ldk-node rejected a Paykit Server account's xpub for this seed, which no retry can fix. */
+internal fun Throwable.isRejectedPaykitServerAccount(): Boolean =
+    generateSequence(this) { it.cause }.any { it is NodeException.InvalidSeedBytes }
+
 internal fun LdkAddressType.toBitkitAddressType(): AddressType = when (this) {
     LdkAddressType.LEGACY -> AddressType.P2PKH
     LdkAddressType.NESTED_SEGWIT -> AddressType.P2SH
@@ -211,6 +240,7 @@ class LightningService internal constructor(
     companion object {
         private const val TAG = "LightningService"
         private const val RELEASE_FEE_ATTEMPTS = 4
+        private val WATCH_ONLY_RECONCILE_RETRY_DELAY = 15.seconds
 
         /** A small fixed payment to a new wallet address; the rest returns as change, which pays the fee. */
         private const val RELEASE_AMOUNT_SATS = 1_000uL
@@ -289,6 +319,10 @@ class LightningService internal constructor(
 
     private var listenerJob: Job? = null
 
+    @Volatile
+    private var watchOnlyReconcileRetryJob: Job? = null
+    private val watchOnlyReconcileRetryLock = Any()
+
     // Release of the previous node's rust handle (free_node). Rebuild and destructive storage work
     // wait on this so a new node never touches storage the old one is still draining.
     @Volatile
@@ -343,6 +377,20 @@ class LightningService internal constructor(
         runtimeMonitor: NodeRuntimeMonitor,
         channelMigration: ChannelDataMigration? = null,
     ): Node = ServiceQueue.LDK.background(ldkQueue) {
+        buildAcceptingPaykitServerAccounts(config) {
+            buildNode(walletIndex, customServerUrl, customRgsServerUrl, it, runtimeMonitor, channelMigration)
+        }
+    }
+
+    @Suppress("ForbiddenComment")
+    private suspend fun buildNode(
+        walletIndex: Int,
+        customServerUrl: String?,
+        customRgsServerUrl: String?,
+        config: Config,
+        runtimeMonitor: NodeRuntimeMonitor,
+        channelMigration: ChannelDataMigration?,
+    ): Node {
         val storedSettings = settingsStore.data.first()
         val settings = storedSettings.withRequiredNativeSegwitMonitoring()
         if (settings != storedSettings) {
@@ -393,9 +441,7 @@ class LightningService internal constructor(
                 throw ServiceError.VssAuthRequired()
             }
 
-            builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
-        } catch (e: BuildException) {
-            throw LdkError(e)
+            return builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
         } finally {
             // TODO: cleanup sensitive data after implementing a `SecureString` value holder for Keychain return values
         }
@@ -487,9 +533,11 @@ class LightningService internal constructor(
         Logger.info("Node started", context = TAG)
     }
 
+    // No wallet sync here: it holds the watch-only lock and the LDK queue for the whole Electrum round trip, which
+    // delays the node start and any Pubky auth approval waiting on that lock. The initial sync after start covers it.
     private suspend fun reconcileWatchOnlyAccountsBestEffort() {
         runSuspendCatching {
-            reconcileWatchOnlyAccounts()
+            reconcileWatchOnlyAccounts(syncAfterReconcile = false)
         }.onFailure { error ->
             Logger.error("Failed to reconcile Paykit Server accounts during startup", error, context = TAG)
         }
@@ -505,7 +553,9 @@ class LightningService internal constructor(
             }
             val desiredConfigs = enabledOnchainWalletAccountConfigs(walletRecords, currentWalletIndex)
 
-            ServiceQueue.LDK.background(ldkQueue) {
+            val reconciled = ServiceQueue.LDK.background(ldkQueue) {
+                // The node may have been stopped and released while this waited for the queue.
+                if (this@LightningService.node !== node) return@background false
                 val trackedAccounts = node.listOnchainWalletAccounts()
                 val managedKeys = (walletRecords + accountsPendingRemoval).mapNotNull { record ->
                     when (record.addressType) {
@@ -523,25 +573,34 @@ class LightningService internal constructor(
                     }
                 }
 
-                desiredConfigs.forEach { config ->
-                    val isTracked = trackedAccounts.any {
-                        it.addressType == config.addressType && it.accountIndex == config.accountIndex
+                // One account the node rejects must not keep the others from loading. A transient failure is rethrown
+                // ahead of a rejected xpub so the caller retries it.
+                val failures = desiredConfigs.mapNotNull { config ->
+                    runSuspendCatching {
+                        val isTracked = trackedAccounts.any {
+                            it.addressType == config.addressType && it.accountIndex == config.accountIndex
+                        }
+                        if (!isTracked) {
+                            node.addOnchainWalletAccount(config.addressType, config.accountIndex, config.xpub)
+                        }
+                        node.onchainPayment().revealReceiveAddressesToAccount(
+                            config.addressType,
+                            config.accountIndex,
+                            WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
+                        )
+                    }.exceptionOrNull()?.also {
+                        Logger.error("Failed to load Paykit Server account ${config.accountIndex}", it, context = TAG)
                     }
-                    if (!isTracked) {
-                        node.addOnchainWalletAccount(config.addressType, config.accountIndex, config.xpub)
-                    }
-                    node.onchainPayment().revealReceiveAddressesToAccount(
-                        config.addressType,
-                        config.accountIndex,
-                        WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
-                    )
                 }
+                val retryable = failures.firstOrNull { !it.isRejectedPaykitServerAccount() }
+                (retryable ?: failures.firstOrNull())?.let { throw it }
 
                 if (syncAfterReconcile && desiredConfigs.isNotEmpty() && node.status().isRunning) {
                     node.syncWallets()
                 }
+                true
             }
-            if (accountsPendingRemoval.isNotEmpty()) {
+            if (reconciled && accountsPendingRemoval.isNotEmpty()) {
                 watchOnlyAccountStore.completeReconciliation(currentWalletIndex)
             }
         }
@@ -551,6 +610,7 @@ class LightningService internal constructor(
     // let the GC free it later on the finalizer thread, racing the next node. This covers the whole
     // body, including the listener join, so cancellation during listener cleanup cannot skip it.
     suspend fun stop() = withContext(NonCancellable) {
+        watchOnlyReconcileRetryJob?.cancelAndJoin()
         shouldListenForEvents = false
         // A stop requested from inside an event handler runs on the listener job itself; joining it
         // here would deadlock, so let the loop exit on shouldListenForEvents instead.
@@ -573,16 +633,17 @@ class LightningService internal constructor(
                 }
             this@LightningService.node = null
         }
-        // Releasing a node whose stop left tasks detached shuts down its tokio runtime under them, and the first
-        // one to resume (a VSS write returning, or a thaw from the freezer) aborts the app with "A Tokio 1.x
-        // context was found, but it is being shutdown." In the background, kill the process while the runtime
-        // is alive instead; a cold start restores everything. In the foreground, release as before.
-        if (monitor.hasDetachedWork && isAppInBackground() && exitBeforeRuntimeShutdown()) return@withContext
+        // A stop can leave tasks detached, e.g. a VSS write that keeps retrying. ldk-node keeps their runtime
+        // alive until they end, but the release returns before that, so a rebuilt node could run while the old
+        // node's work still runs. Building the next node waits up to 60 s for the old node's VSS writes in
+        // flight and drops any it starts later. In the background, kill the process instead; a cold start
+        // restores everything. In the foreground, release as before.
+        if (monitor.hasDetachedWork && isAppInBackground() && exitBeforeDetachedWorkOverlaps()) return@withContext
         releaseHandle(node)
         Logger.info("Node stopped", context = TAG)
     }
 
-    private suspend fun exitBeforeRuntimeShutdown(): Boolean {
+    private suspend fun exitBeforeDetachedWorkOverlaps(): Boolean {
         Logger.warn("Exiting process: node stop left ldk_node tasks detached while in background", context = TAG)
         delay(EXIT_LOG_FLUSH_DELAY)
         if (!isAppInBackground()) {
@@ -597,11 +658,12 @@ class LightningService internal constructor(
      * Releases the rust handle instead of leaving it to the GC finalizer, keeping it off the
      * single-threaded LDK queue and off the lifecycle critical path.
      *
-     * `free_node` only returns once the node's background tasks drain, which takes tens of seconds
-     * when a failed start left them wedged, so the wait is bounded and the release is joined rather
-     * than run inline: cancelling a blocking FFI call does nothing, but abandoning the join lets the
-     * caller continue while the release finishes on its own. [awaitNodeRelease] gates the next
-     * rebuild or destructive storage work on the same job so native lifetimes never overlap.
+     * `free_node` waits a bounded time for the node's background tasks to drain, which can take tens
+     * of seconds when a failed start left them wedged, so the wait here is bounded too and the release
+     * is joined rather than run inline: cancelling a blocking FFI call does nothing, but abandoning the
+     * join lets the caller continue while the release finishes on its own. [awaitNodeRelease] gates
+     * the next rebuild or destructive storage work on the same job. After a timed-out stop, `free_node`
+     * can return while detached work of the old node still runs.
      */
     private suspend fun releaseHandle(node: Node) {
         val release = launch(ioDispatcher) {
@@ -616,10 +678,10 @@ class LightningService internal constructor(
     }
 
     /**
-     * Blocks until the previous node's release ([releaseHandle] / `free_node`) has finished, so a
-     * rebuild or destructive storage operation never overlaps the old node's native lifetime. The
-     * wait is bounded: a stuck free_node throws rather than proceeding (which would overlap) or
-     * blocking forever (which would brick every future rebuild).
+     * Blocks until the previous node's release ([releaseHandle] / `free_node`) has returned. It does
+     * not wait for the old node's detached work, which can still run after a timed-out stop. The wait
+     * is bounded: a stuck free_node throws rather than proceeding or blocking forever (which would
+     * brick every future rebuild).
      */
     suspend fun awaitNodeRelease(timeout: Duration = NODE_RELEASE_GATE_TIMEOUT) {
         val release = releaseJob ?: return
@@ -701,7 +763,11 @@ class LightningService internal constructor(
     suspend fun sync() {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        reconcileWatchOnlyAccounts(syncAfterReconcile = false)
+        // A Paykit Server account that fails to load must not fail the wallet sync: sends are gated on it. A transient
+        // failure is retried on its own schedule; an xpub the node rejects (`InvalidSeedBytes`) stays rejected.
+        val reconcileFailure = runSuspendCatching { reconcileWatchOnlyAccounts(syncAfterReconcile = false) }
+            .onFailure { Logger.error("Failed to reconcile Paykit Server accounts before sync", it, context = TAG) }
+            .exceptionOrNull()
 
         Logger.verbose("Syncing LDK…", context = TAG)
         ServiceQueue.LDK.background(ldkQueue) {
@@ -711,6 +777,41 @@ class LightningService internal constructor(
         _syncStatusChanged.tryEmit(Unit)
 
         Logger.debug("LDK synced", context = TAG)
+        if (reconcileFailure != null && !reconcileFailure.isRejectedPaykitServerAccount()) {
+            scheduleWatchOnlyReconcileRetry()
+        }
+    }
+
+    /** Retries loading Paykit Server accounts until they load, the node stops, or the node rejects one for good. */
+    private fun scheduleWatchOnlyReconcileRetry() {
+        synchronized(watchOnlyReconcileRetryLock) {
+            if (watchOnlyReconcileRetryJob?.isActive == true) return
+            watchOnlyReconcileRetryJob = launch { retryWatchOnlyReconcile() }
+        }
+    }
+
+    private suspend fun retryWatchOnlyReconcile() {
+        var retry = true
+        while (retry && currentCoroutineContext().isActive && node != null) {
+            delay(WATCH_ONLY_RECONCILE_RETRY_DELAY)
+            val failure = runSuspendCatching { reconcileWatchOnlyAccounts(syncAfterReconcile = false) }
+                .exceptionOrNull()
+            if (failure == null) {
+                syncWalletsAfterAccountsLoad()
+            } else {
+                Logger.warn("Paykit Server account reconcile retry failed", failure, context = TAG)
+            }
+            retry = failure != null && !failure.isRejectedPaykitServerAccount()
+        }
+    }
+
+    // Outside the watch-only lock, as in sync(): an Electrum round trip must not delay Pubky auth. A failure here is
+    // a wallet sync failure, which the regular sync retries.
+    private suspend fun syncWalletsAfterAccountsLoad() {
+        runSuspendCatching {
+            ServiceQueue.LDK.background(ldkQueue) { this@LightningService.node?.syncWallets() }
+            _syncStatusChanged.tryEmit(Unit)
+        }.onFailure { Logger.warn("Wallet sync after loading Paykit Server accounts failed", it, context = TAG) }
     }
 
     suspend fun sign(message: String): String {

@@ -33,6 +33,7 @@ import to.bitkit.R
 import to.bitkit.ext.isBluetoothEnabled
 import to.bitkit.ext.startActivityAppSettings
 import to.bitkit.models.HwWalletVendor
+import to.bitkit.models.Toast
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.modelNameRes
@@ -41,7 +42,10 @@ import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
+import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.AppViewModel
+
+private const val TAG = "HardwareSheet"
 
 /** Runtime nearby-devices permissions needed to BLE-scan: SCAN + CONNECT on Android 12+, else fine location. */
 private val bluetoothPermissions: List<String>
@@ -84,15 +88,25 @@ fun HardwareSheet(
         if (context.isBluetoothEnabled) viewModel.setBluetoothScanningEnabled()
     }
 
+    val errorTitle = stringResource(R.string.common__error)
+    val bluetoothEnableError = stringResource(R.string.hardware__bluetooth_enable_error)
     val enableBleScanning: () -> Unit = {
         if (context.isBluetoothEnabled) {
             viewModel.setBluetoothScanningEnabled()
         } else {
-            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            runCatching { enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }
+                .onFailure {
+                    Logger.warn("Failed to request enabling Bluetooth", it, context = TAG)
+                    appViewModel.toast(
+                        type = Toast.ToastType.ERROR,
+                        title = errorTitle,
+                        description = bluetoothEnableError,
+                    )
+                }
         }
     }
     val blePermissions = rememberMultiplePermissionsState(bluetoothPermissions) { results ->
-        if (results.values.all { it }) {
+        if (results.isNotEmpty() && results.values.all { it }) {
             enableBleScanning()
         } else {
             showBlePermissionDialog = true

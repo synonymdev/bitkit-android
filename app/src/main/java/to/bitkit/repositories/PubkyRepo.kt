@@ -58,6 +58,7 @@ import to.bitkit.data.sharedpubky.SharedPubkyContract
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.isPaykitIdentityError
+import to.bitkit.ext.isPaykitStateFromNewerVersion
 import to.bitkit.ext.isPaykitTemporarilyUnavailable
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
@@ -272,6 +273,9 @@ class PubkyRepo @Inject constructor(
     private var restoreBase: RestoreBase? = null
     private val signInGeneration = AtomicLong(0L)
     private val storedIdentityRevision = AtomicLong(0L)
+
+    @Volatile
+    private var updatePromptIdentityRevision: Long? = null
     private val readOnlyProfileGeneration = AtomicLong(0L)
     private val readOnlyProfileLock = Any()
     private var isServiceInitialized = false
@@ -307,6 +311,14 @@ class PubkyRepo @Inject constructor(
 
     private val _sessionRestorationFailed = MutableStateFlow(false)
     val sessionRestorationFailed: StateFlow<Boolean> = _sessionRestorationFailed.asStateFlow()
+
+    private val _sessionRestorationNeedsUpdate = MutableStateFlow(false)
+    val sessionRestorationNeedsUpdate: StateFlow<Boolean> = _sessionRestorationNeedsUpdate.asStateFlow()
+
+    private val _restorationNeedsUpdate = MutableStateFlow(false)
+
+    /** Stays set after the one-time prompt, so Profile can show why retrying does not help. */
+    val restorationNeedsUpdate: StateFlow<Boolean> = _restorationNeedsUpdate.asStateFlow()
 
     private val _adoptedSourceLost = MutableStateFlow(false)
     val adoptedSourceLost: StateFlow<Boolean> = _adoptedSourceLost.asStateFlow()
@@ -362,6 +374,7 @@ class PubkyRepo @Inject constructor(
         data class Restored(val publicKey: String) : InitResult
         data object RestorationFailed : InitResult
         data object RestorationDeferred : InitResult
+        data object RestorationNeedsUpdate : InitResult
     }
 
     private data class SavedContact(
@@ -540,6 +553,7 @@ class PubkyRepo @Inject constructor(
                 if (notifyFailure && it.isPaykitIdentityError() && hasSavedSession()) {
                     _sessionRestorationFailed.update { true }
                 }
+                if (it.isPaykitStateFromNewerVersion()) askForUpdateOnce()
             }.getOrElse { return false }
 
             if (notifyFailure) _sessionRestorationFailed.update { false }
@@ -554,13 +568,7 @@ class PubkyRepo @Inject constructor(
                 )
             }.onFailure {
                 Logger.error("Failed to initialize paykit", it, context = TAG)
-            }.getOrElse {
-                if (it.isPaykitTemporarilyUnavailable()) {
-                    InitResult.RestorationDeferred
-                } else {
-                    InitResult.RestorationFailed
-                }
-            }
+            }.getOrElse { it.toFailedInitResult() }
 
             when (result) {
                 is InitResult.NoSession -> {
@@ -569,16 +577,20 @@ class PubkyRepo @Inject constructor(
                 }
                 is InitResult.Restored -> {
                     _sessionRestorationFailed.update { false }
+                    _sessionRestorationNeedsUpdate.update { false }
+                    _restorationNeedsUpdate.update { false }
+                    updatePromptIdentityRevision = null
                     continueSignIn(result.publicKey)
                     Logger.info("Restored paykit session for '${redacted(result.publicKey)}'", context = TAG)
                 }
-                InitResult.RestorationFailed, InitResult.RestorationDeferred -> {
+                InitResult.RestorationFailed, InitResult.RestorationDeferred, InitResult.RestorationNeedsUpdate -> {
                     clearAuthenticatedState(
                         clearCachedProfile = false,
                         clearRestorationFailure = notifyFailure,
                         preserveStoredIdentity = true,
                     )
                     if (notifyFailure) _sessionRestorationFailed.update { result == InitResult.RestorationFailed }
+                    if (result == InitResult.RestorationNeedsUpdate) askForUpdateOnce()
                 }
             }
             deferredRestoreGeneration = signInGeneration.get().takeIf { result == InitResult.RestorationDeferred }
@@ -626,6 +638,10 @@ class PubkyRepo @Inject constructor(
                     Logger.warn("Deferred session restoration, keeping saved session", it, context = TAG)
                     return@getOrElse InitResult.RestorationDeferred
                 }
+                if (it.isPaykitStateFromNewerVersion()) {
+                    Logger.warn("Kept saved session, paykit state needs an app update", it, context = TAG)
+                    return@getOrElse InitResult.RestorationNeedsUpdate
+                }
                 Logger.warn("Failed to restore paykit session, attempting re-sign-in", it, context = TAG)
                 resolveSignedInSession(savedSessionSecret, storedSecretKeyHex ?: adoptedSecretKeyHex())
             }
@@ -654,17 +670,31 @@ class PubkyRepo @Inject constructor(
                 InitResult.Restored(publicKey)
             }.getOrElse {
                 Logger.error("Failed re-sign-in recovery", it, context = TAG)
-                if (it.isPaykitTemporarilyUnavailable()) {
-                    InitResult.RestorationDeferred
-                } else {
-                    InitResult.RestorationFailed
-                }
+                it.toFailedInitResult()
             }
         }
     }
 
+    private fun Throwable.toFailedInitResult(): InitResult = when {
+        isPaykitTemporarilyUnavailable() -> InitResult.RestorationDeferred
+        isPaykitStateFromNewerVersion() -> InitResult.RestorationNeedsUpdate
+        else -> InitResult.RestorationFailed
+    }
+
     fun clearSessionRestorationFailed() {
         _sessionRestorationFailed.update { false }
+    }
+
+    private fun askForUpdateOnce() {
+        _restorationNeedsUpdate.update { true }
+        val revision = storedIdentityRevision.get()
+        if (updatePromptIdentityRevision == revision) return
+        updatePromptIdentityRevision = revision
+        _sessionRestorationNeedsUpdate.update { true }
+    }
+
+    fun clearSessionRestorationNeedsUpdate() {
+        _sessionRestorationNeedsUpdate.update { false }
     }
 
     // endregion
@@ -2725,7 +2755,10 @@ class PubkyRepo @Inject constructor(
     ) = withContext(ioDispatcher) {
         // First, so work of the ending sign-in stops before the store reset below, and cannot write after it.
         signInGeneration.incrementAndGet()
-        if (!preserveStoredIdentity) storedIdentityRevision.incrementAndGet()
+        if (!preserveStoredIdentity) {
+            storedIdentityRevision.incrementAndGet()
+            _restorationNeedsUpdate.update { false }
+        }
         if (clearCachedProfile) {
             invalidateReadOnlyProfile()
             evictPubkyImages()
@@ -2743,7 +2776,10 @@ class PubkyRepo @Inject constructor(
         _contactsLoadVersion.update { 0L }
         _contactsLoadCompletionVersion.update { 0L }
         clearPendingImport()
-        if (clearRestorationFailure) _sessionRestorationFailed.update { false }
+        if (clearRestorationFailure) {
+            _sessionRestorationFailed.update { false }
+            _sessionRestorationNeedsUpdate.update { false }
+        }
     }
 
     private fun updateContacts(transform: (List<PubkyProfile>) -> List<PubkyProfile>) {

@@ -206,7 +206,7 @@ fun PaymentRequestsScreen(
 ) {
     val pending by appViewModel.pendingPaymentRequests.collectAsStateWithLifecycle()
     val receipts by appViewModel.paykitUsdtPayments.receipts.collectAsStateWithLifecycle()
-    val history by appViewModel.paymentRequestHistory.collectAsStateWithLifecycle()
+    val history by appViewModel.listedPaymentRequestHistory.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val publicKey by appViewModel.pubkyPublicKey.collectAsStateWithLifecycle()
     val contactsLoadVersion by appViewModel.pubkyContactsLoadVersion.collectAsStateWithLifecycle()

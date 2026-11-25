@@ -23,7 +23,9 @@ import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.services.LightningService
 import to.bitkit.services.WatchOnlyAccountLifecycleCoordinator
+import to.bitkit.services.WatchOnlyAccountXpubDeriver
 import to.bitkit.utils.AppError
+import to.bitkit.utils.Logger
 import java.net.URI
 import java.net.URLDecoder
 import java.nio.ByteBuffer
@@ -39,7 +41,6 @@ sealed class WatchOnlyAccountError : AppError() {
     class AuthorizationAccountMissing : WatchOnlyAccountError()
     class InvalidAccountName : WatchOnlyAccountError()
     class InvalidExtendedPublicKey : WatchOnlyAccountError()
-    class NodeUnavailable : WatchOnlyAccountError()
 }
 
 class WatchOnlyAccountAuthorizationStartError(
@@ -55,6 +56,7 @@ class WatchOnlyAccountRepo @Inject constructor(
     private val lightningService: LightningService,
     private val lifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
     private val xpubSerializer: WatchOnlyAccountXpubSerializer,
+    private val xpubDeriver: WatchOnlyAccountXpubDeriver,
 ) {
     val accounts: Flow<List<WatchOnlyAccountRecord>> = store.data.map { it.accounts }
     val currentWalletAccounts: Flow<List<WatchOnlyAccountRecord>> = accounts.map { accounts ->
@@ -225,16 +227,35 @@ class WatchOnlyAccountRepo @Inject constructor(
         }
     }
 
-    private suspend fun exportAccountXpub(accountIndex: Int): String = ServiceQueue.LDK.background {
-        val node = lightningService.node ?: throw WatchOnlyAccountError.NodeUnavailable()
-        node.exportOnchainWalletAccountXpub(AddressType.NATIVE_SEGWIT, accountIndex.toUInt())
-    }
+    private suspend fun exportAccountXpub(accountIndex: Int): String = xpubDeriver.derive(accountIndex)
 
+    /**
+     * Applies [enabled] to the running node. Without a node (stopped, or being rebuilt after the app returned to the
+     * foreground) only the store changes: the next build loads tracked accounts from it, and
+     * [LightningService.reconcileWatchOnlyAccounts] on start adds or removes any account the build missed.
+     *
+     * The node is checked before queueing because a rebuild holds the LDK queue for the whole build while the node is
+     * still null; checking only inside the queue would make the approval wait for the build.
+     */
     private suspend fun setAccountTracking(
         account: WatchOnlyAccountRecord,
         enabled: Boolean,
+    ) {
+        if (lightningService.node == null) return logTrackingWithoutNode(account)
+        applyAccountTracking(account, enabled)
+    }
+
+    // Journeys read this line to prove an approval finished before the node was built.
+    private fun logTrackingWithoutNode(account: WatchOnlyAccountRecord) = Logger.info(
+        "Paykit Server account ${account.accountIndex} tracking stored without a node; it loads when the node starts",
+        context = TAG,
+    )
+
+    private suspend fun applyAccountTracking(
+        account: WatchOnlyAccountRecord,
+        enabled: Boolean,
     ) = ServiceQueue.LDK.background {
-        val node = lightningService.node ?: throw WatchOnlyAccountError.NodeUnavailable()
+        val node = lightningService.node ?: return@background logTrackingWithoutNode(account)
         val addressType = when (account.addressType) {
             WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE -> AddressType.NATIVE_SEGWIT
             else -> throw WatchOnlyAccountError.InvalidExtendedPublicKey()
@@ -313,6 +334,7 @@ class WatchOnlyAccountRepo @Inject constructor(
     }
 
     companion object {
+        private const val TAG = "WatchOnlyAccountRepo"
         private const val MAX_NAME_LENGTH = 64
     }
 }

@@ -35,10 +35,10 @@ class ReceiveNavigationTest {
     private var sheetDismissed = false
 
     @Test
-    fun deepLinkedTransferUnavailableReturnsToQr() {
-        setGraph(ReceiveRoute.TransferUnavailable)
+    fun deepLinkedEditInvoiceReturnsToQr() {
+        setGraph(ReceiveRoute.EditInvoice)
 
-        assertOn(ReceiveRoute.TransferUnavailable::class)
+        assertOn(ReceiveRoute.EditInvoice::class)
         pressBack()
         assertOn(ReceiveRoute.QR::class)
         assertFalse(sheetDismissed)
@@ -97,7 +97,7 @@ class ReceiveNavigationTest {
                     LaunchedEffect(startRoute) { controller.navigateToReceiveStart(startRoute) }
                     NavHost(navController = controller, startDestination = startRoute.rootRoute()) {
                         composable<ReceiveRoute.QR> { Text("QR") }
-                        composable<ReceiveRoute.TransferUnavailable> { Text("Transfer Unavailable") }
+                        composable<ReceiveRoute.EditInvoice> { Text("Edit Invoice") }
                         composable<ReceiveRoute.PaymentRequestDetails> { Text("Details") }
                         composable<ReceiveRoute.PaymentRequestRecipient> { Text("Recipient") }
                         composable<ReceiveRoute.PaymentRequestSent> { Text("Sent") }

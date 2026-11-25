@@ -11,11 +11,15 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.After
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -64,7 +68,9 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     private val executor = mock<PaykitAllowanceExecutor>()
     private val lightningRepo = mock<LightningRepo>()
     private val activityRepo = mock<ActivityRepo>()
+    private val backupRepo = mock<BackupRepo>()
     private val executorEvents = MutableSharedFlow<PaykitAllowanceEvent>(extraBufferCapacity = 8)
+    private val spendBackups = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
     private val nodeEvents = MutableSharedFlow<Event>(extraBufferCapacity = 8)
     private val lightningState = MutableStateFlow(LightningState())
     private val isSparkSynced = MutableStateFlow(false)
@@ -81,6 +87,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
     @Before
     fun setUp() = test {
         whenever(executor.events).thenReturn(executorEvents)
+        whenever(executor.spendBackups).thenReturn(spendBackups)
         whenever(executor.localState(any())).thenAnswer { localState }
         whenever(executor.isLedgerBehind(any())).thenReturn(false)
         whenever(executor.isLedgerBehindOrThrow(any())).thenReturn(false)
@@ -117,6 +124,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
             lightningRepo = lightningRepo,
             activityRepo = activityRepo,
             clock = clock,
+            backupRepo = { backupRepo },
             allowanceTerms = { _, monthAnchor, endpoints ->
                 proposedTerms += monthAnchor to endpoints
                 terms
@@ -135,6 +143,7 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
             lightningRepo = lightningRepo,
             activityRepo = activityRepo,
             clock = clock,
+            backupRepo = { backupRepo },
         )
         val activation = async(start = CoroutineStart.UNDISPATCHED) { queued.activate(identity) }
 
@@ -1008,6 +1017,228 @@ class PaykitAllowanceRepoTest : BaseUnitTest() {
         assertFalse(sut.isAutomaticallyHandling(above))
         assertTrue(sut.isAutomaticallyHandling(within))
         verify(executor, never()).autoPay(any(), any(), any())
+    }
+
+    @Test
+    fun `a request this wallet already paid stays off the pending requests`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        whenever(executor.autoPay(any(), any(), any())).thenReturn(PaykitAllowanceAutoPayResult.MANUAL)
+        val request = fixtures.paymentRequest()
+        val unpaid = fixtures.paymentRequest(id = "550e8400-e29b-41d4-a716-446655440002")
+        localState = PaykitAllowanceLocalState(autoPaidRequestIds = setOf(request.id))
+        sut.activate(identity)
+        sut.processIncomingRequests(listOf(request, unpaid))
+
+        assertFalse(sut.isAutomaticallyHandling(request))
+        assertTrue(sut.keepsOffPending(request))
+        assertFalse(sut.keepsOffPending(unpaid))
+        assertTrue(sut.hasSentPayment(request))
+        assertFalse(sut.hasSentPayment(unpaid))
+    }
+
+    @Test
+    fun `every request of a pass stays hidden from its start`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        whenever(executor.inFlightRequestIds).thenReturn(MutableStateFlow(emptySet()))
+        val first = fixtures.paymentRequest()
+        val second = fixtures.paymentRequest(id = "550e8400-e29b-41d4-a716-446655440002")
+        val hiddenWhilePaying = mutableListOf<Set<PaykitPaymentRequestId>>()
+        whenever(executor.autoPay(any(), any(), any())).doSuspendableAnswer {
+            hiddenWhilePaying += sut.handlingRequestIds.first()
+            PaykitAllowanceAutoPayResult.MANUAL
+        }
+        sut.activate(identity)
+
+        sut.processIncomingRequests(listOf(first, second))
+
+        assertEquals(setOf(first.id, second.id), hiddenWhilePaying.first())
+        assertEquals(setOf(second.id), hiddenWhilePaying.last())
+        assertEquals(emptySet(), sut.handlingRequestIds.first())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a started request is released with its record loaded, before the pass ends`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        whenever(executor.inFlightRequestIds).thenReturn(MutableStateFlow(emptySet()))
+        val first = fixtures.paymentRequest()
+        val second = fixtures.paymentRequest(id = "550e8400-e29b-41d4-a716-446655440002")
+        var firstWhileSecondPays: Pair<Boolean, Boolean>? = null
+        whenever(executor.autoPay(any(), any(), any())).doSuspendableAnswer {
+            val request = it.getArgument<PaykitPaymentRequest>(0)
+            if (request.id == first.id) {
+                localState = localState.copy(
+                    journal = listOf(journalEntry("first", first, ALLOWANCE_ID, 1_000uL, Stage.SENT)),
+                )
+                PaykitAllowanceAutoPayResult.STARTED
+            } else {
+                firstWhileSecondPays = (first.id in sut.handlingRequestIds.first()) to sut.hasSentPayment(first)
+                PaykitAllowanceAutoPayResult.MANUAL
+            }
+        }
+        sut.activate(identity)
+        // Each time the hidden set changes, the started request must already be hidden by its record once released.
+        val shownOnRelease = mutableListOf<Boolean>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            sut.handlingRequestIds.collect { ids ->
+                if (first.id !in ids) shownOnRelease += !sut.hasSentPayment(first)
+            }
+        }
+
+        sut.processIncomingRequests(listOf(first, second))
+
+        assertEquals(false to true, firstWhileSecondPays)
+        assertTrue(sut.hasSentPayment(first))
+        assertFalse(true in shownOnRelease.drop(1), "The request never shows between its release and its record")
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a request the allowance waits on stays shown or hidden across polls`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        whenever(executor.inFlightRequestIds).thenReturn(MutableStateFlow(emptySet()))
+        whenever(executor.autoPay(any(), any(), any())).thenReturn(PaykitAllowanceAutoPayResult.DEFERRED)
+        val request = fixtures.paymentRequest()
+        sut.activate(identity)
+        sut.processIncomingRequests(listOf(request))
+        // Mirrors the bell filter in AppViewModel.pendingPaymentRequests.
+        val hidden = mutableListOf<Boolean>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            sut.handlingRequestIds.collect { hidden += it.contains(request.id) || sut.hasSentPayment(request) }
+        }
+
+        sut.processIncomingRequests(listOf(request))
+
+        assertEquals(1, hidden.distinct().size, "Hidden state of a deferred request across the next poll: $hidden")
+    }
+
+    @Test
+    fun `a request deferred by a pass allowances were turned off during shows again`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        whenever(executor.inFlightRequestIds).thenReturn(MutableStateFlow(emptySet()))
+        val resolving = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(executor.autoPay(any(), any(), any())).doSuspendableAnswer {
+            resolving.complete(Unit)
+            release.await()
+            PaykitAllowanceAutoPayResult.DEFERRED
+        }
+        val request = fixtures.paymentRequest()
+        sut.activate(identity)
+        val pass = async { sut.processIncomingRequests(listOf(request)) }
+        resolving.await()
+
+        sut.pause(identity)
+        release.complete(Unit)
+        pass.await()
+
+        assertFalse(request.id in sut.handlingRequestIds.first(), "The unpaid request shows while allowances are off")
+    }
+
+    @Test
+    fun `a deferred request shows again while it waits for the node`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        whenever(executor.inFlightRequestIds).thenReturn(MutableStateFlow(emptySet()))
+        whenever(executor.autoPay(any(), any(), any())).thenReturn(PaykitAllowanceAutoPayResult.DEFERRED)
+        val request = fixtures.paymentRequest()
+        sut.activate(identity)
+        sut.processIncomingRequests(listOf(request))
+        assertTrue(request.id in sut.handlingRequestIds.first())
+
+        lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
+        sut.processIncomingRequests(listOf(request))
+
+        assertFalse(request.id in sut.handlingRequestIds.first(), "A request waiting for the node stays in the bell")
+    }
+
+    @Test
+    fun `a request whose automatic payment failed is the user's to pay`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        val request = fixtures.paymentRequest()
+        localState = PaykitAllowanceLocalState(
+            journal = listOf(journalEntry("failed", request, ALLOWANCE_ID, 1_000uL, Stage.FAILED)),
+        )
+        sut.activate(identity)
+
+        assertFalse(sut.isAutomaticallyHandling(request))
+        assertFalse(sut.processIncomingRequests(listOf(request)))
+        verify(executor, never()).autoPay(any(), any(), any())
+    }
+
+    @Test
+    fun `only an automatic payment still with the node reads as paying automatically`() = test {
+        val automatic = fixtures.paymentRequest()
+        val manual = fixtures.paymentRequest(id = "550e8400-e29b-41d4-a716-446655440002")
+        localState = PaykitAllowanceLocalState(
+            journal = listOf(
+                journalEntry("automatic", automatic, ALLOWANCE_ID, 1_000uL, Stage.SENT),
+                journalEntry("manual", manual, null, 1_000uL, Stage.SENT, isAutomatic = false),
+            ),
+        )
+        sut.activate(identity)
+
+        assertTrue(sut.isPayingAutomatically(automatic))
+        assertFalse(sut.isPayingAutomatically(manual))
+        assertTrue(sut.hasSentPayment(manual))
+    }
+
+    @Test
+    fun `a paid request stays hidden while allowances are off`() = test {
+        val request = fixtures.paymentRequest()
+        localState = PaykitAllowanceLocalState(autoPaidRequestIds = setOf(request.id))
+        sut.activate(identity)
+
+        sut.pause(identity)
+
+        assertTrue(sut.hasSentPayment(request))
+    }
+
+    @Test
+    fun `a request found manual moves the pending filter`() = test {
+        nodeReady()
+        records = listOf(fixtures.record())
+        whenever(executor.autoPay(any(), any(), any())).thenReturn(PaykitAllowanceAutoPayResult.MANUAL)
+        sut.activate(identity)
+        val request = fixtures.paymentRequest()
+        assertTrue(sut.keepsOffPending(request))
+        val version = sut.pendingFilterVersion.value
+
+        sut.processIncomingRequests(listOf(request))
+
+        assertTrue(sut.pendingFilterVersion.value > version)
+        assertFalse(sut.keepsOffPending(request))
+    }
+
+    @Test
+    fun `an automatic payment leaving the wallet is backed up at once`() = test {
+        whenever(backupRepo.persistWalletBackup()).thenReturn(Result.success(Unit))
+
+        spendBackups.emit(Unit)
+
+        verify(backupRepo).persistWalletBackup()
+    }
+
+    @Test
+    fun `a slow activity update does not delay a spend backup`() = test {
+        whenever(backupRepo.persistWalletBackup()).thenReturn(Result.success(Unit))
+        val activityUpdate = CompletableDeferred<Unit>()
+        whenever(activityRepo.setContact(any(), any(), any(), any())).doSuspendableAnswer {
+            activityUpdate.await()
+            Result.success(Unit)
+        }
+        executorEvents.emit(PaykitAllowanceEvent.PaidAutomatically(fixtures.counterpartyKey, 1_000uL, TXID))
+
+        spendBackups.emit(Unit)
+
+        verify(backupRepo).persistWalletBackup()
+        activityUpdate.complete(Unit)
     }
 
     @Test

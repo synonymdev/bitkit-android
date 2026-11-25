@@ -14,9 +14,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import org.junit.Before
 import org.junit.Rule
@@ -26,6 +28,7 @@ import org.lightningdevkit.ldknode.AddressInfo
 import org.lightningdevkit.ldknode.AddressType
 import org.lightningdevkit.ldknode.AnchorChannelsConfig
 import org.lightningdevkit.ldknode.BalanceSource
+import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Config
 import org.lightningdevkit.ldknode.ConfirmationStatus
 import org.lightningdevkit.ldknode.Event
@@ -40,6 +43,7 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.OnchainPayment
 import org.lightningdevkit.ldknode.OnchainSendResult
 import org.lightningdevkit.ldknode.OnchainWalletAccount
+import org.lightningdevkit.ldknode.OnchainWalletAccountConfig
 import org.lightningdevkit.ldknode.OutPoint
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
@@ -53,6 +57,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -87,6 +92,7 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PreparedOnchainSend
 import to.bitkit.repositories.PreparedOnchainSendRefused
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.LdkError
 import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
 import java.io.File
@@ -97,9 +103,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import com.synonym.bitkitcore.AddressType as BitkitAddressType
 import org.lightningdevkit.ldknode.LogLevel as LdkLogLevel
@@ -108,6 +116,7 @@ import org.lightningdevkit.ldknode.PreparedOnchainSend as NativePreparedOnchainS
 private const val VERIFY_TIMEOUT_MS = 2_000L
 private const val RELEASE_GATE_PROBE_MS = 200L
 private const val STOP_BOUND_MS = 5_000L
+private const val LOCK_PROBE_TIMEOUT_MS = 200L
 private val SHORT_GATE_TIMEOUT = 200.milliseconds
 private val detachingRecord = LogRecord(
     LdkLogLevel.ERROR,
@@ -646,7 +655,7 @@ class LightningServiceTest : BaseUnitTest() {
         assertNull(sut.node)
     }
 
-    // Regression #1536: releasing the node shuts down its runtime under the detached tasks, which abort the app
+    // #1536: in the background, a node with detached work is not released, so its work cannot overlap a rebuilt node
     @Test
     fun `stop exits the process instead of releasing a node with detached work in background`() = test {
         isAppInBackground = true
@@ -1188,6 +1197,184 @@ class LightningServiceTest : BaseUnitTest() {
         assertEquals(listOf(OnchainWalletAccount(AddressType.NATIVE_SEGWIT, 2u)), trackedAccounts)
         verify(watchOnlyAccountStore).completeReconciliation(walletIndex = 0)
     }
+
+    @Test
+    fun `build without paykit server accounts when the node rejects one`() = test {
+        val account = OnchainWalletAccountConfig(AddressType.NATIVE_SEGWIT, 1u, "xpub-1")
+        val built = mock<Node>()
+        val attempts = mutableListOf<List<OnchainWalletAccountConfig>>()
+
+        val result = buildAcceptingPaykitServerAccounts(buildConfig(listOf(account))) {
+            attempts += it.onchainWalletAccounts
+            if (it.onchainWalletAccounts.isNotEmpty()) throw BuildException.InvalidSeedBytes("xpub mismatch")
+            built
+        }
+
+        assertSame(built, result)
+        assertEquals(listOf(listOf(account), emptyList()), attempts)
+    }
+
+    @Test
+    fun `build fails without retry when no paykit server account is configured`() = test {
+        var attempts = 0
+
+        val error = assertFailsWith<LdkError> {
+            buildAcceptingPaykitServerAccounts(buildConfig(emptyList())) {
+                attempts++
+                throw BuildException.InvalidSeedBytes("bad seed")
+            }
+        }
+
+        assertEquals(1, attempts)
+        assertEquals("InvalidSeedBytes", error.compactType)
+    }
+
+    @Test
+    fun `build fails without retry on other build errors`() = test {
+        var attempts = 0
+
+        assertFailsWith<LdkError> {
+            buildAcceptingPaykitServerAccounts(
+                buildConfig(listOf(OnchainWalletAccountConfig(AddressType.NATIVE_SEGWIT, 1u, "xpub-1"))),
+            ) {
+                attempts++
+                throw BuildException.WalletSetupFailed("wallet")
+            }
+        }
+
+        assertEquals(1, attempts)
+    }
+
+    @Test
+    fun `reconciliation loads the other accounts when the node rejects one`() = test {
+        val rejected = watchOnlyAccount(accountIndex = 1, walletIndex = 0, enabled = true)
+        val accepted = watchOnlyAccount(accountIndex = 2, walletIndex = 0, enabled = true)
+        val onchainPayment = mock<OnchainPayment>()
+        whenever(watchOnlyAccountStore.loadReconciliationState()).thenReturn(
+            WatchOnlyAccountReconciliationState(listOf(rejected, accepted), emptyList()),
+        )
+        whenever(node.listOnchainWalletAccounts()).thenReturn(emptyList())
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        doThrow(NodeException.InvalidSeedBytes("xpub mismatch"))
+            .whenever(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, rejected.xpub)
+
+        assertTrue(runCatching { sut.reconcileWatchOnlyAccounts(syncAfterReconcile = false) }.isFailure)
+
+        verify(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 2u, accepted.xpub)
+        verify(onchainPayment).revealReceiveAddressesToAccount(
+            AddressType.NATIVE_SEGWIT,
+            2u,
+            WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
+        )
+    }
+
+    @Test
+    fun `wallet sync runs when reconciliation fails`() = test {
+        val rejected = watchOnlyAccount(accountIndex = 1, walletIndex = 0, enabled = true)
+        whenever(watchOnlyAccountStore.loadReconciliationState()).thenReturn(
+            WatchOnlyAccountReconciliationState(listOf(rejected), emptyList()),
+        )
+        whenever(node.listOnchainWalletAccounts()).thenReturn(emptyList())
+        whenever(node.onchainPayment()).thenReturn(mock<OnchainPayment>())
+        doThrow(NodeException.InvalidSeedBytes("xpub mismatch"))
+            .whenever(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, rejected.xpub)
+
+        sut.sync()
+
+        verify(node, times(1)).syncWallets()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `wallet sync succeeds and retries a transient account failure on its own`() = test {
+        val account = watchOnlyAccount(accountIndex = 1, walletIndex = 0, enabled = true)
+        val status = mock<NodeStatus>()
+        whenever(status.isRunning).thenReturn(true)
+        whenever(node.status()).thenReturn(status)
+        whenever(watchOnlyAccountStore.loadReconciliationState()).thenReturn(
+            WatchOnlyAccountReconciliationState(listOf(account), emptyList()),
+        )
+        whenever(node.listOnchainWalletAccounts()).thenReturn(emptyList())
+        whenever(node.onchainPayment()).thenReturn(mock<OnchainPayment>())
+        var failAdd = true
+        doAnswer { if (failAdd) throw NodeException.PersistenceFailed("vss write failed") }
+            .whenever(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
+        val lockFreeDuringSync = mutableListOf<Boolean>()
+        doAnswer { lockFreeDuringSync += isWatchOnlyLockFree() }.whenever(node).syncWallets()
+
+        sut.sync()
+        verify(node, times(1)).syncWallets()
+
+        failAdd = false
+        advanceTimeBy(16.seconds)
+        runCurrent()
+
+        verify(node, times(2)).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
+        verify(node, times(2)).syncWallets()
+        assertEquals(listOf(true, true), lockFreeDuringSync)
+
+        advanceTimeBy(60.seconds)
+        runCurrent()
+        verify(node, times(2)).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `stop ends the account retry before releasing the node`() = test {
+        val account = watchOnlyAccount(accountIndex = 1, walletIndex = 0, enabled = true)
+        whenever(watchOnlyAccountStore.loadReconciliationState()).thenReturn(
+            WatchOnlyAccountReconciliationState(listOf(account), emptyList()),
+        )
+        whenever(node.listOnchainWalletAccounts()).thenReturn(emptyList())
+        whenever(node.onchainPayment()).thenReturn(mock<OnchainPayment>())
+        doThrow(NodeException.PersistenceFailed("vss write failed"))
+            .whenever(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
+
+        sut.sync()
+        sut.stop()
+        advanceTimeBy(60.seconds)
+        runCurrent()
+
+        verify(node, times(1)).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u, account.xpub)
+        verify(node, times(1)).syncWallets()
+    }
+
+    @Test
+    fun `reconciliation skips a node that was released while it waited`() = test {
+        val account = watchOnlyAccount(accountIndex = 1, walletIndex = 0, enabled = true)
+        whenever(watchOnlyAccountStore.loadReconciliationState()).thenAnswer {
+            sut.node = null
+            WatchOnlyAccountReconciliationState(listOf(account), emptyList())
+        }
+
+        sut.reconcileWatchOnlyAccounts(syncAfterReconcile = false)
+
+        verify(node, never()).listOnchainWalletAccounts()
+        verify(node, never()).addOnchainWalletAccount(any(), any(), any())
+    }
+
+    // Mutex.withLock on a free mutex returns without suspending; a held one times out.
+    private fun isWatchOnlyLockFree(): Boolean = runBlocking {
+        withTimeoutOrNull(LOCK_PROBE_TIMEOUT_MS) { watchOnlyAccountLifecycleCoordinator.withLock { true } } ?: false
+    }
+
+    private fun buildConfig(accounts: List<OnchainWalletAccountConfig>) = Config(
+        storageDirPath = "",
+        network = Network.REGTEST,
+        listeningAddresses = null,
+        announcementAddresses = null,
+        nodeAlias = null,
+        trustedPeers0conf = emptyList(),
+        probingLiquidityLimitMultiplier = 1uL,
+        anchorChannelsConfig = null,
+        routeParameters = null,
+        scoringFeeParams = null,
+        scoringDecayParams = null,
+        includeUntrustedPendingInSpendable = false,
+        addressType = AddressType.NATIVE_SEGWIT,
+        addressTypesToMonitor = emptyList(),
+        onchainWalletAccounts = accounts,
+    )
 
     private fun watchOnlyAccount(accountIndex: Int, walletIndex: Int, enabled: Boolean) = WatchOnlyAccountRecord(
         id = "account-$accountIndex",

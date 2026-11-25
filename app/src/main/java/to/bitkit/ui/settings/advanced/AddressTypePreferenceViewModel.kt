@@ -76,6 +76,7 @@ class AddressTypePreferenceViewModel @Inject constructor(
                 title = context.getString(R.string.settings__addr_type__applying),
                 autoHide = false,
                 testTag = "AddressTypeApplyingToast",
+                replacedByNext = true,
             )
 
             val currentMonitored = _uiState.value.monitoredTypes.toMutableSet()
@@ -122,6 +123,7 @@ class AddressTypePreferenceViewModel @Inject constructor(
                 type = Toast.ToastType.INFO,
                 title = context.getString(R.string.settings__addr_type__applying),
                 autoHide = false,
+                replacedByNext = true,
             )
 
             val repoResult = lightningRepo.setMonitoring(addressType, enabled)

@@ -246,7 +246,8 @@ class CurrencyRepo @Inject constructor(
         val btcAmount = fiatValue.divide(BigDecimal.valueOf(rate.rate), BTC_SCALE, RoundingMode.HALF_UP)
         val satsDecimal = btcAmount.multiply(BigDecimal(SATS_IN_BTC))
         val roundedSats = satsDecimal.setScale(0, RoundingMode.HALF_UP)
-        roundedSats.toLong().toULong()
+        require(roundedSats.signum() >= 0) { "Negative sats for fiat '$fiatValue'" }
+        roundedSats.longValueExact().toULong()
     }
 
     fun convertFiatToSats(fiat: Double, currency: String?) = convertFiatToSats(BigDecimal.valueOf(fiat), currency)
@@ -277,6 +278,18 @@ data class CurrencyState(
     val lastSuccessfulRefresh: Long? = null,
     val isRefreshing: Boolean = false,
 )
+
+/** The rate conversions use for the selected currency, its first, is finite and positive, so fiat amounts can show. */
+val CurrencyState.hasUsableRate: Boolean
+    get() = rates.firstOrNull { it.quote == selectedCurrency }?.rate?.let { it.isFinite() && it > 0.0 } == true
+
+/** Switching to fiat needs a usable rate, or every fiat amount would be missing. */
+val CurrencyState.canSwitchUnit: Boolean
+    get() = primaryDisplay == PrimaryDisplay.FIAT || hasUsableRate
+
+/** The unit amounts show in: bitcoin while fiat is selected without a usable rate, so they never go blank. */
+val CurrencyState.shownUnit: PrimaryDisplay
+    get() = if (primaryDisplay == PrimaryDisplay.FIAT && !hasUsableRate) PrimaryDisplay.BITCOIN else primaryDisplay
 
 val CurrencyState.paykitRate: PaykitExchangeRate?
     get() = rates.firstOrNull {

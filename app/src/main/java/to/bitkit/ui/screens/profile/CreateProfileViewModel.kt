@@ -27,6 +27,7 @@ import to.bitkit.repositories.PubkyProfileTagsNotSavedError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.utils.profileErrorDescription
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -107,7 +108,7 @@ class CreateProfileViewModel @Inject constructor(
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.common__error),
-                    description = error.message,
+                    description = error.profileErrorDescription(context),
                 )
             }
     }
@@ -216,7 +217,11 @@ class CreateProfileViewModel @Inject constructor(
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.profile__create_error),
-                    description = if (changed) context.getString(R.string.profile__edit_changed_error) else it.message,
+                    description = if (changed) {
+                        context.getString(R.string.profile__edit_changed_error)
+                    } else {
+                        it.profileErrorDescription(context)
+                    },
                 )
                 if (changed) deriveAndCheckRemote()
             }
