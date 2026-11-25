@@ -9067,6 +9067,31 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pairing code requested while the receive sheet reads the cache replaces the pending receive`() = test {
+        val releaseCache = CompletableDeferred<Unit>()
+        whenever(cacheStore.data).thenReturn(
+            flow {
+                releaseCache.await()
+                emit(AppCacheData())
+            },
+        )
+        sut.showSheet(Sheet.Receive())
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+
+        needsPairingCode.value = true
+        pairingCodeRequestId.value = 1L
+        runCurrent()
+        val pairingSheet = sut.currentSheet.value
+        assertTrue(pairingSheet is Sheet.Hardware)
+        releaseCache.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(pairingSheet, sut.currentSheet.value)
+        verify(walletRepo, never()).setBip21AmountSats(null)
+    }
+
+    @Test
     fun `payment of an invoice shown by a replaced receive sheet closes the receive sheet replacing it`() = test {
         sut.showSheet(Sheet.Receive())
         advanceUntilIdle()

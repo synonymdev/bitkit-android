@@ -1034,7 +1034,7 @@ class AppViewModel @Inject constructor(
         val storedBolt11 = runSuspendCatching { cacheStore.data.first().bolt11 }.getOrDefault("")
         return ReceiveSheetContext(
             sheet = sheet,
-            cachedBolt11s = setOf(walletRepo.getBolt11(), storedBolt11) - shownBolt11s,
+            cachedBolt11s = setOf(walletRepo.getBolt11(), storedBolt11),
             bolt11s = shownBolt11s,
             paymentHashes = replaced?.paymentHashes.orEmpty(),
             onchainAddresses = replaced?.onchainAddresses.orEmpty(),
