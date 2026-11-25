@@ -149,6 +149,14 @@ internal fun NavController.navigateToCoinSelection() {
     navigateTo(SendRoute.CoinSelection)
 }
 
+/** Shows [route] after a failed swipe and resets the confirmation under it, so Back returns to one that takes a swipe. */
+internal fun NavController.navigateToSendError(route: SendRoute.Error) {
+    runCatching { getBackStackEntry(SendRoute.Confirm) }.getOrNull()
+        ?.savedStateHandle
+        ?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
+    navigateTo(route)
+}
+
 internal fun NavController.navigateToSendAmount(startDestination: SendRoute) {
     if (popBackStack(SendRoute.Amount, inclusive = false)) return
     navigateTo(SendRoute.Amount) {
@@ -377,7 +385,7 @@ fun SendSheet(
                                 retryRoute = it.retryRoute,
                             )
                         )
-                        is SendEffect.NavigateToError -> navController.navigateTo(
+                        is SendEffect.NavigateToError -> navController.navigateToSendError(
                             SendRoute.errorFromFailure(
                                 failure = it.failure,
                                 retryRoute = it.retryRoute,
