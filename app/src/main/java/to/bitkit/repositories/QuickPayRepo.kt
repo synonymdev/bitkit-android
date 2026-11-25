@@ -577,6 +577,11 @@ class QuickPayRepo @Inject constructor(
                     emitOutcomeLocked(invoiceHash, error, paymentRequest)
                 }
             }
+            // Shown as failed, as nothing would resolve a pending screen if no transfer went out; the charge stays, as
+            // a transfer Spark may have committed can still settle.
+            QuickPayDispatchClass.REFUSED_AFTER_SPARK_SEND -> mutex.withLock {
+                emitOutcomeLocked(invoiceHash, error, paymentRequest)
+            }
             QuickPayDispatchClass.DUPLICATE_PAYMENT,
             QuickPayDispatchClass.AMBIGUOUS,
             -> {
@@ -1084,7 +1089,11 @@ internal fun classifyDispatchError(error: Throwable): QuickPayDispatchClass {
     // Spark refuses before anything leaves the wallet, as PaykitPaymentProofRepo reads it, unless the refusal may
     // follow a transfer Spark committed.
     generateSequence(error) { it.cause }.filterIsInstance<SparkError.SendRefused>().firstOrNull()?.let {
-        return if (it.mayHaveReachedSpark) QuickPayDispatchClass.AMBIGUOUS else QuickPayDispatchClass.PRE_DISPATCH_REJECTION
+        return if (it.mayHaveReachedSpark) {
+            QuickPayDispatchClass.REFUSED_AFTER_SPARK_SEND
+        } else {
+            QuickPayDispatchClass.PRE_DISPATCH_REJECTION
+        }
     }
     return when (error.asNodeException()) {
         is NodeException.InvalidInvoice,
@@ -1100,6 +1109,9 @@ internal fun classifyDispatchError(error: Throwable): QuickPayDispatchClass {
 
 enum class QuickPayDispatchClass {
     PRE_DISPATCH_REJECTION,
+
+    /** Refused after a transfer Spark may have committed, which can still settle until its invoice expires. */
+    REFUSED_AFTER_SPARK_SEND,
     DUPLICATE_PAYMENT,
     AMBIGUOUS,
 }

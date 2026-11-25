@@ -1250,6 +1250,25 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark retry rechecks only the payment's authorization`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        val checks = mutableListOf<Boolean>()
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorize = it.getArgument<suspend () -> Boolean>(4)
+            repeat(2) { checks += authorize() }
+            Result.success("hash")
+        }
+        var submissionChecks = 0
+
+        val result = sut.payInvoiceAuthorizedAtSubmission("invoice", 1_000uL, { ++submissionChecks > 0 }) { true }
+
+        assertEquals("hash", result.getOrThrow())
+        assertEquals(listOf(true, true), checks)
+        assertEquals(1, submissionChecks)
+    }
+
+    @Test
     fun `a node send checks its authorization again where it is submitted`() = test {
         startNodeForTesting()
         whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))

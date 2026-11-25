@@ -674,7 +674,7 @@ class SparkRepo @Inject constructor(
                     // committed, so that send stays held.
                     if ((it is SdkException.InsufficientFunds || it.isLeafSelectionFailure()) && !isReusedKey) {
                         // After an operator error the SDK can select leaves again, so this error can still follow a
-                        // committed transfer: the node stays off the invoice until Spark syncs and lists it. Kept
+                        // committed transfer: the node stays off the invoice until it expires. Kept
                         // before the holds go, so no stop in between frees the invoice.
                         cacheStore.addSparkRefusedSend(
                             paymentHash,
@@ -779,7 +779,9 @@ class SparkRepo @Inject constructor(
 
     private suspend fun settleUncertainSend(paymentHash: String, expiresAt: ULong, attemptId: String) {
         val failedAt = clock.now().epochSeconds
-        val startedAt = cacheStore.data.first().sparkUncertainSends[paymentHash.lowercase()] ?: failedAt
+        val startedAt = runSuspendCatching { cacheStore.data.first().sparkUncertainSends[paymentHash.lowercase()] }
+            .onFailure { Logger.warn("Failed to read the hold of Spark send '$paymentHash'", it, context = TAG) }
+            .getOrNull() ?: failedAt
         uncertainSends[paymentHash.lowercase()] = UncertainSend(attemptId, failedAt.toULong(), expiresAt)
         // Held in memory meanwhile, and the hash kept before the send still holds the invoice after a restart.
         bestEffort("keep the hold of Spark send '$paymentHash'") {

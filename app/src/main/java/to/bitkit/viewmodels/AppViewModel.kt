@@ -7761,8 +7761,9 @@ class AppViewModel @Inject constructor(
         swapIdsByHoldHash[holdPaymentHash] = payment.swapId
         // The hold invoice settles only after the claim reveals the preimage, so its payment stays pending.
         lightningRepo.payInvoice(payment.invoice).onFailure {
-            // Spark may have sent it, so an unknown outcome waits on the claim like a sent hold payment.
-            if (it is PaymentPendingException) return@onFailure
+            // Spark may have sent it, so an unknown outcome, or a refusal after a transfer Spark may have committed,
+            // waits on the claim like a sent hold payment.
+            if (it is PaymentPendingException || it.mayHaveReachedSpark()) return@onFailure
             holdFailure.cancel()
             swapIdsByHoldHash.remove(holdPaymentHash)
             pubkySwapsRouteRepo.dropFailedSwap(payment.swapId)
@@ -8206,11 +8207,13 @@ class AppViewModel @Inject constructor(
                 resolveSettledPendingSend(pendingHash)
                 return@onFailure
             }
-            releasePrivatePaymentListIfNeeded(contactPaymentContext)
-            cancelPaymentProofPreparation(proofRequest)
-            // A refused Spark send that may have committed a transfer can still settle, and its event settles the
-            // allowance attempt then.
-            val mayHaveSent = (error as? SparkError.SendRefused)?.mayHaveReachedSpark == true
+            // A refused Spark send that may have committed a transfer can still settle, so it shows as failed but keeps
+            // its proof, private payment list and allowance attempt, which its event settles then.
+            val mayHaveSent = error.mayHaveReachedSpark()
+            if (!mayHaveSent) {
+                releasePrivatePaymentListIfNeeded(contactPaymentContext)
+                cancelPaymentProofPreparation(proofRequest)
+            }
             finishManualAllowancePayment(allowanceAttemptId, succeeded = if (mayHaveSent) null else false)
             createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
             lnurlComment?.let { activityRepo.clearPendingLightningMessage(paymentHash) }
@@ -8342,7 +8345,7 @@ class AppViewModel @Inject constructor(
         updateFailed: Boolean,
     ): Boolean = when (error) {
         is PaymentPendingException -> false
-        else if !isPaymentRequest -> true
+        else if !isPaymentRequest || error.mayHaveReachedSpark() -> true
         // Any failed spending balance update happens before the invoice is paid, so nothing was sent.
         else if updateFailed || error is LightningPaymentFailedError -> {
             paykitPaymentProofRepo.failLightningPayment(paymentHash)
@@ -11219,3 +11222,6 @@ internal fun allowanceOffersAcceptedDescription(
         else -> several.replace("{names}", formatNames(names))
     }
 }
+
+/** A Spark send refused after a transfer it may have committed, which can still settle until its invoice expires. */
+private fun Throwable.mayHaveReachedSpark(): Boolean = (this as? SparkError.SendRefused)?.mayHaveReachedSpark == true
