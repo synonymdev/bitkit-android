@@ -31,10 +31,11 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
+import java.util.UUID
 import javax.inject.Inject
 
-/** The progress toast waiting in the queue is replaced by its result. */
-private const val ADDRESS_TYPE_TOAST_KEY = "AddressType"
+/** One key per change, so its waiting progress toast is replaced by its own result and not by another change's. */
+private fun newAddressTypeToastKey() = "AddressType-${UUID.randomUUID()}"
 
 @HiltViewModel
 class AddressTypePreferenceViewModel @Inject constructor(
@@ -74,12 +75,13 @@ class AddressTypePreferenceViewModel @Inject constructor(
 
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isLoading = true) }
+            val toastKey = newAddressTypeToastKey()
             ToastEventBus.send(
                 type = Toast.ToastType.INFO,
                 title = context.getString(R.string.settings__addr_type__applying),
                 autoHide = false,
                 testTag = "AddressTypeApplyingToast",
-                replaceKey = ADDRESS_TYPE_TOAST_KEY,
+                replaceKey = toastKey,
             )
 
             val currentMonitored = _uiState.value.monitoredTypes.toMutableSet()
@@ -103,14 +105,14 @@ class AddressTypePreferenceViewModel @Inject constructor(
                     description = context.getString(R.string.settings__addr_type__now_using)
                         .replace("{type}", typeName),
                     testTag = "AddressTypeSettingsUpdatedToast",
-                    replaceKey = ADDRESS_TYPE_TOAST_KEY,
+                    replaceKey = toastKey,
                 )
             } else {
                 ToastEventBus.send(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.common__error),
                     description = result.exceptionOrNull()?.message,
-                    replaceKey = ADDRESS_TYPE_TOAST_KEY,
+                    replaceKey = toastKey,
                 )
             }
         }
@@ -124,11 +126,12 @@ class AddressTypePreferenceViewModel @Inject constructor(
 
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isLoading = true) }
+            val toastKey = newAddressTypeToastKey()
             ToastEventBus.send(
                 type = Toast.ToastType.INFO,
                 title = context.getString(R.string.settings__addr_type__applying),
                 autoHide = false,
-                replaceKey = ADDRESS_TYPE_TOAST_KEY,
+                replaceKey = toastKey,
             )
 
             val repoResult = lightningRepo.setMonitoring(addressType, enabled)
@@ -143,14 +146,14 @@ class AddressTypePreferenceViewModel @Inject constructor(
                 ToastEventBus.send(
                     type = Toast.ToastType.SUCCESS,
                     title = context.getString(R.string.settings__addr_type__settings_updated),
-                    replaceKey = ADDRESS_TYPE_TOAST_KEY,
+                    replaceKey = toastKey,
                 )
             } else {
                 ToastEventBus.send(
                     type = Toast.ToastType.WARNING,
                     title = context.getString(R.string.common__error),
                     description = monitoringErrorMessage(repoResult.exceptionOrNull()?.message),
-                    replaceKey = ADDRESS_TYPE_TOAST_KEY,
+                    replaceKey = toastKey,
                 )
             }
         }

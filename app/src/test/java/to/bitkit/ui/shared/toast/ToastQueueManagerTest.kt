@@ -189,6 +189,30 @@ class ToastQueueManagerTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an earlier result keeps its place when a later change starts behind a sticky warning`() = test {
+        val sut = ToastQueueManager(backgroundScope)
+        val returnedToast = Toast(
+            type = Toast.ToastType.INFO,
+            title = "Payment returned",
+            autoHide = false,
+            interruptible = false,
+        )
+        val errorA = Toast(type = Toast.ToastType.WARNING, title = "Error", autoHide = true, replaceKey = "A")
+        val progressB = Toast(type = Toast.ToastType.INFO, title = "Applying", autoHide = false, replaceKey = "B")
+        val resultB = progressB.copy(type = Toast.ToastType.SUCCESS, title = "Settings updated", autoHide = true)
+        sut.enqueue(returnedToast)
+
+        sut.enqueue(errorA)
+        sut.enqueue(progressB)
+        sut.enqueue(resultB)
+        sut.dismissCurrentToast()
+
+        assertEquals(errorA, sut.currentToast.value)
+        advanceTimeBy(Toast.VISIBILITY_TIME_DEFAULT + 1)
+        assertEquals(resultB, sut.currentToast.value)
+    }
+
+    @Test
     fun `a toast that is not interruptible is shown once when sent twice`() = test {
         val sut = ToastQueueManager(backgroundScope)
         val returnedToast = Toast(
