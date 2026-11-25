@@ -624,7 +624,14 @@ class SparkRepo @Inject constructor(
                 // moves past each attempt Spark's list shows failed, as a failed key can't send again.
                 val attempt = nextSendAttempt(paymentHash, local)
                 val attemptId = sparkService.sendKey(paymentHash, attempt)
-                val isReusedKey = cacheStore.data.first().sparkSendAttempts[paymentHash.lowercase()]?.attempt == attempt
+                val previousAttempt = cacheStore.data.first().sparkSendAttempts[paymentHash.lowercase()]
+                val isReusedKey = previousAttempt?.attempt == attempt
+
+                // A send refused before anything reached Spark's operators leaves its key unused, so a retry refuses
+                // the same way.
+                suspend fun forgetUnusedAttempt() {
+                    if (!isReusedKey) cacheStore.restoreSparkSendAttempt(paymentHash, previousAttempt)
+                }
                 val sent = run {
                     sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
                     cacheStore.addSparkSendHash(paymentHash, expiresAt.toEpochSeconds())
@@ -645,6 +652,7 @@ class SparkRepo @Inject constructor(
                         }.onFailure {
                             cacheStore.removeSparkUncertainSend(paymentHash)
                             cacheStore.removeSparkSendHash(paymentHash)
+                            forgetUnusedAttempt()
                             throw it
                         }
                         sendRetryingLeafSelection(prepared, attemptId, paymentDeadlineAt)
@@ -655,6 +663,7 @@ class SparkRepo @Inject constructor(
                     if (it.isInvoiceExpired()) {
                         cacheStore.removeSparkUncertainSend(paymentHash)
                         cacheStore.removeSparkSendHash(paymentHash)
+                        forgetUnusedAttempt()
                         throw SparkError.InvoiceExpired(it)
                     }
                     // Spark selects the leaves to spend before anything goes to the operators, so a short balance or
@@ -664,6 +673,7 @@ class SparkRepo @Inject constructor(
                     if ((it is SdkException.InsufficientFunds || it.isLeafSelectionFailure()) && !isReusedKey) {
                         cacheStore.removeSparkUncertainSend(paymentHash)
                         cacheStore.removeSparkSendHash(paymentHash)
+                        forgetUnusedAttempt()
                         throw SparkError.SendRefused("Spark balance can't cover the payment", it)
                     }
                     Logger.warn("Failed to learn the outcome of Spark send '$paymentHash'", it, context = TAG)

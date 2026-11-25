@@ -212,6 +212,15 @@ class CacheStore internal constructor(
         }
     }
 
+    /** Puts back [previous], the attempt kept before a send whose key never reached Spark, or drops the invoice's. */
+    suspend fun restoreSparkSendAttempt(paymentHash: String, previous: SparkSendAttempt?) {
+        val hash = paymentHash.lowercase()
+        store.updateData {
+            val attempts = it.sparkSendAttempts - hash
+            it.copy(sparkSendAttempts = if (previous == null) attempts else attempts + (hash to previous))
+        }
+    }
+
     suspend fun addSparkUnsavedOwnFailure(paymentId: String) {
         if (paymentId in store.data.first().sparkUnsavedOwnFailures) return
         store.updateData { it.copy(sparkUnsavedOwnFailures = it.sparkUnsavedOwnFailures + paymentId) }

@@ -5246,6 +5246,24 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send refused before reaching spark is refused again on retry`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw leafSelectionFailure() }
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        assertFalse("hash" in store.data.first().sparkSendAttempts)
+
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        assertFalse("hash" in store.data.first().sparkUncertainSends)
+    }
+
+    @Test
     fun `leaves spark can't select under a reused spark key keep the send held`() = test {
         val kept = AppCacheData(sparkSendAttempts = mapOf("hash" to SparkSendAttempt(0, now.epochSeconds + 3_600)))
         val store = CacheStore(InMemoryDataStore(kept), clock)
