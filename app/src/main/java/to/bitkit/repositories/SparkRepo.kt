@@ -633,7 +633,7 @@ class SparkRepo @Inject constructor(
                 }.getOrElse { throw SparkError.SendRefused("Spark is not connected", it) }
                 val previousAttempt = cacheStore.data.first().sparkSendAttempts[paymentHash.lowercase()]
                 val isReusedKey = previousAttempt?.attempt == attempt
-                val wasHeld = uncertainSends.containsKey(paymentHash.lowercase())
+                val wasHeld = sendHold(paymentHash.lowercase()) != null
 
                 // A send refused before anything went out is taken as not having used its key, so a retry refuses the
                 // same way. The hold of an earlier attempt under the same key stays, as it may have committed a
@@ -785,6 +785,8 @@ class SparkRepo @Inject constructor(
             .onFailure { Logger.warn("Failed to read the hold of Spark send '$paymentHash'", it, context = TAG) }
             .getOrNull() ?: failedAt
         uncertainSends[paymentHash.lowercase()] = UncertainSend(attemptId, failedAt.toULong(), expiresAt)
+        // Its caller now waits on the hold, so its outcome is reported, also when an earlier send under the key was.
+        reportedSendIds.remove(attemptId)
         // Held in memory meanwhile, and the hash kept before the send still holds the invoice after a restart.
         bestEffort("keep the hold of Spark send '$paymentHash'") {
             cacheStore.addSparkUncertainSend(paymentHash, startedAt, attemptId)

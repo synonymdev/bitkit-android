@@ -5497,6 +5497,45 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark retry stopped by its deadline keeps a hold only saved before a restart`() = test {
+        val store = CacheStore(
+            InMemoryDataStore(
+                AppCacheData(
+                    sparkSendHashes = listOf("hash"),
+                    sparkSendExpiries = mapOf("hash" to now.epochSeconds + 3_600),
+                    sparkUncertainSends = mapOf("hash" to now.epochSeconds),
+                    sparkSendAttemptIds = mapOf("hash" to "hash-0"),
+                    sparkSendAttempts = mapOf("hash" to SparkSendAttempt(0, now.epochSeconds + 3_600)),
+                )
+            ),
+            clock,
+        )
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenAnswer { info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()) }
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+
+        val retry = sut.payInvoice(
+            "lnbc1",
+            100uL,
+            paymentDeadlineAt = now + 1.minutes,
+            onBeforeSend = {
+                now += 2.minutes
+                true
+            },
+        )
+
+        assertIs<ServiceError.PaymentDeadlineExpired>(retry.exceptionOrNull())
+        verify(sparkService, never()).send(any(), anyOrNull())
+        assertTrue("hash" in store.data.first().sparkUncertainSends)
+        assertTrue("hash" in store.data.first().sparkSendHashes)
+    }
+
+    @Test
     fun `a held spark send spark never recorded reports its failure at expiry after a restart`() = test {
         val sentAt = now.epochSeconds
         // The app saved the hold, then died before Spark recorded the send.
