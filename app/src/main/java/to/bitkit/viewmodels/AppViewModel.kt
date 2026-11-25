@@ -266,6 +266,7 @@ import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PubkyService
 import to.bitkit.services.SparkError
 import to.bitkit.ui.ID_NOTIFICATION_SKIPPED
+import to.bitkit.ui.MainActivity
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.AllowanceRoute
 import to.bitkit.ui.components.Sheet
@@ -862,7 +863,7 @@ class AppViewModel @Inject constructor(
         }
         viewModelScope.launch {
             pubkyRepo.sessionRestorationNeedsUpdate.collect {
-                if (it && App.currentActivity?.hasStartedActivity == true) showPaykitUpdatePrompt()
+                if (it && App.currentActivity?.value is MainActivity) showPaykitUpdatePrompt()
             }
         }
         viewModelScope.launch {
