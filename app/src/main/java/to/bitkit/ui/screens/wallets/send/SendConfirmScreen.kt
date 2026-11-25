@@ -242,7 +242,7 @@ fun SendConfirmScreen(
             onEvent(SendEvent.PayConfirmed)
         },
         onBiometricsFailure = {
-            isLoading = false
+            // Loading stays on, as on the direct PIN path; the PIN result resets it.
             showBiometrics = false
             onNavigateToPin()
         },
