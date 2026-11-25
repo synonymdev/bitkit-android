@@ -169,6 +169,10 @@ Use `Not used` when a phase had no AI involvement and `Unknown` when the model w
 never infer a model from a tool name. If no review occurred, write `Review: Not performed`.
 `Not used` and `Not performed` need no reasoning value. See `.agents/commands/pr.md` for formatting.
 
+### Release topics
+
+A planned release's topic (for example `Spark`) is its GitHub milestone's description; read it before triaging, planning or cutting a release.
+
 ### Review Findings
 
 When addressing review feedback on any PR, release PRs included, PR babysitters and the author's agent keep the PR in scope:
