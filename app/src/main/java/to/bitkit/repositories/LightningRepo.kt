@@ -400,7 +400,7 @@ class LightningRepo @Inject constructor(
         )
     }
 
-    private suspend fun <T> whileStartPending(start: suspend () -> T): T {
+    private inline fun <T> whileStartPending(start: () -> T): T {
         pendingStartCount.update { it + 1 }
         try {
             return start()
@@ -1040,17 +1040,19 @@ class LightningRepo @Inject constructor(
             waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
 
             recoverOnCancellation {
-                stop().onFailure {
-                    Logger.error("Failed to stop node during electrum server change", it, context = TAG)
-                    return@withContext Result.failure(it)
+                whileStartPending {
+                    stop().onFailure {
+                        Logger.error("Failed to stop node during electrum server change", it, context = TAG)
+                        return@withContext Result.failure(it)
+                    }
+
+                    Logger.debug("Starting node with new electrum server: '$newServerUrl'", context = TAG)
+
+                    start(
+                        shouldRetry = false,
+                        customServerUrl = newServerUrl,
+                    )
                 }
-
-                Logger.debug("Starting node with new electrum server: '$newServerUrl'", context = TAG)
-
-                start(
-                    shouldRetry = false,
-                    customServerUrl = newServerUrl,
-                )
             }.onFailure {
                 // Recover in the background: a wedged node's release can gate the rebuild for tens of
                 // seconds, and the caller must surface this failure now rather than block on recovery.
@@ -1327,40 +1329,40 @@ class LightningRepo @Inject constructor(
         configChangeMutex.withLock {
             Logger.debug("Stopping node for recovery attempt", context = TAG)
 
-            stop().onFailure { e ->
-                Logger.error("Failed to stop node during recovery", e, context = TAG)
-                return@withContext Result.failure(e)
-            }
-
-            Logger.debug("Starting node with previous config for recovery", context = TAG)
-            val stopRequests = stopRequestCount.get()
-
-            var result: Result<Unit>
-            var attempt = 0
-            // The stopped node's VSS writes can keep retrying for minutes, past one build's wait for them.
-            do {
-                // A stop requested since the app went to the background wins over recovery.
-                if (pendingStopJob.get() != null) {
-                    Logger.info("Skipped recovery start because a stop was requested", context = TAG)
-                    return@withContext Result.failure(NodeStartYieldedToStopError(null))
+            whileStartPending {
+                stop().onFailure { e ->
+                    Logger.error("Failed to stop node during recovery", e, context = TAG)
+                    return@withContext Result.failure(e)
                 }
-                attempt++
-                if (attempt > 1) {
-                    Logger.warn("Retrying recovery start '$attempt/$RECOVERY_START_ATTEMPTS'", context = TAG)
-                }
-                // A direct stop since recovery's own stop wins over every attempt.
-                result = whileStartPending {
-                    startNode(
+
+                Logger.debug("Starting node with previous config for recovery", context = TAG)
+                val stopRequests = stopRequestCount.get()
+
+                var result: Result<Unit>
+                var attempt = 0
+                // The stopped node's VSS writes can keep retrying for minutes, past one build's wait for them.
+                do {
+                    // A stop requested since the app went to the background wins over recovery.
+                    if (pendingStopJob.get() != null) {
+                        Logger.info("Skipped recovery start because a stop was requested", context = TAG)
+                        return@withContext Result.failure(NodeStartYieldedToStopError(null))
+                    }
+                    attempt++
+                    if (attempt > 1) {
+                        Logger.warn("Retrying recovery start '$attempt/$RECOVERY_START_ATTEMPTS'", context = TAG)
+                    }
+                    // A direct stop since recovery's own stop wins over every attempt.
+                    result = startNode(
                         shouldRetry = false,
                         shouldCancelPendingStop = false,
                         stopRequestsSeen = stopRequests,
                     )
+                } while (result.exceptionOrNull().isKvStoreSetupFailure() && attempt < RECOVERY_START_ATTEMPTS)
+                result.onSuccess {
+                    Logger.debug("Successfully started node with previous config", context = TAG)
+                }.onFailure {
+                    Logger.error("Failed starting node with previous config", it, context = TAG)
                 }
-            } while (result.exceptionOrNull().isKvStoreSetupFailure() && attempt < RECOVERY_START_ATTEMPTS)
-            result.onSuccess {
-                Logger.debug("Successfully started node with previous config", context = TAG)
-            }.onFailure {
-                Logger.error("Failed starting node with previous config", it, context = TAG)
             }
         }
     }
@@ -1722,23 +1724,27 @@ class LightningRepo @Inject constructor(
     /**
      * Waits, up to [NODE_RUN_WAIT_TIMEOUT], until the node runs and lists its payments. A node stopping, or stopped
      * with a start called, is waited for, also across a start's retry or its restart for a stale graph. The wait
-     * ends without it when the start fails, when the node is stopped with no start coming, or when the wallet was
-     * wiped since [wipesBefore], as the node that runs next can be another wallet's.
+     * ends without it when the node cannot run and no start is left pending, as after a failed start, or when the
+     * wallet was wiped since [wipesBefore], as the node that runs next can be another wallet's.
      */
     private suspend fun awaitNodeListing(wipesBefore: Long): Boolean {
         val isWiped = { isWiping || wipeCount.get() != wipesBefore }
-        val startStates = combine(_lightningState, pendingStartCount) { state, starts ->
-            state.nodeLifecycleState to starts
-        }
+        // The two flows only wake the wait. What it decides on is read then, the count before the state: read as a
+        // pair they can show a failed start beside a count another start has left since, which never was the case.
+        val changes = combine(_lightningState, pendingStartCount) { _, _ -> }
+        val isRunning = { _lightningState.value.nodeLifecycleState.isRunning() }
         var isListing = false
         withTimeoutOrNull(NODE_RUN_WAIT_TIMEOUT) {
             while (!isListing) {
-                val (lifecycle, _) = startStates.first { (lifecycle, starts) ->
+                changes.first {
+                    val starts = pendingStartCount.value
+                    val lifecycle = _lightningState.value.nodeLifecycleState
                     val canStillRun = lifecycle.canRun() || lifecycle is NodeLifecycleState.Stopping || starts > 0
-                    lifecycle.isRunning() || lifecycle is NodeLifecycleState.ErrorStarting || isWiped() || !canStillRun
+                    lifecycle.isRunning() || isWiped() || !canStillRun
                 }
-                if (!lifecycle.isRunning() || isWiped()) return@withTimeoutOrNull
-                isListing = listPaymentsKeepingSendHashes() != null
+                if (!isRunning() || isWiped()) return@withTimeoutOrNull
+                // A listing that fails is asked again, so the wait ends with the hold's own error, never a throw.
+                isListing = runSuspendCatching { listPaymentsKeepingSendHashes() }.getOrNull() != null
                 if (!isListing) delay(NODE_LISTING_POLL_DELAY)
             }
         }
@@ -3417,26 +3423,26 @@ class LightningRepo @Inject constructor(
         channelMigration: ChannelDataMigration? = null,
         walletIndex: Int = 0,
     ): Result<Unit> = withContext(bgDispatcher) {
-        Logger.info("Restarting node", context = TAG)
-        stop().onFailure {
-            Logger.error("Failed to stop node during restart", it, context = TAG)
-            return@withContext Result.failure(it)
-        }
         whileStartPending {
+            Logger.info("Restarting node", context = TAG)
+            stop().onFailure {
+                Logger.error("Failed to stop node during restart", it, context = TAG)
+                return@withContext Result.failure(it)
+            }
             startNode(
                 walletIndex = walletIndex,
                 channelMigration = channelMigration,
                 shouldRetryYieldToStop = true
-            )
-        }.onFailure {
-            if (it is NodeStartYieldedToStopError) {
-                Logger.info("Deferred node restart to a requested stop", context = TAG)
-            } else {
-                Logger.error("Failed to start node during restart", it, context = TAG)
+            ).onFailure {
+                if (it is NodeStartYieldedToStopError) {
+                    Logger.info("Deferred node restart to a requested stop", context = TAG)
+                } else {
+                    Logger.error("Failed to start node during restart", it, context = TAG)
+                }
+                return@withContext Result.failure(it)
+            }.onSuccess {
+                Logger.info("Node restarted successfully", context = TAG)
             }
-            return@withContext Result.failure(it)
-        }.onSuccess {
-            Logger.info("Node restarted successfully", context = TAG)
         }
     }
 
