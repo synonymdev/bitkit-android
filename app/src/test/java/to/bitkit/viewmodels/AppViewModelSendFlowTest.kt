@@ -21841,7 +21841,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `a stalled update quote ends the swipe with the payment error`() = test {
         val bolt11 = "lnbcrt1stalledrequote"
         whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
-        whenever(moveToSparkRepo.quote()).doSuspendableAnswer { awaitCancellation() }
+        // Ignores cancellation, as LDK queue work does
+        whenever(moveToSparkRepo.quote()).doSuspendableAnswer { withContext(NonCancellable) { awaitCancellation() } }
         setSendState(
             SendUiState(
                 address = bolt11,
@@ -21868,7 +21869,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         var quotes = 0
         whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
         whenever(moveToSparkRepo.quote()).doSuspendableAnswer {
-            if (++quotes > 1) awaitCancellation()
+            if (++quotes > 1) withContext(NonCancellable) { awaitCancellation() }
             Result.success(UPDATE_QUOTE)
         }
         setSendState(

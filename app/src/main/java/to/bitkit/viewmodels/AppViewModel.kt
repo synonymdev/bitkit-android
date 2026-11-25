@@ -8179,11 +8179,15 @@ class AppViewModel @Inject constructor(
         return false
     }
 
-    private suspend fun quoteSparkUpdate(): Result<MoveToSparkQuote> =
-        withTimeoutOrNull(SPARK_UPDATE_QUOTE_TIMEOUT) { moveToSparkRepo.quote() } ?: run {
+    private suspend fun quoteSparkUpdate(): Result<MoveToSparkQuote> {
+        // Awaited apart, since the LDK queue finishes its work even after its caller is cancelled
+        val quote = viewModelScope.async(bgDispatcher) { moveToSparkRepo.quote() }
+        return withTimeoutOrNull(SPARK_UPDATE_QUOTE_TIMEOUT) { quote.await() } ?: run {
+            quote.cancel()
             Logger.warn("Timed out quoting the update after '$SPARK_UPDATE_QUOTE_TIMEOUT'", context = TAG)
             Result.failure(MoveToSparkError.QuoteTimedOut())
         }
+    }
 
     /** Whether this Lightning payment fits only once the spending balance update moves the channels to Spark. */
     private fun SendUiState.needsSparkUpdate(): Boolean {
