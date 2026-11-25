@@ -1082,17 +1082,19 @@ class LightningRepo @Inject constructor(
             waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
 
             recoverOnCancellation {
-                stop().onFailure {
-                    Logger.error("Failed to stop node during RGS server change", it, context = TAG)
-                    return@withContext Result.failure(it)
+                whileStartPending {
+                    stop().onFailure {
+                        Logger.error("Failed to stop node during RGS server change", it, context = TAG)
+                        return@withContext Result.failure(it)
+                    }
+
+                    Logger.debug("Starting node with new RGS server: '$newRgsUrl'", context = TAG)
+
+                    start(
+                        shouldRetry = false,
+                        customRgsServerUrl = newRgsUrl,
+                    )
                 }
-
-                Logger.debug("Starting node with new RGS server: '$newRgsUrl'", context = TAG)
-
-                start(
-                    shouldRetry = false,
-                    customRgsServerUrl = newRgsUrl,
-                )
             }.onFailure {
                 // Recover in the background: a wedged node's release can gate the rebuild for tens of
                 // seconds, and the caller must surface this failure now rather than block on recovery.
@@ -1732,17 +1734,19 @@ class LightningRepo @Inject constructor(
         // The two flows only wake the wait. What it decides on is read then, the count before the state: read as a
         // pair they can show a failed start beside a count another start has left since, which never was the case.
         val changes = combine(_lightningState, pendingStartCount) { _, _ -> }
-        val isRunning = { _lightningState.value.nodeLifecycleState.isRunning() }
         var isListing = false
         withTimeoutOrNull(NODE_RUN_WAIT_TIMEOUT) {
             while (!isListing) {
+                var wasRunning = false
                 changes.first {
                     val starts = pendingStartCount.value
                     val lifecycle = _lightningState.value.nodeLifecycleState
                     val canStillRun = lifecycle.canRun() || lifecycle is NodeLifecycleState.Stopping || starts > 0
-                    lifecycle.isRunning() || isWiped() || !canStillRun
+                    wasRunning = lifecycle.isRunning()
+                    wasRunning || isWiped() || !canStillRun
                 }
-                if (!isRunning() || isWiped()) return@withTimeoutOrNull
+                // Decided on what woke the wait: a node that stopped again since is asked for its listing and waited.
+                if (!wasRunning || isWiped()) return@withTimeoutOrNull
                 // A listing that fails is asked again, so the wait ends with the hold's own error, never a throw.
                 isListing = runSuspendCatching { listPaymentsKeepingSendHashes() }.getOrNull() != null
                 if (!isListing) delay(NODE_LISTING_POLL_DELAY)
