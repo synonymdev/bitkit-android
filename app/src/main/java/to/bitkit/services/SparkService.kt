@@ -44,6 +44,7 @@ import breez_sdk_spark.SendPaymentRequest
 import breez_sdk_spark.SyncWalletRequest
 import breez_sdk_spark.defaultConfig
 import breez_sdk_spark.parseSparkConfig
+import com.synonym.bitkitcore.mnemonicToSeed
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -153,8 +154,14 @@ class SparkService @Inject constructor(
     }
 
     private val mutex = Mutex()
+
+    @Volatile
     private var sdk: BreezSdk? = null
     private var listenerId: String? = null
+
+    /** The connected wallet's [SparkSendKey.secret], derived once at connect. */
+    @Volatile
+    private var sendKeySecret: ByteArray? = null
 
     private val _events = MutableSharedFlow<SdkEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<SdkEvent> = _events.asSharedFlow()
@@ -190,6 +197,7 @@ class SparkService @Inject constructor(
         val network = sparkNetwork() ?: throw SparkError.Unsupported()
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        val secret = SparkSendKey.secret(mnemonicToSeed(mnemonic, passphrase))
         val config = configure(defaultConfig(network), Env.breezApiKey, isExiting)
         val storageDir = File(Env.sparkStoragePath(walletIndex)).apply { mkdirs() }.path
         val apiType = configureLocalSpark(config, Env.localSparkSettings)
@@ -208,6 +216,8 @@ class SparkService @Inject constructor(
                 }
             },
         )
+        // The secret comes first, so a send that sees the wallet connected can derive its key.
+        sendKeySecret = secret
         sdk = connected
         val chain = chainServiceUrl ?: "default"
         Logger.info("Connected Spark wallet on '$network' with chain '$chain' and exit '$isExiting'", context = TAG)
@@ -223,6 +233,7 @@ class SparkService @Inject constructor(
         } finally {
             sdk = null
             listenerId = null
+            sendKeySecret = null
         }
     }
 
@@ -277,6 +288,12 @@ class SparkService @Inject constructor(
                 feePolicy = feePolicy,
             ),
         )
+
+    /** The idempotency key of attempt [attempt] at paying the invoice with [paymentHash], see [SparkSendKey]. */
+    fun sendKey(paymentHash: String, attempt: Int): String {
+        val secret = checkNotNull(sendKeySecret) { "Spark is not connected" }
+        return SparkSendKey.key(secret, paymentHash, attempt)
+    }
 
     /** Sends [prepared]; Spark makes one payment per [idempotencyKey], a UUID that becomes the payment's id. */
     suspend fun send(prepared: PrepareSendPaymentResponse, idempotencyKey: String? = null): Payment {

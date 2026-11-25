@@ -132,6 +132,11 @@ class SparkRepo @Inject constructor(
 
         private val SETTLE_RETRY_INTERVAL = 30.seconds
 
+        /** Sends again under the same key while Spark can't select the leaves, as after a move to Spark lands. */
+        private const val LEAF_SELECTION_RETRIES = 3
+
+        private val LEAF_SELECTION_RETRY_DELAY = 2.seconds
+
         /** Seconds a withdrawal quote must still hold to be reused, so it can't expire mid-send. */
         private const val QUOTE_EXPIRY_MARGIN_SECS = 30uL
     }
@@ -530,7 +535,8 @@ class SparkRepo @Inject constructor(
     /**
      * Pays [bolt11] and returns its payment hash, the id ldk-node payments use, so the send flow can match it.
      * Fails with [SparkError.SendRefused] when nothing left the wallet: Spark was not connected, could not prepare the
-     * payment or list its payments, or its fee was over [maxTotalFeeMsat]; with [SparkError.InvoiceExpired], a
+     * payment, could not list its payments while an older build's send of the invoice is kept, or its fee was over
+     * [maxTotalFeeMsat]; with [SparkError.InvoiceExpired], a
      * [SparkError.SendRefused], when Spark refuses an expired invoice at prepare or send; and with
      * [ServiceError.PaymentDeadlineExpired] past [paymentDeadlineAt]. A failure inside the send is a
      * [PaymentPendingException], as the payment may have been
@@ -575,8 +581,10 @@ class SparkRepo @Inject constructor(
                     Logger.info("Skipped Spark send of '$paymentHash', already paid", context = TAG)
                     return@runSuspendCatching paymentHash
                 }
+                // A send held in doubt under this build's key is sent again under that key, which can't pay twice:
+                // the operators return the transfer it committed, if any.
                 is SparkLightningSend.Found if earlier.status == PaymentStatus.PENDING ->
-                    throw PaymentPendingException(paymentHash)
+                    if (!isKeyedHold(paymentHash)) throw PaymentPendingException(paymentHash)
                 // Spark's list, synced or unreadable, can lack a send it made before the restore, as on the node's
                 // path, so the operators decide. Before Spark syncs, its list can lack an earlier attempt they show
                 // failed, so that one is refused too.
@@ -587,19 +595,16 @@ class SparkRepo @Inject constructor(
                     isFailedUnsent = canList,
                 )
             }
-            // A list that can't be read may hide a payment of the invoice, which Spark would pay again under a new
-            // key. It is read again here: the local one before Spark's first sync, else the synced one.
-            if (earlier == SparkLightningSend.Unavailable) {
-                val local = runSuspendCatching { listPayments() }.getOrNull()
-                    ?: throw SparkError.SendRefused("Spark could not list its payments to check the invoice")
-                when (local.latestSend(paymentHash)?.status) {
-                    PaymentStatus.COMPLETED -> {
-                        Logger.info("Skipped Spark send of '$paymentHash', already paid", context = TAG)
-                        return@runSuspendCatching paymentHash
-                    }
-                    PaymentStatus.PENDING -> throw PaymentPendingException(paymentHash)
-                    else -> Unit
-                }
+            // Spark's local list picks the attempt's key and, before Spark's first sync, shows the invoice's earlier
+            // sends, as the synced list did above.
+            val local = runSuspendCatching { listPayments() }.getOrNull()
+            // Past the checks above, a pending send is a held one this build's key retries, whose outcome Spark's local
+            // list may already show.
+            val isKeyedRetry = earlier is SparkLightningSend.Found && earlier.status == PaymentStatus.PENDING
+            val readsLocally = earlier == SparkLightningSend.Unavailable || isKeyedRetry
+            if (readsLocally && isPaidLocally(paymentHash, local, isKeyedRetry)) {
+                Logger.info("Skipped Spark send of '$paymentHash', already paid", context = TAG)
+                return@runSuspendCatching paymentHash
             }
             // A cancel, block or identity change can land while Spark prepares, so the last check runs right here.
             if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
@@ -609,11 +614,39 @@ class SparkRepo @Inject constructor(
             if (!isEntered) throw PaymentPendingException(paymentHash)
             // Kept in flight until its result is handled, so a sync meanwhile never takes back its saved hold.
             try {
-                // Spark keeps the key as this attempt's payment id, so only its own outcome settles the send.
-                val attemptId = UUID.randomUUID().toString()
+                // Spark keeps the key as this attempt's payment id, so only its own outcome settles the send. A retry
+                // keeps the latest attempt's key, so Spark returns that attempt's payment instead of paying again, and
+                // moves past each attempt Spark's list shows failed, as a failed key can't send again.
+                // The key's secret comes with Spark's connection, so a send that lost it is refused before it goes.
+                val (attempt, attemptId) = runSuspendCatching {
+                    nextSendAttempt(paymentHash, local).let { it to sparkService.sendKey(paymentHash, it) }
+                }.getOrElse { throw SparkError.SendRefused("Spark is not connected", it) }
+                val previousAttempt = cacheStore.data.first().sparkSendAttempts[paymentHash.lowercase()]
+                val isReusedKey = previousAttempt?.attempt == attempt
+                val wasHeld = sendHold(paymentHash.lowercase()) != null
+                // A held send whose attempt Spark lists failed is settled by the next listing, and a send after that
+                // goes through the restore checks above, as a new key's send must.
+                if (isKeyedRetry && !isReusedKey) throw PaymentPendingException(paymentHash)
+
+                // A send refused before anything went out is taken as not having used its key, so a retry refuses the
+                // same way. The hold of an earlier attempt under the same key stays, as it may have committed a
+                // transfer. Under a new key every earlier attempt failed, so a hold one of them left ends too.
+                suspend fun dropUnsentSend() {
+                    if (isReusedKey && wasHeld) return
+                    uncertainSends.remove(paymentHash.lowercase())
+                    cacheStore.removeSparkUncertainSend(paymentHash)
+                    cacheStore.removeSparkSendHash(paymentHash)
+                    if (!isReusedKey) cacheStore.restoreSparkSendAttempt(paymentHash, previousAttempt)
+                }
                 val sent = run {
                     sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
                     cacheStore.addSparkSendHash(paymentHash, expiresAt.toEpochSeconds())
+                    cacheStore.setSparkSendAttempt(
+                        paymentHash,
+                        attempt,
+                        expiresAt.toEpochSeconds(),
+                        clock.now().epochSeconds,
+                    )
                     spending {
                         // Kept until the call returns, so a send cut off by process death or cancellation stays held.
                         cacheStore.addSparkUncertainSend(paymentHash, clock.now().epochSeconds, attemptId)
@@ -623,27 +656,30 @@ class SparkRepo @Inject constructor(
                             ensurePaymentDeadline(paymentDeadlineAt)
                             ensureNotExiting()
                         }.onFailure {
-                            cacheStore.removeSparkUncertainSend(paymentHash)
-                            cacheStore.removeSparkSendHash(paymentHash)
+                            dropUnsentSend()
                             throw it
                         }
-                        runSuspendCatching { sparkService.send(prepared, attemptId) }
+                        sendRetryingLeafSelection(prepared, attemptId, paymentDeadlineAt, onBeforeSend)
                     }
                 }
                 val payment = sent.getOrElse {
                     // The SDK checks the expiry again before anything goes out, so an expired invoice left nothing.
-                    if (it.isInvoiceExpired()) {
-                        cacheStore.removeSparkUncertainSend(paymentHash)
-                        cacheStore.removeSparkSendHash(paymentHash)
+                    // Under a key an earlier attempt used, that attempt may have committed a transfer before the
+                    // expiry, so the send stays held.
+                    if (it.isInvoiceExpired() && !isReusedKey) {
+                        dropUnsentSend()
                         throw SparkError.InvoiceExpired(it)
                     }
                     // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
-                    // nothing, for instance when an earlier send spent it after the balance was read.
-                    if (it is SdkException.InsufficientFunds) {
-                        cacheStore.removeSparkUncertainSend(paymentHash)
-                        cacheStore.removeSparkSendHash(paymentHash)
+                    // nothing, for instance when an earlier send spent it after the balance was read. Under a key an
+                    // earlier attempt used, it can hide the transfer that attempt committed, so that send stays held.
+                    if (it is SdkException.InsufficientFunds && !isReusedKey) {
+                        dropUnsentSend()
                         throw SparkError.SendRefused("Spark balance can't cover the payment", it)
                     }
+                    // Leaves Spark still can't select after its retries can follow a transfer it committed, as the SDK
+                    // selects them again after an operator error, so that send stays held until Spark settles it or its
+                    // invoice expires, as any other unknown outcome does.
                     Logger.warn("Failed to learn the outcome of Spark send '$paymentHash'", it, context = TAG)
                     settleUncertainSend(paymentHash, expiresAt, attemptId)
                     throw PaymentPendingException(paymentHash)
@@ -653,12 +689,7 @@ class SparkRepo @Inject constructor(
                 if (payment.status == PaymentStatus.PENDING) {
                     settleUncertainSend(paymentHash, expiresAt, attemptId)
                 } else {
-                    cacheStore.removeSparkUncertainSend(paymentHash)
-                }
-                // Spark's failure event during its send call was left to this result, so the result reports it.
-                if (payment.status == PaymentStatus.FAILED) {
-                    recordActivity(payment, isOwnAttempt = true)
-                    if (reportedSendIds.add(payment.id)) payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
+                    settleSentResult(paymentHash, payment, wasHeld)
                 }
                 Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
                 paymentHash
@@ -676,22 +707,126 @@ class SparkRepo @Inject constructor(
         }
     }
 
+    /**
+     * Whether Spark's [local] list shows the send of [paymentHash] paid; throws while it shows the send pending, or,
+     * unless it is a [isKeyedRetry], while the list can't be read and an older build sent the invoice.
+     */
+    private suspend fun isPaidLocally(paymentHash: String, local: List<Payment>?, isKeyedRetry: Boolean): Boolean {
+        when (local?.latestSend(paymentHash)?.status) {
+            PaymentStatus.COMPLETED -> return true
+            PaymentStatus.PENDING -> throw PaymentPendingException(paymentHash)
+            else -> Unit
+        }
+        // A retry reuses its attempt's key, so Spark never pays an invoice twice under it, but an older build sent
+        // under a random key, which a list that can't be read may hide.
+        if (!isKeyedRetry && local == null && hasUnkeyedSend(paymentHash)) {
+            throw SparkError.SendRefused("Spark could not list its payments to check the invoice")
+        }
+        return false
+    }
+
+    /**
+     * Ends the hold of a send whose call returned its settled [payment]: a retry of a send held in doubt settles that
+     * hold with its own result, which callers waiting on the held send learn from its event, as Spark may not report a
+     * transfer it returned for the key again. A failed one is refused.
+     */
+    private suspend fun settleSentResult(paymentHash: String, payment: Payment, wasHeld: Boolean) {
+        uncertainSends.remove(paymentHash.lowercase())
+        bestEffort("end the hold of Spark send '$paymentHash'") {
+            cacheStore.removeSparkUncertainSend(paymentHash)
+        }
+        if (wasHeld && reportedSendIds.add(payment.id)) {
+            recordActivity(payment, isOwnAttempt = true)
+            payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
+        }
+        // Spark's failure event during its send call was left to this result, so the result reports it.
+        if (payment.status == PaymentStatus.FAILED) {
+            // This attempt paid nothing, as when its outcome settles, so a retry isn't held as pending.
+            bestEffort("drop the hash of Spark send '$paymentHash'") {
+                cacheStore.removeSparkSendHash(paymentHash)
+            }
+            if (!wasHeld) recordActivity(payment, isOwnAttempt = true)
+            // The caller subscribes to events only once this returns, so the result reports the failure, once:
+            // marked reported, Spark's event for it is not reported again, as a second error would be.
+            reportedSendIds.add(payment.id)
+            throw SparkError.SendRefused("Spark send failed")
+        }
+    }
+
+    private suspend fun sendRetryingLeafSelection(
+        prepared: PrepareSendPaymentResponse,
+        attemptId: String,
+        paymentDeadlineAt: Instant?,
+        onBeforeSend: suspend () -> Boolean,
+    ): Result<Payment> {
+        var result = runSuspendCatching { sparkService.send(prepared, attemptId) }
+        val canRetry = {
+            runCatching {
+                ensurePaymentDeadline(paymentDeadlineAt)
+                ensureNotExiting()
+            }.isSuccess
+        }
+        repeat(LEAF_SELECTION_RETRIES) {
+            if (result.exceptionOrNull()?.isLeafSelectionFailure() != true || !canRetry()) return result
+            Logger.info("Retrying Spark send '$attemptId' as Spark could not select its leaves", context = TAG)
+            delay(LEAF_SELECTION_RETRY_DELAY)
+            // A cancel, block or identity change can land during the delay, so each resend is checked again.
+            if (!canRetry() || !onBeforeSend()) return result
+            val retried = runSuspendCatching { sparkService.send(prepared, attemptId) }
+            // A failed try can have committed a transfer before Spark selected leaves again, so a short balance or an
+            // expiry on a retry, which would read as nothing sent, ends with the earlier leaf failure instead.
+            val error = retried.exceptionOrNull()
+            if (error is SdkException.InsufficientFunds || error?.isInvoiceExpired() == true) return result
+            result = retried
+        }
+        return result
+    }
+
+    /** Logs a failed cache write on a send's settlement path, so a storage error never changes the send's outcome. */
+    private suspend fun bestEffort(what: String, write: suspend () -> Unit) {
+        runSuspendCatching { write() }.onFailure { Logger.warn("Failed to $what", it, context = TAG) }
+    }
+
+    private suspend fun nextSendAttempt(paymentHash: String, listing: List<Payment>?): Int {
+        var attempt = cacheStore.data.first().sparkSendAttempts[paymentHash.lowercase()]?.attempt ?: 0
+        val failed = listing?.filter { it.status == PaymentStatus.FAILED }?.mapTo(HashSet()) { it.id }
+            ?: return attempt
+        while (sparkService.sendKey(paymentHash, attempt) in failed) attempt++
+        return attempt
+    }
+
+    private suspend fun hasUnkeyedSend(paymentHash: String): Boolean {
+        val hash = paymentHash.lowercase()
+        val cache = cacheStore.data.first()
+        if (hash in cache.sparkSendAttempts) return false
+        return hash in cache.sparkSendHashes || hash in cache.sparkUncertainSends
+    }
+
     private suspend fun settleUncertainSend(paymentHash: String, expiresAt: ULong, attemptId: String) {
         val failedAt = clock.now().epochSeconds
-        val startedAt = cacheStore.data.first().sparkUncertainSends[paymentHash.lowercase()] ?: failedAt
-        uncertainSends[paymentHash.lowercase()] = UncertainSend(attemptId, failedAt.toULong(), expiresAt)
-        cacheStore.addSparkUncertainSend(paymentHash, startedAt, attemptId)
+        val startedAt = runSuspendCatching { cacheStore.data.first().sparkUncertainSends[paymentHash.lowercase()] }
+            .onFailure { Logger.warn("Failed to read the hold of Spark send '$paymentHash'", it, context = TAG) }
+            .getOrNull() ?: failedAt
+        val hold = UncertainSend(attemptId, failedAt.toULong(), expiresAt)
+        uncertainSends[paymentHash.lowercase()] = hold
+        // Its caller now waits on the hold, so its outcome is reported, also when an earlier send under the key was.
+        reportedSendIds.remove(attemptId)
+        // Held in memory meanwhile, and the hash kept before the send still holds the invoice after a restart.
+        bestEffort("keep the hold of Spark send '$paymentHash'") {
+            cacheStore.addSparkUncertainSend(paymentHash, startedAt, attemptId)
+        }
         scope.launch {
             // The send screen tracks the hash as pending only once the send returns, and resolves tracked ones.
             withTimeoutOrNull(PENDING_TRACK_WAIT) {
                 pendingPaymentRepo.state.first { paymentHash in it.pendingPayments }
             }
             repeat(SETTLE_ATTEMPTS) {
-                // A send its own payment event settled meanwhile needs no sync.
-                if (!uncertainSends.containsKey(paymentHash.lowercase())) return@launch
+                // A send its own payment event settled meanwhile needs no sync, and a later hold of it polls on
+                // its own.
+                if (uncertainSends[paymentHash.lowercase()] !== hold) return@launch
                 runSuspendCatching { sparkService.syncWallet() }
                     .onFailure { Logger.warn("Failed to sync Spark after send '$paymentHash'", it, context = TAG) }
-                if (trySettleUncertainSend(paymentHash)) return@launch
+                if (trySettleUncertainSend(paymentHash, held = hold)) return@launch
                 delay(SETTLE_RETRY_INTERVAL)
             }
             // Spark's next sync settles it, as a send it resumes then ends with its own payment event.
@@ -733,7 +868,8 @@ class SparkRepo @Inject constructor(
         if (!isSettled) return false
         // A send Spark settled while the app was closed updates its row only, as nobody waits for it now. Its marker
         // stays until its payment is claimed, so Spark's event for it meanwhile claims it too.
-        val isReported = takeUncertainSend(paymentHash, uncertain, send) ?: return true
+        // A hold left to a retry in flight under its key stays polled, as the retry may leave it held.
+        val isReported = takeUncertainSend(paymentHash, uncertain, send) ?: return uncertainSends[key] !== uncertain
         when (send) {
             // A send Spark never recorded settles only at its expiry, so it is reported, as a caller may wait for it.
             SparkLightningSend.NotFound -> {
@@ -807,9 +943,13 @@ class SparkRepo @Inject constructor(
         // invoice again clears its marker under the same lock, so it either sees the hold and gets its report, or
         // finds it settled.
         return holdRestoreMutex.withLock {
+            // A retry in flight under the send's key settles the hold with its own outcome.
+            if (sendsInFlight.containsKey(key)) return@withLock null
             if (!uncertainSends.remove(key, uncertain)) return@withLock null
-            cacheStore.removeSparkUncertainSend(paymentHash)
-            if (isFailed && !sendsInFlight.containsKey(key)) cacheStore.removeSparkSendHash(paymentHash)
+            bestEffort("end the hold of Spark send '$paymentHash'") { cacheStore.removeSparkUncertainSend(paymentHash) }
+            if (isFailed) {
+                bestEffort("drop the hash of Spark send '$paymentHash'") { cacheStore.removeSparkSendHash(paymentHash) }
+            }
             key !in restoredAtStart
         }
     }
@@ -1688,6 +1828,15 @@ class SparkRepo @Inject constructor(
         if (isHeld) SparkLightningSend.Found(PaymentStatus.PENDING, null) else send
     }
 
+    /** Whether [paymentHash] is pending only by a hold on a send under this build's key, which a retry can reuse. */
+    private suspend fun isKeyedHold(paymentHash: String): Boolean {
+        val hash = paymentHash.lowercase()
+        if (sendsInFlight.containsKey(hash) || sendHold(hash) == null) return false
+        if (hash !in cacheStore.data.first().sparkSendAttempts) return false
+        val listed = listedLightningSend(paymentHash)
+        return listed !is SparkLightningSend.Found || listed.status != PaymentStatus.PENDING
+    }
+
     /** The hold on the send of [hash] whose outcome Spark didn't report, null when none. */
     private suspend fun sendHold(hash: String): SendHold? {
         uncertainSends[hash]?.let { return SendHold(it.attemptId) }
@@ -2131,8 +2280,10 @@ class SparkRepo @Inject constructor(
                 if (isFailed && isHeldFrom(payment)) return@withLock true
                 uncertainSends.remove(hash.lowercase())
                 if (restoredAtStart.remove(hash.lowercase())) reportedSendIds.add(payment.id)
-                cacheStore.removeSparkUncertainSend(hash)
-                if (isReleased) cacheStore.removeSparkSendHash(hash)
+                bestEffort("end the hold of Spark send '$hash'") { cacheStore.removeSparkUncertainSend(hash) }
+                if (isReleased) {
+                    bestEffort("drop the hash of Spark send '$hash'") { cacheStore.removeSparkSendHash(hash) }
+                }
                 false
             }
         } ?: false
@@ -2654,6 +2805,14 @@ internal fun SdkException.InvalidInput.isBelowMinimum(): Boolean =
  */
 internal fun Throwable.isWithdrawalFeeRise(): Boolean =
     this is SdkException.InvalidInput && v1.contains("onchain fee rose to", ignoreCase = true)
+
+/**
+ * Spark fails a send with this error when it holds the balance but can't select leaves to spend, for instance right
+ * after a move to Spark lands (`select_leaves_with_retry` in the 0.28.3 SDK's `spark-wallet/src/wallet.rs`). The SDK
+ * selects leaves again after an operator error, so the error can follow a transfer the send committed.
+ */
+internal fun Throwable.isLeafSelectionFailure(): Boolean =
+    this is SdkException.SparkException && v1.contains("Failed to select leaves after all retries", ignoreCase = true)
 
 /** Spark refuses an expired Lightning invoice with this input error, at prepare and again at send. */
 internal fun Throwable.isInvoiceExpired(): Boolean =

@@ -200,6 +200,27 @@ class CacheStore internal constructor(
         }
     }
 
+    /**
+     * Keeps [attempt] as the latest attempt at paying the invoice with [paymentHash], which expires at [expiresAt],
+     * and drops the attempts of invoices expired before [now], both in epoch seconds.
+     */
+    suspend fun setSparkSendAttempt(paymentHash: String, attempt: Int, expiresAt: Long, now: Long) {
+        val hash = paymentHash.lowercase()
+        store.updateData {
+            val live = it.sparkSendAttempts.filterValues { kept -> kept.expiresAt >= now }
+            it.copy(sparkSendAttempts = live + (hash to SparkSendAttempt(attempt, expiresAt)))
+        }
+    }
+
+    /** Puts back [previous], the attempt kept before a send whose key never reached Spark, or drops the invoice's. */
+    suspend fun restoreSparkSendAttempt(paymentHash: String, previous: SparkSendAttempt?) {
+        val hash = paymentHash.lowercase()
+        store.updateData {
+            val attempts = it.sparkSendAttempts - hash
+            it.copy(sparkSendAttempts = if (previous == null) attempts else attempts + (hash to previous))
+        }
+    }
+
     suspend fun addSparkUnsavedOwnFailure(paymentId: String) {
         if (paymentId in store.data.first().sparkUnsavedOwnFailures) return
         store.updateData { it.copy(sparkUnsavedOwnFailures = it.sparkUnsavedOwnFailures + paymentId) }
@@ -413,6 +434,8 @@ data class AppCacheData(
      * only its own outcome settles it. A hold without one waits for a paid attempt or its invoice's expiry.
      */
     val sparkSendAttemptIds: Map<String, String> = mapOf(),
+    /** The latest attempt at each invoice Spark sent, by hash, whose number picks the attempt's idempotency key. */
+    val sparkSendAttempts: Map<String, SparkSendAttempt> = mapOf(),
     /**
      * Payment ids of Spark send attempts whose own failure a failed Activity write still has to save over an earlier
      * attempt's row, kept across a restart until it saves.
@@ -462,6 +485,10 @@ data class AppCacheData(
 
     fun invalidateReceiveOnchainAddress() = copy(bip21 = "", onchainAddress = "")
 }
+
+/** An attempt at paying an invoice through Spark, the [attempt]th, of an invoice that expires at [expiresAt]. */
+@Serializable
+data class SparkSendAttempt(val attempt: Int, val expiresAt: Long)
 
 @Serializable
 data class CachedUsdtBalance(
