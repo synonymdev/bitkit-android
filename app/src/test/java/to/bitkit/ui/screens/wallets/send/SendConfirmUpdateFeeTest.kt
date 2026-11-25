@@ -64,6 +64,31 @@ class SendConfirmUpdateFeeTest {
         composeRule.onNodeWithTag("ReviewUpdateFee").assertIsDisplayed()
     }
 
+    @Config(sdk = [34])
+    @Test
+    fun `a closed biometrics prompt locks again from its first composition`() {
+        var showBiometrics by mutableStateOf(true)
+        val composed = mutableListOf<Boolean>()
+        composeRule.setContent {
+            composed += rememberConfirmLock(
+                isLoading = true,
+                isSwipeRunning = false,
+                uiState = SendUiState(),
+                showBiometrics = showBiometrics,
+            )
+        }
+        advanceBy(SWIPE_IDLE_RELEASE * 2)
+        assertFalse(composed.last())
+        val prompted = composed.size
+
+        composeRule.runOnUiThread { showBiometrics = false }
+        advanceBy(SWIPE_IDLE_RELEASE / 4)
+
+        val afterClose = composed.drop(prompted)
+        assertTrue(afterClose.isNotEmpty())
+        assertTrue(afterClose.all { it }, "compositions after close: $afterClose")
+    }
+
     @Config(sdk = [34], qualifiers = "w411dp-h891dp")
     @Test
     fun `the lock hides back and blocks edits on its own`() {

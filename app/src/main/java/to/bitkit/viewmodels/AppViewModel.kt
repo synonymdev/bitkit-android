@@ -8181,7 +8181,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun quoteSparkUpdate(): Result<MoveToSparkQuote> =
         withTimeoutOrNull(SPARK_UPDATE_QUOTE_TIMEOUT) { moveToSparkRepo.quote() } ?: run {
-            Logger.warn("Timed out quoting the spending balance update after '$SPARK_UPDATE_QUOTE_TIMEOUT'", context = TAG)
+            Logger.warn("Timed out quoting the update after '$SPARK_UPDATE_QUOTE_TIMEOUT'", context = TAG)
             Result.failure(MoveToSparkError.QuoteTimedOut())
         }
 

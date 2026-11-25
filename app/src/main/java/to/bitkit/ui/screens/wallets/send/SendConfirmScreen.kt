@@ -206,7 +206,7 @@ fun SendConfirmScreen(
         if (uiState.isPreparedFeeReview) isLoading = false
     }
 
-    val isLocked = rememberConfirmLock(isLoading, isSwipeRunning, uiState)
+    val isLocked = rememberConfirmLock(isLoading, isSwipeRunning, uiState, showBiometrics)
 
     // A running swipe holds the sheet too, until it moves on or returns here
     DisposableEffect(isLocked) {
@@ -252,18 +252,26 @@ fun SendConfirmScreen(
 /**
  * Whether the confirm screen is locked: from the swipe until it moves on or returns here. A swipe with nothing
  * running for it for [SWIPE_IDLE_RELEASE], such as one stopped before paying, no longer holds it, and neither does
- * the review of a prepared fee or the amount warning, which the user answers.
+ * the review of a prepared fee, the amount warning or the biometrics prompt, which the user answers.
  */
 @Composable
-internal fun rememberConfirmLock(isLoading: Boolean, isSwipeRunning: Boolean, uiState: SendUiState): Boolean {
-    // Keyed so a new run locks from its first composition, before the effect resets it.
-    var isSwipeIdle by remember(isLoading, isSwipeRunning, uiState.shouldConfirmPay) { mutableStateOf(false) }
-    LaunchedEffect(isLoading, isSwipeRunning, uiState.shouldConfirmPay) {
-        if (!isLoading || isSwipeRunning || uiState.shouldConfirmPay) return@LaunchedEffect
+internal fun rememberConfirmLock(
+    isLoading: Boolean,
+    isSwipeRunning: Boolean,
+    uiState: SendUiState,
+    showBiometrics: Boolean = false,
+): Boolean {
+    // Keyed so a new run, or a closed prompt, locks from its first composition, before the effect resets it.
+    var isSwipeIdle by remember(isLoading, isSwipeRunning, uiState.shouldConfirmPay, showBiometrics) {
+        mutableStateOf(false)
+    }
+    LaunchedEffect(isLoading, isSwipeRunning, uiState.shouldConfirmPay, showBiometrics) {
+        if (!isLoading || isSwipeRunning || uiState.shouldConfirmPay || showBiometrics) return@LaunchedEffect
         delay(SWIPE_IDLE_RELEASE)
         isSwipeIdle = true
     }
-    return isLoading && !isSwipeIdle && !uiState.isPreparedFeeReview && uiState.showSanityWarningDialog == null
+    if (showBiometrics || uiState.isPreparedFeeReview || uiState.showSanityWarningDialog != null) return false
+    return isLoading && !isSwipeIdle
 }
 
 @Composable
