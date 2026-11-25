@@ -48,18 +48,14 @@ class CacheStoreTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a refused spark send drops expired ones and keeps a later refusal`() = test {
+    fun `a refused spark send drops expired ones and keeps the latest refusal`() = test {
         sut.addSparkRefusedSend("OLD", refusedAt = 1_000, expiresAt = 1_500)
         sut.addSparkRefusedSend("HASH", refusedAt = 2_000, expiresAt = 3_000)
 
         assertEquals(mapOf("hash" to SparkRefusedSend(2_000, 3_000)), sut.data.first().sparkRefusedSends)
 
         sut.addSparkRefusedSend("hash", refusedAt = 2_500, expiresAt = 3_000)
-        sut.removeSparkRefusedSend("HASH", refusedAt = 2_000)
         assertEquals(2_500, sut.data.first().sparkRefusedSends["hash"]?.refusedAt)
-
-        sut.removeSparkRefusedSend("hash", refusedAt = 2_500)
-        assertFalse("hash" in sut.data.first().sparkRefusedSends)
     }
 
     @Test

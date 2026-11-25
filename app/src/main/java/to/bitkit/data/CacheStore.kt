@@ -175,15 +175,6 @@ class CacheStore internal constructor(
         }
     }
 
-    /** Drops the refusal of [paymentHash] made at [refusedAt] only, as a later one waits for its own sync. */
-    suspend fun removeSparkRefusedSend(paymentHash: String, refusedAt: Long) {
-        val hash = paymentHash.lowercase()
-        store.updateData {
-            val isSame = it.sparkRefusedSends[hash]?.refusedAt == refusedAt
-            if (isSame) it.copy(sparkRefusedSends = it.sparkRefusedSends - hash) else it
-        }
-    }
-
     suspend fun removeSparkSendHash(paymentHash: String) {
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().sparkSendHashes) return
@@ -454,7 +445,7 @@ data class AppCacheData(
     val sparkSendAttemptIds: Map<String, String> = mapOf(),
     /** The latest attempt at each invoice Spark sent, by hash, whose number picks the attempt's idempotency key. */
     val sparkSendAttempts: Map<String, SparkSendAttempt> = mapOf(),
-    /** Spark sends refused after they may have reached the operators: the node stays off each until Spark syncs. */
+    /** Spark sends refused after they may have reached the operators: the node stays off each until it expires. */
     val sparkRefusedSends: Map<String, SparkRefusedSend> = mapOf(),
     /**
      * Payment ids of Spark send attempts whose own failure a failed Activity write still has to save over an earlier

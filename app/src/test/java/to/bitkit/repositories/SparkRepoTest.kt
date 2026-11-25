@@ -4442,7 +4442,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(earlier)
         val sut = createSut(store)
         sut.start(0).getOrThrow()
-        sut.payInvoice("lnbc1", 100uL).getOrThrow()
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
         whenever { sparkService.listPayments() }.thenReturn(listOf(earlier))
         advanceUntilIdle()
 
@@ -5267,38 +5267,6 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a refused spark send spark lists completed keeps the node off while spark can't list until it expires`() =
-        test {
-            whenever(sparkService.isConnected).thenReturn(true)
-            whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = null))
-            val prepared = unexpiredPrepared()
-            whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
-            whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw leafSelectionFailure() }
-            val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
-            val sut = createSut(store)
-            sut.start(0).getOrThrow()
-            assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
-
-            whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong() + 1u))
-            var isListReadable = true
-            whenever(sparkService.listPayments()).thenAnswer {
-                check(isListReadable) { "spark list" }
-                listOf(sentPayment(fees = 0))
-            }
-            sut.start(0).getOrThrow()
-            advanceUntilIdle()
-            assertNotNull(sut.earlierLightningSend("lnbc1280n1send", "hash"))
-
-            // The transfer the refused send committed keeps its refusal, so a list Spark can't read still holds it.
-            isListReadable = false
-            assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1280n1send", "hash"))
-
-            // Once the invoice expired, no node send can pay it.
-            now += 2.hours
-            assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash"))
-        }
-
-    @Test
     fun `a spark send whose leaves spark can't select is refused under a new key`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         val prepared = unexpiredPrepared()
@@ -5316,7 +5284,7 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a spark send refused after a leaf failure keeps the node off its invoice until spark syncs`() = test {
+    fun `a spark send refused after a leaf failure keeps the node off its invoice until it expires`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = null))
         val prepared = unexpiredPrepared()
@@ -5327,21 +5295,18 @@ class SparkRepoTest : BaseUnitTest() {
         sut.start(0).getOrThrow()
 
         assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
-
-        // The SDK may have selected leaves again after a committed transfer, which Spark shows only once it syncs.
         assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1280n1send", "hash"))
 
+        // The SDK may have selected leaves again after a committed transfer, which can stay unlisted after a sync.
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong() + 1u))
         whenever(sparkService.listPayments()).thenReturn(emptyList())
         sut.start(0).getOrThrow()
         advanceUntilIdle()
-        whenever(sparkService.listPayments()).thenAnswer { throw IllegalStateException("spark list") }
-        // Synced, but a list Spark can't read shows nothing of the transfer.
         assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1280n1send", "hash"))
 
-        doReturn(emptyList<Payment>()).whenever(sparkService).listPayments()
+        // Once the invoice expired, no node send can pay it.
+        now += 2.hours
         assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash"))
-        assertFalse("hash" in store.data.first().sparkRefusedSends)
     }
 
     @Test

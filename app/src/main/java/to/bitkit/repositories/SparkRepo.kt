@@ -711,10 +711,11 @@ class SparkRepo @Inject constructor(
                         cacheStore.removeSparkSendHash(paymentHash)
                     }
                     recordActivity(payment, isOwnAttempt = true)
-                    // A retry under a key whose failure was already reported, as when Spark's list couldn't be read to
-                    // move past it, gets that failure back and no event, so the result reports it.
-                    if (!reportedSendIds.add(payment.id)) throw SparkError.SendRefused("Spark send failed earlier")
-                    payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
+                    // The caller subscribes to events only once this returns, so the result reports the failure too. A
+                    // retry under a key whose failure was already reported, as when Spark's list couldn't be read to
+                    // move past it, gets that failure back and no event.
+                    if (reportedSendIds.add(payment.id)) payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
+                    throw SparkError.SendRefused("Spark send failed")
                 }
                 Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
                 paymentHash
@@ -1841,15 +1842,12 @@ class SparkRepo @Inject constructor(
                 send.value.equals(bolt11, ignoreCase = true) || send.key == paymentHash?.lowercase()
             }
             sendsInFlight.entries.firstOrNull(isOfInvoice)?.let { return@withContext EarlierSend.Pending(it.key) }
-            // A Spark send refused after it may have reached the operators holds the invoice until Spark syncs since.
-            val refused = paymentHash?.lowercase()?.let { hash ->
-                cacheStore.data.first().sparkRefusedSends[hash]
-                    ?.takeIf { it.expiresAt > clock.now().epochSeconds }
-                    ?.let { hash to it.refusedAt }
-            }
-            if (refused != null && !hasSyncedSince(refused.second.toULong())) {
-                return@withContext EarlierSend.Pending(refused.first)
-            }
+            // A Spark send refused after it may have reached the operators holds the invoice until it expires: a
+            // transfer it committed can stay unlisted after a sync and still go out, as an unknown send's can.
+            val refusals = cacheStore.data.first().sparkRefusedSends
+            paymentHash?.lowercase()
+                ?.takeIf { hash -> refusals[hash]?.let { it.expiresAt > clock.now().epochSeconds } == true }
+                ?.let { return@withContext EarlierSend.Pending(it) }
             // A retry started, or recorded, while the listing below is read may still be pending, as may a send whose
             // outcome Spark didn't report until a sync settles it.
             val retried = {
@@ -1868,7 +1866,6 @@ class SparkRepo @Inject constructor(
                 null
             }
             if (payments == null) {
-                refused?.let { return@withContext EarlierSend.Pending(it.first) }
                 startedSend(paymentHash)?.let { return@withContext EarlierSend.Pending(it) }
                 refuseUnverifiedRestoredInvoice(bolt11, invoiceCreatedAt, invoiceExpiresAt)
                 return@withContext null
@@ -1879,11 +1876,6 @@ class SparkRepo @Inject constructor(
                     it.invoice.equals(bolt11, ignoreCase = true) ||
                         it.htlcDetails.paymentHash.equals(paymentHash, ignoreCase = true)
                 }
-            // Spark synced since the refusal, so this list shows any transfer that send committed, which keeps the
-            // refusal to hold the invoice when Spark can't list.
-            if (send == null || send.status == PaymentStatus.FAILED) {
-                refused?.let { cacheStore.removeSparkRefusedSend(it.first, it.second) }
-            }
             if (send == null) {
                 (retried() ?: paymentHash?.lowercase()?.takeIf { it in unlisted })
                     ?.let { return@withContext EarlierSend.Pending(it) }
