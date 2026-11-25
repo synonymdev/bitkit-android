@@ -58,6 +58,8 @@ import to.bitkit.data.PrivatePaykitReservationData
 import to.bitkit.data.PrivatePaykitReservationStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.SparkRefusedSend
+import to.bitkit.data.SparkSendAttempt
 import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.WatchOnlyAccountAllocationState
 import to.bitkit.data.WatchOnlyAccountBackupSnapshot
@@ -101,6 +103,7 @@ import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
+import to.bitkit.utils.jsonLogOf
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
@@ -3865,6 +3868,34 @@ class BackupRepoTest : BaseUnitTest() {
         db = db,
         connectionRecovery = connectionRecoveryFixture(settingsStore, keychain),
     )
+
+    @Test
+    fun `the restore log leaves out every payment detail`() {
+        val id = "PAYMENT_DETAIL"
+        val cache = AppCacheData(
+            onchainAddress = id,
+            bolt11 = id,
+            bolt11PaymentHash = id,
+            bip21 = id,
+            deletedActivities = listOf(id),
+            detachedActivityContacts = setOf(id),
+            pendingLightningMessages = mapOf(id to id),
+            unfinishedPubkySwaps = listOf(id),
+            pubkySwapHoldHashes = mapOf(id to id),
+            sparkSendHashes = listOf(id),
+            sparkSendExpiries = mapOf(id to 1),
+            sparkUncertainSends = mapOf(id to 1),
+            sparkSendAttemptIds = mapOf(id to id),
+            sparkSendAttempts = mapOf(id to SparkSendAttempt(0, 1)),
+            sparkRefusedSends = mapOf(id to SparkRefusedSend(1, 2)),
+            sparkUnsavedOwnFailures = setOf(id),
+            moveToSparkHashes = listOf(id),
+            ldkSendHashes = listOf(id),
+            ldkSendExpiries = mapOf(id to 1),
+        )
+
+        assertFalse(id in jsonLogOf(cache.withoutPaymentDetails()))
+    }
 
     private class BackupRepoTestError(message: String) : AppError(message)
 

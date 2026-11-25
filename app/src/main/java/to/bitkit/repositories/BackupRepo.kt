@@ -42,6 +42,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import to.bitkit.R
 import to.bitkit.async.appScope
+import to.bitkit.data.AppCacheData
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.HwWalletStore
@@ -1336,16 +1337,7 @@ class BackupRepo @Inject constructor(
         }
         runCatching { restoreSparkExitEarlierAddresses(parsed.sparkExitEarlierAddresses) }
             .onFailure { Logger.warn("Failed to restore the earlier Spark exit addresses", it, context = TAG) }
-        // Payment history and Spark attempt ids stay out of the log, as support requests attach it.
-        val logged = parsed.cache.copy(
-            cachedRates = emptyList(),
-            moveToSparkHashes = emptyList(),
-            sparkSendAttemptIds = emptyMap(),
-            sparkSendAttempts = emptyMap(),
-            sparkRefusedSends = emptyMap(),
-            sparkUnsavedOwnFailures = emptySet(),
-        )
-        Logger.debug("Restored caches: ${jsonLogOf(logged)}", TAG)
+        Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.withoutPaymentDetails())}", TAG)
         onCacheRestored()
         val persisted = preActivityMetadataRepo.upsertPreActivityMetadata(parsed.tagMetadata)
             .onFailure { Logger.warn("Failed to restore pre-activity metadata", it, context = TAG) }
@@ -1722,3 +1714,35 @@ internal fun Throwable.isTemporaryBackupFailure(): Boolean = isPaykitTemporarily
     -> true
     else -> false
 }
+
+/**
+ * The cache as the restore log shows it: without the addresses, invoices, payment hashes, payment and activity ids,
+ * transaction ids and comments that identify a payment, as support requests attach the log.
+ */
+internal fun AppCacheData.withoutPaymentDetails() = copy(
+    cachedRates = emptyList(),
+    onchainAddress = "",
+    bolt11 = "",
+    bolt11PaymentHash = "",
+    bip21 = "",
+    deletedActivities = emptyList(),
+    detachedActivityContacts = emptySet(),
+    pendingBoostActivities = emptyList(),
+    backgroundReceive = null,
+    quickPayLedger = quickPayLedger?.copy(records = emptyList()),
+    pendingLightningMessages = emptyMap(),
+    pendingSparkWithdrawal = null,
+    sentSparkWithdrawals = emptyList(),
+    unfinishedPubkySwaps = emptyList(),
+    pubkySwapHoldHashes = emptyMap(),
+    sparkSendHashes = emptyList(),
+    sparkSendExpiries = emptyMap(),
+    sparkUncertainSends = emptyMap(),
+    sparkSendAttemptIds = emptyMap(),
+    sparkSendAttempts = emptyMap(),
+    sparkRefusedSends = emptyMap(),
+    sparkUnsavedOwnFailures = emptySet(),
+    moveToSparkHashes = emptyList(),
+    ldkSendHashes = emptyList(),
+    ldkSendExpiries = emptyMap(),
+)
