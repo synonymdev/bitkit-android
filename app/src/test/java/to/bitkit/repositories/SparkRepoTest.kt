@@ -5467,6 +5467,36 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark retry of a held send stopped by its deadline keeps the send held`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenAnswer { info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()) }
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).doSuspendableAnswer { throw leafSelectionFailure() }
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        val retry = sut.payInvoice(
+            "lnbc1",
+            100uL,
+            paymentDeadlineAt = now + 1.minutes,
+            onBeforeSend = {
+                // The deadline passes while the retry is checked, so it never goes out.
+                now += 2.minutes
+                true
+            },
+        )
+
+        assertIs<ServiceError.PaymentDeadlineExpired>(retry.exceptionOrNull())
+        assertTrue("hash" in store.data.first().sparkUncertainSends)
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+    }
+
+    @Test
     fun `a held spark send spark never recorded reports its failure at expiry after a restart`() = test {
         val sentAt = now.epochSeconds
         // The app saved the hold, then died before Spark recorded the send.
