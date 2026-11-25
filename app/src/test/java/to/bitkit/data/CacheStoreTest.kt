@@ -33,6 +33,21 @@ class CacheStoreTest : BaseUnitTest() {
     fun tearDown() = runBlocking { sut.reset() }
 
     @Test
+    fun `a spark send attempt drops expired ones and restores the earlier one`() = test {
+        sut.setSparkSendAttempt("OLD", attempt = 2, expiresAt = 1_500, now = 1_000)
+        sut.setSparkSendAttempt("hash", attempt = 0, expiresAt = 3_000, now = 1_000)
+        sut.setSparkSendAttempt("hash", attempt = 1, expiresAt = 3_000, now = 2_000)
+
+        assertEquals(mapOf("hash" to SparkSendAttempt(1, 3_000)), sut.data.first().sparkSendAttempts)
+
+        sut.restoreSparkSendAttempt("HASH", SparkSendAttempt(0, 3_000))
+        assertEquals(0, sut.data.first().sparkSendAttempts["hash"]?.attempt)
+
+        sut.restoreSparkSendAttempt("hash", null)
+        assertFalse("hash" in sut.data.first().sparkSendAttempts)
+    }
+
+    @Test
     fun `invalidateReceiveLightningInvoice preserves a replacement invoice`() = test {
         val replacement = AppCacheData(
             onchainAddress = "bc1qtest",

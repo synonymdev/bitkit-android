@@ -154,6 +154,8 @@ class SparkService @Inject constructor(
     }
 
     private val mutex = Mutex()
+
+    @Volatile
     private var sdk: BreezSdk? = null
     private var listenerId: String? = null
 

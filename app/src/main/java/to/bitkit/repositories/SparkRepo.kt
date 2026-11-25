@@ -726,7 +726,7 @@ class SparkRepo @Inject constructor(
         paymentDeadlineAt: Instant?,
     ): Result<Payment> {
         var result = runSuspendCatching { sparkService.send(prepared, attemptId) }
-        val canRetry = suspend {
+        val canRetry = {
             runCatching {
                 ensurePaymentDeadline(paymentDeadlineAt)
                 ensureNotExiting()
