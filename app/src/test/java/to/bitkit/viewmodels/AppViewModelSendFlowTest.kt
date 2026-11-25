@@ -22460,6 +22460,125 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a scan while the node starts uses QuickPay without the channel wait when Spark covers the amount`() = test {
+        val bolt11 = "lnbcrt1quickpaysparkstarting"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        whenever(lightningRepo.canSendWithSpark(500u)).thenReturn(true)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting)))
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).waitForUsableChannels(any())
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
+        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `a scan while the node starts waits for the channels when Spark covers less than the amount`() = test {
+        val bolt11 = "lnbcrt1quickpaysparkshort"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        whenever(lightningRepo.canSendWithSpark(499u)).thenReturn(true)
+        val nodeState = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting))
+        whenever(lightningRepo.lightningState).thenReturn(nodeState)
+        var isQuickPaySetBeforeWait = false
+        whenever(lightningRepo.waitForUsableChannels()).thenAnswer {
+            isQuickPaySetBeforeWait = sut.quickPayData.value != null
+            nodeState.value = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
+            Unit
+        }
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        verify(lightningRepo).waitForUsableChannels()
+        assertFalse(isQuickPaySetBeforeWait)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
+    }
+
+    @Test
+    fun `a scan with unusable channels uses QuickPay without waiting for them when Spark covers the amount`() = test {
+        val bolt11 = "lnbcrt1quickpaysparkpeeroffline"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        whenever(lightningRepo.canSendWithSpark(500u)).thenReturn(true)
+        val offlinePeerChannel = mock<ChannelDetails> { on { isUsable } doReturn false }
+        whenever(lightningRepo.lightningState).thenReturn(
+            MutableStateFlow(
+                LightningState(
+                    nodeLifecycleState = NodeLifecycleState.Running,
+                    channels = persistentListOf(offlinePeerChannel),
+                )
+            )
+        )
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).waitForUsableChannels()
+        verify(lightningRepo).waitForUsableChannels(awaitUsable = false)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
+    }
+
+    @Test
+    fun `a fixed lnurl scan while the node starts uses QuickPay without the channel wait when Spark covers`() = test {
+        val input = "lnurl1quickpaysparkstarting"
+        val data =
+            LnurlPayData(input, "https://example.com/callback", 1_000_000uL, 1_000_000uL, "[]", null, false, null)
+        enableQuickPay()
+        whenever(coreService.decode(input)).thenReturn(Scanner.LnurlPay(data))
+        whenever(lightningRepo.canSend(1_000u)).thenReturn(true)
+        whenever(lightningRepo.canSendWithSpark(1_000u)).thenReturn(true)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting)))
+
+        sut.onScanResult(input)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).waitForUsableChannels(any())
+        assertEquals(QuickPayData.LnurlPay(sats = 1_000u, data = data), sut.quickPayData.value?.data)
+    }
+
+    @Test
+    fun `a unified scan while the node starts uses QuickPay without the channel wait when Spark covers`() = test {
+        val bolt11 = "lnbcrt1quickpaysparkunified"
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.0002&lightning=$bolt11"
+        enableQuickPay()
+        stubUnifiedScan(uri = uri, bolt11 = bolt11, amountSats = 20_000u, payeeNodeId = FOREIGN_NODE_ID.fromHex())
+        whenever(lightningRepo.canSendWithSpark(20_000u)).thenReturn(true)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting)))
+
+        sut.onScanResult(uri)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).waitForUsableChannels(any())
+        assertEquals(QuickPayData.Bolt11(sats = 20_000u, bolt11 = bolt11), sut.quickPayData.value?.data)
+    }
+
+    @Test
+    fun `a payment that needs the update is never sent by QuickPay when the channel wait is skipped`() = test {
+        val bolt11 = "lnbcrt1quickpaysparkupdate"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        whenever(lightningRepo.canSendWithSpark(500u)).thenReturn(true)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting)))
+        whenever(moveToSparkRepo.needsUpdateToSend(500uL)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).thenReturn(Result.success(MoveToSparkQuote("lnbcrt1spark", 500uL, 1uL)))
+        whenever(moveToSparkRepo.estimateFeeAfterUpdate(bolt11, 500uL)).thenReturn(2uL)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertNull(sut.quickPayData.value, "QuickPay paid a payment that needs the update")
+        verify(quickPayRepo, never()).canApply(any<ULong>())
+    }
+
+    @Test
     fun `a fixed-amount scan with QuickPay off does not wait for channels whose peer is offline`() = test {
         val bolt11 = "lnbcrt1quickpayoffpeeroffline"
         val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.0002&lightning=$bolt11"
