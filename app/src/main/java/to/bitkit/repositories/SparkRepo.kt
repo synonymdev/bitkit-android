@@ -807,7 +807,8 @@ class SparkRepo @Inject constructor(
         val startedAt = runSuspendCatching { cacheStore.data.first().sparkUncertainSends[paymentHash.lowercase()] }
             .onFailure { Logger.warn("Failed to read the hold of Spark send '$paymentHash'", it, context = TAG) }
             .getOrNull() ?: failedAt
-        uncertainSends[paymentHash.lowercase()] = UncertainSend(attemptId, failedAt.toULong(), expiresAt)
+        val hold = UncertainSend(attemptId, failedAt.toULong(), expiresAt)
+        uncertainSends[paymentHash.lowercase()] = hold
         // Its caller now waits on the hold, so its outcome is reported, also when an earlier send under the key was.
         reportedSendIds.remove(attemptId)
         // Held in memory meanwhile, and the hash kept before the send still holds the invoice after a restart.
@@ -820,11 +821,12 @@ class SparkRepo @Inject constructor(
                 pendingPaymentRepo.state.first { paymentHash in it.pendingPayments }
             }
             repeat(SETTLE_ATTEMPTS) {
-                // A send its own payment event settled meanwhile needs no sync.
-                if (!uncertainSends.containsKey(paymentHash.lowercase())) return@launch
+                // A send its own payment event settled meanwhile needs no sync, and a later hold of it polls on
+                // its own.
+                if (uncertainSends[paymentHash.lowercase()] !== hold) return@launch
                 runSuspendCatching { sparkService.syncWallet() }
                     .onFailure { Logger.warn("Failed to sync Spark after send '$paymentHash'", it, context = TAG) }
-                if (trySettleUncertainSend(paymentHash)) return@launch
+                if (trySettleUncertainSend(paymentHash, held = hold)) return@launch
                 delay(SETTLE_RETRY_INTERVAL)
             }
             // Spark's next sync settles it, as a send it resumes then ends with its own payment event.

@@ -5561,6 +5561,27 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `keyed retries of a held spark send keep one poll of spark per interval`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenAnswer { info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()) }
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).doSuspendableAnswer { throw leafSelectionFailure() }
+        val sut = createSut(CacheStore(InMemoryDataStore(AppCacheData()), clock))
+        sut.start(0).getOrThrow()
+        repeat(3) { assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull()) }
+        // Past the wait for the send screen to track the send, every poll started.
+        advanceTimeBy(11.seconds)
+        clearInvocations(sparkService)
+
+        advanceTimeBy(30.seconds)
+
+        verify(sparkService, times(1)).syncWallet()
+    }
+
+    @Test
     fun `a held spark send spark never recorded reports its failure at expiry after a restart`() = test {
         val sentAt = now.epochSeconds
         // The app saved the hold, then died before Spark recorded the send.
