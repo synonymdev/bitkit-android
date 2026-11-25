@@ -696,6 +696,8 @@ class SparkRepo @Inject constructor(
                 }
                 // Spark's failure event during its send call was left to this result, so the result reports it.
                 if (payment.status == PaymentStatus.FAILED) {
+                    // This attempt paid nothing, as when its outcome settles, so a retry isn't held as pending.
+                    cacheStore.removeSparkSendHash(paymentHash)
                     recordActivity(payment, isOwnAttempt = true)
                     // A retry under a key whose failure was already reported, as when Spark's list couldn't be read to
                     // move past it, gets that failure back and no event, so the result reports it.
@@ -724,15 +726,17 @@ class SparkRepo @Inject constructor(
         paymentDeadlineAt: Instant?,
     ): Result<Payment> {
         var result = runSuspendCatching { sparkService.send(prepared, attemptId) }
-        repeat(LEAF_SELECTION_RETRIES) {
-            if (result.exceptionOrNull()?.isLeafSelectionFailure() != true) return result
-            Logger.info("Retrying Spark send '$attemptId' as Spark could not select its leaves", context = TAG)
-            delay(LEAF_SELECTION_RETRY_DELAY)
-            val canRetry = runCatching {
+        val canRetry = suspend {
+            runCatching {
                 ensurePaymentDeadline(paymentDeadlineAt)
                 ensureNotExiting()
             }.isSuccess
-            if (!canRetry) return result
+        }
+        repeat(LEAF_SELECTION_RETRIES) {
+            if (result.exceptionOrNull()?.isLeafSelectionFailure() != true || !canRetry()) return result
+            Logger.info("Retrying Spark send '$attemptId' as Spark could not select its leaves", context = TAG)
+            delay(LEAF_SELECTION_RETRY_DELAY)
+            if (!canRetry()) return result
             result = runSuspendCatching { sparkService.send(prepared, attemptId) }
         }
         return result

@@ -5151,7 +5151,8 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
         val failed = sentPayment(fees = 0).copy(id = "hash-0", status = PaymentStatus.FAILED)
         whenever(sparkService.send(any(), anyOrNull())).thenReturn(failed)
-        val sut = createSut()
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        val sut = createSut(store)
         sut.start(0).getOrThrow()
         advanceUntilIdle()
         whenever(sparkService.listPayments()).thenAnswer { throw SdkException.Generic("storage") }
@@ -5279,6 +5280,26 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
         assertFalse("hash" in store.data.first().sparkUncertainSends)
+    }
+
+    @Test
+    fun `a refused spark retry keeps the attempt spark listed failed before it`() = test {
+        val kept = AppCacheData(sparkSendAttempts = mapOf("hash" to SparkSendAttempt(0, now.epochSeconds + 3_600)))
+        val store = CacheStore(InMemoryDataStore(kept), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val firstFailed = sentPayment(fees = 0).copy(id = "hash-0", status = PaymentStatus.FAILED)
+        whenever(sparkService.listPayments()).thenReturn(listOf(firstFailed))
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw leafSelectionFailure() }
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        assertEquals("hash-1", sentKey())
+        assertEquals(0, store.data.first().sparkSendAttempts["hash"]?.attempt)
     }
 
     @Test

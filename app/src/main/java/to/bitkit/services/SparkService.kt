@@ -214,8 +214,9 @@ class SparkService @Inject constructor(
                 }
             },
         )
-        sdk = connected
+        // The secret comes first, so a send that sees the wallet connected can derive its key.
         sendKeySecret = secret
+        sdk = connected
         val chain = chainServiceUrl ?: "default"
         Logger.info("Connected Spark wallet on '$network' with chain '$chain' and exit '$isExiting'", context = TAG)
         true
