@@ -867,7 +867,7 @@ class SparkRepo @Inject constructor(
         // A send Spark settled while the app was closed updates its row only, as nobody waits for it now. Its marker
         // stays until its payment is claimed, so Spark's event for it meanwhile claims it too.
         // A hold left to a retry in flight under its key stays polled, as the retry may leave it held.
-        val isReported = takeUncertainSend(paymentHash, uncertain, send) ?: return !sendsInFlight.containsKey(key)
+        val isReported = takeUncertainSend(paymentHash, uncertain, send) ?: return uncertainSends[key] !== uncertain
         when (send) {
             // A send Spark never recorded settles only at its expiry, so it is reported, as a caller may wait for it.
             SparkLightningSend.NotFound -> {
