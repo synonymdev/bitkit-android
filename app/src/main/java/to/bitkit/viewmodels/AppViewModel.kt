@@ -56,6 +56,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -176,6 +177,7 @@ import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.models.toTxType
+import to.bitkit.nfc.nfcPaymentRequest
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -297,6 +299,7 @@ import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
 import to.bitkit.utils.timedsheets.sheets.BackupTimedSheet
 import to.bitkit.utils.timedsheets.sheets.HighBalanceTimedSheet
 import to.bitkit.utils.timedsheets.sheets.MoveToSparkTimedSheet
+import to.bitkit.utils.timedsheets.sheets.NfcTimedSheet
 import to.bitkit.utils.timedsheets.sheets.NotificationsTimedSheet
 import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import to.bitkit.utils.timedsheets.sheets.UsdtTimedSheet
@@ -366,6 +369,7 @@ class AppViewModel @Inject constructor(
     private val backupSheet: BackupTimedSheet,
     private val notificationsSheet: NotificationsTimedSheet,
     private val quickPaySheet: QuickPayTimedSheet,
+    private val nfcSheet: NfcTimedSheet,
     private val usdtSheet: UsdtTimedSheet,
     private val usdtPreferences: UsdtPreferencesRepo,
     private val highBalanceSheet: HighBalanceTimedSheet,
@@ -427,9 +431,19 @@ class AppViewModel @Inject constructor(
         if (canPresent()) _mainScreenEffect.emit(effect)
     }
 
-    private suspend fun waitForUsableChannels(walletGeneration: Long? = connectionRecovery.currentGeneration()) {
+    /**
+     * Waits for the node's channels before a Lightning send. When Spark covers [amountSats] there is no wait for a
+     * usable channel: a running node only publishes its current channels, which the send limit reads, and a node not
+     * running yet is skipped, so a payment opened right after launch does not wait for the node to start.
+     */
+    private suspend fun waitForUsableChannels(
+        walletGeneration: Long? = connectionRecovery.currentGeneration(),
+        amountSats: ULong? = null,
+    ) {
         requireCurrentPaymentPreparation(walletGeneration)
-        lightningRepo.waitForUsableChannels()
+        val isNodeRunning = lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
+        val sparkCovers = amountSats != null && lightningRepo.canSendWithSpark(amountSats)
+        if (isNodeRunning || !sparkCovers) lightningRepo.waitForUsableChannels(awaitUsable = !sparkCovers)
         requireCurrentPaymentPreparation(walletGeneration)
         walletRepo.refreshMaxSendLightning()
         requireCurrentPaymentPreparation(walletGeneration)
@@ -676,12 +690,36 @@ class AppViewModel @Inject constructor(
         registerSheet(usdtSheet)
         registerSheet(backupSheet)
         registerSheet(notificationsSheet)
+        // Registered before QuickPay at the same priority: the NFC sheet includes the QuickPay toggle.
+        registerSheet(nfcSheet)
         registerSheet(quickPaySheet)
         registerSheet(highBalanceSheet)
     }
     private var isCompletingMigration = false
     private var isCompletingRestoreHold = false
     private var addressValidationJob: Job? = null
+
+    /**
+     * A request read during this Send visit (a nearby read on the recipient screen, or a read from Send's own scanner).
+     * It is cancelled when Send closes or the user enters a request manually.
+     */
+    private var sendVisitScanJob: Job? = null
+
+    /**
+     * True on the main thread while a scan job runs, so a scan that closes Send itself (to open LNURL auth,
+     * withdraw or another sheet) does not cancel itself. Only a dismissal from outside the scan cancels it.
+     */
+    private val isRunningScan = ThreadLocal<Boolean>()
+
+    /**
+     * Bumped each time the wallet locks (the background lock, a PIN reset or the setter), so a scan that was
+     * already preparing can tell it crossed a lock.
+     */
+    @Volatile
+    private var lockGeneration = 0L
+
+    /** [lockGeneration] when the scan now holding [scanMutex] started, or null outside a scan. */
+    private var scanLockGeneration: Long? = null
     private var lastPrivatePaykitContactKeys: Set<String> = emptySet()
     private val isPaykitEnabled = settingsStore.isPaykitEnabled
         .map { PaykitFeatureFlags.isUiEnabled(it) }
@@ -694,6 +732,7 @@ class AppViewModel @Inject constructor(
     fun setIsAuthenticated(value: Boolean) {
         _isAuthenticated.value = value
         if (!value) {
+            lockGeneration++
             clearPaymentRequestPreparation()
             return
         }
@@ -3380,7 +3419,7 @@ class AppViewModel @Inject constructor(
 
                         is SendEvent.AddressChange -> onAddressChange(it.value)
                         SendEvent.AddressReset -> resetAddressInput()
-                        is SendEvent.AddressContinue -> onAddressContinue(it.data)
+                        is SendEvent.AddressContinue -> onAddressContinue(it.data, it.suppressQuickPay, it.isNearbyRead)
 
                         is SendEvent.AmountChange -> onAmountChange(it.amount)
                         is SendEvent.AmountMax -> onAmountMax(it.amount)
@@ -3431,13 +3470,16 @@ class AppViewModel @Inject constructor(
                         SendEvent.ClearPayConfirmation -> _sendUiState.update { s -> s.copy(shouldConfirmPay = false) }
                         SendEvent.BackToAmount -> setSendEffect(SendEffect.PopBack(SendRoute.Amount))
                         SendEvent.NavToAddress -> setSendEffect(SendEffect.NavigateToAddress)
-                        SendEvent.Contacts -> setSendEffect(
-                            if (isPaykitEnabled.value) {
-                                SendEffect.NavigateToContacts
-                            } else {
-                                SendEffect.NavigateToComingSoon
-                            }
-                        )
+                        SendEvent.Contacts -> {
+                            cancelSendVisitScan()
+                            setSendEffect(
+                                if (isPaykitEnabled.value) {
+                                    SendEffect.NavigateToContacts
+                                } else {
+                                    SendEffect.NavigateToComingSoon
+                                },
+                            )
+                        }
                     }
                 } catch (_: CancellationException) {
                     currentCoroutineContext().ensureActive()
@@ -3451,7 +3493,14 @@ class AppViewModel @Inject constructor(
     private val activeHardwareWalletId: String?
         get() = (currentSheet.value as? Sheet.Send)?.hardwareWalletId
 
+    /** A request still decoding must not route over the choice the user just made, or after Send closed. */
+    private fun cancelSendVisitScan() {
+        sendVisitScanJob?.cancel()
+        sendVisitScanJob = null
+    }
+
     private fun onEnterManuallyClick() {
+        cancelSendVisitScan()
         clearActiveContactPaymentContext()
         resetAddressInput()
         setSendEffect(SendEffect.NavigateToAddress)
@@ -3705,7 +3754,7 @@ class AppViewModel @Inject constructor(
                     )
                     return@takeIf false
                 }
-                waitForUsableChannels(walletGeneration)
+                waitForUsableChannels(walletGeneration, lnInv.amountSatoshis.coerceAtLeast(1u))
                 val canSend = canSendLightning(lnInv.amountSatoshis.coerceAtLeast(1u))
                 if (!canSend) {
                     val nodeState = lightningRepo.lightningState.value.nodeLifecycleState
@@ -3843,7 +3892,8 @@ class AppViewModel @Inject constructor(
         }
 
         val previousJob = scheduled?.job
-        val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
+        val lockAtStart = lockGeneration
+        val nextJob = viewModelScope.launch(isRunningScan.asContextElement(true), start = CoroutineStart.LAZY) {
             if (!admission.await() || !canPrepareSend(walletGeneration)) return@launch
             clearPaymentRequestPreparation(previousPreparation)
             scanMutex.withLock {
@@ -3854,6 +3904,7 @@ class AppViewModel @Inject constructor(
                     if (deferLockedScan(deferrable)) return@withLock
                     prepareContactPaymentContextForScan(normalized, allowPubkyAuth, contactPaymentContext)
                     if (startDelay > Duration.ZERO) delay(startDelay)
+                    scanLockGeneration = lockAtStart
                     handleScan(
                         data,
                         routePubkyKeys,
@@ -3863,6 +3914,7 @@ class AppViewModel @Inject constructor(
                         walletGeneration
                     )
                 } finally {
+                    scanLockGeneration = null
                     hidePubkyAuthWaitToast()
                 }
             }
@@ -4119,9 +4171,26 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private fun onAddressContinue(data: String) {
+    private fun onAddressContinue(data: String, suppressQuickPay: Boolean, isNearbyRead: Boolean) {
+        // Bluetooth reads suppress QuickPay; NFC reads come from a tap, like a QR scan or a paste.
+        val isPassiveRead = isNearbyRead && suppressQuickPay
+        // A Bluetooth read never replaces a request still preparing: one the user chose, or the strongest receiver
+        // the scanner read first. A QR, paste or NFC request still replaces a Bluetooth one.
+        if (isPassiveRead && scheduledScan?.job?.isActive == true) {
+            Logger.info("Ignoring nearby read while another request is preparing", context = TAG)
+            return
+        }
         clearActiveContactPaymentContext()
-        launchScan(source = ScanSource.ADDRESS_CONTINUE, data = data, routePubkyKeys = true)
+        val job = launchScan(
+            source = ScanSource.ADDRESS_CONTINUE,
+            data = data,
+            routePubkyKeys = true,
+            suppressQuickPay = suppressQuickPay,
+        )
+        // A nearby read (NFC or Bluetooth) arrives on its own, so Enter Manually must be able to drop it.
+        // Its job ends once it routes, so cancelling it never stops a payment in progress.
+        // A duplicate read returns no job; keep the handle of the scan still running.
+        if (isNearbyRead) job?.let { sendVisitScanJob = it }
     }
 
     fun onUsdtAmountChange(value: String) {
@@ -5455,15 +5524,20 @@ class AppViewModel @Inject constructor(
         routePubkyKeys: Boolean = false,
         contactPaymentContext: ContactPaymentContext? = null,
         allowPubkyAuth: Boolean = isMainScanner,
+        suppressQuickPay: Boolean = false,
+        fromSendScanner: Boolean = false,
     ) {
-        launchScan(
+        val job = launchScan(
             source = ScanSource.SCAN_RESULT,
             data = data,
             startDelay = startDelay,
             routePubkyKeys = routePubkyKeys,
             contactPaymentContext = contactPaymentContext,
             allowPubkyAuth = allowPubkyAuth,
+            suppressQuickPay = suppressQuickPay,
         )
+        // A read from Send's own scanner (camera, NFC or Bluetooth) belongs to this Send visit.
+        if (fromSendScanner) job?.let { sendVisitScanJob = it }
     }
 
     fun openContactPayment(
@@ -6420,7 +6494,7 @@ class AppViewModel @Inject constructor(
         )
         if (quickPayHandled) return
 
-        waitForUsableChannels(walletGeneration)
+        waitForUsableChannels(walletGeneration, amount)
         if (!canSendLightning(amount)) {
             val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
             val shortfall = amount.safe() - maxSendLightning.safe()
@@ -6500,7 +6574,7 @@ class AppViewModel @Inject constructor(
         }
         val paymentAmount = incomingAmount ?: displaySats
 
-        waitForUsableChannels(walletGeneration)
+        waitForUsableChannels(walletGeneration, paymentAmount.coerceAtLeast(1u))
         if (!canSendLightning(paymentAmount.coerceAtLeast(1u))) {
             toast(
                 type = Toast.ToastType.WARNING,
@@ -6678,6 +6752,10 @@ class AppViewModel @Inject constructor(
         mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
     }
 
+    /** Whether the wallet is locked, or locked since the running scan started: whoever unlocked did not confirm it. */
+    private fun scanCrossedLock(): Boolean =
+        !_isAuthenticated.value || scanLockGeneration.let { it != null && it != lockGeneration }
+
     private suspend fun handleQuickPayIfApplicable(
         amountSats: ULong,
         fromMainScanner: Boolean,
@@ -6687,8 +6765,12 @@ class AppViewModel @Inject constructor(
         walletGeneration: Long?,
     ): Boolean {
         requireCurrentPaymentPreparation(walletGeneration)
-        if (suppressQuickPay) {
-            Logger.info("Skipping QuickPay for '$amountSats' sats deferred across the lock", context = TAG)
+        if (suppressQuickPay || scanCrossedLock()) {
+            Logger.info(
+                "Skipping QuickPay for '$amountSats' sats: suppressed for this scan " +
+                    "(deferred across the lock, or read from a nearby device)",
+                context = TAG,
+            )
             return false
         }
         if (hasActiveContactPaymentContext()) return false
@@ -6702,6 +6784,8 @@ class AppViewModel @Inject constructor(
         val canApply = open || canApplyQuickPay(amountSats)
         requireCurrentPaymentPreparation(walletGeneration)
         if (!canApply) return false
+        // Checked again: the wallet can lock while the QuickPay checks above suspend.
+        if (scanCrossedLock()) return false
 
         Logger.info("Using QuickPay for '$amountSats' sats", context = TAG)
 
@@ -6720,7 +6804,11 @@ class AppViewModel @Inject constructor(
         }
 
         _quickPayData.update {
-            QuickPayRequest(id = quickPayRequestIds.incrementAndGet(), data = quickPayData)
+            QuickPayRequest(
+                id = quickPayRequestIds.incrementAndGet(),
+                data = quickPayData,
+                lockGeneration = scanLockGeneration ?: lockGeneration,
+            )
         }
 
         if (lnurlPay != null) {
@@ -8615,6 +8703,24 @@ class AppViewModel @Inject constructor(
 
     fun resetQuickPay() = _quickPayData.update { null }
 
+    /**
+     * Leaves QuickPay for the swipe review. QuickPay takes a fixed invoice before the scan marks its amount
+     * valid, so it is marked here as the fixed LNURL-pay path does: the request sets the amount, and paying
+     * checks the funds. A check against the spending limit here could run before the node publishes it and
+     * keep Swipe to Pay disabled.
+     */
+    fun fallBackFromQuickPay() {
+        resetQuickPay()
+        _sendUiState.update { it.copy(isAmountInputValid = it.isAmountInputValid || it.amount > 0uL) }
+    }
+
+    /**
+     * Whether the QuickPay screen may start paying [request] now: the wallet is unlocked and has not locked since
+     * the scan that made the request. Otherwise whoever unlocked did not choose the payment, so it goes to review.
+     */
+    fun canStartQuickPay(request: QuickPayRequest): Boolean =
+        _isAuthenticated.value && request.lockGeneration == lockGeneration
+
     fun navigateToUsdtDeposits() {
         viewModelScope.launch {
             hideSheet()
@@ -9165,11 +9271,13 @@ class AppViewModel @Inject constructor(
             Sheet.QrScanner(
                 isPubkyScan = isPubkyScan,
                 showBackButton = showBackButton,
+                // A caller with its own handler scans for a setting or a contact, not for a payment.
+                readsNearby = !isPubkyScan && onResult == null,
             )
         )
     }
 
-    fun onScannerSheetResult(data: String) {
+    fun onScannerSheetResult(data: String, suppressQuickPay: Boolean = false) {
         val handler = scanResultHandler
         val shouldHandleAsProtocol = SamRockSetupRequest.isProtocolUrl(data.removeLightningSchemes())
         scanResultHandler = null
@@ -9186,6 +9294,7 @@ class AppViewModel @Inject constructor(
                 data = data,
                 startDelay = SCREEN_TRANSITION_DELAY,
                 routePubkyKeys = true,
+                suppressQuickPay = suppressQuickPay,
             )
         }
     }
@@ -9307,6 +9416,8 @@ class AppViewModel @Inject constructor(
             clearPaymentRequestPresentationRetry(it.request.id)
         }
         if (_currentSheet.value is Sheet.Send) {
+            // A read still preparing belongs to this Send visit: it must not reopen a sheet or reach QuickPay.
+            if (isRunningScan.get() != true) cancelSendVisitScan()
             sendStateGeneration++
             // A closed send is over: a swap failing for it later gives no contact back to whatever comes next.
             sendSession++
@@ -9396,6 +9507,7 @@ class AppViewModel @Inject constructor(
     private suspend fun resetIsAuthenticatedStateInternal() {
         val settings = settingsStore.data.first()
         val needsAuth = settings.isPinEnabled
+        if (needsAuth) lockGeneration++
         _isAuthenticated.value = !needsAuth
         if (!needsAuth) flushDeferredScan()
     }
@@ -9415,6 +9527,7 @@ class AppViewModel @Inject constructor(
         if (!isPinEnabled.value) return
         if (!walletRepo.walletExists()) return
         if (lightningRepo.isRecoveryMode.value) return
+        lockGeneration++
         _isAuthenticated.update { false }
         Logger.debug("Locked app on background", context = TAG)
     }
@@ -10242,9 +10355,21 @@ class AppViewModel @Inject constructor(
         if (intent.action !in DEEPLINK_ACTIONS) return
         intent.data?.let { uri ->
             Logger.debug("Received deeplink '${uri.toString().sanitizedDeeplinkLogValue()}'", context = TAG)
-            processDeeplink(uri)
+            // A tapped tag goes through the same rewrite and refusal as a scanner read.
+            val value = if (intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED) {
+                nfcPaymentRequest(uri.toString()) ?: return showNfcReadError()
+            } else {
+                uri.toString()
+            }
+            processDeeplink(uri, value)
         }
     }
+
+    private fun showNfcReadError() = toast(
+        type = Toast.ToastType.ERROR,
+        title = context.getString(R.string.other__nfc_read_error_title),
+        description = context.getString(R.string.other__nfc_read_error_text),
+    )
 
     fun onUsbDeviceAttached(
         deviceId: String? = null,
@@ -10325,9 +10450,9 @@ class AppViewModel @Inject constructor(
 
     private fun processDeeplink(
         uri: Uri,
+        value: String = uri.toString(),
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
     ) = viewModelScope.launch {
-        val value = uri.toString()
         val isContactLink = PubkyContactLink.matches(uri)
         if (SamRockSetupRequest.isProtocolUrl(value)) {
             if (!walletRepo.walletExists()) return@launch
@@ -10901,7 +11026,11 @@ sealed interface SendEvent {
 
     data object AddressReset : SendEvent
     data class AddressChange(val value: String) : SendEvent
-    data class AddressContinue(val data: String) : SendEvent
+    data class AddressContinue(
+        val data: String,
+        val suppressQuickPay: Boolean = false,
+        val isNearbyRead: Boolean = false,
+    ) : SendEvent
 
     data object AmountReset : SendEvent
     data object AmountContinue : SendEvent
@@ -10999,6 +11128,8 @@ sealed interface QuickPayData {
 data class QuickPayRequest(
     val id: Long,
     val data: QuickPayData,
+    /** The wallet's lock count when the scan behind this request started. */
+    val lockGeneration: Long,
 )
 // endregion
 

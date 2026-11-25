@@ -16,6 +16,7 @@ sealed class ServiceError(message: String) : AppError(message) {
     class NodeNotSetup : ServiceError("Node is not setup")
     class NodeNotStarted : ServiceError("Node is not started")
     class PaymentDeadlineExpired : ServiceError("Payment deadline has expired")
+    class PaymentStoppedAtSubmission : ServiceError("Payment stopped before it was submitted")
     class MnemonicNotFound : ServiceError("Mnemonic not found")
     class VssAuthRequired : ServiceError("VSS requires LNURL-auth")
     class NodeStillRunning : ServiceError("Node is still running")
@@ -138,3 +139,7 @@ fun Throwable.asNodeException(): NodeException? = when (this) {
 // endregion
 
 fun Throwable.isTxSyncTimeout(): Boolean = this is NodeException.TxSyncTimeout || cause is NodeException.TxSyncTimeout
+
+/** Whether this, or an error it wraps, is [ServiceError.PaymentStoppedAtSubmission]: nothing reached the node. */
+fun Throwable.isStoppedAtSubmission(): Boolean =
+    generateSequence(this) { it.cause }.any { it is ServiceError.PaymentStoppedAtSubmission }

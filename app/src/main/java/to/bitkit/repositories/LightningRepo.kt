@@ -1570,11 +1570,46 @@ class LightningRepo @Inject constructor(
         onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> = payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat = null, onBeforeSend)
 
+    /**
+     * Like [payInvoice], with [isAuthorizedAtSubmission] checked again where a node send is submitted, after its queue
+     * wait. When it is false, nothing is sent and the result fails with [ServiceError.PaymentStoppedAtSubmission].
+     */
+    suspend fun payInvoiceAuthorizedAtSubmission(
+        bolt11: String,
+        sats: ULong?,
+        isAuthorizedAtSubmission: () -> Boolean,
+        onBeforeSend: suspend () -> Boolean,
+    ): Result<PaymentId> = payInvoiceChecked(
+        bolt11 = bolt11,
+        sats = sats,
+        paymentDeadlineAt = null,
+        maxTotalRoutingFeeMsat = null,
+        isAuthorizedAtSubmission = isAuthorizedAtSubmission,
+        onBeforeSend = onBeforeSend,
+    )
+
     suspend fun payInvoice(
         bolt11: String,
         sats: ULong?,
         paymentDeadlineAt: Instant?,
         maxTotalRoutingFeeMsat: ULong?,
+        onBeforeSend: suspend () -> Boolean,
+    ): Result<PaymentId> = payInvoiceChecked(
+        bolt11 = bolt11,
+        sats = sats,
+        paymentDeadlineAt = paymentDeadlineAt,
+        maxTotalRoutingFeeMsat = maxTotalRoutingFeeMsat,
+        isAuthorizedAtSubmission = null,
+        onBeforeSend = onBeforeSend,
+    )
+
+    @Suppress("LongParameterList")
+    private suspend fun payInvoiceChecked(
+        bolt11: String,
+        sats: ULong?,
+        paymentDeadlineAt: Instant?,
+        maxTotalRoutingFeeMsat: ULong?,
+        isAuthorizedAtSubmission: (() -> Boolean)?,
         onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> {
         // The rail is picked again on every attempt, so each one checks the other holds no live send of the invoice.
@@ -1636,7 +1671,15 @@ class LightningRepo @Inject constructor(
                 if (isAdmitted) releaseSend(key)
             }
         }
-        return payInvoiceWithLdk(bolt11, sats, paymentHash, paymentDeadlineAt, maxTotalRoutingFeeMsat, onBeforeSend)
+        return payInvoiceWithLdk(
+            bolt11,
+            sats,
+            paymentHash,
+            paymentDeadlineAt,
+            maxTotalRoutingFeeMsat,
+            isAuthorizedAtSubmission = isAuthorizedAtSubmission,
+            onBeforeSend = onBeforeSend,
+        )
     }
 
     /** Pays [bolt11] from the node's channels only, for a send quoted on them that must never fall back to Spark. */
@@ -1757,6 +1800,7 @@ class LightningRepo @Inject constructor(
         paymentHash: String?,
         paymentDeadlineAt: Instant?,
         maxTotalRoutingFeeMsat: ULong?,
+        isAuthorizedAtSubmission: (() -> Boolean)? = null,
         onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
         requireWalletRestoreComplete()
@@ -1788,7 +1832,19 @@ class LightningRepo @Inject constructor(
             isCounted = true
             ldkSendRecordedAt[key] = ldkSendRecords.incrementAndGet()
             cacheStore.addLdkSendHash(key, invoiceExpiresAt(bolt11))
-            runCatching { lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) }
+            runCatching {
+                if (isAuthorizedAtSubmission == null) {
+                    lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat)
+                } else {
+                    lightningService.send(
+                        bolt11,
+                        sats,
+                        paymentDeadlineAt,
+                        maxTotalRoutingFeeMsat,
+                        isAuthorizedAtSubmission,
+                    )
+                }
+            }
                 .also {
                     isCounted = false
                     uncount()
@@ -1908,7 +1964,11 @@ class LightningRepo @Inject constructor(
         lightningService.listPayments()
     }
 
-    suspend fun waitForUsableChannels() = withContext(bgDispatcher) {
+    /**
+     * Publishes current channels and, with [awaitUsable], waits for one to become usable. Without it the call returns
+     * once the channels are published, for a payment another rail (Spark) already covers.
+     */
+    suspend fun waitForUsableChannels(awaitUsable: Boolean = true) = withContext(bgDispatcher) {
         var state = _lightningState.value
         if (!state.nodeLifecycleState.canRun()) {
             delayNoUsableChannelsFeedback()
@@ -1923,6 +1983,7 @@ class LightningRepo @Inject constructor(
         // Usability can stay true while a payment changes the outbound HTLC limit.
         // Publish current channels before callers derive send capacity from them.
         refreshChannelsAndPeers()
+        if (!awaitUsable) return@withContext
         state = _lightningState.value
         if (!state.nodeLifecycleState.canRun()) {
             delayNoUsableChannelsFeedback()

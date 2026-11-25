@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.wallets.receive
 
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class ReceiveInvoiceUtilsTest {
 
@@ -339,5 +340,20 @@ class ReceiveInvoiceUtilsTest {
     @Test
     fun `getSavingsCopyText returns fallback address when bip21 is empty`() {
         assertEquals(testAddress, getSavingsCopyText("", testAddress))
+    }
+
+    @Test
+    fun `nearby offers only the request the QR shows`() {
+        val request = "bitcoin:bcrt1qold?lightning=lnbcrt1old"
+        for (tab in listOf(ReceiveTab.AUTO, ReceiveTab.SPENDING)) {
+            assertEquals(request, nearbyReceiveRequest(tab, request, hasInvoiceError = false, isUpdating = false))
+            assertNull(nearbyReceiveRequest(tab, request, hasInvoiceError = true, isUpdating = false))
+            assertNull(nearbyReceiveRequest(tab, request, hasInvoiceError = false, isUpdating = true))
+        }
+        assertEquals(
+            "bcrt1qold",
+            nearbyReceiveRequest(ReceiveTab.SAVINGS, "bcrt1qold", hasInvoiceError = true, isUpdating = true),
+        )
+        assertNull(nearbyReceiveRequest(ReceiveTab.USDT, "ethereum:0xold", hasInvoiceError = false, isUpdating = false))
     }
 }

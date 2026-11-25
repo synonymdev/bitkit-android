@@ -47,6 +47,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.InMemoryDataStore
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
+import to.bitkit.utils.ServiceError
 import java.math.BigDecimal
 import java.util.Locale
 import kotlin.test.assertEquals
@@ -384,8 +385,10 @@ class QuickPayRepoTest : BaseUnitTest() {
         val (bolt11, hash) = testInvoice()
         val started = CompletableDeferred<Unit>()
         val hold = CompletableDeferred<Result<String>>()
-        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
-            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(3)
             if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
             started.complete(Unit)
             hold.await()
@@ -411,8 +414,10 @@ class QuickPayRepoTest : BaseUnitTest() {
         val (bolt11, hash) = testInvoice()
         val started = CompletableDeferred<Unit>()
         val hold = CompletableDeferred<Result<String>>()
-        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
-            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(3)
             if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
             started.complete(Unit)
             hold.await()
@@ -443,8 +448,10 @@ class QuickPayRepoTest : BaseUnitTest() {
         val (bolt11, hash) = testInvoice()
         val started = CompletableDeferred<Unit>()
         val hold = CompletableDeferred<Result<String>>()
-        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
-            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(3)
             if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
             started.complete(Unit)
             hold.await()
@@ -503,8 +510,10 @@ class QuickPayRepoTest : BaseUnitTest() {
         val (bolt11, hash) = testInvoice()
         val started = CompletableDeferred<Unit>()
         val hold = CompletableDeferred<Result<String>>()
-        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
-            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(3)
             if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
             started.complete(Unit)
             hold.await()
@@ -656,7 +665,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         val reloaded = repo()
 
         assertNull(reloaded.reserveBound("inv", 1000u).getOrThrow())
-        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, never()).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -751,8 +760,10 @@ class QuickPayRepoTest : BaseUnitTest() {
     fun `live record survives day prune then settles`() = test {
         val (bolt11, hash) = testInvoice()
         val dispatched = CompletableDeferred<Unit>()
-        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
-            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(3)
             if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
             dispatched.complete(Unit)
             Result.success("pid")
@@ -829,7 +840,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         sut.attach(session)
         sut.pay(session, QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u))
 
-        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, never()).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -925,8 +936,10 @@ class QuickPayRepoTest : BaseUnitTest() {
         val (bolt11, hash) = testInvoice()
         val dispatched = CompletableDeferred<Unit>()
         val hold = CompletableDeferred<Result<String>>()
-        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
-            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(3)
             if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
             dispatched.complete(Unit)
             hold.await()
@@ -971,7 +984,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             sut.payNow(second, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
             assertIs<QuickPaySessionEvent.Pending>(awaitItem())
         }
-        verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, times(1)).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
         assertEquals(250L, spentCents())
         assertEquals(1, cacheStore.data.first().quickPayLedger!!.records.size)
     }
@@ -1004,8 +1017,10 @@ class QuickPayRepoTest : BaseUnitTest() {
     fun `zombie rescan replays pending after detach timeout`() = test {
         val (bolt11, hash) = testInvoice()
         val dispatched = CompletableDeferred<Unit>()
-        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
-            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(3)
             if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
             dispatched.complete(Unit)
             Result.success("pid")
@@ -1024,7 +1039,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             sut.payNow(second, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
             assertIs<QuickPaySessionEvent.Pending>(awaitItem())
         }
-        verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, times(1)).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
         verify(pendingPaymentRepo).track(hash)
         assertEquals(250L, spentCents())
         assertEquals(1, cacheStore.data.first().quickPayLedger!!.records.size)
@@ -1065,8 +1080,10 @@ class QuickPayRepoTest : BaseUnitTest() {
         val (bolt11, _) = testInvoice()
         val started = CompletableDeferred<Unit>()
         val hold = CompletableDeferred<Result<String>>()
-        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
-            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(3)
             if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
             started.complete(Unit)
             hold.await()
@@ -1079,7 +1096,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         started.await()
         sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
 
-        verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, times(1)).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
         hold.complete(Result.success("pid"))
     }
 
@@ -1096,7 +1113,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             assertEquals(hash, pending.paymentHash)
         }
         assertEquals(250L, spentCents())
-        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, never()).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
         verify(pendingPaymentRepo).track(hash)
     }
 
@@ -1114,7 +1131,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         }
         assertEquals(250L, spentCents())
         assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
-        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, never()).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -1130,7 +1147,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         }
         assertEquals(0L, spentCents())
         assertTrue(cacheStore.data.first().quickPayLedger?.records.orEmpty().isEmpty())
-        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, never()).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -1154,7 +1171,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         }
         assertEquals(0L, spentCents())
         assertTrue(checkNotNull(cacheStore.data.first().quickPayLedger) { "ledger missing" }.records.isEmpty())
-        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, never()).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -1173,7 +1190,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             assertEquals(hash, pending.paymentHash)
         }
         assertEquals(250L, spentCents())
-        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, never()).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
         verify(pendingPaymentRepo).track(hash)
     }
 
@@ -1193,7 +1210,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         }
         assertEquals(250L, spentCents())
         assertTrue(checkNotNull(cacheStore.data.first().quickPayLedger) { "ledger missing" }.records.isEmpty())
-        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, never()).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -1216,7 +1233,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         }
         assertEquals(250L, spentCents())
         assertTrue(checkNotNull(cacheStore.data.first().quickPayLedger) { "ledger missing" }.records.isEmpty())
-        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, never()).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -1237,7 +1254,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             assertEquals(hash, pending.paymentHash)
         }
         assertEquals(250L, spentCents())
-        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, never()).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
         verify(pendingPaymentRepo).track(hash)
     }
 
@@ -1245,8 +1262,10 @@ class QuickPayRepoTest : BaseUnitTest() {
     fun `disabling quickpay before send aborts the dispatch and falls back to confirm`() = test {
         val (bolt11, hash) = testInvoice()
         val proceeded = CompletableDeferred<Boolean>()
-        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
-            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(3)
             assertEquals(250L, spentCents())
             settingsData.value = settingsData.value.copy(isQuickPayEnabled = false)
             val ok = onBeforeSend()
@@ -1263,7 +1282,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         assertEquals(0L, spentCents())
         assertTrue(checkNotNull(cacheStore.data.first().quickPayLedger) { "ledger missing" }.records.isEmpty())
         assertFalse(sut.hasOpen(hash))
-        verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, times(1)).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -1364,7 +1383,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             assertEquals(QuickPaySessionEvent.FallBackToConfirm, awaitItem())
         }
         assertEquals(0L, spentCents())
-        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, never()).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -1380,7 +1399,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             assertIs<QuickPayConversionError>(error.error)
         }
         assertEquals(0L, spentCents())
-        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, never()).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -1396,7 +1415,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             assertEquals(bolt11, error.paymentRequest)
         }
         assertEquals(0L, spentCents())
-        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, never()).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -1410,14 +1429,16 @@ class QuickPayRepoTest : BaseUnitTest() {
             assertEquals(QuickPaySessionEvent.FallBackToConfirm, awaitItem())
         }
         verify(lightningRepo, never()).fetchLnurlInvoice(any(), any(), anyOrNull())
-        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, never()).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
     }
 
     @Test
     fun `reserve persists before dispatch`() = test {
         val (bolt11, _) = testInvoice()
-        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
-            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(3)
             assertEquals(250L, spentCents())
             assertEquals(1, cacheStore.data.first().quickPayLedger!!.records.size)
             if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
@@ -1434,8 +1455,10 @@ class QuickPayRepoTest : BaseUnitTest() {
         val entered = CompletableDeferred<Unit>()
         val gate = CompletableDeferred<Unit>()
         val proceeded = CompletableDeferred<Boolean>()
-        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
-            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(3)
             entered.complete(Unit)
             withContext(NonCancellable) {
                 gate.await()
@@ -1457,13 +1480,66 @@ class QuickPayRepoTest : BaseUnitTest() {
         }
         assertEquals(0L, spentCents())
         assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
-        verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), any())
+        verify(lightningRepo, times(1)).payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+    }
+
+    @Test
+    fun `authorization lapsing before dispatch falls back to review and releases`() = test {
+        val (bolt11, _) = testInvoice()
+        val proceeded = CompletableDeferred<Boolean>()
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val ok = invocation.getArgument<suspend () -> Boolean>(3)()
+            proceeded.complete(ok)
+            if (!ok) Result.failure(PaymentAbortedBeforeSend()) else Result.success("pid")
+        }
+        val session = QuickPaySession()
+        sut.attach(session).test {
+            // The wallet locked while the invoice was being prepared.
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u), canDispatch = { false })
+            assertEquals(false, proceeded.await())
+            assertEquals(QuickPaySessionEvent.FallBackToConfirm, awaitItem())
+        }
+        assertEquals(0L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+    }
+
+    @Test
+    fun `authorization lapsing while the node send waits in its queue falls back to review`() = test {
+        val (bolt11, _) = testInvoice()
+        var isUnlocked = true
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(3)
+            val isAuthorizedAtSubmission = invocation.getArgument<() -> Boolean>(2)
+            if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
+            // The wallet locks while the send waits behind a wallet sync on the node's queue.
+            isUnlocked = false
+            if (!isAuthorizedAtSubmission()) {
+                Result.failure(AppError(ServiceError.PaymentStoppedAtSubmission()))
+            } else {
+                Result.success("pid")
+            }
+        }
+        val session = QuickPaySession()
+        sut.attach(session).test {
+            sut.payNow(
+                session,
+                QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u),
+                canDispatch = { isUnlocked },
+            )
+            assertEquals(QuickPaySessionEvent.FallBackToConfirm, awaitItem())
+        }
+        assertEquals(0L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
     }
 
     @Test
     fun `ambiguous failure before dispatch refunds and errors`() = test {
         val (bolt11, _) = testInvoice()
-        whenever(lightningRepo.payInvoice(any(), anyOrNull(), any()))
+        whenever(lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any()))
             .thenReturn(Result.failure(AppError("Cannot execute 'payInvoice'")))
         val session = QuickPaySession()
         sut.attach(session).test {
@@ -1477,7 +1553,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     @Test
     fun `ambiguous failure before dispatch refunds even with succeeded ldk row`() = test {
         val (bolt11, hash) = testInvoice()
-        whenever(lightningRepo.payInvoice(any(), anyOrNull(), any()))
+        whenever(lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any()))
             .thenReturn(Result.failure(AppError("Cannot execute 'payInvoice'")))
         paymentRows = listOf(succeededRow(hash))
         val session = QuickPaySession()
@@ -1520,8 +1596,10 @@ class QuickPayRepoTest : BaseUnitTest() {
         val (bolt11, hash) = testInvoice()
         val dispatched = CompletableDeferred<Unit>()
         val hold = CompletableDeferred<Result<String>>()
-        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
-            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(3)
             if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
             dispatched.complete(Unit)
             hold.await()
@@ -1564,8 +1642,10 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     private suspend fun stubPayInvoiceFailure(error: NodeException) {
-        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
-            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(3)
             if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
             Result.failure(LdkError(error))
         }
@@ -1573,8 +1653,10 @@ class QuickPayRepoTest : BaseUnitTest() {
 
     private fun stubPayInvoiceChangingSettings(change: () -> Unit): CompletableDeferred<Boolean> {
         val proceeded = CompletableDeferred<Boolean>()
-        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
-            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(3)
             val records = checkNotNull(cacheStore.data.first().quickPayLedger) { "ledger missing" }.records
             assertEquals(1, records.count { it.invoicePaymentHash == TEST_HASH })
             change()

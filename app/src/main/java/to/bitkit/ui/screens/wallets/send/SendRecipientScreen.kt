@@ -66,12 +66,18 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.scanner.CameraOverlayButtonSize
+import to.bitkit.ui.screens.scanner.EnableSourceButton
+import to.bitkit.ui.screens.scanner.NearbyEnableButtons
+import to.bitkit.ui.screens.scanner.NearbyScanSources
+import to.bitkit.ui.screens.scanner.NearbyScanStatus
 import to.bitkit.ui.screens.scanner.QrCodeAnalyzer
+import to.bitkit.ui.screens.scanner.rememberNearbyScanSources
+import to.bitkit.ui.shared.effects.BluetoothState
+import to.bitkit.ui.shared.effects.NfcState
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
@@ -101,6 +107,11 @@ fun SendRecipientScreen(
     val resources = LocalResources.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
+
+    val nearbySources = rememberNearbyScanSources(enabled = true) { text, isNearby ->
+        Logger.debug("Read nearby request '${text.sanitizedQrLogValue()}'", context = TAG)
+        onEvent(SendEvent.AddressContinue(text, suppressQuickPay = isNearby, isNearbyRead = true))
+    }
 
     // Camera state
     var isFlashlightOn by remember { mutableStateOf(false) }
@@ -238,6 +249,7 @@ fun SendRecipientScreen(
 
     SendRecipientContent(
         previewView = previewView,
+        nearbySources = nearbySources,
         isFlashlightOn = isFlashlightOn,
         onClickFlashlight = {
             camera?.cameraControl?.let { control ->
@@ -273,6 +285,7 @@ fun SendRecipientScreen(
 @Composable
 private fun SendRecipientContent(
     previewView: PreviewView?,
+    nearbySources: NearbyScanSources,
     isFlashlightOn: Boolean,
     onClickFlashlight: () -> Unit,
     onClickGallery: () -> Unit,
@@ -310,8 +323,15 @@ private fun SendRecipientContent(
                         onClickGallery = onClickGallery,
                         modifier = Modifier.fillMaxSize()
                     )
+                    if (nearbySources != NearbyScanSources.None) {
+                        NearbyScanStatus(
+                            sources = nearbySources,
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
+                    }
                 } else {
                     PermissionDenied(
+                        nearbySources = nearbySources,
                         onClickRetry = onRequestPermission,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -418,6 +438,7 @@ private fun CameraPreviewWithControls(
 
 @Composable
 private fun PermissionDenied(
+    nearbySources: NearbyScanSources,
     onClickRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -428,7 +449,7 @@ private fun PermissionDenied(
             .padding(32.dp)
     ) {
         Display(
-            stringResource(R.string.other__camera_permission_title)
+            stringResource(R.string.other__scan_to_pay_title)
                 .withAccent(accentColor = Colors.Brand),
             color = Colors.White
         )
@@ -436,19 +457,23 @@ private fun PermissionDenied(
         VerticalSpacer(8.dp)
 
         BodyM(
-            stringResource(R.string.other__camera_permission_description),
+            stringResource(R.string.other__scan_to_pay_description),
             color = Colors.White64,
             modifier = Modifier.fillMaxWidth()
         )
 
         VerticalSpacer(32.dp)
 
-        PrimaryButton(
-            text = stringResource(R.string.other__camera_permission_button),
-            icon = {
-                Icon(painter = painterResource(R.drawable.ic_camera), contentDescription = null)
+        NearbyEnableButtons(
+            sources = nearbySources,
+            leading = {
+                EnableSourceButton(
+                    icon = R.drawable.ic_camera,
+                    contentDescription = stringResource(R.string.other__camera_permission_button),
+                    onClick = onClickRetry,
+                    testTag = "ScannerEnableCamera",
+                )
             },
-            onClick = onClickRetry,
         )
     }
 }
@@ -495,6 +520,7 @@ private fun Preview() {
         BottomSheetPreview {
             SendRecipientContent(
                 previewView = null,
+                nearbySources = NearbyScanSources(NfcState.OFF, BluetoothState.NEEDS_PERMISSION, {}, {}),
                 isFlashlightOn = false,
                 onClickFlashlight = {},
                 onClickGallery = {},

@@ -469,11 +469,17 @@ fun SendSheet(
                 }
                 composableWithDefaultTransitions<SendRoute.QrScanner> {
                     QrScanningScreen(
+                        readsNearby = true,
                         onBack = { navController.popBackStack() },
                         onScanSuccess = { payload ->
                             payload.text?.let {
                                 navController.popBackStack()
-                                appViewModel.onScanResult(data = it, routePubkyKeys = true)
+                                appViewModel.onScanResult(
+                                    data = it,
+                                    routePubkyKeys = true,
+                                    suppressQuickPay = payload.isNearby,
+                                    fromSendScanner = true,
+                                )
                             }
                         },
                     )
@@ -730,6 +736,7 @@ fun SendSheet(
                             quickPayData = request.data,
                             isRequestActive = quickPayRequest?.id == request.id,
                             canPayWithoutNode = sparkCanPayQuickPay(request.data, sparkState),
+                            canStart = { appViewModel.canStartQuickPay(request) },
                             onPaymentComplete = { paymentHash, amountWithFee ->
                                 appViewModel.onSendSuccess(
                                     NewTransactionSheetDetails(
@@ -753,7 +760,7 @@ fun SendSheet(
                                 )
                             },
                             onFallBackToConfirm = {
-                                appViewModel.resetQuickPay()
+                                appViewModel.fallBackFromQuickPay()
                                 navController.navigateTo(SendRoute.Confirm) {
                                     popUpTo<SendRoute.QuickPay> { inclusive = true }
                                 }

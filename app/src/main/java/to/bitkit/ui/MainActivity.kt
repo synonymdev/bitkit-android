@@ -4,6 +4,8 @@ import android.app.NotificationManager
 import android.content.Intent
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
+import android.nfc.NfcAdapter
+import android.nfc.Tag
 import android.os.Bundle
 import android.os.Looper
 import androidx.activity.compose.setContent
@@ -48,6 +50,7 @@ import to.bitkit.androidServices.LightningNodeService.Companion.ACTION_START_SER
 import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.SamRockSetupRequest
+import to.bitkit.nfc.NfcRepeatGuard
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.ui.components.AuthCheckView
@@ -102,6 +105,10 @@ class MainActivity : FragmentActivity() {
     private val transferViewModel by viewModels<TransferViewModel>()
     private val settingsViewModel by viewModels<SettingsViewModel>()
     private val backupsViewModel by viewModels<BackupsViewModel>()
+
+    /** Set when a tag tap launched or resumed the app, so [onResume] can hold NFC while the tag stays in range. */
+    private var nfcTagToGuard: Tag? = null
+    private var guardNfcOnResume = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -315,6 +322,10 @@ class MainActivity : FragmentActivity() {
             return
         }
 
+        if (intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED) {
+            guardNfcOnResume = true
+            nfcTagToGuard = IntentCompat.getParcelableExtra(intent, NfcAdapter.EXTRA_TAG, Tag::class.java)
+        }
         appViewModel.handleDeeplinkIntent(intent)
 
         if (ScreenDeepLinks.detachScreenUri(intent)) {
@@ -362,6 +373,11 @@ class MainActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (guardNfcOnResume) {
+            guardNfcOnResume = false
+            NfcRepeatGuard.engage(this, nfcTagToGuard)
+            nfcTagToGuard = null
+        }
         appViewModel.onAppResumed()
         // A permission dialog launched from a sheet that has since closed loses its result callback.
         settingsViewModel.setNotificationPreference(areNotificationsEnabled())
