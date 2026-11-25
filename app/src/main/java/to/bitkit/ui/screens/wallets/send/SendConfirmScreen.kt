@@ -252,7 +252,8 @@ fun SendConfirmScreen(
 /**
  * Whether the confirm screen is locked: from the swipe until it moves on or returns here. A swipe with nothing
  * running for it for [SWIPE_IDLE_RELEASE], such as one stopped before paying, no longer holds it, and neither does
- * the review of a prepared fee, the amount warning or the biometrics prompt, which the user answers.
+ * the amount warning or the biometrics prompt, which the user answers. The review of a prepared fee clears the
+ * swipe's loading, so it stays leavable until the user swipes again to accept it.
  */
 @Composable
 internal fun rememberConfirmLock(
@@ -270,7 +271,7 @@ internal fun rememberConfirmLock(
         delay(SWIPE_IDLE_RELEASE)
         isSwipeIdle = true
     }
-    if (showBiometrics || uiState.isPreparedFeeReview || uiState.showSanityWarningDialog != null) return false
+    if (showBiometrics || uiState.showSanityWarningDialog != null) return false
     return isLoading && !isSwipeIdle
 }
 

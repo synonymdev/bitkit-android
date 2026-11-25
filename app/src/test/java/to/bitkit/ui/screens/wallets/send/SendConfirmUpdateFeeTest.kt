@@ -66,6 +66,27 @@ class SendConfirmUpdateFeeTest {
 
     @Config(sdk = [34])
     @Test
+    fun `a swipe accepting a prepared fee locks the confirm`() {
+        var isLoading by mutableStateOf(false)
+        var isLocked = true
+        composeRule.setContent {
+            isLocked = rememberConfirmLock(
+                isLoading = isLoading,
+                isSwipeRunning = true,
+                uiState = SendUiState(isPreparedFeeReview = true),
+            )
+        }
+        advanceBy(SWIPE_IDLE_RELEASE / 4)
+        assertFalse(isLocked)
+
+        composeRule.runOnUiThread { isLoading = true }
+        advanceBy(SWIPE_IDLE_RELEASE / 4)
+
+        assertTrue(isLocked)
+    }
+
+    @Config(sdk = [34])
+    @Test
     fun `a closed biometrics prompt locks again from its first composition`() {
         var showBiometrics by mutableStateOf(true)
         val composed = mutableListOf<Boolean>()
