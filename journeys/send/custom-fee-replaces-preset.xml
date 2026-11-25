@@ -1,0 +1,14 @@
+<journey name="custom fee replaces preset in send">
+  <description>
+    Verifies that the custom fee screen of an on-chain send shows the preset rate as selected, so the
+    first number pad key replaces it instead of appending to it. Reported in the public Bitkit Telegram
+    group. Preconditions: a synced regtest wallet with at least 30,000 confirmed sats in Savings.
+  </description>
+  <actions>
+    <action>Start an on-chain send of 5,000 sats from Savings to a fresh regtest address and reach the confirmation screen</action>
+    <action>Open the speed picker by tapping the Speed and Fee value, then tap Custom (id "fee_CUSTOM_button")</action>
+    <action>On the custom fee screen, verify the amount shows the preset rate with a highlighted background</action>
+    <action>Tap 7 (id "N7") and verify the amount reads 7 with no highlight, not the preset with 7 appended</action>
+    <action>Tap 0 (id "N0") and verify the amount reads 70</action>
+  </actions>
+</journey>
