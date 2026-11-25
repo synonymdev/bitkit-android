@@ -807,13 +807,6 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a spark refusal that may follow a committed transfer keeps its charge`() {
-        val refusal = SparkError.SendRefused("Spark could not select leaves", mayHaveReachedSpark = true)
-
-        assertEquals(QuickPayDispatchClass.REFUSED_AFTER_SPARK_SEND, classifyDispatchError(AppError(refusal)))
-    }
-
-    @Test
     fun `classifies wrapped and unwrapped ldk errors`() {
         assertEquals(
             QuickPayDispatchClass.PRE_DISPATCH_REJECTION,

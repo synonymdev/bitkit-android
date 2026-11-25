@@ -4045,9 +4045,7 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertTrue(inFlightAtClear.isNotEmpty() && inFlightAtClear.all { it }, "a sync could take back the hold")
         assertFalse(sut.isSendInFlight("hash"))
-        // The node stays off the invoice until it expires.
-        val nodeRefusal = runCatching { sut.earlierLightningSend("lnbc1", "hash") }.exceptionOrNull()
-        assertTrue(assertIs<SparkError.SendRefused>(nodeRefusal).mayHaveReachedSpark)
+        assertNull(sut.earlierLightningSend("lnbc1", "hash"))
     }
 
     @Test
@@ -5262,7 +5260,7 @@ class SparkRepoTest : BaseUnitTest() {
         sut.start(0).getOrThrow()
         advanceUntilIdle()
 
-        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL, paymentDeadlineAt = deadline).exceptionOrNull())
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL, paymentDeadlineAt = deadline).exceptionOrNull())
 
         verify(sparkService, times(1)).send(any(), anyOrNull())
     }
@@ -5280,13 +5278,13 @@ class SparkRepoTest : BaseUnitTest() {
 
         val result = sut.payInvoice("lnbc1", 100uL, onBeforeSend = { ++checks == 1 })
 
-        assertIs<SparkError.SendRefused>(result.exceptionOrNull())
+        assertIs<PaymentPendingException>(result.exceptionOrNull())
         verify(sparkService, times(1)).send(any(), anyOrNull())
         assertEquals(2, checks)
     }
 
     @Test
-    fun `a spark send whose leaves spark can't select is refused under a new key`() = test {
+    fun `a spark send whose leaves spark can't select is held under a new key`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         val prepared = unexpiredPrepared()
         whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
@@ -5296,14 +5294,14 @@ class SparkRepoTest : BaseUnitTest() {
         sut.start(0).getOrThrow()
         advanceUntilIdle()
 
-        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
 
         verify(sparkService, times(4)).send(any(), anyOrNull())
-        assertFalse("hash" in store.data.first().sparkUncertainSends)
+        assertTrue("hash" in store.data.first().sparkUncertainSends)
     }
 
     @Test
-    fun `a spark send refused after a leaf failure keeps the node off its invoice until it expires`() = test {
+    fun `a spark send held after a leaf failure keeps the node off its invoice after a sync`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = null))
         val prepared = unexpiredPrepared()
@@ -5313,22 +5311,15 @@ class SparkRepoTest : BaseUnitTest() {
         val sut = createSut(store)
         sut.start(0).getOrThrow()
 
-        val refusal = assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
-        assertTrue(refusal.mayHaveReachedSpark)
-        val nodeRefusal = runCatching { sut.earlierLightningSend("lnbc1280n1send", "hash") }.exceptionOrNull()
-        assertTrue(assertIs<SparkError.SendRefused>(nodeRefusal).mayHaveReachedSpark)
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1280n1send", "hash"))
 
         // The SDK may have selected leaves again after a committed transfer, which can stay unlisted after a sync.
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong() + 1u))
         whenever(sparkService.listPayments()).thenReturn(emptyList())
         sut.start(0).getOrThrow()
         advanceUntilIdle()
-        val laterRefusal = runCatching { sut.earlierLightningSend("lnbc1280n1send", "hash") }.exceptionOrNull()
-        assertIs<SparkError.SendRefused>(laterRefusal)
-
-        // Once the invoice expired, no node send can pay it.
-        now += 2.hours
-        assertNull(sut.earlierLightningSend("lnbc1280n1send", "hash"))
+        assertEquals(EarlierSend.Pending("hash"), sut.earlierLightningSend("lnbc1280n1send", "hash"))
     }
 
     @Test
@@ -5352,7 +5343,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()))
         val prepared = unexpiredPrepared()
         whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
-        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw leafSelectionFailure() }
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw SdkException.InsufficientFunds(null) }
         val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
         val sut = createSut(store)
         sut.start(0).getOrThrow()
@@ -5374,7 +5365,7 @@ class SparkRepoTest : BaseUnitTest() {
         whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
         val firstFailed = sentPayment(fees = 0).copy(id = "hash-0", status = PaymentStatus.FAILED)
         whenever(sparkService.listPayments()).thenReturn(listOf(firstFailed))
-        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw leafSelectionFailure() }
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw SdkException.InsufficientFunds(null) }
         val sut = createSut(store)
         sut.start(0).getOrThrow()
         advanceUntilIdle()

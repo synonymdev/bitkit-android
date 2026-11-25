@@ -1741,7 +1741,6 @@ internal fun AppCacheData.withoutPaymentDetails() = copy(
     sparkUncertainSends = emptyMap(),
     sparkSendAttemptIds = emptyMap(),
     sparkSendAttempts = emptyMap(),
-    sparkRefusedSends = emptyMap(),
     sparkUnsavedOwnFailures = emptySet(),
     moveToSparkHashes = emptyList(),
     ldkSendHashes = emptyList(),

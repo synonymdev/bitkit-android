@@ -166,15 +166,6 @@ class CacheStore internal constructor(
         }
     }
 
-    /** Drops the refusals whose invoice expired by [refusedAt], which the node can no longer pay. */
-    suspend fun addSparkRefusedSend(paymentHash: String, refusedAt: Long, expiresAt: Long) {
-        val hash = paymentHash.lowercase()
-        store.updateData {
-            val unexpired = it.sparkRefusedSends.filterValues { send -> send.expiresAt > refusedAt }
-            it.copy(sparkRefusedSends = unexpired + (hash to SparkRefusedSend(refusedAt, expiresAt)))
-        }
-    }
-
     suspend fun removeSparkSendHash(paymentHash: String) {
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().sparkSendHashes) return
@@ -445,8 +436,6 @@ data class AppCacheData(
     val sparkSendAttemptIds: Map<String, String> = mapOf(),
     /** The latest attempt at each invoice Spark sent, by hash, whose number picks the attempt's idempotency key. */
     val sparkSendAttempts: Map<String, SparkSendAttempt> = mapOf(),
-    /** Spark sends refused after they may have reached the operators: the node stays off each until it expires. */
-    val sparkRefusedSends: Map<String, SparkRefusedSend> = mapOf(),
     /**
      * Payment ids of Spark send attempts whose own failure a failed Activity write still has to save over an earlier
      * attempt's row, kept across a restart until it saves.
@@ -500,10 +489,6 @@ data class AppCacheData(
 /** An attempt at paying an invoice through Spark, the [attempt]th, of an invoice that expires at [expiresAt]. */
 @Serializable
 data class SparkSendAttempt(val attempt: Int, val expiresAt: Long)
-
-/** When a Spark send was refused and when its invoice expires, in epoch seconds. */
-@Serializable
-data class SparkRefusedSend(val refusedAt: Long, val expiresAt: Long)
 
 @Serializable
 data class CachedUsdtBalance(

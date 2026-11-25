@@ -938,8 +938,6 @@ class PaykitPaymentProofRepo @Inject constructor(
         val error = generateSequence(submissionError) { it.cause }
             .firstOrNull { it is ServiceError.PaymentDeadlineExpired || it is SparkError.SendRefused }
             ?: submissionError.asNodeException() ?: submissionError
-        // A refused Spark send that may have committed a transfer can still settle, so its proof is kept.
-        if (error is SparkError.SendRefused && error.mayHaveReachedSpark) return false
         when (error) {
             is SparkError.SendRefused,
             is NodeNotRunningError,

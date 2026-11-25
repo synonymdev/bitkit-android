@@ -48,17 +48,6 @@ class CacheStoreTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a refused spark send drops expired ones and keeps the latest refusal`() = test {
-        sut.addSparkRefusedSend("OLD", refusedAt = 1_000, expiresAt = 1_500)
-        sut.addSparkRefusedSend("HASH", refusedAt = 2_000, expiresAt = 3_000)
-
-        assertEquals(mapOf("hash" to SparkRefusedSend(2_000, 3_000)), sut.data.first().sparkRefusedSends)
-
-        sut.addSparkRefusedSend("hash", refusedAt = 2_500, expiresAt = 3_000)
-        assertEquals(2_500, sut.data.first().sparkRefusedSends["hash"]?.refusedAt)
-    }
-
-    @Test
     fun `invalidateReceiveLightningInvoice preserves a replacement invoice`() = test {
         val replacement = AppCacheData(
             onchainAddress = "bc1qtest",

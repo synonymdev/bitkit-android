@@ -59,7 +59,6 @@ import to.bitkit.data.PrivatePaykitReservationData
 import to.bitkit.data.PrivatePaykitReservationStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.SparkRefusedSend
 import to.bitkit.data.SparkSendAttempt
 import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.WatchOnlyAccountAllocationState
@@ -3889,7 +3888,6 @@ class BackupRepoTest : BaseUnitTest() {
             sparkUncertainSends = mapOf(id to 1),
             sparkSendAttemptIds = mapOf(id to id),
             sparkSendAttempts = mapOf(id to SparkSendAttempt(0, 1)),
-            sparkRefusedSends = mapOf(id to SparkRefusedSend(1, 2)),
             sparkUnsavedOwnFailures = setOf(id),
             moveToSparkHashes = listOf(id),
             ldkSendHashes = listOf(id),
