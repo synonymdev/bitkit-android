@@ -708,8 +708,9 @@ class AppViewModel @Inject constructor(
     private var addressValidationJob: Job? = null
 
     /**
-     * A request read during this Send visit (a nearby read on the recipient screen, or a read from Send's own scanner).
-     * It is cancelled when Send closes or the user enters a request manually.
+     * A request read or entered during this Send visit: a camera, gallery, paste or nearby read on the recipient
+     * screen, an address continued, or a read from Send's own scanner. It is cancelled when Send closes or the user
+     * enters a request manually.
      */
     private var sendVisitScanJob: Job? = null
 
@@ -4195,10 +4196,10 @@ class AppViewModel @Inject constructor(
             routePubkyKeys = true,
             suppressQuickPay = suppressQuickPay,
         )
-        // A nearby read (NFC or Bluetooth) arrives on its own, so Enter Manually must be able to drop it.
+        // A read can still be decoding when the user moves on, so Enter Manually must be able to drop it.
         // Its job ends once it routes, so cancelling it never stops a payment in progress.
         // A duplicate read returns no job; keep the handle of the scan still running.
-        if (isNearbyRead) job?.let { sendVisitScanJob = it }
+        job?.let { sendVisitScanJob = it }
     }
 
     fun onUsdtAmountChange(value: String) {
@@ -5518,7 +5519,7 @@ class AppViewModel @Inject constructor(
             )
             return
         }
-        launchScan(source = ScanSource.PASTE, data = data, routePubkyKeys = true)
+        launchScan(source = ScanSource.PASTE, data = data, routePubkyKeys = true)?.let { sendVisitScanJob = it }
     }
 
     private fun onScanClick() {
