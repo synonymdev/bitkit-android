@@ -1341,6 +1341,7 @@ class BackupRepo @Inject constructor(
             cachedRates = emptyList(),
             moveToSparkHashes = emptyList(),
             sparkSendAttemptIds = emptyMap(),
+            sparkSendAttempts = emptyMap(),
             sparkUnsavedOwnFailures = emptySet(),
         )
         Logger.debug("Restored caches: ${jsonLogOf(logged)}", TAG)

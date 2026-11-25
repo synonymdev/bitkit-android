@@ -5144,6 +5144,24 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark retry that gets back a failure already reported is refused`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(0uL).copy(lastSyncedAt = null))
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        val failed = sentPayment(fees = 0).copy(id = "hash-0", status = PaymentStatus.FAILED)
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(failed)
+        val sut = createSut()
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+        whenever(sparkService.listPayments()).thenAnswer { throw SdkException.Generic("storage") }
+        sut.payInvoice("lnbc1", 100uL)
+
+        // Spark's list still can't be read, so the retry keeps the failed attempt's key and gets its failure back.
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+    }
+
+    @Test
     fun `a spark retry reuses its attempt's key until spark lists that attempt failed`() = test {
         val kept = AppCacheData(sparkSendAttempts = mapOf("hash" to SparkSendAttempt(1, now.epochSeconds + 3_600)))
         val store = CacheStore(InMemoryDataStore(kept), clock)
@@ -5673,10 +5691,10 @@ class SparkRepoTest : BaseUnitTest() {
         )
     }
 
-    /** The idempotency key of the latest Spark send, which Spark keeps as that attempt's payment id. */
     private fun leafSelectionFailure() =
         SdkException.SparkException("Tree service error: generic error: Failed to select leaves after all retries")
 
+    /** The idempotency key of the latest Spark send, which Spark keeps as that attempt's payment id. */
     private suspend fun sentKey(): String =
         argumentCaptor<String>().apply { verify(sparkService, atLeastOnce()).send(any(), capture()) }.lastValue
 

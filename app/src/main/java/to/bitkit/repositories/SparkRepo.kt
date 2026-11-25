@@ -622,8 +622,10 @@ class SparkRepo @Inject constructor(
                 // Spark keeps the key as this attempt's payment id, so only its own outcome settles the send. A retry
                 // keeps the latest attempt's key, so Spark returns that attempt's payment instead of paying again, and
                 // moves past each attempt Spark's list shows failed, as a failed key can't send again.
-                val attempt = nextSendAttempt(paymentHash, local)
-                val attemptId = sparkService.sendKey(paymentHash, attempt)
+                // The key's secret comes with Spark's connection, so a send that lost it is refused before it goes.
+                val (attempt, attemptId) = runSuspendCatching {
+                    nextSendAttempt(paymentHash, local).let { it to sparkService.sendKey(paymentHash, it) }
+                }.getOrElse { throw SparkError.SendRefused("Spark is not connected", it) }
                 val previousAttempt = cacheStore.data.first().sparkSendAttempts[paymentHash.lowercase()]
                 val isReusedKey = previousAttempt?.attempt == attempt
 
@@ -674,7 +676,12 @@ class SparkRepo @Inject constructor(
                         cacheStore.removeSparkUncertainSend(paymentHash)
                         cacheStore.removeSparkSendHash(paymentHash)
                         forgetUnusedAttempt()
-                        throw SparkError.SendRefused("Spark balance can't cover the payment", it)
+                        val reason = if (it.isLeafSelectionFailure()) {
+                            "Spark could not select leaves for the payment"
+                        } else {
+                            "Spark balance can't cover the payment"
+                        }
+                        throw SparkError.SendRefused(reason, it)
                     }
                     Logger.warn("Failed to learn the outcome of Spark send '$paymentHash'", it, context = TAG)
                     settleUncertainSend(paymentHash, expiresAt, attemptId)
@@ -690,7 +697,10 @@ class SparkRepo @Inject constructor(
                 // Spark's failure event during its send call was left to this result, so the result reports it.
                 if (payment.status == PaymentStatus.FAILED) {
                     recordActivity(payment, isOwnAttempt = true)
-                    if (reportedSendIds.add(payment.id)) payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
+                    // A retry under a key whose failure was already reported, as when Spark's list couldn't be read to
+                    // move past it, gets that failure back and no event, so the result reports it.
+                    if (!reportedSendIds.add(payment.id)) throw SparkError.SendRefused("Spark send failed earlier")
+                    payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
                 }
                 Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
                 paymentHash
