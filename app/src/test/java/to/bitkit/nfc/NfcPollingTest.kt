@@ -38,23 +38,17 @@ class CameraNfcStopTrackerTest {
     }
 
     @Test
-    fun `nfc turned back on while a camera stays open polls until the cameras close and one opens again`() {
+    fun `same camera reported unavailable twice resumes after one available`() {
         tracker.onCameraUnavailable("0", present)
-        tracker.onNfcOff()
-        assertFalse(tracker.isStopped)
-        tracker.onCameraUnavailable("1", present)
-        assertFalse(tracker.isStopped)
+        tracker.onCameraUnavailable("0", present)
         tracker.onCameraAvailable("0")
-        tracker.onCameraAvailable("1")
         assertFalse(tracker.isStopped)
-        tracker.onCameraUnavailable("0", present)
-        assertTrue(tracker.isStopped)
     }
 
     @Test
-    fun `camera opened while nfc is off still stops polling`() {
-        tracker.onNfcOff()
+    fun `available for a camera never seen keeps the stop of an open one`() {
         tracker.onCameraUnavailable("0", present)
+        tracker.onCameraAvailable("1")
         assertTrue(tracker.isStopped)
     }
 

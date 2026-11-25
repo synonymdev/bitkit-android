@@ -108,18 +108,19 @@ fun rememberNfcState(): NfcState {
 }
 
 /**
- * Whether NFC polling is off because a camera is open, on phones that switch it off then (see
- * [to.bitkit.nfc.NOTIFY_NFC_PROPERTY] and [CameraNfcStopTracker]).
+ * Whether NFC polling may be off because a camera is open, on phones that switch it off then (see
+ * [to.bitkit.nfc.NOTIFY_NFC_PROPERTY] and [CameraNfcStopTracker]). Errs toward true: a stop the system no longer
+ * applies after an NFC toggle still counts until every camera is available again.
  */
 @Composable
 fun rememberNfcStoppedByCamera(nfcState: NfcState): Boolean {
     val override by NfcDevOverride.cameraStopsPolling.collectAsStateWithLifecycle()
     val deviceStopsPolling by produceState(false) {
-        value = withContext(Dispatchers.IO) { deviceCameraStopsNfcPolling }
+        value = withContext(Dispatchers.IO) { deviceCameraStopsNfcPolling() }
     }
     val cameraStopsPolling = override ?: deviceStopsPolling
-    val stoppedByCamera = rememberCameraNfcStop(enabled = cameraStopsPolling, isNfcOn = nfcState == NfcState.ON)
-    val isStopped = nfcState == NfcState.ON && cameraStopsPolling && stoppedByCamera
+    val isEnabled = nfcState == NfcState.ON && cameraStopsPolling
+    val isStopped = rememberCameraNfcStop(enabled = isEnabled) && isEnabled
     LaunchedEffect(isStopped) {
         if (isStopped) Logger.info("Detected NFC polling stopped by an open camera", context = TAG)
     }
@@ -127,21 +128,14 @@ fun rememberNfcStoppedByCamera(nfcState: NfcState): Boolean {
 }
 
 @Composable
-private fun rememberCameraNfcStop(enabled: Boolean, isNfcOn: Boolean): Boolean {
+private fun rememberCameraNfcStop(enabled: Boolean): Boolean {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val tracker = remember(enabled) { CameraNfcStopTracker() }
-    var isStopped by remember(enabled) { mutableStateOf(false) }
+    var isStopped by remember { mutableStateOf(false) }
 
-    // Cameras that open while NFC is off still stop polling once it is back on, so the tracker runs regardless.
-    LaunchedEffect(tracker, isNfcOn) {
-        if (isNfcOn) return@LaunchedEffect
-        tracker.onNfcOff()
-        isStopped = tracker.isStopped
-    }
-
-    DisposableEffect(context, lifecycleOwner, tracker) {
+    DisposableEffect(context, lifecycleOwner, enabled) {
         if (!enabled) return@DisposableEffect onDispose {}
+        val tracker = CameraNfcStopTracker()
         val cameraManager = context.cameraManager
         fun presentCameras() = runCatching { cameraManager.cameraIdList.toSet() }.getOrDefault(emptySet())
 
@@ -169,6 +163,7 @@ private fun rememberCameraNfcStop(enabled: Boolean, isNfcOn: Boolean): Boolean {
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             if (registered) cameraManager.unregisterAvailabilityCallback(callback)
+            isStopped = false
         }
     }
     return isStopped
