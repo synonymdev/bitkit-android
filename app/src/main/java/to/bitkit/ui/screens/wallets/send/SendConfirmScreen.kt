@@ -262,16 +262,17 @@ internal fun rememberConfirmLock(
     uiState: SendUiState,
     showBiometrics: Boolean = false,
 ): Boolean {
+    val isAnswering = showBiometrics || uiState.showSanityWarningDialog != null
     // Keyed so a new run, or a closed prompt, locks from its first composition, before the effect resets it.
-    var isSwipeIdle by remember(isLoading, isSwipeRunning, uiState.shouldConfirmPay, showBiometrics) {
+    var isSwipeIdle by remember(isLoading, isSwipeRunning, uiState.shouldConfirmPay, isAnswering) {
         mutableStateOf(false)
     }
-    LaunchedEffect(isLoading, isSwipeRunning, uiState.shouldConfirmPay, showBiometrics) {
-        if (!isLoading || isSwipeRunning || uiState.shouldConfirmPay || showBiometrics) return@LaunchedEffect
+    LaunchedEffect(isLoading, isSwipeRunning, uiState.shouldConfirmPay, isAnswering) {
+        if (!isLoading || isSwipeRunning || uiState.shouldConfirmPay || isAnswering) return@LaunchedEffect
         delay(SWIPE_IDLE_RELEASE)
         isSwipeIdle = true
     }
-    if (showBiometrics || uiState.showSanityWarningDialog != null) return false
+    if (isAnswering) return false
     return isLoading && !isSwipeIdle
 }
 

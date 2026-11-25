@@ -22,6 +22,7 @@ import org.robolectric.shadows.ShadowSystemClock
 import to.bitkit.repositories.MoveToSparkQuote
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.viewmodels.SanityWarning
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import kotlin.test.assertEquals
@@ -62,6 +63,22 @@ class SendConfirmUpdateFeeTest {
         }
 
         composeRule.onNodeWithTag("ReviewUpdateFee").assertIsDisplayed()
+    }
+
+    @Config(sdk = [34])
+    @Test
+    fun `the amount warning frees the confirm while the user answers it`() {
+        var isLocked = true
+        composeRule.setContent {
+            isLocked = rememberConfirmLock(
+                isLoading = true,
+                isSwipeRunning = true,
+                uiState = SendUiState(showSanityWarningDialog = SanityWarning.OVER_HALF_BALANCE),
+            )
+        }
+        advanceBy(SWIPE_IDLE_RELEASE / 4)
+
+        assertFalse(isLocked)
     }
 
     @Config(sdk = [34])
