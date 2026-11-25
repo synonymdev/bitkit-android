@@ -126,9 +126,6 @@ fun ReceiveSheet(
         wallet.resetPreActivityMetadataTagsForCurrentInvoice()
         wallet.refreshReceiveState()
     }
-    DisposableEffect(wallet) {
-        onDispose { wallet.resetReceiveRequest() }
-    }
 
     Box(
         modifier = Modifier
@@ -152,12 +149,12 @@ fun ReceiveSheet(
                         lightningState = lightningState,
                         canReceiveWithSpark = sparkState.isUsable,
                         onClickEditInvoice = {
-                            invoiceEditState.beginSoftwareEdit(it)
+                            invoiceEditState.beginSoftwareEdit(it, walletState.bip21Description)
                             resetEditInvoiceAmount()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         onClickHardwareEditInvoice = {
-                            invoiceEditState.beginHardwareEdit()
+                            invoiceEditState.beginHardwareEdit(walletState.bip21Description)
                             resetEditInvoiceAmount()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
@@ -272,12 +269,12 @@ fun ReceiveSheet(
                     @Suppress("ViewModelForwarding")
                     EditInvoiceScreen(
                         amountInputViewModel = editInvoiceAmountViewModel,
-                        walletUiState = walletUiState,
+                        walletUiState = walletUiState.copy(bip21Description = invoiceEditState.note),
                         onBack = { navController.popBackStack() },
-                        updateInvoice = wallet::updateBip21Invoice,
+                        updateInvoice = { wallet.updateBip21Invoice(it, invoiceEditState.note) },
                         onClickAddTag = { navController.navigateTo(ReceiveRoute.AddTag) },
                         onClickTag = wallet::removeTag,
-                        onDescriptionUpdate = wallet::updateBip21Description,
+                        onDescriptionUpdate = invoiceEditState::updateNote,
                         showPaymentRequestButton = paymentRequestTargets.isNotEmpty(),
                         onClickPaymentRequest = { amountSats, note ->
                             paymentRequestDraft = PaykitPaymentRequestDraft(
@@ -291,7 +288,10 @@ fun ReceiveSheet(
                             navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
                         },
                         onchainOnly = invoiceEditState.isHardwareInvoice,
-                        updateOnchainInvoice = wallet::setBip21AmountSats,
+                        updateOnchainInvoice = {
+                            wallet.updateBip21Description(invoiceEditState.note)
+                            wallet.setBip21AmountSats(it)
+                        },
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.AddTag> {
@@ -332,15 +332,23 @@ internal class ReceiveInvoiceEditState {
         private set
     private var returnTab by mutableStateOf<ReceiveTab?>(null)
 
-    fun beginSoftwareEdit(sourceTab: ReceiveTab) {
+    /** The note being typed in Edit. It reaches the request only when the edit is confirmed. */
+    var note by mutableStateOf("")
+        private set
+
+    fun beginSoftwareEdit(sourceTab: ReceiveTab, note: String = "") {
         isHardwareInvoice = false
         returnTab = sourceTab
+        this.note = note
     }
 
-    fun beginHardwareEdit() {
+    fun beginHardwareEdit(note: String = "") {
         isHardwareInvoice = true
         returnTab = ReceiveTab.HARDWARE
+        this.note = note
     }
+
+    fun updateNote(text: String) = run { note = text }
 
     fun initialTab(hardwareWalletId: String?): ReceiveTab? =
         returnTab ?: ReceiveTab.HARDWARE.takeIf { hardwareWalletId != null || isHardwareInvoice }

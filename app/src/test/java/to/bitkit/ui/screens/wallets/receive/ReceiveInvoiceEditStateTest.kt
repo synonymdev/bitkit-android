@@ -70,4 +70,17 @@ class ReceiveInvoiceEditStateTest {
             assertEquals(sourceTab, state.initialTab(hardwareWalletId = null))
         }
     }
+
+    @Test
+    fun `edit starts from the request note and keeps typed text until the next edit`() {
+        val state = ReceiveInvoiceEditState()
+
+        state.beginSoftwareEdit(ReceiveTab.AUTO, note = "coffee")
+        assertEquals("coffee", state.note)
+        state.updateNote("coffee and cake")
+        assertEquals("coffee and cake", state.note)
+
+        state.beginHardwareEdit(note = "coffee")
+        assertEquals("coffee", state.note)
+    }
 }

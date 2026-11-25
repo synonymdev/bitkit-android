@@ -2240,7 +2240,7 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `refreshReceiveState resets the request of a previous sheet`() = test {
+    fun `refreshReceiveState still resets the request when receive opens`() = test {
         stubReceiveInvoices(INVOICE, INVOICE_REPLACEMENT)
         sut.setOnchainAddress(ADDRESS)
         sut.updateBip21Invoice(SATS, "note").getOrThrow()
@@ -2266,6 +2266,30 @@ class WalletRepoTest : BaseUnitTest() {
         assertTrue(state.hasReceiveInvoiceError)
         assertEquals(SATS, state.bip21AmountSats)
         assertEquals("note", state.bip21Description)
+    }
+
+    @Test
+    fun `loadFromCache exposes the payment hash of the cached invoice and settling clears it`() = test {
+        whenever(cacheStore.data).thenReturn(
+            flowOf(AppCacheData(bolt11 = INVOICE, bolt11PaymentHash = "cachedHash", onchainAddress = ADDRESS)),
+        )
+        whenever(coreService.isAddressUsed(any())).thenReturn(false)
+        sut = createSut()
+        sut.loadFromCache()
+        assertEquals("cachedHash", sut.walletState.value.bolt11PaymentHash)
+
+        sut.refreshBip21ForEvent(
+            Event.PaymentReceived(
+                paymentId = "testPaymentId",
+                paymentHash = "cachedHash",
+                amountMsat = 1_000_000uL,
+                customRecords = emptyList(),
+            ),
+            settledReceiveInvoice = SettledReceiveInvoice(INVOICE),
+        )
+
+        assertEquals("", sut.walletState.value.bolt11)
+        assertEquals("", sut.walletState.value.bolt11PaymentHash)
     }
 
     private suspend fun stubReceiveInvoices(vararg invoices: String) {

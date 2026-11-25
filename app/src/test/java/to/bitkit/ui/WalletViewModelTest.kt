@@ -298,10 +298,13 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `resetReceiveRequest should call walletRepo resetReceiveRequest`() = test {
-        sut.resetReceiveRequest()
+    fun `updateBip21Invoice should pass the confirmed note to walletRepo`() = test {
+        whenever(walletRepo.updateBip21Invoice(anyOrNull(), any())).thenReturn(Result.success(Unit))
 
-        verify(walletRepo).resetReceiveRequest()
+        sut.updateBip21Invoice(4_000uL, "coffee")
+        advanceUntilIdle()
+
+        verify(walletRepo).updateBip21Invoice(4_000uL, "coffee")
     }
 
     @Test

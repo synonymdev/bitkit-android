@@ -556,9 +556,27 @@ class AppViewModel @Inject constructor(
 
     private data class ReceiveSheetContext(
         val sheet: Sheet.Receive,
-        val bolt11: String,
-        val onchainAddress: String,
-    )
+        val bolt11s: Set<String> = emptySet(),
+        val paymentHashes: Set<String> = emptySet(),
+        val onchainAddresses: Set<String> = emptySet(),
+    ) {
+        fun withRequest(bolt11: String, paymentHash: String, onchainAddress: String) = copy(
+            bolt11s = bolt11s + setOfNotNull(bolt11.takeIf { it.isNotEmpty() }),
+            paymentHashes = paymentHashes + setOfNotNull(paymentHash.takeIf { bolt11.isNotEmpty() && it.isNotEmpty() }),
+            onchainAddresses = onchainAddresses + setOfNotNull(onchainAddress.takeIf { it.isNotEmpty() }),
+        )
+
+        fun isSettledBy(update: NodeEventUpdate): Boolean = when (val event = update.event) {
+            is Event.PaymentReceived ->
+                update.settledReceiveInvoice?.bolt11 in bolt11s || event.paymentHash in paymentHashes
+
+            is Event.OnchainTransactionReceived ->
+                update.settledReceiveAddress?.address in onchainAddresses ||
+                    event.details.outputs.any { it.scriptpubkeyAddress in onchainAddresses }
+
+            else -> false
+        }
+    }
 
     private data class SubscriptionNotificationTarget(
         val identity: String,
@@ -938,6 +956,7 @@ class AppViewModel @Inject constructor(
             }
         }
         observeReceiveSheetInvoice()
+        observeReceiveSheetClosed()
         observeLdkNodeEvents()
         observeLightningUsableChannels()
         observeSparkReady()
@@ -989,16 +1008,28 @@ class AppViewModel @Inject constructor(
     private fun observeReceiveSheetInvoice() {
         viewModelScope.launch {
             walletRepo.walletState
-                .map { it.bolt11 }
+                .map { Triple(it.bolt11, it.bolt11PaymentHash, it.onchainAddress) }
                 .distinctUntilChanged()
-                .collect { bolt11 ->
-                    if (bolt11.isEmpty()) return@collect
+                .collect { (bolt11, paymentHash, onchainAddress) ->
                     val receiveSheet = _currentSheet.value as? Sheet.Receive ?: return@collect
-                    receiveSheetContext = receiveSheetContext
-                        ?.takeIf { it.sheet === receiveSheet }
-                        ?.copy(bolt11 = bolt11)
-                        ?: ReceiveSheetContext(receiveSheet, bolt11, walletRepo.getOnchainAddress())
+                    val context = receiveSheetContext?.takeIf { it.sheet === receiveSheet }
+                        ?: ReceiveSheetContext(receiveSheet)
+                    // Every request shown during this visit stays, so a late payment of a replaced one still closes it
+                    receiveSheetContext = context.withRequest(bolt11, paymentHash, onchainAddress)
                 }
+        }
+    }
+
+    private fun observeReceiveSheetClosed() {
+        viewModelScope.launch {
+            var openReceiveSheet: Sheet.Receive? = null
+            _currentSheet.collect { sheet ->
+                val receiveSheet = sheet as? Sheet.Receive
+                val closed = openReceiveSheet?.takeIf { it.presentationId != receiveSheet?.presentationId }
+                // A refresh after the sheet is gone must not issue an invoice for its amount
+                if (closed != null) walletRepo.resetReceiveRequest()
+                openReceiveSheet = receiveSheet
+            }
         }
     }
 
@@ -2693,13 +2724,7 @@ class AppViewModel @Inject constructor(
         Logger.debug("LDK-node event received in $TAG: ${jsonLogOf(event)}", context = TAG)
 
         val receiveSheetToClose = receiveSheetContext?.takeIf { context ->
-            val matchesSettledRequest = when (event) {
-                is Event.PaymentReceived -> update.settledReceiveInvoice?.bolt11 == context.bolt11
-                is Event.OnchainTransactionReceived -> update.settledReceiveAddress?.address == context.onchainAddress
-                else -> false
-            }
-            matchesSettledRequest &&
-                _currentSheet.value === context.sheet
+            context.isSettledBy(update) && _currentSheet.value === context.sheet
         }
 
         viewModelScope.launch {
@@ -9410,9 +9435,9 @@ class AppViewModel @Inject constructor(
             }
             if (!canPresent()) return@launch
             receiveSheetContext = (sheetType as? Sheet.Receive)?.let { receiveSheet ->
-                ReceiveSheetContext(
-                    sheet = receiveSheet,
+                ReceiveSheetContext(receiveSheet).withRequest(
                     bolt11 = walletRepo.getBolt11(),
+                    paymentHash = walletRepo.walletState.value.bolt11PaymentHash,
                     onchainAddress = walletRepo.getOnchainAddress(),
                 )
             }

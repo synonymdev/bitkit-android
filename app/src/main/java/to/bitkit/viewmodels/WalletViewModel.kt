@@ -1003,8 +1003,11 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun updateBip21Invoice(amountSats: ULong? = walletState.value.bip21AmountSats) = viewModelScope.launch {
-        walletRepo.updateBip21Invoice(amountSats).onFailure { error ->
+    fun updateBip21Invoice(
+        amountSats: ULong? = walletState.value.bip21AmountSats,
+        description: String = walletState.value.bip21Description,
+    ) = viewModelScope.launch {
+        walletRepo.updateBip21Invoice(amountSats, description).onFailure { error ->
             ToastEventBus.send(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.wallet__error_invoice_update),
@@ -1117,8 +1120,6 @@ class WalletViewModel @Inject constructor(
     fun setBip21AmountSats(amountSats: ULong?) {
         walletRepo.setBip21AmountSats(amountSats?.takeIf { it > 0uL })
     }
-
-    fun resetReceiveRequest() = walletRepo.resetReceiveRequest()
 
     suspend fun handleHideBalanceOnOpen() {
         val hideBalanceOnOpen = settingsStore.data.map { it.hideBalanceOnOpen }.first()
