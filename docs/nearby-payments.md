@@ -47,3 +47,7 @@ advertiser and reads the request.
   advertiser at or above -60 dBm, reads meta and the needed chunks, then disconnects.
 - A request received over Bluetooth always opens the normal send review; QuickPay does not apply,
   because Bluetooth range lets a device that is not the merchant's answer.
+- Only `bitcoin:`, `lightning:` BOLT11 and USDT `ethereum:` requests are taken over Bluetooth. LNURL and
+  Lightning addresses (also as a unified URI's `lightning` part) are refused, since decoding them contacts
+  their server before the user picked the request. BOLT12 offers are refused because the decoder does not
+  read them.
