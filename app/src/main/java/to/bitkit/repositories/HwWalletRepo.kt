@@ -101,6 +101,7 @@ class HwWalletRepo @Inject constructor(
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val hwWalletStore: HwWalletStore,
     private val settingsStore: SettingsStore,
+    private val hwRetainedSendRepo: HwRetainedSendRepo,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     companion object {
@@ -1109,6 +1110,9 @@ class HwWalletRepo @Inject constructor(
                     "Hardware wallet '$walletId' still present after removal"
                 }
             }
+        }.onSuccess {
+            hwRetainedSendRepo.abandon(walletId)
+                .onFailure { Logger.warn("Failed to release retained send of '$walletId'", it, context = TAG) }
         }.onFailure {
             watcherSyncRequests.tryEmit(Unit)
         }
@@ -1186,19 +1190,29 @@ class HwWalletRepo @Inject constructor(
         syncWatchers()
     }
 
+    private suspend fun markObservedRetainedSend(walletId: String, txIds: List<String>) {
+        if (txIds.isEmpty()) return
+        hwRetainedSendRepo.markObserved(walletId, txIds)
+            .onFailure { Logger.warn("Failed to mark observed send of '$walletId'", it, context = TAG) }
+    }
+
     private fun observeWatcherEvents() {
         scope.launch {
             trezorRepo.watcherEvents.collect { (watcherId, event) ->
                 if (event !is WatcherEvent.TransactionsChanged) return@collect
-                val receivedTxs = watcherMutex.withLock {
-                    val walletId = activeWatcherWalletIds[watcherId] ?: return@withLock emptyList()
+                val outcome = watcherMutex.withLock {
+                    val walletId = activeWatcherWalletIds[watcherId] ?: return@withLock null
                     val activities = event.activities
                         .filter { it.walletId() == walletId }
                         .toImmutableList()
+                    val observedTxIds = activities.mapNotNull { activity ->
+                        (activity as? Activity.Onchain)?.v1?.takeIf { it.doesExist }?.txId
+                    }
                     val transactionDetails = event.transactionDetails
                         .filter { it.walletId == walletId }
                         .toImmutableList()
-                    val addressType = watcherId.toFundingAddressType() ?: return@withLock emptyList()
+                    val addressType = watcherId.toFundingAddressType()
+                        ?: return@withLock HwWatcherEventOutcome(walletId, observedTxIds)
                     val watcher = HwWatcherData(
                         walletId = walletId,
                         addressType = addressType,
@@ -1221,14 +1235,14 @@ class HwWalletRepo @Inject constructor(
                             _watcherData.update { data ->
                                 data + (watcherId to watcher.copy(activities = it.activities))
                             }
-                            return@withLock emptyList()
+                            return@withLock HwWatcherEventOutcome(walletId, observedTxIds)
                         }
 
                     val persistedActivities = activityRepo.persistHwSnapshot(
                         walletId = walletId,
                         activities = activities,
                         transactionDetails = transactionDetails,
-                    ).getOrElse { return@withLock emptyList() }
+                    ).getOrElse { return@withLock HwWatcherEventOutcome(walletId, observedTxIds) }
                     val immutablePersistedActivities = persistedActivities.toImmutableList()
                     lastPersistedHwSnapshots[walletId] = PersistedHwSnapshot(
                         source = snapshotCacheKey,
@@ -1238,9 +1252,14 @@ class HwWalletRepo @Inject constructor(
                     val updatedWatcherData = _watcherData.value + (watcherId to persistedWatcher)
                     _watcherData.update { updatedWatcherData }
                     persistedActivityIds[watcherId] = persistedActivities.map { it.scopedId() }.toSet()
-                    buildReceivedTxs(previousIds, persistedActivities, updatedWatcherData)
-                }
-                receivedTxs.forEach { _receivedTxs.emit(it) }
+                    HwWatcherEventOutcome(
+                        walletId = walletId,
+                        observedTxIds = observedTxIds,
+                        receivedTxs = buildReceivedTxs(previousIds, persistedActivities, updatedWatcherData),
+                    )
+                } ?: return@collect
+                markObservedRetainedSend(outcome.walletId, outcome.observedTxIds)
+                outcome.receivedTxs.forEach { _receivedTxs.emit(it) }
             }
         }
     }
@@ -1557,6 +1576,12 @@ private fun WatcherEvent.TransactionsChanged.toReceiveAddress(
     address = nextUnusedExternalAddress.address,
     path = nextUnusedExternalAddress.path,
     addressType = addressType,
+)
+
+private data class HwWatcherEventOutcome(
+    val walletId: String,
+    val observedTxIds: List<String>,
+    val receivedTxs: List<HwWalletReceivedTx> = emptyList(),
 )
 
 private data class HwSnapshot(

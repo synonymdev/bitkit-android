@@ -86,6 +86,8 @@ the other three rely on, and `passphrase-settings-remove.xml` removes it again.
 | `passphrase-settings-remove.xml` | Per-identity settings row, rename and delete; removing the hidden wallet keeps the device paired |
 | `passphrase-transfer-to-spending.xml` | Signs with the live session, re-prompts after the session is dropped, refuses a wrong passphrase |
 
+Broadcast faults on an ordinary send are not a journey capability; the manual recipe is [broadcast-unknown-retry.md](broadcast-unknown-retry.md).
+
 Connect-flow testTags: `HardwareWalletSheet`, `HardwareWalletIntroScreen`,
 `HardwareWalletIntroCancel`, `HardwareWalletIntroContinue`,
 `HardwareWalletSearchingScreen`, `HardwareWalletSearchingCancel`,
