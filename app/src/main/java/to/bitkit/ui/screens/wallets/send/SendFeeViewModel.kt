@@ -31,6 +31,15 @@ import to.bitkit.viewmodels.SendUiState
 import javax.inject.Inject
 
 private const val MAX_DIGITS = 3
+
+/** Next custom fee input after [key]; while the preset is [selected], a digit replaces it and delete clears it. */
+internal fun feeInputAfterKey(input: String, key: String, selected: Boolean): String {
+    val current = if (selected) "" else input
+    return when (key) {
+        KEY_DELETE -> current.dropLast(1)
+        else -> if (current.length < MAX_DIGITS) (current + key).trimStart('0') else current
+    }
+}
 private val MAX_VALUE = OnchainRecoveryFeeRate.maximum.toUInt()
 private const val MAX_RATIO = 0.5
 
@@ -75,6 +84,7 @@ class SendFeeViewModel @Inject constructor(
                     fees = fees,
                     custom = custom,
                     input = custom.satsPerVByte.toString().takeIf { custom.satsPerVByte > 0u } ?: "",
+                    isPresetSelected = custom.satsPerVByte > 0u,
                     disabledRates = disabledRates,
                 )
             }
@@ -90,17 +100,14 @@ class SendFeeViewModel @Inject constructor(
     }
 
     fun onKeyPress(key: String) {
-        val currentInput = _uiState.value.input
-        val newInput = when (key) {
-            KEY_DELETE -> if (currentInput.isNotEmpty()) currentInput.dropLast(1) else ""
-            else -> if (currentInput.length < MAX_DIGITS) (currentInput + key).trimStart('0') else currentInput
-        }
+        val newInput = feeInputAfterKey(_uiState.value.input, key, _uiState.value.isPresetSelected)
 
         val satsPerVByte = newInput.toUIntOrNull() ?: 0u
 
         _uiState.update {
             it.copy(
                 input = newInput,
+                isPresetSelected = false,
                 custom = TransactionSpeed.Custom(satsPerVByte),
             )
         }
@@ -196,6 +203,7 @@ data class SendFeeUiState(
     val selected: FeeRate? = null,
     val custom: TransactionSpeed.Custom? = null,
     val input: String = "",
+    val isPresetSelected: Boolean = false,
     val totalFeeText: String = "",
     val disabledRates: ImmutableSet<FeeRate> = persistentSetOf(),
     val shouldContinue: Boolean? = null,

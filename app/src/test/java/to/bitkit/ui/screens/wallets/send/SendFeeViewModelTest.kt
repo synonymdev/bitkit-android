@@ -23,6 +23,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.viewmodels.OnchainFeeUi
 import to.bitkit.viewmodels.SendUiState
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -85,6 +86,28 @@ class SendFeeViewModelTest : BaseUnitTest() {
         sut.init(sendUiState)
 
         assertTrue(sut.uiState.value.disabledRates.isEmpty())
+    }
+
+    @Test
+    fun `first key replaces the preset fee and later keys append`() = test {
+        sut.init(createSendUiState())
+        assertTrue(sut.uiState.value.isPresetSelected)
+
+        sut.onKeyPress("2")
+        assertEquals("2", sut.uiState.value.input)
+        assertFalse(sut.uiState.value.isPresetSelected)
+
+        sut.onKeyPress("5")
+        assertEquals("25", sut.uiState.value.input)
+    }
+
+    @Test
+    fun `delete clears the preset fee`() = test {
+        sut.init(createSendUiState())
+
+        sut.onKeyPress(KEY_DELETE)
+
+        assertEquals("", sut.uiState.value.input)
     }
 
     @Test
