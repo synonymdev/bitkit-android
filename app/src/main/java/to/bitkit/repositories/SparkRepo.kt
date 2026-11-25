@@ -581,8 +581,10 @@ class SparkRepo @Inject constructor(
                     Logger.info("Skipped Spark send of '$paymentHash', already paid", context = TAG)
                     return@runSuspendCatching paymentHash
                 }
+                // A send held in doubt under this build's key is sent again under that key, which can't pay twice:
+                // the operators return the transfer it committed, if any.
                 is SparkLightningSend.Found if earlier.status == PaymentStatus.PENDING ->
-                    throw PaymentPendingException(paymentHash)
+                    if (!isKeyedHold(paymentHash)) throw PaymentPendingException(paymentHash)
                 // Spark's list, synced or unreadable, can lack a send it made before the restore, as on the node's
                 // path, so the operators decide. Before Spark syncs, its list can lack an earlier attempt they show
                 // failed, so that one is refused too.
@@ -689,6 +691,8 @@ class SparkRepo @Inject constructor(
                 if (payment.status == PaymentStatus.PENDING) {
                     settleUncertainSend(paymentHash, expiresAt, attemptId)
                 } else {
+                    // A retry of a send held in doubt settles that hold with its own result.
+                    uncertainSends.remove(paymentHash.lowercase())
                     bestEffort("end the hold of Spark send '$paymentHash'") {
                         cacheStore.removeSparkUncertainSend(paymentHash)
                     }
@@ -1783,6 +1787,15 @@ class SparkRepo @Inject constructor(
             is SparkLightningSend.Found -> isUncertain && send.status == PaymentStatus.FAILED
         }
         if (isHeld) SparkLightningSend.Found(PaymentStatus.PENDING, null) else send
+    }
+
+    /** Whether [paymentHash] is pending only by a hold on a send under this build's key, which a retry can reuse. */
+    private suspend fun isKeyedHold(paymentHash: String): Boolean {
+        val hash = paymentHash.lowercase()
+        if (sendsInFlight.containsKey(hash) || sendHold(hash) == null) return false
+        if (hash !in cacheStore.data.first().sparkSendAttempts) return false
+        val listed = listedLightningSend(paymentHash)
+        return listed !is SparkLightningSend.Found || listed.status != PaymentStatus.PENDING
     }
 
     /** The hold on the send of [hash] whose outcome Spark didn't report, null when none. */

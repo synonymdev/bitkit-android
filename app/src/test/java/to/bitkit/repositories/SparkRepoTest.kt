@@ -5395,6 +5395,54 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send held after a leaf failure reports its failure at its invoice's expiry`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenAnswer { info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()) }
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw leafSelectionFailure() }
+        val sut = createSut(CacheStore(InMemoryDataStore(AppCacheData()), clock))
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
+        sut.start(0).getOrThrow()
+
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        advanceUntilIdle()
+        assertTrue(events.none { it is Event.PaymentFailed }, "a transfer the send committed can still go out")
+
+        now += 2.hours
+        sparkEvents.emit(SdkEvent.Synced)
+        advanceUntilIdle()
+
+        assertEquals("hash", assertIs<Event.PaymentFailed>(events.single()).paymentHash)
+    }
+
+    @Test
+    fun `a spark retry of a send held after a leaf failure pays under its key`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenAnswer { info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()) }
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        var sends = 0
+        whenever(sparkService.send(any(), anyOrNull())).doSuspendableAnswer {
+            if (++sends <= 4) throw leafSelectionFailure()
+            sentPayment(fees = 0).copy(id = it.getArgument(1))
+        }
+        val sut = createSut(CacheStore(InMemoryDataStore(AppCacheData()), clock))
+        sut.start(0).getOrThrow()
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        assertEquals("hash", sut.payInvoice("lnbc1", 100uL).getOrThrow())
+
+        val keys = argumentCaptor<String>().apply { verify(sparkService, times(5)).send(any(), capture()) }.allValues
+        assertEquals(List(5) { "hash-0" }, keys)
+    }
+
+    @Test
     fun `a held spark send spark never recorded reports its failure at expiry after a restart`() = test {
         val sentAt = now.epochSeconds
         // The app saved the hold, then died before Spark recorded the send.
