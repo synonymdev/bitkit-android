@@ -5457,13 +5457,18 @@ class SparkRepoTest : BaseUnitTest() {
             sentPayment(fees = 0).copy(id = it.getArgument(1))
         }
         val sut = createSut(CacheStore(InMemoryDataStore(AppCacheData()), clock))
+        val events = mutableListOf<Event>()
+        backgroundScope.launch { sut.nodeEvents.collect { events += it } }
         sut.start(0).getOrThrow()
         assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
 
         assertEquals("hash", sut.payInvoice("lnbc1", 100uL).getOrThrow())
+        runCurrent()
 
         val keys = argumentCaptor<String>().apply { verify(sparkService, times(5)).send(any(), capture()) }.allValues
         assertEquals(List(5) { "hash-0" }, keys)
+        // A caller still waiting on the held send learns it paid.
+        assertEquals(1, events.count { it is Event.PaymentSuccessful })
     }
 
     @Test
