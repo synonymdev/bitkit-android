@@ -664,7 +664,9 @@ class SparkRepo @Inject constructor(
                 }
                 val payment = sent.getOrElse {
                     // The SDK checks the expiry again before anything goes out, so an expired invoice left nothing.
-                    if (it.isInvoiceExpired()) {
+                    // Under a key an earlier attempt used, that attempt may have committed a transfer before the
+                    // expiry, so the send stays held.
+                    if (it.isInvoiceExpired() && !isReusedKey) {
                         cacheStore.removeSparkUncertainSend(paymentHash)
                         cacheStore.removeSparkSendHash(paymentHash)
                         forgetUnusedAttempt()
@@ -704,10 +706,9 @@ class SparkRepo @Inject constructor(
                         cacheStore.removeSparkSendHash(paymentHash)
                     }
                     recordActivity(payment, isOwnAttempt = true)
-                    // The caller subscribes to events only once this returns, so the result reports the failure too. A
-                    // retry under a key whose failure was already reported, as when Spark's list couldn't be read to
-                    // move past it, gets that failure back and no event.
-                    if (reportedSendIds.add(payment.id)) payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
+                    // The caller subscribes to events only once this returns, so the result reports the failure, once:
+                    // marked reported, Spark's event for it is not reported again, as a second error would be.
+                    reportedSendIds.add(payment.id)
                     throw SparkError.SendRefused("Spark send failed")
                 }
                 Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
@@ -745,7 +746,12 @@ class SparkRepo @Inject constructor(
             delay(LEAF_SELECTION_RETRY_DELAY)
             // A cancel, block or identity change can land during the delay, so each resend is checked again.
             if (!canRetry() || !onBeforeSend()) return result
-            result = runSuspendCatching { sparkService.send(prepared, attemptId) }
+            val retried = runSuspendCatching { sparkService.send(prepared, attemptId) }
+            // A failed try can have committed a transfer before Spark selected leaves again, so a short balance or an
+            // expiry on a retry, which would read as nothing sent, ends with the earlier leaf failure instead.
+            val error = retried.exceptionOrNull()
+            if (error is SdkException.InsufficientFunds || error?.isInvoiceExpired() == true) return result
+            result = retried
         }
         return result
     }
