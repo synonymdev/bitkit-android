@@ -10099,7 +10099,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
             assertEquals(SendEffect.NavigateToAddress, awaitItem())
 
-            sut.setSendEvent(SendEvent.AddressContinue(input))
+            sut.onSendRecipientShown()
+            sut.setSendEvent(SendEvent.AddressContinue(input, isRecipientRead = true))
             advanceUntilIdle()
             assertEquals(SendEffect.NavigateToConfirm, awaitItem())
 
@@ -10186,6 +10187,134 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(Sheet.LnurlAuth(domain = "example.com", lnurl = lnurl, k1 = "k1"), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `a camera frame delivered after enter manually does not route`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.onSendRecipientShown()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            sut.setSendEvent(SendEvent.AddressContinue(input, isRecipientRead = true))
+            sut.setSendEvent(SendEvent.AddressContinue(input, isNearbyRead = true))
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(coreService, never()).decode(input)
+    }
+
+    @Test
+    fun `a camera frame delivered after contacts does not route`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        isPaykitEnabled.value = true
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.onSendRecipientShown()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.Contacts)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToContacts, awaitItem())
+
+            sut.setSendEvent(SendEvent.AddressContinue(input, isRecipientRead = true))
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(coreService, never()).decode(input)
+    }
+
+    @Test
+    fun `a camera frame delivered after send closes does not reopen it`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.onSendRecipientShown()
+        sut.hideSheet()
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.AddressContinue(input, isRecipientRead = true))
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(coreService, never()).decode(input)
+    }
+
+    @Test
+    fun `the recipient screen reads again once it is shown after enter manually`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            sut.onSendRecipientShown()
+            sut.setSendEvent(SendEvent.AddressContinue(input, isRecipientRead = true))
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `an address continued after enter manually routes`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            sut.setSendEvent(SendEvent.AddressContinue(input))
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `a pasted contact's refresh is not cancelled by a later send visit`() = test {
+        enablePaykitUi()
+        pubkyContacts.value = listOf(PubkyProfile.placeholder(testPublicKey))
+        stubClipboard(testPublicKey)
+        val release = CompletableDeferred<Unit>()
+        var isRefreshed = false
+        whenever { refreshContactPaykitLink(any()) }.doSuspendableAnswer {
+            release.await()
+            isRefreshed = true
+            Result.success(Unit)
+        }
+        sut.setIsAuthenticated(true)
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.Paste)
+        advanceUntilIdle()
+        assertNull(sut.currentSheet.value)
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.EnterManually)
+        advanceUntilIdle()
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertTrue(isRefreshed, "A later Send visit cancelled the contact's refresh")
     }
 
     @Test
