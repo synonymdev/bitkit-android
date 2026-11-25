@@ -132,6 +132,7 @@ fun SendRecipientScreen(
             if (event == Lifecycle.Event.ON_START) {
                 cameraPermissionState.launchPermissionRequest()
             }
+            if (event == Lifecycle.Event.ON_RESUME) app?.onSendRecipientShown()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
 
@@ -146,7 +147,7 @@ fun SendRecipientScreen(
             if (result.isSuccess) {
                 val qrCode = result.getOrThrow().text ?: return@QrCodeAnalyzer
                 Logger.debug("Scanned QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
-                onEvent(SendEvent.AddressContinue(qrCode))
+                onEvent(SendEvent.AddressContinue(qrCode, isRecipientRead = true))
             } else {
                 val error = requireNotNull(result.exceptionOrNull())
                 Logger.error("Scan failed", error, context = TAG)
@@ -215,7 +216,7 @@ fun SendRecipientScreen(
     // Gallery picker launchers
     val handleGalleryScanSuccess = { qrCode: String ->
         Logger.debug("Found gallery QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
-        onEvent(SendEvent.AddressContinue(qrCode))
+        onEvent(SendEvent.AddressContinue(qrCode, isRecipientRead = true))
     }
 
     val handleGalleryError: (Throwable) -> Unit = { app?.toast(it) }

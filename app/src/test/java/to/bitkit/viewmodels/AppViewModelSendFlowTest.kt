@@ -9934,6 +9934,390 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `camera scan still decoding does not route after enter manually`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input))
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `duplicate camera scan keeps the decoding scan cancellable by enter manually`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input))
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.AddressContinue(input))
+            advanceUntilIdle()
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `paste still decoding does not route after enter manually`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        stubClipboard(input)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.Paste)
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `camera scan still decoding does not route after contacts`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+        isPaykitEnabled.value = true
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input))
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.Contacts)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToContacts, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `paste still preparing does not reopen send after the sheet closes`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        stubClipboard(input)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever { blocktankRepo.refreshInfo() }.doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Result.success(Unit)
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.Paste)
+        advanceUntilIdle()
+        assertTrue(entered.isCompleted)
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(coreService, never()).decode(input)
+    }
+
+    @Test
+    fun `the same code scanned again after enter manually routes`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val release = CompletableDeferred<Unit>()
+        var decodes = 0
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            if (decodes++ == 0) release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input))
+            advanceUntilIdle()
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            sut.onSendRecipientShown()
+            sut.setSendEvent(SendEvent.AddressContinue(input, isRecipientRead = true))
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(2, decodes)
+    }
+
+    @Test
+    fun `a paste replacing a camera scan still decoding routes and the replaced scan does not`() = test {
+        val scanned = stubOnchainAmountScan(amountSats = 10_000u)
+        val pasted = "bitcoin:$REGTEST_ADDRESS?amount=20000"
+        stubClipboard(pasted)
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(scanned)).doSuspendableAnswer {
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+        whenever(coreService.decode(pasted)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 20_000u, null, null, null)),
+        )
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(scanned))
+            advanceUntilIdle()
+            sut.setSendEvent(SendEvent.Paste)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(20_000uL, sut.sendUiState.value.amount)
+    }
+
+    @Test
+    fun `login request from the recipient camera opens its sheet`() = test {
+        val lnurl = "lnurl1recipientcameraauth"
+        val data = com.synonym.bitkitcore.LnurlAuthData(uri = lnurl, tag = "login", k1 = "k1", domain = "example.com")
+        // Decoding suspends, as it does on device, so the scan is still running once its handle is kept.
+        val decoded = CompletableDeferred<Unit>()
+        whenever { coreService.decode(lnurl) }.doSuspendableAnswer {
+            decoded.await()
+            Scanner.LnurlAuth(data)
+        }
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.AddressContinue(lnurl))
+        advanceUntilIdle()
+        decoded.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.LnurlAuth(domain = "example.com", lnurl = lnurl, k1 = "k1"), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `pasted login request opens its sheet`() = test {
+        val lnurl = "lnurl1recipientpasteauth"
+        val data = com.synonym.bitkitcore.LnurlAuthData(uri = lnurl, tag = "login", k1 = "k1", domain = "example.com")
+        stubClipboard(lnurl)
+        val decoded = CompletableDeferred<Unit>()
+        whenever { coreService.decode(lnurl) }.doSuspendableAnswer {
+            decoded.await()
+            Scanner.LnurlAuth(data)
+        }
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.Paste)
+        advanceUntilIdle()
+        decoded.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.LnurlAuth(domain = "example.com", lnurl = lnurl, k1 = "k1"), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `a camera frame delivered after enter manually does not route`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.onSendRecipientShown()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            sut.setSendEvent(SendEvent.AddressContinue(input, isRecipientRead = true))
+            sut.setSendEvent(SendEvent.AddressContinue(input, isNearbyRead = true))
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(coreService, never()).decode(input)
+    }
+
+    @Test
+    fun `a camera frame delivered after contacts does not route`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        isPaykitEnabled.value = true
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.onSendRecipientShown()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.Contacts)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToContacts, awaitItem())
+
+            sut.setSendEvent(SendEvent.AddressContinue(input, isRecipientRead = true))
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(coreService, never()).decode(input)
+    }
+
+    @Test
+    fun `a camera frame delivered after send closes does not reopen it`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.onSendRecipientShown()
+        sut.hideSheet()
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.AddressContinue(input, isRecipientRead = true))
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(coreService, never()).decode(input)
+    }
+
+    @Test
+    fun `the recipient screen reads again once it is shown after enter manually`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            sut.onSendRecipientShown()
+            sut.setSendEvent(SendEvent.AddressContinue(input, isRecipientRead = true))
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `an address continued after enter manually routes`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            sut.setSendEvent(SendEvent.AddressContinue(input))
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `a pasted contact's refresh is not cancelled by a later send visit`() = test {
+        enablePaykitUi()
+        pubkyContacts.value = listOf(PubkyProfile.placeholder(testPublicKey))
+        stubClipboard(testPublicKey)
+        val release = CompletableDeferred<Unit>()
+        var isRefreshed = false
+        whenever { refreshContactPaykitLink(any()) }.doSuspendableAnswer {
+            release.await()
+            isRefreshed = true
+            Result.success(Unit)
+        }
+        sut.setIsAuthenticated(true)
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.Paste)
+        advanceUntilIdle()
+        assertNull(sut.currentSheet.value)
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.EnterManually)
+        advanceUntilIdle()
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertTrue(isRefreshed, "A later Send visit cancelled the contact's refresh")
+    }
+
+    @Test
     fun `nearby read still decoding does not route after contacts`() = test {
         val input = stubOnchainAmountScan(amountSats = 10_000u)
         val entered = CompletableDeferred<Unit>()
@@ -10227,6 +10611,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private fun stubHardwareFunding() {
         hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
         whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }.thenReturn(Result.success(48_000uL))
+    }
+
+    private fun stubClipboard(text: String) {
+        val item = mock<ClipData.Item> { on { this.text } doReturn text }
+        val clipData = mock<ClipData> { on { getItemAt(0) } doReturn item }
+        whenever(clipboardManager.primaryClip).thenReturn(clipData)
     }
 
     private suspend fun stubOnchainAmountScan(amountSats: ULong): String {

@@ -708,10 +708,17 @@ class AppViewModel @Inject constructor(
     private var addressValidationJob: Job? = null
 
     /**
-     * A request read during this Send visit (a nearby read on the recipient screen, or a read from Send's own scanner).
-     * It is cancelled when Send closes or the user enters a request manually.
+     * A request read or entered during this Send visit: a camera, gallery, paste or nearby read on the recipient
+     * screen, an address continued, or a read from Send's own scanner. It is cancelled when Send closes or the user
+     * enters a request manually.
      */
     private var sendVisitScanJob: Job? = null
+
+    /**
+     * True from Enter Manually, Contacts or Send closing until the recipient screen shows again. A read the screen
+     * still delivers while it leaves (a camera frame, a gallery pick or a nearby read) is dropped.
+     */
+    private var hasLeftSendRecipient = false
 
     /**
      * True on the main thread while a scan job runs, so a scan that closes Send itself (to open LNURL auth,
@@ -3427,7 +3434,7 @@ class AppViewModel @Inject constructor(
 
                         is SendEvent.AddressChange -> onAddressChange(it.value)
                         SendEvent.AddressReset -> resetAddressInput()
-                        is SendEvent.AddressContinue -> onAddressContinue(it.data, it.suppressQuickPay, it.isNearbyRead)
+                        is SendEvent.AddressContinue -> onAddressContinue(it)
 
                         is SendEvent.AmountChange -> onAmountChange(it.amount)
                         is SendEvent.AmountMax -> onAmountMax(it.amount)
@@ -3480,6 +3487,7 @@ class AppViewModel @Inject constructor(
                         SendEvent.NavToAddress -> setSendEffect(SendEffect.NavigateToAddress)
                         SendEvent.Contacts -> {
                             cancelSendVisitScan()
+                            hasLeftSendRecipient = true
                             setSendEffect(
                                 if (isPaykitEnabled.value) {
                                     SendEffect.NavigateToContacts
@@ -3507,8 +3515,14 @@ class AppViewModel @Inject constructor(
         sendVisitScanJob = null
     }
 
+    /** The recipient screen is shown, at the start of a Send visit or on the way back to it, so it reads again. */
+    fun onSendRecipientShown() {
+        hasLeftSendRecipient = false
+    }
+
     private fun onEnterManuallyClick() {
         cancelSendVisitScan()
+        hasLeftSendRecipient = true
         clearActiveContactPaymentContext()
         resetAddressInput()
         setSendEffect(SendEffect.NavigateToAddress)
@@ -4179,7 +4193,12 @@ class AppViewModel @Inject constructor(
         )
     }
 
-    private fun onAddressContinue(data: String, suppressQuickPay: Boolean, isNearbyRead: Boolean) {
+    private fun onAddressContinue(event: SendEvent.AddressContinue) {
+        val (data, suppressQuickPay, isNearbyRead) = event
+        if (event.isRecipientRead && hasLeftSendRecipient) {
+            Logger.info("Ignoring read from the recipient screen the user left", context = TAG)
+            return
+        }
         // Bluetooth reads suppress QuickPay; NFC reads come from a tap, like a QR scan or a paste.
         val isPassiveRead = isNearbyRead && suppressQuickPay
         // A Bluetooth read never replaces a request still preparing: one the user chose, or the strongest receiver
@@ -4195,10 +4214,11 @@ class AppViewModel @Inject constructor(
             routePubkyKeys = true,
             suppressQuickPay = suppressQuickPay,
         )
-        // A nearby read (NFC or Bluetooth) arrives on its own, so Enter Manually must be able to drop it.
-        // Its job ends once it routes, so cancelling it never stops a payment in progress.
+        // A read can still be decoding when the user moves on, so Enter Manually must be able to drop it.
+        // Cancelling it never stops a payment: the job sends none. After it routes to the confirmation it only
+        // estimates fees, which stop with it for a request the user left.
         // A duplicate read returns no job; keep the handle of the scan still running.
-        if (isNearbyRead) job?.let { sendVisitScanJob = it }
+        job?.let { sendVisitScanJob = it }
     }
 
     fun onUsdtAmountChange(value: String) {
@@ -5518,7 +5538,7 @@ class AppViewModel @Inject constructor(
             )
             return
         }
-        launchScan(source = ScanSource.PASTE, data = data, routePubkyKeys = true)
+        launchScan(source = ScanSource.PASTE, data = data, routePubkyKeys = true)?.let { sendVisitScanJob = it }
     }
 
     private fun onScanClick() {
@@ -9460,7 +9480,9 @@ class AppViewModel @Inject constructor(
         }
         if (_currentSheet.value is Sheet.Send) {
             // A read still preparing belongs to this Send visit: it must not reopen a sheet or reach QuickPay.
-            if (isRunningScan.get() != true) cancelSendVisitScan()
+            // A scan that closes Send itself keeps running, and no later visit may cancel it.
+            if (isRunningScan.get() != true) cancelSendVisitScan() else sendVisitScanJob = null
+            hasLeftSendRecipient = true
             sendStateGeneration++
             // A closed send is over: a swap failing for it later gives no contact back to whatever comes next.
             sendSession++
@@ -11078,6 +11100,8 @@ sealed interface SendEvent {
         val data: String,
         val suppressQuickPay: Boolean = false,
         val isNearbyRead: Boolean = false,
+        /** Read by the recipient screen on its own (camera, gallery or nearby), not continued by the user. */
+        val isRecipientRead: Boolean = isNearbyRead,
     ) : SendEvent
 
     data object AmountReset : SendEvent
