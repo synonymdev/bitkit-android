@@ -22481,7 +22481,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val bolt11 = "lnbcrt1quickpaysparkshort"
         enableQuickPay()
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
-        whenever(lightningRepo.canSendWithSpark(499u)).thenReturn(true)
+        whenever(lightningRepo.canSendWithSpark(any())).thenAnswer { (it.arguments[0] as Long) <= 499L }
         val nodeState = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting))
         whenever(lightningRepo.lightningState).thenReturn(nodeState)
         var isQuickPaySetBeforeWait = false
@@ -22497,6 +22497,25 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(lightningRepo).waitForUsableChannels()
         assertFalse(isQuickPaySetBeforeWait)
         assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
+    }
+
+    @Test
+    fun `an amountless scan while the node starts keeps the channel wait when Spark is ready with no balance`() = test {
+        val bolt11 = "lnbcrt1quickpayamountless"
+        // QuickPay never takes a zero amount.
+        enableQuickPay(canApply = false)
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+        whenever(lightningRepo.canSendWithSpark(0u)).thenReturn(true)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting)))
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        // Once before the QuickPay decision and once before the send path reads what Lightning can send.
+        verify(lightningRepo, times(2)).waitForUsableChannels()
+        verify(lightningRepo, never()).waitForUsableChannels(awaitUsable = false)
+        assertNull(sut.quickPayData.value)
     }
 
     @Test

@@ -299,7 +299,7 @@ class LightningRepo @Inject constructor(
      */
     suspend fun <T> executeWhenNodeRunning(
         operationName: String,
-        waitTimeout: Duration = 1.minutes,
+        waitTimeout: Duration = NODE_RUN_WAIT_TIMEOUT,
         operation: suspend () -> Result<T>,
     ): Result<T> = withContext(bgDispatcher) {
         Logger.verbose("Operation called: '$operationName'", context = TAG)
@@ -1610,6 +1610,7 @@ class LightningRepo @Inject constructor(
         paymentDeadlineAt: Instant?,
         maxTotalRoutingFeeMsat: ULong?,
         isAuthorizedAtSubmission: (() -> Boolean)?,
+        isRetryAfterNodeStart: Boolean = false,
         onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> {
         // The rail is picked again on every attempt, so each one checks the other holds no live send of the invoice.
@@ -1621,7 +1622,21 @@ class LightningRepo @Inject constructor(
             val ldkRecordsBefore = ldkSendRecords.get()
             val sparkRecordsBefore = sparkRepo.sendRecordMark()
             runSuspendCatching { earlierNodeSend(bolt11, paymentHash) }
-                .getOrElse { return Result.failure(it) }
+                .getOrElse {
+                    // Nothing is authorized or admitted yet, so the payment starts over once the node can list its
+                    // sends: the rail is picked again, and an earlier node send of the invoice is found.
+                    val canRetry = it is ServiceError.NodeNotStarted && !isRetryAfterNodeStart
+                    if (!canRetry || !awaitNodeRunning()) return Result.failure(it)
+                    return payInvoiceChecked(
+                        bolt11 = bolt11,
+                        sats = sats,
+                        paymentDeadlineAt = paymentDeadlineAt,
+                        maxTotalRoutingFeeMsat = maxTotalRoutingFeeMsat,
+                        isAuthorizedAtSubmission = isAuthorizedAtSubmission,
+                        isRetryAfterNodeStart = true,
+                        onBeforeSend = onBeforeSend,
+                    )
+                }
                 ?.let {
                     // The node paid it, so its caller settles from the node's payment, as its event already fired.
                     if (it is EarlierSend.Paid) recordSendRail(it.paymentHash, LightningRail.Ldk)
@@ -1680,6 +1695,16 @@ class LightningRepo @Inject constructor(
             isAuthorizedAtSubmission = isAuthorizedAtSubmission,
             onBeforeSend = onBeforeSend,
         )
+    }
+
+    private suspend fun awaitNodeRunning(): Boolean {
+        if (!_lightningState.value.nodeLifecycleState.canRun()) return false
+        withTimeoutOrNull(NODE_RUN_WAIT_TIMEOUT) {
+            _lightningState.first { it.nodeLifecycleState.isRunning() }
+        } ?: return false
+        // The node is marked running before its channels are published, and the rail is picked from them.
+        refreshChannelsAndPeers()
+        return true
     }
 
     /** Pays [bolt11] from the node's channels only, for a send quoted on them that must never fall back to Spark. */
@@ -3400,6 +3425,9 @@ class LightningRepo @Inject constructor(
         private val CHANNELS_USABLE_POLL_DELAY = 1.seconds
         private val ABANDON_SYNC_TIMEOUT = 30.seconds
         private val NO_USABLE_CHANNELS_FEEDBACK_DELAY = 2_500.milliseconds
+
+        /** Max time an operation waits for a starting node to run. */
+        private val NODE_RUN_WAIT_TIMEOUT = 1.minutes
 
         /** Max time to wait for a starting node before its id is treated as unavailable. */
         private val NODE_ID_WAIT_TIMEOUT = 15.seconds
