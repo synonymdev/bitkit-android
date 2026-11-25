@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -212,6 +213,12 @@ class LightningRepo @Inject constructor(
     private val pendingStopLock = Any()
     private val lifecycleMutex = Mutex()
 
+    /** Starts called and not returned yet, also while one waits for a stop to finish or between its retries. */
+    private val pendingStartCount = MutableStateFlow(0)
+
+    /** Counts [wipeStorage] calls, so a send that waited for the node can tell the wallet was wiped meanwhile. */
+    private val wipeCount = AtomicLong(0)
+
     /**
      * Serializes a whole server-change transaction (stop, start, persist) against the background
      * recovery a failed change launches. [lifecycleMutex] is taken separately by `stop()` and
@@ -379,17 +386,28 @@ class LightningRepo @Inject constructor(
         eventHandler: NodeEventHandler? = null,
         channelMigration: ChannelDataMigration? = null,
         shouldValidateGraph: Boolean = true,
-    ): Result<Unit> = startNode(
-        walletIndex = walletIndex,
-        timeout = timeout,
-        shouldRetry = shouldRetry,
-        customServerUrl = customServerUrl,
-        customRgsServerUrl = customRgsServerUrl,
-        eventHandler = eventHandler,
-        channelMigration = channelMigration,
-        shouldValidateGraph = shouldValidateGraph,
-        shouldRetryYieldToStop = false,
-    )
+    ): Result<Unit> = whileStartPending {
+        startNode(
+            walletIndex = walletIndex,
+            timeout = timeout,
+            shouldRetry = shouldRetry,
+            customServerUrl = customServerUrl,
+            customRgsServerUrl = customRgsServerUrl,
+            eventHandler = eventHandler,
+            channelMigration = channelMigration,
+            shouldValidateGraph = shouldValidateGraph,
+            shouldRetryYieldToStop = false,
+        )
+    }
+
+    private suspend fun <T> whileStartPending(start: suspend () -> T): T {
+        pendingStartCount.update { it + 1 }
+        try {
+            return start()
+        } finally {
+            pendingStartCount.update { it - 1 }
+        }
+    }
 
     private suspend fun startNode(
         walletIndex: Int = 0,
@@ -988,6 +1006,7 @@ class LightningRepo @Inject constructor(
 
     suspend fun wipeStorage(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("wipeStorage called, stopping node first", context = TAG)
+        wipeCount.incrementAndGet()
         lifecycleMutex.withLock {
             stopLocked().mapCatching {
                 Logger.debug("node stopped, calling wipeStorage", context = TAG)
@@ -1330,11 +1349,13 @@ class LightningRepo @Inject constructor(
                     Logger.warn("Retrying recovery start '$attempt/$RECOVERY_START_ATTEMPTS'", context = TAG)
                 }
                 // A direct stop since recovery's own stop wins over every attempt.
-                result = startNode(
-                    shouldRetry = false,
-                    shouldCancelPendingStop = false,
-                    stopRequestsSeen = stopRequests,
-                )
+                result = whileStartPending {
+                    startNode(
+                        shouldRetry = false,
+                        shouldCancelPendingStop = false,
+                        stopRequestsSeen = stopRequests,
+                    )
+                }
             } while (result.exceptionOrNull().isKvStoreSetupFailure() && attempt < RECOVERY_START_ATTEMPTS)
             result.onSuccess {
                 Logger.debug("Successfully started node with previous config", context = TAG)
@@ -1618,6 +1639,7 @@ class LightningRepo @Inject constructor(
         if (shouldPayWithSpark(bolt11, sats)) {
             runCatching { requireWalletRestoreComplete() }.onFailure { return Result.failure(it) }
             val key = ldkSendKey(bolt11, paymentHash)
+            val wipesBefore = wipeCount.get()
             // Read before the checks, so a send of either rail recorded after them refuses this one at submission.
             val ldkRecordsBefore = ldkSendRecords.get()
             val sparkRecordsBefore = sparkRepo.sendRecordMark()
@@ -1626,7 +1648,7 @@ class LightningRepo @Inject constructor(
                     // Nothing is authorized or admitted yet, so the payment starts over once the node can list its
                     // sends: the rail is picked again, and an earlier node send of the invoice is found.
                     val canRetry = it is ServiceError.NodeNotStarted && !isRetryAfterNodeStart
-                    if (!canRetry || !awaitNodeRunning()) return Result.failure(it)
+                    if (!canRetry || !awaitNodeListing(wipesBefore)) return Result.failure(it)
                     return payInvoiceChecked(
                         bolt11 = bolt11,
                         sats = sats,
@@ -1697,14 +1719,33 @@ class LightningRepo @Inject constructor(
         )
     }
 
-    private suspend fun awaitNodeRunning(): Boolean {
-        if (!_lightningState.value.nodeLifecycleState.canRun()) return false
+    /**
+     * Waits, up to [NODE_RUN_WAIT_TIMEOUT], until the node runs and lists its payments. A node stopping, or stopped
+     * with a start called, is waited for, also across a start's retry or its restart for a stale graph. The wait
+     * ends without it when the start fails, when the node is stopped with no start coming, or when the wallet was
+     * wiped since [wipesBefore], as the node that runs next can be another wallet's.
+     */
+    private suspend fun awaitNodeListing(wipesBefore: Long): Boolean {
+        val isWiped = { isWiping || wipeCount.get() != wipesBefore }
+        val startStates = combine(_lightningState, pendingStartCount) { state, starts ->
+            state.nodeLifecycleState to starts
+        }
+        var isListing = false
         withTimeoutOrNull(NODE_RUN_WAIT_TIMEOUT) {
-            _lightningState.first { it.nodeLifecycleState.isRunning() }
-        } ?: return false
+            while (!isListing) {
+                val (lifecycle, _) = startStates.first { (lifecycle, starts) ->
+                    val canStillRun = lifecycle.canRun() || lifecycle is NodeLifecycleState.Stopping || starts > 0
+                    lifecycle.isRunning() || lifecycle is NodeLifecycleState.ErrorStarting || isWiped() || !canStillRun
+                }
+                if (!lifecycle.isRunning() || isWiped()) return@withTimeoutOrNull
+                isListing = listPaymentsKeepingSendHashes() != null
+                if (!isListing) delay(NODE_LISTING_POLL_DELAY)
+            }
+        }
+        if (!isListing || isWiped()) return false
         // The node is marked running before its channels are published, and the rail is picked from them.
         refreshChannelsAndPeers()
-        return true
+        return !isWiped()
     }
 
     /** Pays [bolt11] from the node's channels only, for a send quoted on them that must never fall back to Spark. */
@@ -3381,11 +3422,13 @@ class LightningRepo @Inject constructor(
             Logger.error("Failed to stop node during restart", it, context = TAG)
             return@withContext Result.failure(it)
         }
-        startNode(
-            walletIndex = walletIndex,
-            channelMigration = channelMigration,
-            shouldRetryYieldToStop = true
-        ).onFailure {
+        whileStartPending {
+            startNode(
+                walletIndex = walletIndex,
+                channelMigration = channelMigration,
+                shouldRetryYieldToStop = true
+            )
+        }.onFailure {
             if (it is NodeStartYieldedToStopError) {
                 Logger.info("Deferred node restart to a requested stop", context = TAG)
             } else {
@@ -3428,6 +3471,7 @@ class LightningRepo @Inject constructor(
 
         /** Max time an operation waits for a starting node to run. */
         private val NODE_RUN_WAIT_TIMEOUT = 1.minutes
+        private val NODE_LISTING_POLL_DELAY = 500.milliseconds
 
         /** Max time to wait for a starting node before its id is treated as unavailable. */
         private val NODE_ID_WAIT_TIMEOUT = 15.seconds
