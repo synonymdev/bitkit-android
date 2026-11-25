@@ -54,7 +54,12 @@ class ToastQueueManagerTest : BaseUnitTest() {
     fun `a result replaces its queued progress toast behind a toast that is not interruptible`() = test {
         val sut = ToastQueueManager(backgroundScope)
         val updateToast = Toast(type = Toast.ToastType.ERROR, title = "Update", autoHide = true, interruptible = false)
-        val progressToast = Toast(type = Toast.ToastType.INFO, title = "Applying changes", autoHide = false)
+        val progressToast = Toast(
+            type = Toast.ToastType.INFO,
+            title = "Applying changes",
+            autoHide = false,
+            replacedByNext = true,
+        )
         val resultToast = Toast(type = Toast.ToastType.SUCCESS, title = "Settings updated", autoHide = true)
         sut.enqueue(updateToast)
         sut.enqueue(progressToast)
@@ -72,7 +77,12 @@ class ToastQueueManagerTest : BaseUnitTest() {
         val sut = ToastQueueManager(backgroundScope)
         val updateToast = Toast(type = Toast.ToastType.ERROR, title = "Update", autoHide = true, interruptible = false)
         val onlineToast = Toast(type = Toast.ToastType.SUCCESS, title = "Back online", autoHide = true)
-        val progressToast = Toast(type = Toast.ToastType.INFO, title = "Applying changes", autoHide = false)
+        val progressToast = Toast(
+            type = Toast.ToastType.INFO,
+            title = "Applying changes",
+            autoHide = false,
+            replacedByNext = true,
+        )
         val resultToast = Toast(type = Toast.ToastType.SUCCESS, title = "Settings updated", autoHide = true)
         sut.enqueue(updateToast)
         sut.enqueue(onlineToast)
@@ -85,6 +95,25 @@ class ToastQueueManagerTest : BaseUnitTest() {
         assertEquals(resultToast, sut.currentToast.value)
         advanceTimeBy(Toast.VISIBILITY_TIME_DEFAULT + 1)
         assertNull(sut.currentToast.value)
+    }
+
+    @Test
+    fun `a toast that stays until dismissed keeps its place behind a toast that is not interruptible`() = test {
+        val sut = ToastQueueManager(backgroundScope)
+        val updateToast = Toast(type = Toast.ToastType.ERROR, title = "Update", autoHide = true, interruptible = false)
+        val returnedToast = Toast(type = Toast.ToastType.INFO, title = "Payment returned", autoHide = false)
+        val onlineToast = Toast(type = Toast.ToastType.SUCCESS, title = "Back online", autoHide = true)
+        sut.enqueue(updateToast)
+        sut.enqueue(returnedToast)
+        sut.enqueue(onlineToast)
+
+        advanceTimeBy(Toast.VISIBILITY_TIME_DEFAULT + 1)
+
+        assertEquals(returnedToast, sut.currentToast.value)
+        advanceTimeBy(Toast.VISIBILITY_TIME_DEFAULT + 1)
+        assertEquals(returnedToast, sut.currentToast.value)
+        sut.dismissCurrentToast()
+        assertEquals(onlineToast, sut.currentToast.value)
     }
 
     @Test

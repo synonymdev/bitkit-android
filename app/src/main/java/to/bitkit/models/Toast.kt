@@ -10,6 +10,8 @@ data class Toast(
     val isLoading: Boolean = false,
     /** False for a one-time warning that later toasts wait behind instead of replacing. */
     val interruptible: Boolean = true,
+    /** True for a progress toast that the next toast replaces, even while it waits in the queue. */
+    val replacedByNext: Boolean = false,
 ) {
     enum class ToastType { SUCCESS, INFO, LIGHTNING, WARNING, ERROR }
 
