@@ -1037,12 +1037,16 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    /** Resets the receive request once per sheet [presentationId], so an activity recreation keeps the open one. */
-    fun openReceive(presentationId: String) {
-        if (openedReceivePresentationId == presentationId) return
+    /**
+     * Resets the receive request once per sheet [presentationId], so an activity recreation keeps the open one.
+     * Returns whether this call opened it.
+     */
+    fun openReceive(presentationId: String): Boolean {
+        if (openedReceivePresentationId == presentationId) return false
         openedReceivePresentationId = presentationId
         resetPreActivityMetadataTagsForCurrentInvoice()
         refreshReceiveState()
+        return true
     }
 
     fun refreshReceiveState() = viewModelScope.launch {

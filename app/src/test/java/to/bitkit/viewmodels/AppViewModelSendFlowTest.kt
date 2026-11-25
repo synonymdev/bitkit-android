@@ -265,6 +265,7 @@ import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
 import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.screens.paymentrequests.paymentRequestLifecycleStatusRes
+import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRetryRoute
 import to.bitkit.ui.sheets.SendRoute
@@ -9039,6 +9040,54 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertEquals(sheet, sut.currentSheet.value)
         verify(walletRepo, never()).resetReceiveRequest()
+    }
+
+    @Test
+    fun `payment of an invoice the cache load publishes after receive opened preserves the receive sheet`() = test {
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(bolt11 = "cached-invoice")))
+        val sheet = Sheet.Receive()
+        sut.showSheet(sheet)
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "cached-invoice", bolt11PaymentHash = "cached-hash")
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "opened-invoice", bolt11PaymentHash = "opened-hash")
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "cached-hash",
+                amountMsat = 4_000_000uL,
+                customRecords = emptyList(),
+            ),
+        )
+        advanceUntilIdle()
+
+        assertEquals(sheet, sut.currentSheet.value)
+    }
+
+    @Test
+    fun `payment of an invoice shown by a replaced receive sheet closes the receive sheet replacing it`() = test {
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "shown-invoice", bolt11PaymentHash = "shown-hash")
+        advanceUntilIdle()
+        val replacement = Sheet.Receive(route = ReceiveRoute.PaymentRequestRecipient)
+        sut.showSheet(replacement)
+        advanceUntilIdle()
+        assertEquals(replacement, sut.currentSheet.value)
+
+        emitNodeEvent(
+            Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "shown-hash",
+                amountMsat = 4_000_000uL,
+                customRecords = emptyList(),
+            ),
+        )
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
     }
 
     @Test

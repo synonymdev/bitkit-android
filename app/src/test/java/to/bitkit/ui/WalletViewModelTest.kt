@@ -301,15 +301,15 @@ class WalletViewModelTest : BaseUnitTest() {
     fun `openReceive resets the receive request once per sheet presentation`() = test {
         whenever(walletRepo.refreshReceiveState()).thenReturn(Result.success(Unit))
 
-        sut.openReceive("first")
+        assertTrue(sut.openReceive("first"))
         advanceUntilIdle()
-        sut.openReceive("first")
+        assertFalse(sut.openReceive("first"))
         advanceUntilIdle()
 
         verify(walletRepo, times(1)).refreshReceiveState()
         verify(walletRepo, times(1)).resetPreActivityMetadataTagsForCurrentInvoice()
 
-        sut.openReceive("second")
+        assertTrue(sut.openReceive("second"))
         advanceUntilIdle()
 
         verify(walletRepo, times(2)).refreshReceiveState()

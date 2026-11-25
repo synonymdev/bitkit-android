@@ -78,7 +78,6 @@ fun ReceiveSheet(
     val rootRoute = startRoute.rootRoute()
     val currencies = LocalCurrencies.current
 
-    LaunchedEffect(Unit) { editInvoiceAmountViewModel.clearInput() }
     val invoiceEditState = rememberSaveable(saver = ReceiveInvoiceEditState.Saver) { ReceiveInvoiceEditState() }
 
     LaunchedEffect(startRoute) {
@@ -125,7 +124,9 @@ fun ReceiveSheet(
         }
     }
 
-    LaunchedEffect(presentationId) { wallet.openReceive(presentationId) }
+    LaunchedEffect(presentationId) {
+        if (wallet.openReceive(presentationId)) editInvoiceAmountViewModel.clearInput()
+    }
 
     Box(
         modifier = Modifier
