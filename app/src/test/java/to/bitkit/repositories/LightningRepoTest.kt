@@ -1458,8 +1458,8 @@ class LightningRepoTest : BaseUnitTest() {
         verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
     }
 
-    @Test
     // Reachable only while a running node is being reset: the stale-graph restart and the recovery screen's reset.
+    @Test
     fun `a held spark send fails with the hold after the bound when a running node never lists`() = test {
         startNodeForTesting()
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
