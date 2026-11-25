@@ -149,6 +149,14 @@ internal fun NavController.navigateToCoinSelection() {
     navigateTo(SendRoute.CoinSelection)
 }
 
+/** Shows [route] after a failed swipe, resetting the confirmation it covers so Back finds it ready to swipe. */
+internal fun NavController.navigateToSendError(route: SendRoute.Error) {
+    currentBackStackEntry?.takeIf { it.destination.hasRoute<SendRoute.Confirm>() }
+        ?.savedStateHandle
+        ?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
+    navigateTo(route)
+}
+
 internal fun NavController.navigateToSendAmount(startDestination: SendRoute) {
     if (popBackStack(SendRoute.Amount, inclusive = false)) return
     navigateTo(SendRoute.Amount) {
@@ -172,6 +180,7 @@ fun SendSheet(
     startDestination: SendRoute = SendRoute.Recipient,
     hardwareWalletId: String? = null,
     preparingRequest: PaykitPaymentRequest? = null,
+    onConfirmLockChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
@@ -384,7 +393,7 @@ fun SendSheet(
                                 retryRoute = it.retryRoute,
                             )
                         )
-                        is SendEffect.NavigateToError -> navController.navigateTo(
+                        is SendEffect.NavigateToError -> navController.navigateToSendError(
                             SendRoute.errorFromFailure(
                                 failure = it.failure,
                                 retryRoute = it.retryRoute,
@@ -477,11 +486,17 @@ fun SendSheet(
                 }
                 composableWithDefaultTransitions<SendRoute.QrScanner> {
                     QrScanningScreen(
+                        readsNearby = true,
                         onBack = { navController.popBackStack() },
                         onScanSuccess = { payload ->
                             payload.text?.let {
                                 navController.popBackStack()
-                                appViewModel.onScanResult(data = it, routePubkyKeys = true)
+                                appViewModel.onScanResult(
+                                    data = it,
+                                    routePubkyKeys = true,
+                                    suppressQuickPay = payload.isNearby,
+                                    fromSendScanner = true,
+                                )
                             }
                         },
                     )
@@ -539,6 +554,7 @@ fun SendSheet(
                     }
                     val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
+                    val isSwipeRunning by appViewModel.isSendSwipeRunning.collectAsStateWithLifecycle()
                     val initialSubscriptionId = uiState.incomingPaymentRequestId
                         ?.takeIf { uiState.isInitialSubscriptionPayment }
                         ?.let { id -> PaykitSubscriptionId(id.paymentRequestId, id.counterparty) }
@@ -588,6 +604,8 @@ fun SendSheet(
                         },
                         onClickTag = { tag -> appViewModel.removeTag(tag) },
                         onNavigateToPin = { navController.navigateTo(SendRoute.PinCheck) },
+                        isSwipeRunning = isSwipeRunning,
+                        onLockChange = onConfirmLockChange,
                         autoPayContent = initialSubscription?.let { subscription ->
                             {
                                 SubscriptionFirstPaymentProgress(
@@ -755,6 +773,7 @@ fun SendSheet(
                             quickPayData = request.data,
                             isRequestActive = quickPayRequest?.id == request.id,
                             canPayWithoutNode = sparkCanPayQuickPay(request.data, sparkState),
+                            canStart = { appViewModel.canStartQuickPay(request) },
                             onPaymentComplete = { paymentHash, amountWithFee ->
                                 appViewModel.onSendSuccess(
                                     NewTransactionSheetDetails(
@@ -778,7 +797,7 @@ fun SendSheet(
                                 )
                             },
                             onFallBackToConfirm = {
-                                appViewModel.resetQuickPay()
+                                appViewModel.fallBackFromQuickPay()
                                 navController.navigateTo(SendRoute.Confirm) {
                                     popUpTo<SendRoute.QuickPay> { inclusive = true }
                                 }

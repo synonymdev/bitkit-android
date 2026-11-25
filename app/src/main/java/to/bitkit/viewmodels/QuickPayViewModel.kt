@@ -59,10 +59,10 @@ class QuickPayViewModel @Inject constructor(
 
     fun acknowledge(session: QuickPaySession) = quickPayRepo.acknowledge(session)
 
-    fun pay(session: QuickPaySession, data: QuickPayData) {
+    fun pay(session: QuickPaySession, data: QuickPayData, canDispatch: () -> Boolean = { true }) {
         if (isPayRequested || _uiState.value.result != null) return
         isPayRequested = true
-        quickPayRepo.pay(session, data.toPayRequest())
+        quickPayRepo.pay(session, data.toPayRequest(), canDispatch)
     }
 
     override fun onCleared() {

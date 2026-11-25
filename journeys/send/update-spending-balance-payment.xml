@@ -5,7 +5,9 @@
     and one swipe first moves the channel's balance to Spark, then pays the invoice from Spark. The move shows in
     Activity as a "Move to Spark" row, and the emptied channel closes in the background. If the payment fails after the
     move, the funds stay in Spark and the usual payment error shows. QuickPay never sends such a payment; it always
-    opens the confirm screen.
+    opens the confirm screen. From the swipe until it moves on or returns to confirm, the confirm screen is locked: no
+    Back, no sheet dismiss and no edits. Android also checks system back here; on iOS a confirm screen opened from a
+    link is the sheet's root, so only the sheet's drag applies there.
 
     Precondition: dev build pointed at a local Spark regtest (spark-sdk regtest/local), QuickPay off, a wallet with an
     open channel to that stack's SSP Lightning node that can send about 30 000 sats and a Spark balance of about
@@ -17,6 +19,7 @@
     <action>Verify the Confirm screen (testTag "SendConfirm") shows 50 000 sats with its details open on their own (Hide Details, testTag "SendConfirmToggleDetails")</action>
     <action>Verify the fee row shows the payment's own fee and the "Update fee" row (testTag "ReviewUpdateFee") shows an amount, without "up to", and that no "Route" row shows</action>
     <action>Swipe to pay (testTag "GRAB"); the payment is over half of the Spending balance, so verify the "Are You Sure?" dialog warns about sending over 50% of the balance and tap "Yes, Send"</action>
+    <action>While the swipe still shows its loading state, press system back and drag the sheet down; verify the Confirm screen stays open</action>
     <action>Verify the Bitcoin Sent screen (testTag "SendSuccess") shows 50 000</action>
     <action>Go back to Home and verify Activity lists a "Move to Spark" transfer row and the 50 000-sat Lightning payment</action>
     <action>Open Settings › Advanced › Lightning Connections and verify the channel is closing or closed</action>

@@ -94,6 +94,7 @@ fun SettingsScreen(
     val bgPaymentsIntroSeen by settings.bgPaymentsIntroSeen.collectAsStateWithLifecycle()
     val notificationsGranted by settings.notificationsGranted.collectAsStateWithLifecycle()
     val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
+    val isNearbyPaymentsEnabled by settings.isNearbyPaymentsEnabled.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { settings.refreshUsdtAvailability() }
     val canDisableUsdt by settings.canDisableUsdt.collectAsStateWithLifecycle()
     val isUsdtEnabled by settings.isUsdtEnabled.collectAsStateWithLifecycle()
@@ -134,6 +135,7 @@ fun SettingsScreen(
             tagCount = lastUsedTags.size,
             isQuickPayEnabled = isQuickPayEnabled,
             notificationsGranted = notificationsGranted,
+            isNearbyPaymentsEnabled = isNearbyPaymentsEnabled,
             hardwareWalletCount = hardwareWallets.size,
             isUsdtEnabled = isUsdtEnabled,
             canDisableUsdt = canDisableUsdt,
@@ -167,6 +169,7 @@ fun SettingsScreen(
                 SettingsEvent.WidgetsClick -> navController.navigateToWidgetsSettings()
                 SettingsEvent.TagsClick -> navController.navigateToTagsSettings()
                 SettingsEvent.TransactionSpeedClick -> navController.navigateToTransactionSpeedSettings()
+                SettingsEvent.NearbyPaymentsClick -> settings.setNearbyPaymentsEnabled(!isNearbyPaymentsEnabled)
                 SettingsEvent.UsdtClick -> settings.setUsdtEnabled(!isUsdtEnabled)
                 SettingsEvent.QuickPayClick -> navController.navigateToQuickPaySettings(quickPayIntroSeen)
                 SettingsEvent.BgPaymentsClick -> {
@@ -378,6 +381,15 @@ private fun GeneralTabContent(
             },
             onClick = { onEvent(SettingsEvent.HardwareWalletsClick) },
             modifier = Modifier.testTag("HardwareWalletsSettings")
+        )
+        SettingsSwitchRow(
+            title = stringResource(R.string.settings__nearby__title),
+            subtitle = stringResource(R.string.settings__nearby__subtitle),
+            isChecked = state.isNearbyPaymentsEnabled,
+            icon = { SettingsIcon(R.drawable.ic_broadcast) },
+            onClick = { onEvent(SettingsEvent.NearbyPaymentsClick) },
+            switchTestTag = "NearbyPaymentsToggle",
+            modifier = Modifier.testTag("NearbyPaymentsSettings")
         )
 
         if (Env.isUsdtEnabled) {
@@ -678,6 +690,7 @@ sealed interface SettingsEvent {
     data object WidgetsClick : SettingsEvent
     data object TagsClick : SettingsEvent
     data object TransactionSpeedClick : SettingsEvent
+    data object NearbyPaymentsClick : SettingsEvent
     data object UsdtClick : SettingsEvent
     data object QuickPayClick : SettingsEvent
     data object BgPaymentsClick : SettingsEvent
@@ -723,6 +736,7 @@ data class GeneralTabState(
     val tagCount: Int = 0,
     val isQuickPayEnabled: Boolean = false,
     val notificationsGranted: Boolean = false,
+    val isNearbyPaymentsEnabled: Boolean = true,
     val hardwareWalletCount: Int = 0,
     val isUsdtEnabled: Boolean = false,
     val canDisableUsdt: Boolean = false,

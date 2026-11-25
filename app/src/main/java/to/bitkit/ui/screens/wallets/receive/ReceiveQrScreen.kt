@@ -79,6 +79,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TertiaryButton
+import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.Tooltip
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.rememberQrBitmap
@@ -86,6 +87,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.usdt.UsdtDepositReceiveScreen
 import to.bitkit.ui.shared.effects.SetMaxBrightness
+import to.bitkit.ui.shared.effects.offerPaymentNearby
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.shareQrCode
@@ -315,6 +317,15 @@ fun ReceiveQrScreen(
         hardwareTabLabel?.let { persistentMapOf(ReceiveTab.HARDWARE to it) } ?: persistentMapOf()
     }
 
+    val canTapToPay = offerPaymentNearby(
+        nearbyReceiveRequest(
+            tab = selectedTab,
+            request = invoicesByTab[selectedTab],
+            hasInvoiceError = walletState.hasReceiveInvoiceError,
+            isUpdating = walletState.isReceiveInvoiceUpdating,
+        )
+    )
+
     if (selectedTab == ReceiveTab.USDT) {
         Column(
             modifier = modifier.fillMaxSize().background(
@@ -473,6 +484,7 @@ fun ReceiveQrScreen(
                                             { onClickEditInvoice(tab) }
                                         },
                                         accentColor = tab.accentColor,
+                                        showsTapToPay = canTapToPay,
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 }
@@ -572,6 +584,7 @@ fun ReceiveQrView(
     onClickEditInvoice: (() -> Unit)?,
     accentColor: Color,
     modifier: Modifier = Modifier,
+    showsTapToPay: Boolean = false,
     shareContent: String = copyText,
     copyMessage: String = stringResource(R.string.wallet__receive_copied),
 ) {
@@ -667,6 +680,30 @@ fun ReceiveQrView(
             )
         }
         VerticalSpacer(16.dp)
+        if (showsTapToPay) {
+            TapToPayLabel()
+            VerticalSpacer(16.dp)
+        }
+    }
+}
+
+@Composable
+private fun TapToPayLabel(modifier: Modifier = Modifier) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.testTag("ReceiveTapToPay")
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_broadcast),
+            contentDescription = null,
+            tint = Colors.White64,
+            modifier = Modifier.size(16.dp)
+        )
+        Text13Up(
+            text = stringResource(R.string.wallet__receive_scan_or_tap),
+            color = Colors.White64,
+        )
     }
 }
 

@@ -343,6 +343,16 @@ class SettingsViewModel @Inject constructor(
     val isQuickpayEnabled = settingsStore.data.map { it.isQuickPayEnabled }
         .asStateFlow(initialValue = false)
 
+    // Off until the saved value loads, so Receive never advertises for a wallet that opted out.
+    val isNearbyPaymentsEnabled = settingsStore.data.map { it.isNearbyPaymentsEnabled }
+        .asStateFlow(initialValue = false)
+
+    fun setNearbyPaymentsEnabled(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(isNearbyPaymentsEnabled = value) }
+        }
+    }
+
     val enableSwipeToHideBalance = settingsStore.data.map { it.enableSwipeToHideBalance }
         .asStateFlow(initialValue = true)
 

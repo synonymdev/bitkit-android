@@ -3,6 +3,22 @@ package to.bitkit.ui.screens.wallets.receive
 import to.bitkit.R
 import to.bitkit.utils.Bip21Utils
 
+/**
+ * The request Receive offers over NFC and Bluetooth for [tab]: the one its QR shows, or null while that QR is replaced
+ * by a spinner or an error. A failed update keeps the previous invoice, which must not stay payable nearby.
+ * USDT draws its own screen and offers its request itself.
+ */
+internal fun nearbyReceiveRequest(
+    tab: ReceiveTab,
+    request: String?,
+    hasInvoiceError: Boolean,
+    isUpdating: Boolean,
+): String? {
+    if (tab == ReceiveTab.USDT) return null
+    val mode = getReceiveInvoiceDisplayMode(tab, hasInvoiceError, isUpdating, showDetails = false)
+    return request.takeIf { mode == ReceiveInvoiceDisplayMode.QR }
+}
+
 internal fun getReceiveInvoiceDisplayMode(
     tab: ReceiveTab,
     hasInvoiceError: Boolean,

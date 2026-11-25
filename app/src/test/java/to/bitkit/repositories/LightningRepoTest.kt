@@ -1250,6 +1250,34 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a node send checks its authorization again where it is submitted`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).thenReturn("hash")
+        val isAuthorizedAtSubmission = { false }
+
+        sut.payInvoiceAuthorizedAtSubmission("bolt11", 1_000uL, isAuthorizedAtSubmission) { true }
+
+        verify(lightningService).send(eq("bolt11"), eq(1_000uL), anyOrNull(), anyOrNull(), eq(isAuthorizedAtSubmission))
+    }
+
+    @Test
+    fun `a node send stopped at submission keeps an earlier send of the invoice`() = test {
+        // An earlier node send of this invoice is pending or paid, so its hash is kept.
+        val cache = AppCacheData(ldkSendHashesSeeded = true, ldkSendHashes = listOf("bolt11"))
+        val store = CacheStore(InMemoryDataStore(cache))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenAnswer { throw AppError(ServiceError.PaymentStoppedAtSubmission()) }
+
+        sut.payInvoiceAuthorizedAtSubmission("bolt11", 1_000uL, { false }) { true }
+
+        assertEquals(listOf("bolt11"), store.data.first().ldkSendHashes, "The earlier send's hash must stay")
+    }
+
+    @Test
     fun `a node-only payment fails instead of falling back to spark`() = test {
         startNodeForTesting()
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
@@ -2801,6 +2829,21 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(sut.canSend(1_000uL))
         assertFalse(sut.canSend(1_001uL))
         verify(lightningService, never()).balances
+    }
+
+    @Test
+    fun `waitForUsableChannels without awaiting publishes unusable channels and returns`() = test {
+        val cached = createChannelDetails().copy(isChannelReady = true, isUsable = true)
+        whenever(lightningService.channels).thenReturn(listOf(cached))
+        startNodeForTesting()
+        val unavailable = cached.copy(isUsable = false)
+        whenever(lightningService.channels).thenReturn(listOf(unavailable))
+
+        val wait = async { sut.waitForUsableChannels(awaitUsable = false) }
+        runCurrent()
+
+        assertTrue(wait.isCompleted)
+        assertEquals(listOf(unavailable), sut.lightningState.value.channels)
     }
 
     @Test

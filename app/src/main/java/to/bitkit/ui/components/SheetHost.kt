@@ -107,6 +107,8 @@ sealed interface Sheet {
     data class QrScanner(
         val isPubkyScan: Boolean = false,
         val showBackButton: Boolean = true,
+        /** Whether the scanner also takes payment requests over NFC and Bluetooth: only when it opens to pay. */
+        val readsNearby: Boolean = false,
     ) : Sheet
     data class PubkyAuth(val authUrl: String) : Sheet
 
@@ -120,6 +122,7 @@ enum class TimedSheetType(val priority: Int) {
     USDT(priority = 5),
     BACKUP(priority = 4),
     NOTIFICATIONS(priority = 3),
+    NFC(priority = 2),
     QUICK_PAY(priority = 2),
     HIGH_BALANCE(priority = 1)
 }
