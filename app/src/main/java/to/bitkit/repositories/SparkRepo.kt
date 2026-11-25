@@ -634,6 +634,9 @@ class SparkRepo @Inject constructor(
                 val previousAttempt = cacheStore.data.first().sparkSendAttempts[paymentHash.lowercase()]
                 val isReusedKey = previousAttempt?.attempt == attempt
                 val wasHeld = sendHold(paymentHash.lowercase()) != null
+                // A held send whose attempt Spark lists failed is settled by the next listing, and a send after that
+                // goes through the restore checks above, as a new key's send must.
+                if (isKeyedRetry && !isReusedKey) throw PaymentPendingException(paymentHash)
 
                 // A send refused before anything went out is taken as not having used its key, so a retry refuses the
                 // same way. The hold of an earlier attempt under the same key stays, as it may have committed a
@@ -712,6 +715,8 @@ class SparkRepo @Inject constructor(
                     // The caller subscribes to events only once this returns, so the result reports the failure, once:
                     // marked reported, Spark's event for it is not reported again, as a second error would be.
                     reportedSendIds.add(payment.id)
+                    // An earlier caller waiting on the held send learns its failure from the event.
+                    if (wasHeld) payment.toNodeEvent()?.let { _nodeEvents.emit(it) }
                     throw SparkError.SendRefused("Spark send failed")
                 }
                 Logger.info("Sent Spark payment '${payment.id}' with status '${payment.status}'", context = TAG)
@@ -917,6 +922,8 @@ class SparkRepo @Inject constructor(
         // invoice again clears its marker under the same lock, so it either sees the hold and gets its report, or
         // finds it settled.
         return holdRestoreMutex.withLock {
+            // A retry in flight under the send's key settles the hold with its own outcome.
+            if (sendsInFlight.containsKey(key)) return@withLock null
             if (!uncertainSends.remove(key, uncertain)) return@withLock null
             bestEffort("end the hold of Spark send '$paymentHash'") { cacheStore.removeSparkUncertainSend(paymentHash) }
             if (isFailed && !sendsInFlight.containsKey(key)) {

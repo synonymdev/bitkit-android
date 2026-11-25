@@ -5536,6 +5536,26 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark retry of a held send spark lists failed never takes a new key before the hold settles`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenAnswer { info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()) }
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).doSuspendableAnswer { throw leafSelectionFailure() }
+        val sut = createSut(CacheStore(InMemoryDataStore(AppCacheData()), clock))
+        sut.start(0).getOrThrow()
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        val failed = sentPayment(fees = 0).copy(id = "hash-0", status = PaymentStatus.FAILED)
+        whenever(sparkService.listPayments()).thenReturn(listOf(failed))
+
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        verify(sparkService, never()).send(any(), eq("hash-1"))
+    }
+
+    @Test
     fun `a held spark send spark never recorded reports its failure at expiry after a restart`() = test {
         val sentAt = now.epochSeconds
         // The app saved the hold, then died before Spark recorded the send.
