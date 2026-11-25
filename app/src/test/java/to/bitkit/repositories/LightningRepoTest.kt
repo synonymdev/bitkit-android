@@ -22,6 +22,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
@@ -37,6 +38,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
@@ -1933,6 +1935,54 @@ class LightningRepoTest : BaseUnitTest() {
         verify(sparkRepo).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
     }
 
+    @Test
+    fun `a node send recorded while a spark check releases the invoice keeps its hash`() = test {
+        assertNodeSendRecordedDuringReleaseKeepsHash(listed = emptyList())
+    }
+
+    @Test
+    fun `a node send recorded while the listing trims its failed attempt keeps its hash`() = test {
+        assertNodeSendRecordedDuringReleaseKeepsHash(listed = listOf(nodeSend("h", PaymentStatus.FAILED)))
+    }
+
+    /** The node sends the invoice again once a Spark send's check decided to release the node's [listed] attempt. */
+    private suspend fun TestScope.assertNodeSendRecordedDuringReleaseKeepsHash(listed: List<PaymentDetails>) {
+        val inner = InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true, ldkSendHashes = listOf("h")))
+        val entered = CompletableDeferred<Unit>()
+        val queued = CompletableDeferred<String>()
+        var isArmed = true
+        var node: Job? = null
+        val store = CacheStore(
+            object : DataStore<AppCacheData> by inner {
+                override suspend fun updateData(transform: suspend (t: AppCacheData) -> AppCacheData): AppCacheData {
+                    val current = inner.data.first()
+                    if (isArmed && "h" in current.ldkSendHashes && "h" !in transform(current).ldkSendHashes) {
+                        isArmed = false
+                        node = launch { sut.payInvoiceWithNode("h") }
+                        entered.await()
+                    }
+                    return inner.updateData(transform)
+                }
+            }
+        )
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(listed)
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            entered.complete(Unit)
+            queued.await()
+        }
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+
+        val result = sut.payInvoice("h", 1_000uL)
+
+        assertIs<PaymentPendingException>(result.exceptionOrNull())
+        assertEquals(listOf("h"), store.data.first().ldkSendHashes, "a Spark check released a node send's hold")
+        queued.complete("h")
+        node?.join()
+    }
+
     private fun failingOnceOnLdkHash(hash: String): DataStore<AppCacheData> = object : DataStore<AppCacheData> {
         private val inner = InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true))
         private var isArmed = true
@@ -2010,10 +2060,11 @@ class LightningRepoTest : BaseUnitTest() {
 
         verifyBlocking(cacheStore) {
             trimLdkSendHashes(
-                paid = setOf("paid"),
-                failed = setOf("failed"),
-                listed = setOf("pending", "paid", "failed"),
-                live = setOf("pending"),
+                paid = eq(setOf("paid")),
+                failed = eq(setOf("failed")),
+                listed = eq(setOf("pending", "paid", "failed")),
+                live = eq(setOf("pending")),
+                isLive = any(),
             )
         }
     }

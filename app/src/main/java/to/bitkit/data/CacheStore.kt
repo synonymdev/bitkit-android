@@ -275,12 +275,19 @@ class CacheStore internal constructor(
     /**
      * Drops the node's sends a listing showed as [failed] only, or as [paid] with an expired invoice, ones it didn't
      * show ([listed] is every hash it shows) whose invoice expired past [UNLISTED_SEND_SETTLE_SECS], and past the cap
-     * the oldest paid or unlisted ones with no known expiry. A send that may be pending ([live]) always stays.
+     * the oldest paid or unlisted ones with no known expiry. A send that may be pending ([live], or [isLive] inside
+     * the write, as for one recorded since the listing) always stays.
      */
-    suspend fun trimLdkSendHashes(paid: Set<String>, failed: Set<String>, listed: Set<String>, live: Set<String>) {
+    suspend fun trimLdkSendHashes(
+        paid: Set<String>,
+        failed: Set<String>,
+        listed: Set<String>,
+        live: Set<String>,
+        isLive: (String) -> Boolean = { false },
+    ) {
         store.updateData {
-            val (hashes, expiries) =
-                withoutSettled(it.ldkSendHashes, it.ldkSendExpiries, SendListing(paid, failed, listed, live))
+            val listing = SendListing(paid, failed, listed, live + it.ldkSendHashes.filter(isLive))
+            val (hashes, expiries) = withoutSettled(it.ldkSendHashes, it.ldkSendExpiries, listing)
             it.copy(ldkSendHashes = hashes, ldkSendExpiries = expiries)
         }
     }
@@ -325,10 +332,12 @@ class CacheStore internal constructor(
         return kept to expiries.filterKeys { it in kept }
     }
 
-    suspend fun removeLdkSendHash(paymentHash: String) {
+    /** Drops the node's send of [paymentHash] unless [isKept] holds inside the write, as for a send recorded since. */
+    suspend fun removeLdkSendHash(paymentHash: String, isKept: () -> Boolean = { false }) {
         val hash = paymentHash.lowercase()
         if (hash !in store.data.first().ldkSendHashes) return
         store.updateData {
+            if (isKept()) return@updateData it
             it.copy(ldkSendHashes = it.ldkSendHashes - hash, ldkSendExpiries = it.ldkSendExpiries - hash)
         }
     }
