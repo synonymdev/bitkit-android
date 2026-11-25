@@ -3422,7 +3422,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `later restores of the same identity do not repeat the update prompt`() = test {
+    fun `later restores of the same identity keep the update reason without repeating the prompt`() = test {
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
         whenever(pubkyService.importSession("saved_session")).thenAnswer {
             throw AppError(PaykitException.Storage("storage_error", "unsupported SDK state blob version 6, expected 4"))
@@ -3436,6 +3436,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         verify(pubkyService, times(2)).importSession("saved_session")
         assertFalse(repo.sessionRestorationNeedsUpdate.value)
+        assertTrue(repo.restorationNeedsUpdate.value)
         assertFalse(repo.sessionRestorationFailed.value)
     }
 

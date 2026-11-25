@@ -315,6 +315,11 @@ class PubkyRepo @Inject constructor(
     private val _sessionRestorationNeedsUpdate = MutableStateFlow(false)
     val sessionRestorationNeedsUpdate: StateFlow<Boolean> = _sessionRestorationNeedsUpdate.asStateFlow()
 
+    private val _restorationNeedsUpdate = MutableStateFlow(false)
+
+    /** Stays set after the one-time prompt, so Profile can show why retrying does not help. */
+    val restorationNeedsUpdate: StateFlow<Boolean> = _restorationNeedsUpdate.asStateFlow()
+
     private val _adoptedSourceLost = MutableStateFlow(false)
     val adoptedSourceLost: StateFlow<Boolean> = _adoptedSourceLost.asStateFlow()
 
@@ -573,6 +578,7 @@ class PubkyRepo @Inject constructor(
                 is InitResult.Restored -> {
                     _sessionRestorationFailed.update { false }
                     _sessionRestorationNeedsUpdate.update { false }
+                    _restorationNeedsUpdate.update { false }
                     updatePromptIdentityRevision = null
                     continueSignIn(result.publicKey)
                     Logger.info("Restored paykit session for '${redacted(result.publicKey)}'", context = TAG)
@@ -680,6 +686,7 @@ class PubkyRepo @Inject constructor(
     }
 
     private fun askForUpdateOnce() {
+        _restorationNeedsUpdate.update { true }
         val revision = storedIdentityRevision.get()
         if (updatePromptIdentityRevision == revision) return
         updatePromptIdentityRevision = revision
@@ -2748,7 +2755,10 @@ class PubkyRepo @Inject constructor(
     ) = withContext(ioDispatcher) {
         // First, so work of the ending sign-in stops before the store reset below, and cannot write after it.
         signInGeneration.incrementAndGet()
-        if (!preserveStoredIdentity) storedIdentityRevision.incrementAndGet()
+        if (!preserveStoredIdentity) {
+            storedIdentityRevision.incrementAndGet()
+            _restorationNeedsUpdate.update { false }
+        }
         if (clearCachedProfile) {
             invalidateReadOnlyProfile()
             evictPubkyImages()
