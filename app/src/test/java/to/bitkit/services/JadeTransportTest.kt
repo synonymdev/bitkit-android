@@ -347,7 +347,10 @@ class JadeTransportTest {
         return waiters
     }
 
-    private fun createSut() = JadeTransport(context = context)
+    private fun createSut() = JadeTransport(
+        context = context,
+        emulatorTransport = JadeEmulatorTransport(address = "127.0.0.1:1", enabled = false),
+    )
 
     private fun usbDevice(
         vendorId: Int,

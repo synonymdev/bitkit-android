@@ -62,6 +62,7 @@ import javax.inject.Singleton
 @Singleton
 class JadeTransport @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val emulatorTransport: JadeEmulatorTransport,
 ) : JadeTransportCallback {
 
     companion object {
@@ -272,6 +273,7 @@ class JadeTransport @Inject constructor(
     fun isJadeUsbDevice(device: UsbDevice): Boolean = device.hwUsbId()?.vendor == HwWalletVendor.BLOCKSTREAM
 
     fun hasUsbPermission(devicePath: String): Boolean {
+        if (emulatorTransport.isEmulatorPath(devicePath)) return true
         val device = usbManager.deviceList[devicePath] ?: return false
         return usbManager.hasPermission(device)
     }
@@ -283,6 +285,7 @@ class JadeTransport @Inject constructor(
     fun disconnectDevice(path: String): JadeTransportResult = closeDevice(path)
 
     fun closeAllConnections() {
+        emulatorTransport.closeAll()
         usbConnections.keys.toList().forEach { closeUsbDevice(it) }
         bleConnections.keys.toList().forEach { disconnectBleDevice(it) }
     }
@@ -293,6 +296,7 @@ class JadeTransport @Inject constructor(
 
     override fun scanDevices(timeoutMs: UInt): List<JadeNativeDevice> {
         val devices = mutableListOf<JadeNativeDevice>()
+        devices.addAll(emulatorTransport.scanDevices())
 
         runCatching { scanUsbDevices() }
             .onSuccess {
@@ -316,17 +320,29 @@ class JadeTransport @Inject constructor(
         return devices
     }
 
-    override fun openDevice(path: String): JadeTransportResult =
-        if (path.isBlePath()) openBleDevice(path) else openUsbDevice(path)
+    override fun openDevice(path: String): JadeTransportResult = when {
+        emulatorTransport.isEmulatorPath(path) -> emulatorTransport.openDevice(path)
+        path.isBlePath() -> openBleDevice(path)
+        else -> openUsbDevice(path)
+    }
 
-    override fun closeDevice(path: String): JadeTransportResult =
-        if (path.isBlePath()) disconnectBleDevice(path) else closeUsbDevice(path)
+    override fun closeDevice(path: String): JadeTransportResult = when {
+        emulatorTransport.isEmulatorPath(path) -> emulatorTransport.closeDevice(path)
+        path.isBlePath() -> disconnectBleDevice(path)
+        else -> closeUsbDevice(path)
+    }
 
-    override fun writeChunk(path: String, data: ByteArray): JadeTransportResult =
-        if (path.isBlePath()) writeBleChunk(path, data) else writeUsbChunk(path, data)
+    override fun writeChunk(path: String, data: ByteArray): JadeTransportResult = when {
+        emulatorTransport.isEmulatorPath(path) -> emulatorTransport.writeChunk(path, data)
+        path.isBlePath() -> writeBleChunk(path, data)
+        else -> writeUsbChunk(path, data)
+    }
 
-    override fun readChunk(path: String, timeoutMs: UInt): JadeTransportReadResult =
-        if (path.isBlePath()) readBleChunk(path, timeoutMs) else readUsbChunk(path, timeoutMs)
+    override fun readChunk(path: String, timeoutMs: UInt): JadeTransportReadResult = when {
+        emulatorTransport.isEmulatorPath(path) -> emulatorTransport.readChunk(path, timeoutMs)
+        path.isBlePath() -> readBleChunk(path, timeoutMs)
+        else -> readUsbChunk(path, timeoutMs)
+    }
 
     override fun getChunkSize(path: String): UInt = when {
         path.isBlePath() -> chunkSizeForMtu(bleConnections[path]?.mtu ?: DEFAULT_ATT_MTU)

@@ -143,6 +143,8 @@ val pubkySwapsProvidersEnv = providers.environmentVariable("PUBKY_SWAPS_PROVIDER
 val paykitUiDisabledEnv = envFlag("PAYKIT_UI_DISABLED", default = false)
 val trezorBridgeEnv = localProp("TREZOR_BRIDGE").map { it.toBoolean().toString() }.orElse("false")
 val trezorBridgeUrlEnv = localProp("TREZOR_BRIDGE_URL").orElse("http://10.0.2.2:21325")
+val jadeEmulatorEnv = localProp("JADE_EMULATOR").map { it.toBoolean().toString() }.orElse("false")
+val jadeEmulatorUrlEnv = localProp("JADE_EMULATOR_URL").orElse("10.0.2.2:30121")
 val networkPerFlavor = mapOf("dev" to "REGTEST", "mainnet" to "BITCOIN", "tnet" to "TESTNET")
 val requestedNdkVersion = providers.environmentVariable("NDK_VERSION").orNull?.takeIf { it.isNotBlank() }
 val androidTestAnnotationPackage = "to.bitkit.test.annotations"
@@ -441,6 +443,12 @@ androidComponents {
         }
         buildConfigFields.put("TREZOR_BRIDGE", trezorBridgeEnv.booleanField())
         buildConfigFields.put("TREZOR_BRIDGE_URL", trezorBridgeUrlEnv.stringField())
+        val isDebug = variant.buildType == "debug"
+        buildConfigFields.put(
+            "JADE_EMULATOR",
+            (if (isDebug) jadeEmulatorEnv else provider { "false" }).booleanField(),
+        )
+        buildConfigFields.put("JADE_EMULATOR_URL", jadeEmulatorUrlEnv.stringField())
         buildConfigFields.put("FEATURE_PAYKIT_UI_DISABLED", paykitUiDisabledEnv.booleanField())
         buildConfigFields.put("LOCALES", provider { bcp47Locales.joinToString(",") }.stringField())
         buildConfigFields.put(
