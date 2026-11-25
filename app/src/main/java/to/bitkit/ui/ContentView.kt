@@ -603,6 +603,7 @@ fun ContentView(
         val isRetryingInitialSubscriptionPayment by
             appViewModel.isRetryingInitialSubscriptionPayment.collectAsStateWithLifecycle()
         var homeWalletPageRequest by remember { mutableIntStateOf(0) }
+        var isSendConfirmLocked by remember { mutableStateOf(false) }
         var homeWidgetsPageRequest by remember { mutableIntStateOf(0) }
         val navigateToHomeWallet = {
             homeWalletPageRequest++
@@ -632,6 +633,7 @@ fun ContentView(
                 dismissEnabled = !isCreatingPaymentRequest &&
                     !isAcceptingSubscription &&
                     !isRetryingInitialSubscriptionPayment &&
+                    !isSendConfirmLocked &&
                     canDismissSheet,
                 sheetDragHandle = { SheetDragHandle(topPadding = if (usesFlatSheetStyle) 8.dp else 12.dp) },
                 sheetHandlePlacement = when (currentSheet) {
@@ -657,6 +659,7 @@ fun ContentView(
                                     hardwareWalletId = sheet.hardwareWalletId,
                                     preparingRequest = sheet.preparingRequest,
                                     hwSendViewModel = hwSendViewModel,
+                                    onConfirmLockChange = { isSendConfirmLocked = it },
                                 )
                             }
                         }

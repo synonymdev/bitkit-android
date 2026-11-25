@@ -765,6 +765,9 @@ sealed class MoveToSparkError(message: String, cause: Throwable? = null) : AppEr
         val feeSats: ULong = 0uL,
     ) : MoveToSparkError("The move's fee rose after '$movedSats' sats moved")
 
+    /** The quote for the update did not finish in time, so nothing moved. */
+    class QuoteTimedOut : MoveToSparkError("The update quote did not finish in time")
+
     /** The update moved the balance, but Spark cannot pay with it yet: the move or Spark's balance has not settled. */
     class UpdateUnsettled : MoveToSparkError("The update to Spark has not settled yet")
 

@@ -459,7 +459,15 @@ class AppViewModel @Inject constructor(
     private val sparkUpdateQuoteRun = AtomicLong(0L)
 
     /** Bumped only when a new send starts, unlike [sendStateGeneration], which edits within one send also bump. */
+    @Volatile
     private var sendSession = 0L
+
+    /** Swipes and payments still running from the confirm screen, by [sendSession]; see [isSendSwipeRunning]. */
+    private val sendSwipeRuns = mutableMapOf<Long, Int>()
+    private val _isSendSwipeRunning = MutableStateFlow(false)
+
+    /** True while a swipe of the current send, or the payment it confirmed, runs; the confirm stays locked. */
+    val isSendSwipeRunning = _isSendSwipeRunning.asStateFlow()
 
     fun setSendEvent(event: SendEvent) {
         if ((currentSheet.value as? Sheet.Send)?.preparingRequest != null) return
@@ -6864,17 +6872,39 @@ class AppViewModel @Inject constructor(
         if (!_sendUiState.value.isAmountInputValid || !_sendUiState.value.isHardwareFeeReady) return
         _sendUiState.update { it.copy(approvedSparkUpdateQuote = it.sparkUpdateQuote) }
         viewModelScope.launch {
-            val review = preparedFeeReview
-            if (review == null && !prepareCoinSelection()) return@launch
-            val amount = _sendUiState.value.amount
+            whileSendSwipeRuns {
+                val review = preparedFeeReview
+                if (review == null && !prepareCoinSelection()) return@whileSendSwipeRuns
+                val amount = _sendUiState.value.amount
 
-            handleSanityChecks(amount, preparedFeeSats = review?.feeSats)
-            if (_sendUiState.value.showSanityWarningDialog != null) return@launch // await for dialog UI interaction
+                handleSanityChecks(amount, preparedFeeSats = review?.feeSats)
+                // await for dialog UI interaction
+                if (_sendUiState.value.showSanityWarningDialog != null) return@whileSendSwipeRuns
 
-            if (preparedFeeReview !== review) return@launch
-            review?.isSwiped = true
-            _sendUiState.update { it.copy(shouldConfirmPay = true) }
+                if (preparedFeeReview !== review) return@whileSendSwipeRuns
+                review?.isSwiped = true
+                _sendUiState.update { it.copy(shouldConfirmPay = true) }
+            }
         }
+    }
+
+    private suspend fun whileSendSwipeRuns(block: suspend () -> Unit) {
+        val session = sendSession
+        synchronized(sendSwipeRuns) { sendSwipeRuns[session] = (sendSwipeRuns[session] ?: 0) + 1 }
+        refreshSendSwipeRunning()
+        try {
+            block()
+        } finally {
+            synchronized(sendSwipeRuns) {
+                val runs = (sendSwipeRuns[session] ?: 1) - 1
+                if (runs > 0) sendSwipeRuns[session] = runs else sendSwipeRuns.remove(session)
+            }
+            refreshSendSwipeRunning()
+        }
+    }
+
+    private fun refreshSendSwipeRunning() = synchronized(sendSwipeRuns) {
+        _isSendSwipeRunning.update { sendSwipeRuns.containsKey(sendSession) }
     }
 
     private fun onStartInitialSubscriptionPayment() {
@@ -8208,7 +8238,7 @@ class AppViewModel @Inject constructor(
     private suspend fun updateSpendingBalanceIfNeeded(bolt11: String, amountSats: ULong): Result<Unit> {
         if (!moveToSparkRepo.needsUpdateToSend(amountSats)) return Result.success(Unit)
         val shown = _sendUiState.value.approvedSparkUpdateQuote
-        val fresh = moveToSparkRepo.quote().getOrElse { return Result.failure(it) }
+        val fresh = quoteSparkUpdate().getOrElse { return Result.failure(it) }
         if (shown == null || fresh.feeSats > shown.feeSats) {
             _sendUiState.update { it.copy(sparkUpdateQuote = fresh) }
             return Result.failure(MoveToSparkError.UpdateFeeUnseen())
@@ -8228,18 +8258,30 @@ class AppViewModel @Inject constructor(
         val state = _sendUiState.value
         if (!state.needsSparkUpdate()) return true
         val generation = sendStateGeneration
-        val fresh = moveToSparkRepo.quote().getOrElse {
+        val result = quoteSparkUpdate()
+        // A swipe from a send the user left neither pays nor shows its failure.
+        if (generation != sendStateGeneration) return false
+        val fresh = result.getOrElse {
             val failure = it.toSendFailureDetails(context, state.currentLightningPaymentRequest())
             setSendEffect(SendEffect.NavigateToError(failure))
             return false
         }
-        if (generation != sendStateGeneration) return false
         val shown = state.approvedSparkUpdateQuote
         _sendUiState.update { it.copy(sparkUpdateQuote = fresh) }
         if (shown != null && fresh.feeSats <= shown.feeSats) return true
         Logger.info("Stopped a payment to show the update fee '${fresh.feeSats}'", context = TAG)
         setSendEffect(SendEffect.ResetConfirm)
         return false
+    }
+
+    private suspend fun quoteSparkUpdate(): Result<MoveToSparkQuote> {
+        // Awaited apart, since the LDK queue finishes its work even after its caller is cancelled
+        val quote = viewModelScope.async(bgDispatcher) { moveToSparkRepo.quote() }
+        return withTimeoutOrNull(SPARK_UPDATE_QUOTE_TIMEOUT) { quote.await() } ?: run {
+            quote.cancel()
+            Logger.warn("Timed out quoting the update after '$SPARK_UPDATE_QUOTE_TIMEOUT'", context = TAG)
+            Result.failure(MoveToSparkError.QuoteTimedOut())
+        }
     }
 
     /** Whether this Lightning payment fits only once the spending balance update moves the channels to Spark. */
@@ -9141,6 +9183,7 @@ class AppViewModel @Inject constructor(
         if (!canPrepareSend(walletGeneration)) return false
         sendStateGeneration++
         sendSession++
+        refreshSendSwipeRunning()
         cancelPreparedFeeReview()
         addressValidationJob?.cancel()
         paykitReviewedAmount = null
@@ -9421,6 +9464,7 @@ class AppViewModel @Inject constructor(
             sendStateGeneration++
             // A closed send is over: a swap failing for it later gives no contact back to whatever comes next.
             sendSession++
+            refreshSendSwipeRunning()
             cancelPreparedFeeReview()
             // A payment still running for the dismissed send, like a slow swap commit, must not block the next.
             if (confirmedPaymentSubmission != null) releaseConfirmedPaymentSubmission()
@@ -9633,11 +9677,10 @@ class AppViewModel @Inject constructor(
             if (review.isSwiped) review.answer.complete(true)
             return
         }
-        if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive) {
+        if (isSubmittingPaymentRequest || isSoftwarePaymentSubmissionActive || !_sendUiState.value.isHardwareFeeReady) {
             _sendUiState.update { it.copy(shouldConfirmPay = false) }
             return
         }
-        if (!_sendUiState.value.isHardwareFeeReady) return
 
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
         if (_sendUiState.value.isPaymentRequest && contactPaymentContext?.incomingPaymentRequest == null) {
@@ -9657,7 +9700,7 @@ class AppViewModel @Inject constructor(
             val finishSubmission = beginPaymentSubmission()
             try {
                 _sendUiState.update { it.copy(shouldConfirmPay = false) }
-                proceedWithPayment(contactPaymentContext)
+                whileSendSwipeRuns { proceedWithPayment(contactPaymentContext) }
             } finally {
                 finishSubmission()
                 if (confirmedPaymentSubmission === submission) releaseConfirmedPaymentSubmission()
@@ -10692,6 +10735,9 @@ class AppViewModel @Inject constructor(
         private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
         private const val PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS = 5_000L
         private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL = 10.seconds
+
+        /** Bounds the re-quote after the swipe, which keeps Confirm locked while it runs. */
+        private val SPARK_UPDATE_QUOTE_TIMEOUT = 60.seconds
         private val PAYKIT_MAINTENANCE_INTERVALS = listOf(30.seconds, 60.seconds)
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS = List(14) { 2.seconds }
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_INTERVAL = 120.seconds

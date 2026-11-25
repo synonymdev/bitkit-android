@@ -22296,6 +22296,146 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `the swipe keeps running while it quotes the update again`() = test {
+        val bolt11 = "lnbcrt1lockedrequote"
+        val quoted = CompletableDeferred<Result<MoveToSparkQuote>>()
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).doSuspendableAnswer { quoted.await() }
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 60_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+            ),
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            // Short of the update quote's time bound
+            advanceTimeBy(30.seconds)
+            assertTrue(sut.isSendSwipeRunning.value)
+
+            quoted.complete(Result.success(UPDATE_QUOTE))
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.ResetConfirm, awaitItem())
+        }
+        assertFalse(sut.isSendSwipeRunning.value)
+    }
+
+    @Test
+    fun `a swipe of a closed send holds nothing and its failing update quote shows no error`() = test {
+        val bolt11 = "lnbcrt1closedrequote"
+        val quoted = CompletableDeferred<Result<MoveToSparkQuote>>()
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).doSuspendableAnswer { quoted.await() }
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        runCurrent()
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 60_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+                sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
+            ),
+        )
+        val effects = mutableListOf<SendEffect>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { sut.sendEffect.collect { effects += it } }
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        // Short of the update quote's time bound
+        advanceTimeBy(30.seconds)
+        assertTrue(sut.isSendSwipeRunning.value)
+        sut.hideSheet()
+        // A payment still finishing for the closed send holds no later send's confirm
+        assertFalse(sut.isSendSwipeRunning.value)
+        quoted.complete(Result.failure(MoveToSparkError.NothingToMove()))
+        advanceUntilIdle()
+
+        assertTrue(effects.none { it is SendEffect.NavigateToError })
+        assertFalse(sut.isSendSwipeRunning.value)
+    }
+
+    @Test
+    fun `a hardware confirm while the fee refreshes clears the pay confirmation`() = test {
+        setSendState(
+            SendUiState(
+                address = "bcrt1qverifyhardware",
+                amount = 60_000uL,
+                isAmountInputValid = true,
+                payMethod = SendMethod.ONCHAIN,
+                hardwareWalletId = "hardware-wallet",
+                onchainFeeUi = OnchainFeeUi(sats = 150, isLoading = true),
+                shouldConfirmPay = true,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+    }
+
+    @Test
+    fun `a stalled update quote ends the swipe with the payment error`() = test {
+        val bolt11 = "lnbcrt1stalledrequote"
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
+        // Ignores cancellation, as LDK queue work does
+        whenever(moveToSparkRepo.quote()).doSuspendableAnswer { withContext(NonCancellable) { awaitCancellation() } }
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 60_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+                sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
+            ),
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertTrue(awaitItem() is SendEffect.NavigateToError)
+        }
+        assertFalse(sut.isSendSwipeRunning.value)
+        verify(moveToSparkRepo, never()).updateToSend(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `a stalled update quote at the payment ends it with the payment error`() = test {
+        val bolt11 = "lnbcrt1stalledpayquote"
+        var quotes = 0
+        whenever(moveToSparkRepo.needsUpdateToSend(60_000uL)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).doSuspendableAnswer {
+            if (++quotes > 1) withContext(NonCancellable) { awaitCancellation() }
+            Result.success(UPDATE_QUOTE)
+        }
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 60_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, 60_000uL),
+                sparkUpdateQuote = UPDATE_QUOTE,
+                approvedSparkUpdateQuote = UPDATE_QUOTE,
+            ),
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertTrue(awaitItem() is SendEffect.NavigateToError)
+        }
+        assertEquals(2, quotes)
+        assertFalse(sut.isSendSwipeRunning.value)
+        verify(moveToSparkRepo, never()).updateToSend(any(), any(), any(), any())
+    }
+
+    @Test
     fun `a scan while the node starts decides on QuickPay once the channels are usable`() = test {
         val bolt11 = "lnbcrt1quickpaystarting"
         enableQuickPay()
