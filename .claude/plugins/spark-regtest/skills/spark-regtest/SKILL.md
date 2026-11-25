@@ -75,9 +75,9 @@ for port in 23535 23536 23537 23049 23090 60001; do adb reverse tcp:$port tcp:$p
   `./spark pay <Spending invoice> [sats]`, and pay exit funding with `./spark send`. iOS allows both when its URLs match the fixture.
 - A deposit is claimed after 1 block here.
 - Mine with `./spark mine`, not `./bitcoin-cli mine`: only `spark-bitcoind` relays Spark's v3 packages.
-- A phone over adb: set `E2E_LOCAL_HOST=127.0.0.1` and keep the `adb reverse` loop. Over the LAN: start with
-  `SPARK_PUBLIC_HOST=<LAN IP> ./spark up`, and build with `E2E_LOCAL_HOST=<LAN IP>` and
-  `SPARK_LOCAL_CHAIN_URL=http://<LAN IP>:23090/api`.
+- A phone over adb: set `E2E_LOCAL_HOST=127.0.0.1` and keep the `adb reverse` loop. Over the LAN: run `export SPARK_PUBLIC_HOST=<LAN IP>`
+  before the block, so its `spark up` keeps the host (unset, it rewrites the operator and SSP URLs to `127.0.0.1`), and
+  build with `E2E_LOCAL_HOST=<LAN IP>` and `SPARK_LOCAL_CHAIN_URL=http://<LAN IP>:23090/api`.
 - bitkit-e2e-tests' `README.md` (Spark tests on local regtest) runs the same stack from its pinned
   `BITKIT_DOCKER_REVISION`, not your checkout.
 
