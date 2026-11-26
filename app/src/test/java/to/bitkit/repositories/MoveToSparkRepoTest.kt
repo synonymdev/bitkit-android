@@ -27,6 +27,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.ext.createChannelDetails
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.WalletScope
 import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
@@ -54,6 +55,10 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     private val cacheStore = CacheStore(InMemoryDataStore(AppCacheData()))
     private val activityRepo = mock<ActivityRepo>()
     private val quote = MoveToSparkQuote(INVOICE, amountSats = 50_000uL, feeSats = 12uL)
+    private val settledHashes = mutableListOf<String>()
+    private val failedHashes = mutableListOf<String>()
+    private val quotedSats = mutableListOf<ULong>()
+    private val retriedAtPay = mutableMapOf<String, List<String>?>()
     private lateinit var sut: MoveToSparkRepo
 
     @Before
@@ -64,13 +69,13 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         sut = createSut()
     }
 
-    private fun createSut() = MoveToSparkRepo(
+    private fun createSut(paymentHashOf: (String) -> String = { "hash" }) = MoveToSparkRepo(
         bgDispatcher = testDispatcher,
         lightningRepo = lightningRepo,
         sparkRepo = sparkRepo,
         cacheStore = cacheStore,
         activityRepo = { activityRepo },
-        paymentHashOf = { "hash" },
+        paymentHashOf = paymentHashOf,
     )
 
     private fun sendable(sats: ULong, htlcCapSats: ULong = sats) {
@@ -79,7 +84,7 @@ class MoveToSparkRepoTest : BaseUnitTest() {
             nextOutboundHtlcLimitMsat = minOf(sats, htlcCapSats) * 1000uL,
             outboundCapacityMsat = sats * 1000uL,
         )
-        lightningState.value = LightningState(channels = persistentListOf(channel))
+        lightningState.value = lightningState.value.copy(channels = persistentListOf(channel))
     }
 
     @Test
@@ -263,7 +268,8 @@ class MoveToSparkRepoTest : BaseUnitTest() {
      * Channels holding [limitSats] whose routes carry at most [maxRouteSats] per payment when quoted and [maxPaySats]
      * when paid, each payment of an amount costing [feeMsatOf] it; the [settles] payments settle, the others stay in
      * flight. A payment whose fee cap is below its fee does not route. After each settled payment, its HTLC holds the
-     * send limit under the minimum for [heldSyncs] syncs. The peer caps each HTLC at [htlcCapSats].
+     * send limit under the minimum for [heldSyncs] syncs. The peer caps each HTLC at [htlcCapSats]. Once the first
+     * payment settles, quotes route at most [routeSatsAfterFirst]. With [distinctParts], each invoice has its own hash.
      */
     private suspend fun channelsRouting(
         limitSats: ULong,
@@ -272,33 +278,52 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         feeMsatOf: (ULong) -> ULong = { 10_000uL },
         heldSyncs: Int = 0,
         htlcCapSats: ULong = ULong.MAX_VALUE,
+        routeSatsAfterFirst: ULong = maxRouteSats,
+        distinctParts: Boolean = false,
         settles: (Int) -> Boolean = { true },
     ) {
+        lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
         sendable(limitSats, htlcCapSats)
         var limit = limitSats
         var payments = 0
         var held = 0
+        var maxRoute = maxRouteSats
         whenever(lightningRepo.syncState()).thenAnswer {
             if (held > 0 && --held == 0) sendable(limit, htlcCapSats)
         }
-        whenever(sparkRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
-        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(eq(INVOICE), any())).doSuspendableAnswer {
+        if (distinctParts) {
+            var invoices = 0
+            whenever(sparkRepo.createInvoice(anyOrNull(), any(), any())).doSuspendableAnswer {
+                Result.success("$INVOICE${++invoices}")
+            }
+            sut = createSut { "hash${it.removePrefix(INVOICE)}" }
+        } else {
+            whenever(sparkRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
+        }
+        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(any(), any())).doSuspendableAnswer {
             val sats = it.arguments[1].asULong()
-            if (sats > maxRouteSats) {
+            quotedSats += sats
+            if (sats > maxRoute) {
                 Result.failure(LdkError(NodeException.RouteNotFound("no route")))
             } else {
                 Result.success(feeMsatOf(sats) / 1000uL)
             }
         }
         whenever(lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            val hash = it.arguments[1] as String
+            retriedAtPay[hash] = cacheStore.data.first().moveToSparkRetriedBefore[hash]
             val sats = it.arguments[2].asULong()
             val feeCapMsat = it.arguments[3].asULong()
             val feeMsat = feeMsatOf(sats)
             payments++
             when {
-                sats > maxPaySats || feeCapMsat < feeMsat ->
-                    nodeEvents.emit(Event.PaymentFailed("id", "hash", PaymentFailureReason.ROUTE_NOT_FOUND))
+                sats > maxPaySats || feeCapMsat < feeMsat -> {
+                    failedHashes += hash
+                    nodeEvents.emit(Event.PaymentFailed("id", hash, PaymentFailureReason.ROUTE_NOT_FOUND))
+                }
                 settles(payments) -> {
+                    settledHashes += hash
+                    maxRoute = routeSatsAfterFirst
                     limit -= sats + (feeMsat + 999uL) / 1000uL
                     held = heldSyncs + 1
                     if (heldSyncs == 0) {
@@ -309,9 +334,9 @@ class MoveToSparkRepoTest : BaseUnitTest() {
                             nextOutboundHtlcLimitMsat = 500_000uL,
                             outboundCapacityMsat = limit * 1000uL,
                         )
-                        lightningState.value = LightningState(channels = persistentListOf(holding))
+                        lightningState.value = lightningState.value.copy(channels = persistentListOf(holding))
                     }
-                    nodeEvents.emit(Event.PaymentSuccessful("id", "hash", null, feeMsat))
+                    nodeEvents.emit(Event.PaymentSuccessful("id", hash, null, feeMsat))
                 }
             }
             Result.success("id")
@@ -371,31 +396,54 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `a split move drops the failed parts it moved in smaller parts from Activity`() = test {
-        channelsRouting(50_000uL, maxPaySats = 30_000uL)
+        channelsRouting(50_000uL, maxPaySats = 30_000uL, distinctParts = true)
         val plan = MoveToSparkPlan(sut.quoteAll().getOrThrow().firstPart, feeSats = 100uL)
 
         sut.moveAll(plan).getOrThrow()
 
-        assertTrue(cacheStore.data.first().isActivityDeleted("hash", WalletScope.default))
-        verify(activityRepo).handlePaymentEvent("hash")
+        val cache = cacheStore.data.first()
+        assertEquals(1, failedHashes.size)
+        assertEquals(2, settledHashes.size)
+        failedHashes.forEach {
+            assertTrue(cache.isActivityDeleted(it, WalletScope.default), "a retried part's failure stayed")
+            verify(activityRepo).handlePaymentEvent(it)
+        }
+        settledHashes.forEach {
+            assertFalse(cache.isActivityDeleted(it, WalletScope.default), "a settled part left Activity")
+            verify(activityRepo, never()).handlePaymentEvent(it)
+        }
+        assertEquals(
+            failedHashes,
+            retriedAtPay[settledHashes.first()],
+            "a restart mid-send would forget the retried part",
+        )
+        assertTrue(cache.moveToSparkRetriedBefore.isEmpty())
     }
 
     @Test
     fun `a split move whose smaller part settles after the wait drops the failed part from Activity then`() = test {
-        channelsRouting(50_000uL, maxPaySats = 30_000uL) { false }
+        channelsRouting(50_000uL, maxPaySats = 30_000uL, distinctParts = true) { false }
         val plan = MoveToSparkPlan(sut.quoteAll().getOrThrow().firstPart, feeSats = 100uL)
         val inFlight = assertIs<MoveToSparkOutcome.InFlight>(sut.moveAll(plan).getOrThrow())
         verify(activityRepo, never()).handlePaymentEvent(any())
+        val retried = failedHashes.single()
+        assertEquals(
+            mapOf(inFlight.paymentHash to listOf(retried)),
+            cacheStore.data.first().moveToSparkRetriedBefore,
+            "a restart would forget the part the one in flight replaced",
+        )
         whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(nodeSend(PaymentStatus.SUCCEEDED)))
 
         sut.awaitSettled(inFlight).getOrThrow()
 
-        verify(activityRepo).handlePaymentEvent("hash")
+        verify(activityRepo).handlePaymentEvent(retried)
+        verify(activityRepo, never()).handlePaymentEvent(inFlight.paymentHash)
+        assertTrue(cacheStore.data.first().moveToSparkRetriedBefore.isEmpty())
     }
 
     @Test
     fun `a split move whose smaller part fails after the wait keeps the failed part in Activity`() = test {
-        channelsRouting(50_000uL, maxPaySats = 30_000uL) { false }
+        channelsRouting(50_000uL, maxPaySats = 30_000uL, distinctParts = true) { false }
         val plan = MoveToSparkPlan(sut.quoteAll().getOrThrow().firstPart, feeSats = 100uL)
         val inFlight = assertIs<MoveToSparkOutcome.InFlight>(sut.moveAll(plan).getOrThrow())
         whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(nodeSend(PaymentStatus.FAILED)))
@@ -403,6 +451,8 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         sut.awaitSettled(inFlight)
 
         verify(activityRepo, never()).handlePaymentEvent(any())
+        assertFalse(cacheStore.data.first().isActivityDeleted(failedHashes.single(), WalletScope.default))
+        assertTrue(cacheStore.data.first().moveToSparkRetriedBefore.isEmpty())
     }
 
     @Test
@@ -418,11 +468,24 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `a move that moves nothing keeps its failed parts in Activity`() = test {
-        channelsRouting(1_800uL, maxPaySats = 1_000uL)
+        channelsRouting(1_800uL, maxPaySats = 1_000uL, distinctParts = true)
 
         sut.moveAll(sut.quoteAll().getOrThrow())
 
-        assertFalse(cacheStore.data.first().isActivityDeleted("hash", WalletScope.default))
+        assertTrue(failedHashes.isNotEmpty())
+        failedHashes.forEach { assertFalse(cacheStore.data.first().isActivityDeleted(it, WalletScope.default)) }
+    }
+
+    @Test
+    fun `a route that shrinks during the move leaves the later parts the size that routed`() = test {
+        channelsRouting(200_000uL, maxRouteSats = 120_000uL, routeSatsAfterFirst = 30_000uL)
+        val plan = sut.quoteAll().getOrThrow()
+        quotedSats.clear()
+
+        sut.moveAll(plan)
+
+        // Only the second part tries the sizes that no longer route: about 100k, then 50k, before 25k routes.
+        assertEquals(2, quotedSats.count { it > 30_000uL }, "a later part quoted a size that no longer routed")
     }
 
     @Test
@@ -547,6 +610,30 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         val outcome = sut.moveAll(sut.quoteAll().getOrThrow()).getOrThrow()
 
         assertEquals(MoveToSparkOutcome.Moved(99_498uL, feeSats = 20uL, feeMsat = 20_000uL), outcome)
+    }
+
+    @Test
+    fun `a move that stops at its last part waits for that part's htlc to leave the send limit`() = test {
+        channelsRouting(100_000uL, maxRouteSats = 5_000uL, heldSyncs = 3)
+
+        sut.moveAll(sut.quoteAll().getOrThrow()).getOrThrow()
+
+        assertTrue(MoveToSparkMath.hasMovableBalance(sut.movableSats()), "the last part's htlc still held the limit")
+    }
+
+    @Test
+    fun `the wait for a settled part's htlc leaves the cached channels alone while the node is not running`() = test {
+        // A settled part's HTLC holds the send limit of a channel that still has capacity.
+        lightningState.value = LightningState(
+            channels = persistentListOf(
+                createChannelDetails().copy(isUsable = true, isOutbound = false, outboundCapacityMsat = 60_000_000uL),
+            ),
+            nodeLifecycleState = NodeLifecycleState.Stopped,
+        )
+
+        sut.movableSatsSettled()
+
+        verify(lightningRepo, never()).syncState()
     }
 
     @Test
@@ -932,6 +1019,57 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         assertEquals(MoveToSparkOutcome.Moved(0uL, feeSats = 0uL), updating.await().getOrThrow())
         assertNull(moved)
         verify(lightningRepo, times(1)).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `update to send reads the channels from the node before it pays from them`() = test {
+        sendable(0uL)
+        lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
+        whenever(lightningRepo.syncState()).thenAnswer { sendable(60_000uL) }
+        sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
+        whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.success(SPARK_FEE))
+        whenever(
+            lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+        ).thenReturn(Result.success("id"))
+        whenever(sparkRepo.canSend(60_000uL)).thenReturn(true)
+        val updating = async { sut.updateToSend(quote, INVOICE, 60_000uL) }
+
+        nodeEvents.emit(Event.PaymentSuccessful("id", "hash", null, 9_000uL))
+
+        assertEquals(MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL), updating.await().getOrThrow())
+    }
+
+    @Test
+    fun `update to send leaves the cached channels alone while the node is not running`() = test {
+        sendable(60_000uL)
+        whenever(lightningRepo.syncState()).thenAnswer { sendable(0uL) }
+        sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
+        whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.success(SPARK_FEE))
+        whenever(
+            lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+        ).thenReturn(Result.success("id"))
+        whenever(sparkRepo.canSend(60_000uL)).thenReturn(true)
+        val updating = async { sut.updateToSend(quote, INVOICE, 60_000uL) }
+
+        nodeEvents.emit(Event.PaymentSuccessful("id", "hash", null, 9_000uL))
+
+        assertEquals(MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL), updating.await().getOrThrow())
+    }
+
+    @Test
+    fun `update to send still pays when the channels' limit moved a little since the quote`() = test {
+        sendable(quote.amountSats + quote.feeSats - 1uL)
+        sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
+        whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.success(SPARK_FEE))
+        whenever(
+            lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+        ).thenReturn(Result.success("id"))
+        whenever(sparkRepo.canSend(60_000uL)).thenReturn(true)
+        val updating = async { sut.updateToSend(quote, INVOICE, 60_000uL) }
+
+        nodeEvents.emit(Event.PaymentSuccessful("id", "hash", null, 9_000uL))
+
+        assertEquals(MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL), updating.await().getOrThrow())
     }
 
     @Test

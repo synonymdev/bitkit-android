@@ -108,9 +108,6 @@ class MoveToSparkRepo internal constructor(
     private val moveLock = Mutex()
     private val reportedPaymentHashes = ConcurrentHashMap.newKeySet<String>()
 
-    /** The payments of the larger parts a part still in flight replaced, by that part's hash, for when it settles. */
-    private val retriedBeforeInFlight = ConcurrentHashMap<String, List<String>>()
-
     /**
      * Whether [paymentHash] is a move to Spark, whose send and receive the app does not announce as payments; also one
      * from before a restart.
@@ -135,6 +132,20 @@ class MoveToSparkRepo internal constructor(
 
     /** The most the channels can send now, before routing fees. */
     fun movableSats(): ULong = MoveToSparkMath.movableSats(lightningRepo.lightningState.value.channels)
+
+    /** [movableSats] once a settled move part's HTLC no longer holds a channel's limit, waiting for it to clear. */
+    suspend fun movableSatsSettled(): ULong = withContext(bgDispatcher) {
+        var rechecks = 0
+        // A stopped node's sync empties the cached channels.
+        while (!MoveToSparkMath.hasMovableBalance(movableSats()) && rechecks++ < HTLC_CLEAR_RECHECKS &&
+            lightningRepo.lightningState.value.nodeLifecycleState.isRunning() &&
+            lightningRepo.lightningState.value.channels.any { it.isUsable && MoveToSparkMath.mayHoldTheMoveHtlc(it) }
+        ) {
+            delay(HTLC_CLEAR_RECHECK)
+            lightningRepo.syncState()
+        }
+        movableSats()
+    }
 
     /** The most a Lightning payment can send once the channels' balance is updated to Spark first. */
     fun combinedSendableSats(): ULong = MoveToSparkMath.combinedSendableSats(
@@ -203,8 +214,11 @@ class MoveToSparkRepo internal constructor(
         feeSats: ULong,
     ): MoveToSparkOutcome? {
         val outcome = moveLock.withLock {
-            // Another move, such as the modal's, may have taken the channels' balance while this one waited for it.
-            val fits = quote.amountSats.safe() + quote.feeSats.safe() <= movableSats()
+            // Another move, such as the modal's, may have taken the channels' balance while this one waited for it; its
+            // parts can leave the cached channels stale, so they are read from the node first.
+            if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) lightningRepo.syncState()
+            // The fee cap is left out, so a limit that moved a little still pays as before.
+            val fits = quote.amountSats <= movableSats()
             if (fits) payPart(quote) else null
         }
         if (outcome != null) return outcome
@@ -361,17 +375,25 @@ class MoveToSparkRepo internal constructor(
         var lastError: Throwable? = null
         var lastOutboundMsat = outboundMsat()
         val retriedHashes = mutableListOf<String>()
+        var waitedForHtlcs = false
         while (parts < MAX_PARTS) {
-            val quote = next ?: nextPart(partSats)?.getOrElse {
+            val quote = next ?: nextPart(partSats) { partSats = it }?.getOrElse {
                 lastError = it
                 null
-            } ?: break
+            } ?: run {
+                waitedForHtlcs = true
+                break
+            }
             next = null
             if (MoveToSparkMath.feeCapMsat(quote.feeSats) > feeLeftMsat) throw feeRoseError(movedSats, paidMsat)
+            val partHash = paymentHashOf(quote.invoice).lowercase()
+            // Kept before the part is sent, so its success also after a restart drops the parts it replaced.
+            if (retriedHashes.isNotEmpty()) cacheStore.setMoveRetriedBefore(partHash, retriedHashes.toList())
             val outcome = runSuspendCatching { payPart(quote, feeCapMsat = feeLeftMsat) }.getOrElse {
+                if (retriedHashes.isNotEmpty()) cacheStore.takeMoveRetriedBefore(partHash)
                 lastError = it
                 if (it !is MoveToSparkError.TooLarge) break
-                retriedHashes += paymentHashOf(quote.invoice).lowercase()
+                retriedHashes += partHash
                 lightningRepo.syncState()
                 partSats = MoveToSparkMath.smallerAmount(quote.amountSats) ?: run {
                     if (feeRose(quote.amountSats, feeLeftMsat)) throw feeRoseError(movedSats, paidMsat)
@@ -380,16 +402,14 @@ class MoveToSparkRepo internal constructor(
                 continue
             }
             when (outcome) {
-                is MoveToSparkOutcome.InFlight -> {
-                    if (retriedHashes.isNotEmpty()) retriedBeforeInFlight[outcome.paymentHash] = retriedHashes.toList()
-                    return outcome.copy(earlierSats = movedSats)
-                }
+                is MoveToSparkOutcome.InFlight -> return outcome.copy(earlierSats = movedSats)
                 is MoveToSparkOutcome.Moved -> {
                     parts++
                     movedSats = movedSats.safe() + outcome.amountSats.safe()
                     paidMsat = paidMsat.safe() + outcome.feeMsat.safe()
                     feeLeftMsat = feeLeftMsat.safe() - outcome.feeMsat.safe()
                     dropFromActivity(retriedHashes)
+                    if (retriedHashes.isNotEmpty()) cacheStore.takeMoveRetriedBefore(partHash)
                     retriedHashes.clear()
                     lightningRepo.syncState()
                     val nowMsat = outboundMsat()
@@ -399,6 +419,8 @@ class MoveToSparkRepo internal constructor(
             }
         }
         if (movedSats == 0uL) throw lastError ?: MoveToSparkError.NothingToMove()
+        // A move that stopped before the next part reads what is left only once the last part's HTLC cleared.
+        if (!waitedForHtlcs) movableSatsSettled()
         return MoveToSparkOutcome.Moved(movedSats, paidMsat / 1000uL, paidMsat)
     }
 
@@ -418,24 +440,21 @@ class MoveToSparkRepo internal constructor(
     private fun outboundMsat(): ULong = lightningRepo.lightningState.value.channels
         .fold(0uL) { total, channel -> total.safe() + channel.outboundCapacityMsat.safe() }
 
-    private suspend fun nextPart(partSats: ULong): Result<MoveToSparkQuote>? {
-        var rechecks = 0
-        while (!MoveToSparkMath.hasMovableBalance(movableSats()) && rechecks++ < HTLC_CLEAR_RECHECKS &&
-            lightningRepo.lightningState.value.channels.any { it.isUsable && MoveToSparkMath.mayHoldTheMoveHtlc(it) }
-        ) {
-            delay(HTLC_CLEAR_RECHECK)
-            lightningRepo.syncState()
-        }
-        if (!MoveToSparkMath.hasMovableBalance(movableSats())) return null
-        return quoteRoutingPart(partSats)
+    private suspend fun nextPart(partSats: ULong, onRouteHalved: (ULong) -> Unit): Result<MoveToSparkQuote>? {
+        if (!MoveToSparkMath.hasMovableBalance(movableSatsSettled())) return null
+        return quoteRoutingPart(partSats, onRouteHalved)
     }
 
-    private suspend fun quoteRoutingPart(targetSats: ULong?): Result<MoveToSparkQuote> {
+    private suspend fun quoteRoutingPart(
+        targetSats: ULong?,
+        onRouteHalved: (ULong) -> Unit = {},
+    ): Result<MoveToSparkQuote> {
         var target = targetSats
         while (true) {
             val quoted = quote(target)
             val tooLarge = quoted.exceptionOrNull() as? MoveToSparkError.TooLarge ?: return quoted
             target = MoveToSparkMath.smallerAmount(tooLarge.amountSats) ?: return quoted
+            onRouteHalved(target)
         }
     }
 
@@ -536,11 +555,14 @@ class MoveToSparkRepo internal constructor(
                         }
                     }
                     settled.cancel()
-                    retriedBeforeInFlight.remove(inFlight.paymentHash)?.let { dropFromActivity(it) }
+                    cacheStore.data.first().moveToSparkRetriedBefore[inFlight.paymentHash.lowercase()]?.let {
+                        dropFromActivity(it)
+                        cacheStore.takeMoveRetriedBefore(inFlight.paymentHash)
+                    }
                     moved
                 }
             }.onFailure {
-                if (it is MoveToSparkError.PaymentFailed) retriedBeforeInFlight.remove(inFlight.paymentHash)
+                if (it is MoveToSparkError.PaymentFailed) cacheStore.takeMoveRetriedBefore(inFlight.paymentHash)
                 Logger.warn("Failed to move '${inFlight.amountSats}' sats to Spark after the wait", it, context = TAG)
             }
         }

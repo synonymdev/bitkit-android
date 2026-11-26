@@ -7,7 +7,9 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -58,6 +60,7 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     fun setUp() {
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(moveToSparkRepo.movableSats()).thenReturn(0uL)
+        whenever { moveToSparkRepo.movableSatsSettled() }.doSuspendableAnswer { moveToSparkRepo.movableSats() }
         whenever { moveToSparkRepo.quoteAll() }.thenReturn(Result.success(plan))
         whenever { moveToSparkRepo.moveAll(eq(plan)) }
             .thenReturn(Result.success(firstMove), Result.success(secondMove))
@@ -75,6 +78,19 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
         firstSettled.complete(Result.failure(MoveToSparkError.PaymentFailed(null)))
 
         assertEquals(MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN), sut.uiState.value)
+    }
+
+    @Test
+    fun `late failure of the only part reads the channels again for Try Again`() = test {
+        lightningState.value = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
+        val sut = createViewModel()
+        sut.move()
+        clearInvocations(lightningRepo)
+
+        firstSettled.complete(Result.failure(MoveToSparkError.PaymentFailed(null)))
+
+        assertEquals(MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN), sut.uiState.value)
+        verify(lightningRepo).syncState()
     }
 
     @Test
@@ -250,6 +266,40 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
 
         assertEquals(MoveToSparkUiState.Confirm(plan), sut.uiState.value)
         verify(moveToSparkRepo, times(2)).quoteAll()
+    }
+
+    @Test
+    fun `a late success quotes the rest its HTLC held until it cleared`() = test {
+        doReturn(50_000uL).whenever(moveToSparkRepo).movableSatsSettled()
+        val sut = createViewModel()
+        sut.move()
+
+        firstSettled.complete(Result.success(moved))
+
+        assertEquals(MoveToSparkUiState.Confirm(plan), sut.uiState.value)
+    }
+
+    @Test
+    fun `a move that settles in the wait reads what is left without waiting again`() = test {
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
+        val sut = createViewModel()
+
+        sut.move()
+
+        assertEquals(MoveToSparkUiState.Done(moved), sut.uiState.value)
+        verify(moveToSparkRepo, never()).movableSatsSettled()
+    }
+
+    @Test
+    fun `a move that fails reads the channels again for Try Again`() = test {
+        lightningState.value = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.failure(MoveToSparkError.PaymentFailed(null)))
+        val sut = createViewModel()
+
+        sut.move()
+
+        assertEquals(MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN), sut.uiState.value)
+        verify(lightningRepo).syncState()
     }
 
     @Test

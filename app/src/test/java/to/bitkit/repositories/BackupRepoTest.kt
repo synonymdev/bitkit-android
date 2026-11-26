@@ -3930,6 +3930,7 @@ class BackupRepoTest : BaseUnitTest() {
             sparkSendAttempts = mapOf(id to SparkSendAttempt(0, 1)),
             sparkUnsavedOwnFailures = setOf(id),
             moveToSparkHashes = listOf(id),
+            moveToSparkRetriedBefore = mapOf(id to listOf(id)),
             ldkSendHashes = listOf(id),
             ldkSendExpiries = mapOf(id to 1),
         )

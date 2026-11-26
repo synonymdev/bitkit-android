@@ -165,6 +165,8 @@ class MoveToSparkManager @Inject constructor(
                             if (moved != null) closeEmptied(channelsBefore, paymentsBefore)
                             requote(moveGeneration, moved)
                         } else if (generation.get() == moveGeneration) {
+                            // Try Again quotes from the channels, which may still hold the failed part.
+                            refreshChannels()
                             _uiState.update { error.toUiState() }
                         }
                     },
@@ -175,13 +177,18 @@ class MoveToSparkManager @Inject constructor(
         }
     }
 
-    private suspend fun done(outcome: MoveToSparkOutcome): MoveToSparkUiState.Done? {
+    private suspend fun done(outcome: MoveToSparkOutcome, waitsForHtlcs: Boolean = false): MoveToSparkUiState.Done? {
         walletRepo.syncNodeAndWallet()
+        refreshChannels()
+        // The parts' loop already waited out their HTLCs, so only a late outcome waits here.
+        val movableSats = if (waitsForHtlcs) moveToSparkRepo.movableSatsSettled() else moveToSparkRepo.movableSats()
+        val hasRest = outcome is MoveToSparkOutcome.Moved && MoveToSparkMath.hasMovableBalance(movableSats)
+        return if (hasRest) null else MoveToSparkUiState.Done(outcome)
+    }
+
+    private fun refreshChannels() {
         // The sync skips the channels' refresh while another sync runs, and they may still hold a failed part.
         if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) lightningRepo.syncState()
-        val hasRest = outcome is MoveToSparkOutcome.Moved &&
-            MoveToSparkMath.hasMovableBalance(moveToSparkRepo.movableSats())
-        return if (hasRest) null else MoveToSparkUiState.Done(outcome)
     }
 
     private fun requote(moveGeneration: Int, moved: MoveToSparkOutcome.Moved?) {
@@ -202,7 +209,13 @@ class MoveToSparkManager @Inject constructor(
         if (generation.get() != moveGeneration || !uiState.value.isInFlight()) return
         val moved = settled.getOrNull() ?: earlierSats.takeIf { it > 0uL }
             ?.let { MoveToSparkOutcome.Moved(it, feeSats = 0uL) }
-        val late = if (moved == null) MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN) else done(moved)
+        val late = if (moved == null) {
+            // Try Again quotes from the channels, which still hold the failed part until they are read again.
+            refreshChannels()
+            MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN)
+        } else {
+            done(moved, waitsForHtlcs = true)
+        }
         if (late == null) {
             if (uiState.value.isInFlight()) requote(moveGeneration, moved)
             return

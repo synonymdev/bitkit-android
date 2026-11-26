@@ -1753,6 +1753,7 @@ internal fun AppCacheData.withoutPaymentDetails() = copy(
     sparkSendAttempts = emptyMap(),
     sparkUnsavedOwnFailures = emptySet(),
     moveToSparkHashes = emptyList(),
+    moveToSparkRetriedBefore = emptyMap(),
     ldkSendHashes = emptyList(),
     ldkSendExpiries = emptyMap(),
 )
