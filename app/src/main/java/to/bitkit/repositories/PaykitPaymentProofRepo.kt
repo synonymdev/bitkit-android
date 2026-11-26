@@ -640,8 +640,8 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     /**
-     * Whether [attempt] pays a Spark exit's funding address, current or earlier, or the exit cannot be read: its
-     * Progress owns that payment, so Payment Pending never pays it again.
+     * Whether [attempt] pays a Spark exit's funding address, current or earlier, or the exit cannot be read: Payment
+     * Pending pays it again only while the exit still asks for it, and offers its release once the exit no longer does.
      */
     suspend fun isSparkExitFunding(attempt: OnchainSendAttempt): Boolean = withContext(ioDispatcher) {
         if (!attempt.mayFundSparkExit) return@withContext false

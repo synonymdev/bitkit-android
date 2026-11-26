@@ -1109,6 +1109,7 @@ class SparkExitRepo @Inject constructor(
 
     /** Funding from another wallet may have reached the address while the payment was prepared. */
     private suspend fun authorizePayAgain(attempt: OnchainSendAttempt, exit: SparkExitFundingRelease.Exit) {
+        check(!attempt.releaseApproved) { "Its release was approved" }
         if (!SparkExitFundingRelease.isExitFunding(attempt, exit)) return
         val utxos = runSuspendCatching { chain?.utxos(attempt.address) }.getOrNull()
         check(SparkExitFundingRelease.mayPayAgain(attempt, exit, utxos)) {

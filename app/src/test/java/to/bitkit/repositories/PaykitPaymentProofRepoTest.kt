@@ -3641,7 +3641,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         for (exit in exits) {
             val repo = paymentProofRepo().apply { sparkExit = { exit } }
             assertTrue(repo.onchainRequestHasEnded(attempt))
-            assertTrue(repo.isSparkExitFunding(attempt), "Payment Pending must not retry it")
+            assertTrue(repo.isSparkExitFunding(attempt), "Payment Pending treats it as the exit's funding")
             val wallet = FakeReleaseWallet()
             assertTrue(repo.abandonUnbroadcastOnchainPayment(attempt, wallet) {}.isSuccess)
             assertEquals(1, wallet.broadcasts)
@@ -3666,7 +3666,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         for (exit in exits) {
             val repo = paymentProofRepo().apply { sparkExit = { exit } }
             assertFalse(repo.onchainRequestHasEnded(attempt))
-            assertTrue(repo.isSparkExitFunding(attempt), "Payment Pending must not retry it")
+            assertTrue(repo.isSparkExitFunding(attempt), "Payment Pending treats it as the exit's funding")
             val result = repo.abandonUnbroadcastOnchainPayment(attempt, FakeReleaseWallet()) {}
             assertEquals(true, (result.exceptionOrNull() as? OnchainSendAbandonRefusedError)?.requestOpen)
         }
@@ -3692,6 +3692,8 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val repo = paymentProofRepo().apply { sparkExit = { SparkExitFundingRelease.Exit(null, emptyList()) } }
         assertTrue(repo.isSparkExitFunding(attempt), "Payment Pending must finish the release, never retry it")
         assertTrue(repo.onchainRequestHasEnded(attempt))
+        val gone = SparkExitFundingRelease.Exit(null, emptyList())
+        assertFalse(SparkExitFundingRelease.mayPayAgain(attempt, gone, emptyList()), "Never paid again")
     }
 
     @Test

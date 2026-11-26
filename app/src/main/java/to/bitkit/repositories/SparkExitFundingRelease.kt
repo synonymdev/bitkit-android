@@ -53,9 +53,9 @@ object SparkExitFundingRelease {
      * check's to refuse.
      */
     fun mayPayAgain(attempt: OnchainSendAttempt, exit: Exit, utxos: List<EsploraUtxo>?): Boolean {
+        // A release approved for it is Send Pending's to finish, even once the exit's record is gone.
+        if (attempt.mayFundSparkExit && attempt.releaseApproved) return false
         if (!isExitFunding(attempt, exit)) return true
-        // A release approved for it is Send Pending's to finish.
-        if (attempt.releaseApproved) return false
         val record = exit.record?.takeIf { it.isActive && it.funding.firstOrNull()?.address == attempt.address }
         if (record == null || utxos == null) return false
         return when (val state = SparkExitMath.fundingState(record, utxos)) {
