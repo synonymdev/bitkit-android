@@ -92,7 +92,9 @@ fun IntroArtLayout(
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
-                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = maxHeight)
+                    .fillMaxWidth()
                     .padding(top = TopBarHeight, start = 32.dp, end = 32.dp, bottom = 48.dp)
             ) {
                 IntroArt(
