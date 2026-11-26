@@ -930,15 +930,17 @@ class PaykitPaymentProofRepo @Inject constructor(
         completed
     }
 
-    suspend fun failLightningPayment(paymentHash: String) = removeProofs {
-        it.kind == PaykitPaymentProofKind.Lightning && it.paymentIdentifier.equals(paymentHash, ignoreCase = true)
+    /**
+     * Clears the Lightning proofs of [paymentHash], only those of [requestId] when given, so a request that sent nothing
+     * leaves another request's proof of the same invoice.
+     */
+    suspend fun failLightningPayment(paymentHash: String, requestId: PaykitPaymentRequestId? = null) = removeProofs {
+        it.kind == PaykitPaymentProofKind.Lightning &&
+            it.paymentIdentifier.equals(paymentHash, ignoreCase = true) &&
+            (requestId == null || it.requestId == requestId)
     }
 
-    /**
-     * Clears the Lightning proofs of [paymentHash] when [submissionError] proves the payment never left, only those of
-     * [requestId] when given, so a refused request leaves another request's proof of the same invoice; returns whether
-     * it did.
-     */
+    /** Clears the proofs as above when [submissionError] proves the payment never left; returns whether it did. */
     suspend fun failLightningPayment(
         paymentHash: String,
         submissionError: Throwable,
@@ -957,11 +959,7 @@ class PaykitPaymentProofRepo @Inject constructor(
             is NodeException.NotRunning,
             is NodeException.InvalidInvoice,
             is NodeException.InvalidAmount,
-            is NodeException.PaymentSendingFailed -> removeProofs {
-                it.kind == PaykitPaymentProofKind.Lightning &&
-                    it.paymentIdentifier.equals(paymentHash, ignoreCase = true) &&
-                    (requestId == null || it.requestId == requestId)
-            }
+            is NodeException.PaymentSendingFailed -> failLightningPayment(paymentHash, requestId)
             else -> return false
         }
         return true

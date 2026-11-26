@@ -29,6 +29,7 @@ import com.synonym.bitkitcore.LnurlWithdrawData
 import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaykitEndpoint
 import com.synonym.bitkitcore.PaykitRoute
+import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PubkySwapRoutePayment
 import com.synonym.bitkitcore.PubkySwapRouteQuote
@@ -8257,7 +8258,7 @@ class AppViewModel @Inject constructor(
             onFailure = { Result.failure(it) },
         )
         authorizationError?.let {
-            paykitPaymentProofRepo.failLightningPayment(paymentHash)
+            paykitPaymentProofRepo.failLightningPayment(paymentHash, incomingPaymentRequest?.id)
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(proofRequest)
             finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
@@ -8320,7 +8321,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun earlierLightningSendSats(paymentHash: String): ULong? =
         (activityRepo.getActivity(paymentHash).getOrNull() as? Activity.Lightning)?.v1
-            ?.takeIf { it.txType == PaymentType.SENT }
+            ?.takeIf { it.txType == PaymentType.SENT && it.status != PaymentState.FAILED }
             ?.value
 
     /**
@@ -8437,7 +8438,7 @@ class AppViewModel @Inject constructor(
         else if requestId == null -> true
         // Any failed spending balance update happens before the invoice is paid, so nothing was sent.
         else if updateFailed || error is LightningPaymentFailedError -> {
-            paykitPaymentProofRepo.failLightningPayment(paymentHash)
+            paykitPaymentProofRepo.failLightningPayment(paymentHash, requestId)
             true
         }
         else -> paykitPaymentProofRepo.failLightningPayment(paymentHash, error, requestId)
