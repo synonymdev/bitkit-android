@@ -3779,6 +3779,25 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send refused at submission stays refused when its cleanup fails`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        var isAuthorized = true
+        whenever(cacheStore.addSparkUncertainSend(any(), any(), any())).thenAnswer {
+            isAuthorized = false
+            Unit
+        }
+        whenever(cacheStore.removeSparkSendHash(any())).thenAnswer { throw IllegalStateException("disk full") }
+        val sut = createSut()
+
+        val result = sut.payInvoice("lnbc1", 100uL, null, null) { isAuthorized }
+
+        assertIs<ServiceError.PaymentStoppedAtSubmission>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any(), anyOrNull())
+    }
+
+    @Test
     fun `an older failed row never ends an uncertain spark send while spark can't resync`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
