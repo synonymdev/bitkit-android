@@ -2,8 +2,11 @@
   <description>
     Logs the paired Jade out on the device itself and checks the message the app shows when it
     next needs the Jade. Requires `JADE_MODE=interactive ./scripts/jade-emulator start` in
-    `bitkit-docker`, a regtest debug build with the Jade emulator enabled (see the README), no
-    Jade paired and funds on the Jade's regtest addresses for the send steps. The device answers
+    `bitkit-docker`, a regtest debug build with the Jade emulator enabled (see the README) and no
+    Jade paired. For the send steps, Settings, Advanced, Electrum Server must point at the
+    `bitkit-docker` Electrum, and the Jade must hold funds there: after pairing, run
+    `./bitcoin-cli sendtoaddress JADE_ADDRESS 0.001; ./bitcoin-cli -generate 1` in
+    `bitkit-docker`, where `JADE_ADDRESS` is the address Receive shows on the Jade tab. The device answers
     the next request with HW_LOCKED, and the app asks for the PIN on the device again and retries,
     on Verify on Device and on Sign With Jade.
   </description>
@@ -36,7 +39,7 @@
       Tap Send (testTag "Send"), enter a regtest address of the bitkit-docker node manually, select the Jade as the funding source on the amount screen (testTag "AssetButton-switch"), enter 50 000 sats, tap Continue (testTag "ContinueAmount"), swipe to confirm and tap "Sign With Jade" (testTag "HardwareSendOpenTrezorConnect")
     </action>
     <action>
-      Verify the Jade shows its PIN pad and the sheet's Back button is still shown, then run `./scripts/jade-emulator pin 012345`
+      Verify the Jade shows its PIN pad, then run `./scripts/jade-emulator pin 012345`
     </action>
     <action>
       Run `./scripts/jade-emulator press front` to pass the Output screen, then `./scripts/jade-emulator press right front` to sign on Send Transaction, and verify the success screen (testTag "SendSuccess") headed "Bitcoin Sent" appears within 30 seconds, with one payment sent
