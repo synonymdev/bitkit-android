@@ -157,30 +157,88 @@ data class PubkyAuthRequest(
         /** An IPv4 address in the only form the SDK's URL parser leaves unchanged. */
         private val CANONICAL_IPV4 = "(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])".let { Regex("""($it\.){3}$it""") }
 
+        /** Characters the SDK's URL parser rewrites or percent-encodes, so a relay holding one is not shown as sent. */
+        private const val RELAY_REWRITTEN_CHARACTERS = "\\\"<>`{}^'"
+
+        /** Ports the SDK's URL parser drops because they are the scheme's default. */
+        private val RELAY_DEFAULT_PORTS = mapOf("http" to 80, "https" to 443)
+
+        /** Highest TCP port. */
+        private const val MAX_PORT = 65535
+
+        /** Number of 16-bit groups in an IPv6 address. */
+        private const val IPV6_GROUPS = 8
+
+        /** Highest value of one IPv6 group. */
+        private const val MAX_IPV6_GROUP = 0xFFFF
+
+        /** First code point past printable ASCII. */
+        private const val DEL = 0x7F
+
         /**
-         * The relay as shown on the approval sheet: scheme, host, port, path and query. Null when the destination the
-         * Pubky SDK would send to cannot be read from [relay] with certainty: a backslash, a space, control or
-         * non-ASCII characters, a missing or percent-encoded host, or a numeric host that is not a plain IPv4 address.
+         * The relay as shown on the approval sheet: scheme, host, port, path and query, exactly as the Pubky SDK's URL
+         * parser keeps them. Null when [relay] is not already in that form apart from letter case, user info, the
+         * fragment and a missing root path: a backslash, a space, control or non-ASCII characters, characters the
+         * parser percent-encodes, a missing, percent-encoded or non-canonical host, a default, padded or out-of-range
+         * port, or a `.` or `..` path segment.
          */
         fun displayRelay(relay: String): String? {
-            if (relay.any { it.code <= ' '.code || it.code >= DEL || it == '\\' }) return null
+            if (relay.any { it.code <= ' '.code || it.code >= DEL || it in RELAY_REWRITTEN_CHARACTERS }) return null
             val schemeEnd = relay.indexOf("://")
             if (schemeEnd <= 0) return null
             val scheme = relay.substring(0, schemeEnd).lowercase().takeIf { it in RELAY_SCHEMES } ?: return null
             val rest = relay.substring(schemeEnd + "://".length)
             val authorityEnd = rest.indexOfAny(charArrayOf('/', '?', '#')).takeIf { it >= 0 } ?: rest.length
             val hostPort = rest.substring(0, authorityEnd).substringAfterLast('@').lowercase()
-            if (!RELAY_HOST_PORT.matches(hostPort)) return null
-            if (!hostPort.startsWith("[")) {
-                val host = hostPort.substringBefore(':')
-                val readsAsNumber = NUMERIC_HOST_LABEL.matches(host.removeSuffix(".").substringAfterLast('.'))
-                if (readsAsNumber && !CANONICAL_IPV4.matches(host)) return null
-            }
-            return "$scheme://$hostPort${rest.substring(authorityEnd).substringBefore('#')}"
+            val pathAndQuery = rest.substring(authorityEnd).substringBefore('#')
+            val hasDotSegment = pathAndQuery.substringBefore('?').split('/')
+                .any { it.lowercase().replace("%2e", ".") in setOf(".", "..") }
+            if (hasDotSegment || !isUnchangedRelayHostPort(scheme, hostPort)) return null
+            val rootPath = if (pathAndQuery.startsWith("/")) "" else "/"
+            return "$scheme://$hostPort$rootPath$pathAndQuery"
         }
 
-        /** First code point past printable ASCII. */
-        private const val DEL = 0x7F
+        private fun isUnchangedRelayHostPort(scheme: String, hostPort: String): Boolean {
+            val (host, portSuffix) = RELAY_HOST_PORT.matchEntire(hostPort)?.destructured ?: return false
+            val port = portSuffix.removePrefix(":")
+            val isUnchangedPort = port.isEmpty() || port.toInt().let {
+                port == it.toString() && it <= MAX_PORT && it != RELAY_DEFAULT_PORTS[scheme]
+            }
+            if (!isUnchangedPort) return false
+            if (host.startsWith("[")) return isCanonicalIpv6(host.removeSurrounding("[", "]"))
+            val readsAsNumber = NUMERIC_HOST_LABEL.matches(host.removeSuffix(".").substringAfterLast('.'))
+            return !readsAsNumber || CANONICAL_IPV4.matches(host)
+        }
+
+        private fun isCanonicalIpv6(address: String): Boolean {
+            val halves = address.split("::")
+            val head = halves[0].split(':').filter { it.isNotEmpty() }
+            val tail = halves.getOrNull(1)?.split(':')?.filter { it.isNotEmpty() }.orEmpty()
+            val missing = IPV6_GROUPS - head.size - tail.size
+            val isComplete = if (halves.size == 1) missing == 0 else halves.size == 2 && missing >= 1
+            if (!isComplete || '.' in address) return false
+            val groups = (head + List(missing) { "0" } + tail).map { group ->
+                group.toIntOrNull(radix = 16)?.takeIf { it <= MAX_IPV6_GROUP } ?: return false
+            }
+            var runStart = -1
+            var runLength = 0
+            var index = 0
+            while (index < groups.size) {
+                val end = (index until groups.size).firstOrNull { groups[it] != 0 } ?: groups.size
+                if (end - index > runLength) {
+                    runStart = index
+                    runLength = end - index
+                }
+                index = maxOf(end, index + 1)
+            }
+            val hex = { part: List<Int> -> part.joinToString(":") { it.toString(radix = 16) } }
+            val canonical = if (runLength < 2) {
+                hex(groups)
+            } else {
+                "${hex(groups.take(runStart))}::${hex(groups.drop(runStart + runLength))}"
+            }
+            return canonical == address
+        }
 
         fun parse(
             rawUrl: String,
