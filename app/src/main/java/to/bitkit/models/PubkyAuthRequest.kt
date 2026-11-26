@@ -99,6 +99,7 @@ sealed class PubkyAuthRequestError(cause: Throwable? = null) : AppError(cause = 
     data object DuplicateBitkitClaim : PubkyAuthRequestError()
     data class UnsupportedBitkitClaim(val value: String) : PubkyAuthRequestError()
     data object InvalidBitkitClaimCapabilities : PubkyAuthRequestError()
+    data class SignerMismatch(val expectedSigner: String) : PubkyAuthRequestError()
 }
 
 @Immutable
@@ -130,6 +131,7 @@ data class PubkyAuthRequest(
     val homeserverPublicKey: String? = null,
     val signupToken: String? = null,
     val authorizationUrl: String? = rawUrl,
+    val expectedSigner: String? = null,
 ) {
     val isSignup: Boolean
         get() = isSignupUrl(rawUrl)
@@ -140,6 +142,46 @@ data class PubkyAuthRequest(
     fun requiresIdentityCreation(hasIdentity: Boolean): Boolean = isSignup && (!isGrantSignup || !hasIdentity)
 
     companion object {
+        /** Query parameter naming the only pubky that may approve a grant sign-in. */
+        private const val EXPECTED_SIGNER_PARAMETER = "spk"
+
+        /** A 32-byte key in canonical z-base-32: 52 symbols, the last one carrying a single bit. */
+        private val CANONICAL_Z32_KEY = Regex("[ybndrfg8ejkmcpqxot1uwisza345h769]{51}[yo]")
+
+        /** Length of a z-base-32 key carrying the `pubky` prefix. */
+        private const val PREFIXED_KEY_LENGTH = 57
+
+        /**
+         * Reads the pubky a sign-in request must be approved with. Absent is fine; a repeated value or anything other
+         * than a bare canonical z-base-32 key makes the request invalid, as in the Pubky SDK parser for `signin_grant`.
+         * Only signup requests ignore the parameter, so a sign-in this parser reads differently from the SDK is still
+         * held to it.
+         */
+        fun parseExpectedSigner(rawUrl: String): Result<String?> = runCatching {
+            val uri = URI(rawUrl)
+            if (uri.isSignupRequest()) return@runCatching null
+            val values = uri.rawQuery.orEmpty()
+                .split("&")
+                .filter { it.isNotEmpty() }
+                .map { it.split("=", limit = 2) }
+                .filter { decodeQueryComponent(it.first()) == EXPECTED_SIGNER_PARAMETER }
+                .map { decodeQueryComponent(it.getOrElse(1) { "" }) }
+            require(values.size <= 1) { "Duplicate Pubky auth parameter: $EXPECTED_SIGNER_PARAMETER" }
+            values.singleOrNull()?.also {
+                require(CANONICAL_Z32_KEY.matches(it)) { "Malformed Pubky auth parameter: $EXPECTED_SIGNER_PARAMETER" }
+            }
+        }.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { Result.failure(PubkyAuthRequestError.InvalidUrl(it)) },
+        )
+
+        /** Whether [publicKey], bare or with the `pubky` prefix, may approve a request naming [expectedSigner]. */
+        fun isExpectedSigner(expectedSigner: String?, publicKey: String): Boolean {
+            if (expectedSigner == null) return true
+            val isPrefixed = publicKey.length == PREFIXED_KEY_LENGTH && publicKey.startsWith("pubky")
+            return expectedSigner == if (isPrefixed) publicKey.removePrefix("pubky") else publicKey
+        }
+
         fun parse(
             rawUrl: String,
             clientId: String,
@@ -148,7 +190,8 @@ data class PubkyAuthRequest(
             homeserverPublicKey: String? = null,
             signupToken: String? = null,
             authorizationUrl: String? = rawUrl,
-        ): Result<PubkyAuthRequest> = parseBitkitClaim(rawUrl, capabilities).map { bitkitClaim ->
+        ): Result<PubkyAuthRequest> = parseBitkitClaim(rawUrl, capabilities).mapCatching { bitkitClaim ->
+            val expectedSigner = parseExpectedSigner(rawUrl).getOrThrow()
             val permissions = parseCapabilities(capabilities)
             PubkyAuthRequest(
                 rawUrl = rawUrl,
@@ -161,6 +204,7 @@ data class PubkyAuthRequest(
                 homeserverPublicKey = homeserverPublicKey,
                 signupToken = signupToken,
                 authorizationUrl = authorizationUrl,
+                expectedSigner = expectedSigner,
             )
         }
 

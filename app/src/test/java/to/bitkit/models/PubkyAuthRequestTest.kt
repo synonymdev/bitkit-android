@@ -12,6 +12,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PubkyAuthRequestTest {
+    companion object {
+        private const val SIGNER = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        private const val OTHER_SIGNER = "5jsjx1o6fzu6aeeo697r3i5rx15zq41kikcye8wtwdqm4nb4tryo"
+    }
 
     @Test
     fun `optional USDT omission preserves delegated Paykit authority`() {
@@ -205,6 +209,106 @@ class PubkyAuthRequestTest {
         ).getOrThrow()
 
         assertEquals(PubkyAuthClaim(Item.WATCH_ONLY_ACCOUNT_V1), request.bitkitClaim)
+    }
+
+    @Test
+    fun `grant sign-in reads the pubky it must be approved with`() {
+        assertEquals(SIGNER.length, 52)
+        assertNull(PubkyAuthRequest.parseExpectedSigner(grantSigninUrl()).getOrThrow())
+        assertEquals(SIGNER, PubkyAuthRequest.parseExpectedSigner(grantSigninUrl("spk=$SIGNER")).getOrThrow())
+        assertEquals(SIGNER, PubkyAuthRequest.parseExpectedSigner(grantSigninUrl("%73pk=$SIGNER#spk=x")).getOrThrow())
+
+        val request = PubkyAuthRequest.parse(
+            rawUrl = grantSigninUrl("spk=$SIGNER"),
+            clientId = "example.app",
+            relay = "https://relay.example/inbox/",
+            capabilities = "/pub/example.app/:rw",
+        ).getOrThrow()
+
+        assertEquals(SIGNER, request.expectedSigner)
+    }
+
+    @Test
+    fun `grant sign-in with a repeated or malformed expected signer is invalid`() {
+        val invalidQueries = listOf(
+            "spk",
+            "spk=",
+            "spk=not-a-public-key",
+            "spk=pubky$SIGNER",
+            "spk=pk:$SIGNER",
+            "spk=https://$SIGNER/",
+            "spk=${SIGNER.uppercase()}",
+            "spk=%20$SIGNER",
+            "spk=$SIGNER%20",
+            "spk=$SIGNER/",
+            "spk=${SIGNER.dropLast(1)}",
+            "spk=${SIGNER.dropLast(1)}b",
+            "spk=$SIGNER&spk=$SIGNER",
+            "spk=$SIGNER&spk=$OTHER_SIGNER",
+            "spk=$SIGNER&%73pk=$SIGNER",
+            "spk=$SIGNER&spk=",
+        )
+
+        invalidQueries.forEach { query ->
+            val url = grantSigninUrl(query)
+            assertIs<PubkyAuthRequestError.InvalidUrl>(
+                PubkyAuthRequest.parseExpectedSigner(url).exceptionOrNull(),
+                query,
+            )
+            assertIs<PubkyAuthRequestError.InvalidUrl>(
+                PubkyAuthRequest.parse(
+                    rawUrl = url,
+                    clientId = "example.app",
+                    relay = "https://relay.example/inbox/",
+                    capabilities = "/pub/example.app/:rw",
+                ).exceptionOrNull(),
+                query,
+            )
+        }
+    }
+
+    @Test
+    fun `sign-in read differently from the SDK is still held to its expected signer`() {
+        listOf("pubkyauth://user@signin_grant:80", "pubkyauth://signin_grant/", "pubkyauth://signin").forEach {
+            assertEquals(SIGNER, PubkyAuthRequest.parseExpectedSigner("$it?spk=$SIGNER").getOrThrow(), it)
+            assertIs<PubkyAuthRequestError.InvalidUrl>(
+                PubkyAuthRequest.parseExpectedSigner("$it?spk=$SIGNER&spk=$SIGNER").exceptionOrNull(),
+                it,
+            )
+        }
+        assertIs<PubkyAuthRequestError.InvalidUrl>(
+            PubkyAuthRequest.parseExpectedSigner(grantSigninUrl("spk=${SIGNER.take(26)}\t${SIGNER.drop(26)}"))
+                .exceptionOrNull(),
+        )
+    }
+
+    @Test
+    fun `signup requests ignore the expected signer`() {
+        val signupUrls = listOf(
+            "pubkyauth://signup_grant",
+            "pubkyauth://signup",
+            "pubkyauth://direct_signup",
+            "pubkyring://signup",
+        )
+        signupUrls.forEach {
+            val url = "$it?caps=/pub/example.app/:rw&hs=homeserver&spk=not-a-public-key&spk=other"
+
+            assertNull(PubkyAuthRequest.parseExpectedSigner(url).getOrThrow(), it)
+        }
+    }
+
+    @Test
+    fun `expected signer matches only this pubky with or without its prefix`() {
+        val bareKeyStartingWithPrefix = "pubky" + SIGNER.drop(5)
+
+        assertTrue(PubkyAuthRequest.isExpectedSigner(null, SIGNER))
+        assertTrue(PubkyAuthRequest.isExpectedSigner(SIGNER, SIGNER))
+        assertTrue(PubkyAuthRequest.isExpectedSigner(SIGNER, "pubky$SIGNER"))
+        assertTrue(PubkyAuthRequest.isExpectedSigner(bareKeyStartingWithPrefix, bareKeyStartingWithPrefix))
+        assertFalse(PubkyAuthRequest.isExpectedSigner(OTHER_SIGNER, SIGNER))
+        assertFalse(PubkyAuthRequest.isExpectedSigner(OTHER_SIGNER, "pubky$SIGNER"))
+        assertFalse(PubkyAuthRequest.isExpectedSigner(SIGNER.drop(5), bareKeyStartingWithPrefix))
+        assertFalse(PubkyAuthRequest.isExpectedSigner(SIGNER, ""))
     }
 
     @Test
@@ -442,6 +546,10 @@ class PubkyAuthRequestTest {
         }
         return "pubkyauth://signin?caps=$capabilities&relay=https%3A%2F%2Fhttprelay.pubky.app%2Finbox%2F$claims"
     }
+
+    private fun grantSigninUrl(extraQuery: String? = null): String =
+        "pubkyauth://signin_grant?caps=/pub/example.app/:rw&relay=https%3A%2F%2Frelay.example%2Finbox%2F" +
+            "&secret=secret&cid=example.app&cpk=$OTHER_SIGNER" + extraQuery?.let { "&$it" }.orEmpty()
 
     private fun ringSignupUrl(signupToken: String? = null, scheme: String = "pubkyring"): String =
         "$scheme://signup?hs=homeserver" +

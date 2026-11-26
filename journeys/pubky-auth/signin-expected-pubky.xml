@@ -1,0 +1,29 @@
+<journey name="signin expected pubky">
+  <description>
+    Verifies that a grant sign-in link naming the pubky that must approve it (spk) opens the authorization sheet only
+    when it names this wallet's pubky, is refused with a message naming the other pubky otherwise, and is invalid when
+    spk is repeated or malformed. Precondition: an unlocked regtest wallet with a locally managed Pubky identity. The
+    links are local-only dummy requests and nothing is authorized; never tap Authorize. BASE is
+    pubkyauth://signin_grant?caps=/pub/locks.app/:rw&amp;relay=https%3A%2F%2Fhttprelay.pubky.app%2Finbox%2F&amp;secret=e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3s&amp;cid=locks.test&amp;cpk=5jsjx1o6fzu6aeeo697r3i5rx15zq41kikcye8wtwdqm4nb4tryo
+    and OTHER is 8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty. Android opens each link with
+    adb shell "am start -a android.intent.action.VIEW -d '&lt;link&gt;' to.bitkit.dev" and reads toasts from a
+    screenshot; iOS opens the same query through bitkit://pubky-auth/signin and its toasts carry the ids
+    PubkyAuthOtherPubkyToast and PubkyAuthInvalidRequestToast.
+  </description>
+  <actions>
+    <action>Open the Profile screen and read this wallet's pubky: tap Share (id "ProfileShare") and read the text preview, then close the share sheet (iOS: tap Copy (id "ProfileCopy") and run xcrun simctl pbpaste)</action>
+    <action>Set OWN to that pubky without its leading "pubky" prefix; it is 52 characters long</action>
+    <action>Open BASE&amp;spk=OWN</action>
+    <action>Verify the authorize button (id "PubkyAuthAuthorize") is visible and the profile card (id "PubkyAuthProfile") shows the first and last four characters of OWN</action>
+    <action>Tap Cancel</action>
+    <action>Open BASE&amp;spk=OTHER</action>
+    <action>Verify an error toast reads "This request is for 8um7...d1ty, not this wallet's pubky."</action>
+    <action>Wait 5 seconds, then verify the authorize button (id "PubkyAuthAuthorize") is not visible</action>
+    <action>Open BASE&amp;spk=OWN&amp;spk=OWN</action>
+    <action>Verify the invalid request toast is shown and the authorize button (id "PubkyAuthAuthorize") is not visible</action>
+    <action>Open BASE&amp;spk=pubkyOWN</action>
+    <action>Verify the invalid request toast is shown and the authorize button (id "PubkyAuthAuthorize") is not visible</action>
+    <action>Open BASE&amp;spk=not-a-public-key</action>
+    <action>Verify the invalid request toast is shown and the authorize button (id "PubkyAuthAuthorize") is not visible</action>
+  </actions>
+</journey>

@@ -9,6 +9,7 @@ import com.synonym.paykit.PubkyAuthCompanionClaimApprovalException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.serialization.json.Json
@@ -38,6 +39,7 @@ import to.bitkit.models.PubkyAuthClaim.Item
 import to.bitkit.models.PubkyAuthPermission
 import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
+import to.bitkit.models.Toast
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.repositories.Endpoint
@@ -48,6 +50,7 @@ import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WatchOnlyAccountAuthorizationStartError
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -334,6 +337,63 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         verifyBlocking(pubkyRepo) { approveAuth(authUrl, capabilities, clientId) }
         verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any(), any()) }
         verifyBlocking(watchOnlyAccountRepo, never()) { prepareUnsignedClaim(any(), any()) }
+    }
+
+    @Test
+    fun `request naming another pubky is refused before consent and never signed`() = test {
+        val signer = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        val other = "5jsjx1o6fzu6aeeo697r3i5rx15zq41kikcye8wtwdqm4nb4tryo"
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/example/:rw&spk=$other"
+        val capabilities = "/pub/example/:rw"
+        publicKeyFlow.value = "pubky$signer"
+        whenever(context.getString(R.string.profile__auth_error_other_pubky, "5jsj...tryo"))
+            .thenReturn("This request is for 5jsj...tryo, not this wallet's pubky.")
+        whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
+            Result.success(authRequest(authUrl, capabilities).copy(expectedSigner = other)),
+        )
+        val sut = createSut()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        sut.effects.test {
+            sut.load(authUrl)
+            advanceUntilIdle()
+            assertEquals(PubkyAuthApprovalEffect.Dismiss, awaitItem())
+
+            sut.requestAuthorize(authUrl)
+            sut.confirmAuthorize(authUrl)
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+
+        assertEquals(ApprovalState.Loading, sut.uiState.value.state)
+        assertEquals("This request is for 5jsj...tryo, not this wallet's pubky.", toasts.single().description)
+        verifyBlocking(pubkyRepo, never()) { approveAuth(any(), any(), any()) }
+        verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any(), any()) }
+        verifyBlocking(pubkyRepo, never()) { approveSignupAuth(any()) }
+        toastJob.cancel()
+    }
+
+    @Test
+    fun `request naming this pubky reaches consent and is approved`() = test {
+        val signer = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/example/:rw&spk=$signer"
+        val capabilities = "/pub/example/:rw"
+        publicKeyFlow.value = "pubky$signer"
+        whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
+            Result.success(authRequest(authUrl, capabilities).copy(expectedSigner = signer)),
+        )
+        whenever { pubkyRepo.approveAuth(authUrl, capabilities, clientId) }.thenReturn(Result.success(Unit))
+        val sut = createSut()
+
+        sut.load(authUrl)
+        advanceUntilIdle()
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        sut.confirmAuthorize(authUrl)
+        advanceUntilIdle()
+
+        assertEquals(ApprovalState.Success, sut.uiState.value.state)
+        verifyBlocking(pubkyRepo) { approveAuth(authUrl, capabilities, clientId) }
     }
 
     @Test

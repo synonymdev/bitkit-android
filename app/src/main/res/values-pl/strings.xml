@@ -568,6 +568,7 @@
     <string name="profile__auth_approval_authorize">Autoryzuj</string>
     <string name="profile__auth_approval_details">Szczegóły</string>
     <string name="profile__auth_approval_title">Autoryzuj</string>
+    <string name="profile__auth_error_other_pubky">To żądanie jest przeznaczone dla %1$s, a nie dla pubky tego portfela.</string>
     <string name="profile__create_nav_title">Utwórz profil</string>
     <string name="profile__edit_nav_title">Edytuj profil</string>
     <string name="profile__nav_title">Profil</string>

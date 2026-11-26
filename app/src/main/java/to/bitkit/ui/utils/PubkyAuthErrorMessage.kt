@@ -9,9 +9,19 @@ import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.repositories.WatchOnlyAccountError
 import to.bitkit.services.PubkyRingAuthTimeoutError
 
+/** Characters shown from each end of the pubky a request names. */
+private const val SIGNER_EDGE_LENGTH = 4
+
 fun Throwable.localizedPubkyAuthMessage(context: Context): String? {
     var current: Throwable? = this
     while (current != null) {
+        if (current is PubkyAuthRequestError.SignerMismatch) {
+            val signer = current.expectedSigner
+            return context.getString(
+                R.string.profile__auth_error_other_pubky,
+                "${signer.take(SIGNER_EDGE_LENGTH)}...${signer.takeLast(SIGNER_EDGE_LENGTH)}",
+            )
+        }
         val messageResource = current.pubkyAuthMessageResource()
         if (messageResource != null) {
             return context.getString(messageResource)

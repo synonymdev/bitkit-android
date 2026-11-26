@@ -2198,6 +2198,7 @@ class PubkyRepo @Inject constructor(
             val secretKeyHex = requireNotNull(activeSecretKeyHex()) {
                 "No secret key available — use Ring to manage authorizations"
             }
+            requireExpectedSigner(authUrl, secretKeyHex)
             pubkyService.approveAuth(authUrl, expectedCapabilities, approvedClientId, secretKeyHex)
         }
     }
@@ -2215,6 +2216,7 @@ class PubkyRepo @Inject constructor(
             val secretKeyHex = requireNotNull(activeSecretKeyHex()) {
                 "No secret key available — use Ring to manage authorizations"
             }
+            requireExpectedSigner(authUrl, secretKeyHex)
             pubkyService.approveAuthWithCompanionClaim(
                 authUrl = authUrl,
                 expectedCapabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES,
@@ -2226,6 +2228,14 @@ class PubkyRepo @Inject constructor(
                     unsignedPayload = unsignedPayload,
                 ),
             )
+        }
+    }
+
+    private suspend fun requireExpectedSigner(authUrl: String, secretKeyHex: String) {
+        val expectedSigner = PubkyAuthRequest.parseExpectedSigner(authUrl).getOrThrow() ?: return
+        val signer = pubkyService.publicKeyFromSecret(secretKeyHex)
+        if (!PubkyAuthRequest.isExpectedSigner(expectedSigner, signer)) {
+            throw PubkyAuthRequestError.SignerMismatch(expectedSigner)
         }
     }
 

@@ -576,6 +576,7 @@
     <string name="profile__add_tag">Προσθήκη ετικέτας</string>
     <string name="profile__auth_approval_details">Λεπτομέρειες</string>
     <string name="profile__auth_approval_ok">ΟΚ</string>
+    <string name="profile__auth_error_other_pubky">Αυτό το αίτημα προορίζεται για το %1$s, όχι για το pubky αυτού του πορτοφολιού.</string>
     <string name="profile__create_nav_title">Δημιουργία προφίλ</string>
     <string name="profile__nav_title">Προφίλ</string>
     <string name="profile__retry_load">Προσπαθήστε Ξανά</string>
