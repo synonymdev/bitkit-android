@@ -685,6 +685,29 @@ class ContactDetailViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `dismissing after the payment resolved keeps it from being claimed`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(null)))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(openedPayment))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.onClickPay()
+            advanceUntilIdle()
+            val payment = assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
+
+            sut.dismissRequestOrPaySheet()
+
+            assertFalse(sut.claimPendingPayment(payment))
+            assertFalse(sut.uiState.value.isPayLoading)
+            expectNoEvents()
+        }
+    }
+
+    @Test
     fun `dismissing the sheet after recreation cancels the payment`() = test {
         val paymentStarted = CompletableDeferred<Unit>()
         var isPaymentCancelled = false

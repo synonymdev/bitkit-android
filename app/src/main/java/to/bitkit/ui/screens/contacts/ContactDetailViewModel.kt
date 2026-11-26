@@ -80,8 +80,6 @@ class ContactDetailViewModel @Inject constructor(
     val uiState: StateFlow<ContactDetailUiState> = _uiState.asStateFlow()
 
     private val _effects = MutableSharedFlow<ContactDetailEffect>(extraBufferCapacity = 1)
-
-    /** Kept until a screen claims it, so a payment resolved while the screen is being recreated is not dropped. */
     private val pendingPayment = MutableStateFlow<ContactDetailEffect.OpenPayment?>(null)
     val effects: Flow<ContactDetailEffect> = merge(_effects.asSharedFlow(), pendingPayment.filterNotNull())
 

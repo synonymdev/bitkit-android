@@ -95,20 +95,36 @@ fun ContactDetailScreen(
                     val scanJob = onPayContact(it.paymentRequest, it.publicKey, it.privatePaymentContext, it.endpoints)
                     viewModel.onPaymentOpening(scanJob)
                 }
-                ContactDetailEffect.ContactDeleted -> onContactDeleted()
+                ContactDetailEffect.ContactDeleted -> {
+                    viewModel.dismissRequestOrPaySheet()
+                    onContactDeleted()
+                }
             }
         }
     }
 
     Content(
         uiState = uiState,
-        onBackClick = onBackClick,
-        onClickEdit = { uiState.profile?.publicKey?.let { onEditContact(it) } },
+        onBackClick = {
+            viewModel.dismissRequestOrPaySheet()
+            onBackClick()
+        },
+        onClickEdit = {
+            uiState.profile?.publicKey?.let {
+                viewModel.dismissRequestOrPaySheet()
+                onEditContact(it)
+            }
+        },
         showDeleteAction = showDeleteAction,
         onClickDelete = { viewModel.showDeleteConfirmation() },
         onClickCopy = { viewModel.copyPublicKey() },
         onClickPay = { viewModel.onClickPay() },
-        onClickActivity = { uiState.profile?.publicKey?.let { onActivityClick(it) } },
+        onClickActivity = {
+            uiState.profile?.publicKey?.let {
+                viewModel.dismissRequestOrPaySheet()
+                onActivityClick(it)
+            }
+        },
         onClickShare = { uiState.profile?.publicKey?.let { shareText(context, it) } },
         onClickRetry = { viewModel.loadContact() },
         onAddTag = { viewModel.showAddTagSheet() },
