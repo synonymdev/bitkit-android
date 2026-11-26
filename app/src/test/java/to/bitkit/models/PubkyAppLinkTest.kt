@@ -2,7 +2,9 @@ package to.bitkit.models
 
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class PubkyAppLinkTest {
     @Test
@@ -55,6 +57,25 @@ class PubkyAppLinkTest {
     fun `web only links refuse email and phone`() {
         listOf("me@example.com", "+1 234 567 890", "mailto:me@example.com", "ftp://example.com").forEach {
             assertEquals(PubkyAppLinkError.URL_INVALID, pubkyAppLinkError("Contact", it, webOnly = true), it)
+        }
+    }
+
+    @Test
+    fun `social v1 web uris follow paykit's rule`() {
+        listOf("https://example.com", "http://localhost", "https://[::1]", "https://user@host:8080/a").forEach {
+            assertTrue(it.isSocialV1WebUri(), it)
+        }
+        listOf(
+            "https:///example.com",
+            "https://",
+            "https://@",
+            "HTTPS://example.com",
+            "mailto:a@example.com",
+            "https://exa mple.com",
+            "https://example.com/\u0001",
+            "https://:80",
+        ).forEach {
+            assertFalse(it.isSocialV1WebUri(), it)
         }
     }
 

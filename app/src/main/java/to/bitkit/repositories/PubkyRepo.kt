@@ -75,6 +75,7 @@ import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
+import to.bitkit.models.isSocialV1WebUri
 import to.bitkit.models.singleLine
 import to.bitkit.models.takeCodePoints
 import to.bitkit.models.toPubkyAppLinkUrl
@@ -1461,7 +1462,7 @@ class PubkyRepo @Inject constructor(
         links = links
             .mapNotNull { link ->
                 val title = link.label.singleLine().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                val url = link.url.toPubkyAppLinkUrl()?.takeIf { it.isSocialV1WebUrl() } ?: return@mapNotNull null
+                val url = link.url.toPubkyAppLinkUrl()?.takeIf { it.isSocialV1WebUri() } ?: return@mapNotNull null
                 PubkyProfileLink(label = title.takeCodePoints(PUBKY_APP_LINK_TITLE_MAX_LENGTH), url = url)
             }
             .take(PUBKY_APP_LINKS_MAX_COUNT),
@@ -1570,9 +1571,6 @@ class PubkyRepo @Inject constructor(
 
     private fun Throwable.isConcurrentUpdate() =
         generateSequence(this) { it.cause }.any { it is PaykitException.ConcurrentUpdate }
-
-    /** Social v1's own link rule: a lowercase `http://` or `https://` prefix; it drops other links on migration too. */
-    private fun String.isSocialV1WebUrl() = startsWith("http://") || startsWith("https://")
 
     private fun String.isPaykitStorage() = "/pub/paykit/" in this
 

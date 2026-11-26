@@ -7,6 +7,12 @@ import to.bitkit.ext.isWebLink
 const val PUBKY_APP_LINK_TITLE_MAX_LENGTH = 100
 const val PUBKY_APP_LINK_URL_MAX_LENGTH = 300
 
+/** First printable ASCII code; lower codes are control characters. */
+private const val ASCII_SPACE = 0x20
+
+/** The ASCII delete control character. */
+private const val ASCII_DELETE = 0x7F
+
 /** Highest port `url::Url::parse` accepts. */
 private const val MAX_PORT = 65_535
 
@@ -57,6 +63,20 @@ fun String.singleLine() = map { if (it.isISOControl()) ' ' else it }.joinToStrin
  */
 fun String.toPubkyAppLinkUrl(): String? = normalizedLinkUrl()?.takeIf {
     it.codePointCount(0, it.length) <= PUBKY_APP_LINK_URL_MAX_LENGTH && it.linkUrlParts() != null
+}
+
+/**
+ * Paykit's social v1 link rule (`is_social_v1_web_uri`): a lowercase `http://` or `https://` prefix, no control or
+ * whitespace character, and a non-empty host, read up to the first `/`, `?` or `#`, after the last `@`, and up to `:`
+ * unless it starts with `[`. Social v1 drops other links on migration too.
+ */
+fun String.isSocialV1WebUri(): Boolean {
+    val rest = removePrefix("http://").takeIf { it != this } ?: removePrefix("https://").takeIf { it != this }
+        ?: return false
+    if (any { it.code < ASCII_SPACE || it.code == ASCII_DELETE || it.isWhitespace() }) return false
+    val hostAndPort = rest.takeWhile { it !in "/?#" }.substringAfterLast('@')
+    val host = if (hostAndPort.startsWith('[')) hostAndPort else hostAndPort.substringBefore(':')
+    return host.isNotEmpty()
 }
 
 /** The lowercase scheme and the host of a URL; the host is empty for a scheme without one, such as `mailto`. */

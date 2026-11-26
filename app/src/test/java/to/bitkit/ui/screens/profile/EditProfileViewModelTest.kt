@@ -246,7 +246,12 @@ class EditProfileViewModelTest : BaseUnitTest() {
 
     @Test
     fun `a link rejection from pubky app points to the stored non-web link`() = test {
-        val sut = createSut(links = listOf(PubkyProfileLink("Email", "mailto:a@example.com")))
+        val sut = createSut(
+            links = listOf(
+                PubkyProfileLink("Local", "https://localhost"),
+                PubkyProfileLink("Email", "mailto:a@example.com"),
+            )
+        )
         advanceUntilIdle()
         whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), anyOrNull(), any())).thenReturn(
             Result.failure(
@@ -262,8 +267,8 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.save()
         advanceUntilIdle()
 
-        assertEquals(0, sut.uiState.value.rejectedLinkIndex)
-        assertEquals(mapOf(0 to PubkyAppLinkError.URL_INVALID), sut.uiState.value.linkErrors)
+        assertEquals(1, sut.uiState.value.rejectedLinkIndex)
+        assertEquals(mapOf(1 to PubkyAppLinkError.URL_INVALID), sut.uiState.value.linkErrors)
         verify(context).getString(R.string.profile__edit_link_error, "Email")
     }
 

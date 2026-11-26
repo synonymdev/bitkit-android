@@ -28,14 +28,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ext.isPaykitNonWebProfileLinkRejected
-import to.bitkit.ext.isWebLink
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PROFILE_NAME_MAX_LENGTH
 import to.bitkit.models.PubkyAppLinkError
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
+import to.bitkit.models.isSocialV1WebUri
 import to.bitkit.models.pubkyAppLinkError
 import to.bitkit.models.takeCodePoints
+import to.bitkit.models.toPubkyAppLinkUrl
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.ProfileEditBase
 import to.bitkit.repositories.PubkyProfileChangedError
@@ -422,7 +423,7 @@ sealed interface EditProfileEffect {
 
 private fun Throwable.rejectedLinkIndex(links: List<ProfileEditLink>): Int? {
     if (!isPaykitNonWebProfileLinkRejected()) return null
-    return links.indexOfFirst { !it.url.isWebLink() }.takeIf { it >= 0 }
+    return links.indexOfFirst { !(it.url.toPubkyAppLinkUrl() ?: it.url).isSocialV1WebUri() }.takeIf { it >= 0 }
 }
 
 internal fun Throwable.profileSaveErrorText(context: Context): String? = when (this) {
