@@ -1573,6 +1573,7 @@
     <string name="profile__intro_description">Dzięki przenośnemu profilowi Twoje kontakty mogą skontaktować się z Tobą i zapłacić Ci w dowolnym miejscu.</string>
     <string name="profile__intro_title">PRZENOŚNY\n&lt;accent&gt;PROFIL&lt;/accent&gt;</string>
     <string name="profile__link_error_label_length">Etykieta może mieć maksymalnie 100 znaków.</string>
+    <string name="profile__link_error_label_stored">Nie można zapisać etykiety tego linku. Usuń link i dodaj go ponownie.</string>
     <string name="profile__link_error_url_invalid">Wpisz prawidłowy link internetowy, np. example.com.</string>
     <string name="profile__link_error_url_length">Link może mieć maksymalnie 300 znaków.</string>
     <string name="profile__pay_contacts_description">Używaj Bitkit ze swoimi kontaktami, aby wysyłać płatności bezpośrednio, zawsze i wszędzie.</string>

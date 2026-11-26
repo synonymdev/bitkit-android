@@ -1575,6 +1575,7 @@
     <string name="profile__intro_description">Com seu perfil portátil, seus contatos podem encontrar você e pagar você em qualquer lugar.</string>
     <string name="profile__intro_title">PERFIL\n&lt;accent&gt;PORTÁTIL&lt;/accent&gt;</string>
     <string name="profile__link_error_label_length">O rótulo deve ter no máximo 100 caracteres.</string>
+    <string name="profile__link_error_label_stored">Não é possível salvar o rótulo deste link. Remova o link e adicione-o novamente.</string>
     <string name="profile__link_error_url_invalid">Insira um link da web válido, como example.com.</string>
     <string name="profile__link_error_url_length">O link deve ter no máximo 300 caracteres.</string>
     <string name="profile__pay_contacts_description">Use a Bitkit com seus contatos para enviar pagamentos diretamente, a qualquer hora, em qualquer lugar.</string>

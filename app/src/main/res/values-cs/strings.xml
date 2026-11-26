@@ -1574,6 +1574,7 @@
     <string name="profile__intro_description">Díky přenosnému profilu vás kontakty mohou kdekoli zastihnout a zaplatit vám.</string>
     <string name="profile__intro_title">PŘENOSNÝ\n&lt;accent&gt;PROFIL&lt;/accent&gt;</string>
     <string name="profile__link_error_label_length">Popisek může mít nejvýše 100 znaků.</string>
+    <string name="profile__link_error_label_stored">Popisek tohoto odkazu nelze uložit. Odkaz odstraňte a přidejte znovu.</string>
     <string name="profile__link_error_url_invalid">Zadejte platný webový odkaz, například example.com.</string>
     <string name="profile__link_error_url_length">Odkaz může mít nejvýše 300 znaků.</string>
     <string name="profile__pay_contacts_description">Používejte Bitkit se svými kontakty a posílejte platby přímo, kdykoli a kdekoli.</string>

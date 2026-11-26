@@ -14,6 +14,9 @@ class WebLinkTest {
             " www.example.com/path ",
             "medium.com/@alice",
             "example.com/a@b",
+            "bücher.de",
+            "my_site.example.com",
+            "https://example.com/?q=a|b",
         ).forEach {
             assertTrue(it.isWebLink(), it)
         }

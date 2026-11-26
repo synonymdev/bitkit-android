@@ -1572,6 +1572,7 @@
     <string name="profile__intro_description">Met uw draagbare profiel kunnen uw contacten u overal bereiken en betalen.</string>
     <string name="profile__intro_title">DRAAGBAAR\n&lt;accent&gt;PROFIEL&lt;/accent&gt;</string>
     <string name="profile__link_error_label_length">Het label mag maximaal 100 tekens bevatten.</string>
+    <string name="profile__link_error_label_stored">Het label van deze link kan niet worden opgeslagen. Verwijder de link en voeg hem opnieuw toe.</string>
     <string name="profile__link_error_url_invalid">Voer een geldige weblink in, zoals example.com.</string>
     <string name="profile__link_error_url_length">De link mag maximaal 300 tekens bevatten.</string>
     <string name="profile__pay_contacts_description">Gebruik Bitkit met uw contacten om direct betalingen te versturen, altijd en overal.</string>

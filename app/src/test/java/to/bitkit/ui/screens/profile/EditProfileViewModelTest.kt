@@ -268,6 +268,32 @@ class EditProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `another link refusal from pubky app marks no row`() = test {
+        val sut = createSut(links = listOf(PubkyProfileLink("Email", "mailto:a@example.com")))
+        advanceUntilIdle()
+        whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), anyOrNull(), any())).thenReturn(
+            Result.failure(PaykitException.Protocol("protocol_error", "Pubky profile link URL must be a valid URI"))
+        )
+
+        sut.addLink("Site", "https://example.com")
+        sut.save()
+        advanceUntilIdle()
+
+        assertEquals(null, sut.uiState.value.rejectedLinkIndex)
+        assertTrue(sut.uiState.value.linkErrors.isEmpty())
+    }
+
+    @Test
+    fun `a stored url the url parser accepts does not block the save`() = test {
+        val sut = createSut(links = listOf(PubkyProfileLink("Search", "https://example.com/?q=a|b")))
+        advanceUntilIdle()
+
+        sut.addLink("Blog", "blog.example.com")
+
+        assertTrue(sut.uiState.value.linkErrors.isEmpty())
+    }
+
+    @Test
     fun `deleteProfile should emit success when repository delete succeeds`() = test {
         whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
 

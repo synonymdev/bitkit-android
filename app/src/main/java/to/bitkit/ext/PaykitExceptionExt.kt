@@ -11,8 +11,11 @@ private const val SIGNUP_CODE_REJECTED_CODE = "signup_code_rejected"
 /** Storage error code Paykit uses for local and shared state failures. */
 private const val STORAGE_ERROR_CODE = "storage_error"
 
-/** Start of the Protocol error contexts Paykit raises when a profile link breaks a pubky.app rule. */
-private const val PROFILE_LINK_CONTEXT = "Pubky profile link"
+/**
+ * Protocol error context Paykit 0.1.1-rc9 raises when a social v1 profile holds a link that is not an http(s) URL
+ * (`paykit-sdk/src/domain/contacts/pubky_app.rs`). Check it again when Paykit is updated.
+ */
+internal const val PAYKIT_NON_WEB_PROFILE_LINK_CONTEXT = "Pubky profile link URL must be a canonical http or https URL"
 
 /** Storage error contexts Paykit raises when the identity's shared state was saved by a newer Paykit. */
 private val NEWER_STATE_CONTEXTS = listOf(
@@ -39,8 +42,10 @@ fun Throwable.isPaykitTemporarilyUnavailable(): Boolean =
 fun Throwable.isPaykitMessageTooLarge(): Boolean =
     generateSequence(this) { it.cause }.any { it is PaykitException.Protocol && it.code == MESSAGE_TOO_LARGE_CODE }
 
-fun Throwable.isPaykitProfileLinkRejected(): Boolean =
-    generateSequence(this) { it.cause }.any { it is PaykitException.Protocol && PROFILE_LINK_CONTEXT in it.context }
+fun Throwable.isPaykitNonWebProfileLinkRejected(): Boolean =
+    generateSequence(this) { it.cause }.any {
+        it is PaykitException.Protocol && it.context == PAYKIT_NON_WEB_PROFILE_LINK_CONTEXT
+    }
 
 fun Throwable.isPaykitSignupCodeRejected(): Boolean =
     generateSequence(this) { it.cause }.any { it is PaykitException.Identity && it.code == SIGNUP_CODE_REJECTED_CODE }

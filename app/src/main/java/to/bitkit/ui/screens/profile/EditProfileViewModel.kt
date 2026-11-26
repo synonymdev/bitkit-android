@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.R
-import to.bitkit.ext.isPaykitProfileLinkRejected
+import to.bitkit.ext.isPaykitNonWebProfileLinkRejected
 import to.bitkit.ext.isWebLink
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PROFILE_NAME_MAX_LENGTH
@@ -421,7 +421,7 @@ sealed interface EditProfileEffect {
 }
 
 private fun Throwable.rejectedLinkIndex(links: List<ProfileEditLink>): Int? {
-    if (!isPaykitProfileLinkRejected()) return null
+    if (!isPaykitNonWebProfileLinkRejected()) return null
     return links.indexOfFirst { !it.url.isWebLink() }.takeIf { it >= 0 }
 }
 

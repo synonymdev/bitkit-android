@@ -1557,6 +1557,7 @@
     <string name="profile__intro_description">Με το φορητό προφίλ σου, οι επαφές σου μπορούν να σε βρουν και να σε πληρώσουν οπουδήποτε.</string>
     <string name="profile__intro_title">ΦΟΡΗΤΟ\n&lt;accent&gt;ΠΡΟΦΙΛ&lt;/accent&gt;</string>
     <string name="profile__link_error_label_length">Η ετικέτα πρέπει να έχει έως 100 χαρακτήρες.</string>
+    <string name="profile__link_error_label_stored">Η ετικέτα αυτού του συνδέσμου δεν μπορεί να αποθηκευτεί. Αφαίρεσε τον σύνδεσμο και πρόσθεσέ τον ξανά.</string>
     <string name="profile__link_error_url_invalid">Εισήγαγε έναν έγκυρο σύνδεσμο ιστού, όπως example.com.</string>
     <string name="profile__link_error_url_length">Ο σύνδεσμος πρέπει να έχει έως 300 χαρακτήρες.</string>
     <string name="profile__pay_contacts_description">Χρησιμοποίησε το Bitkit με τις επαφές σου για να στέλνεις πληρωμές απευθείας, οποτεδήποτε, οπουδήποτε.</string>

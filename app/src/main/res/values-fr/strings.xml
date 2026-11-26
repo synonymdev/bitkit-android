@@ -1570,6 +1570,7 @@
     <string name="profile__intro_description">Grâce à votre profil portable, vos contacts peuvent vous joindre et vous payer partout.</string>
     <string name="profile__intro_title">PROFIL\n&lt;accent&gt;PORTABLE&lt;/accent&gt;</string>
     <string name="profile__link_error_label_length">Le libellé doit contenir 100 caractères au maximum.</string>
+    <string name="profile__link_error_label_stored">Le libellé de ce lien ne peut pas être enregistré. Supprimez le lien et ajoutez-le à nouveau.</string>
     <string name="profile__link_error_url_invalid">Saisissez un lien web valide, par exemple example.com.</string>
     <string name="profile__link_error_url_length">Le lien doit contenir 300 caractères au maximum.</string>
     <string name="profile__pay_contacts_description">Utilisez Bitkit avec vos contacts pour envoyer des paiements directement, à tout moment, partout.</string>

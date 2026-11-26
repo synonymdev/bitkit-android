@@ -3,6 +3,7 @@ package to.bitkit.ext
 import com.synonym.paykit.PaykitException
 import org.junit.Test
 import to.bitkit.utils.AppError
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -12,6 +13,19 @@ class PaykitExceptionExtTest {
         val error = AppError(PaykitException.Transport("transport_error", "Pubky write lock lost"))
 
         assertTrue(error.isPaykitError())
+    }
+
+    @Test
+    fun `only the non-web profile link context of paykit 0_1_1-rc9 is a non-web link rejection`() {
+        // Paykit 0.1.1-rc9, paykit-sdk/src/domain/contacts/pubky_app.rs; update with the Paykit version.
+        val context = "Pubky profile link URL must be a canonical http or https URL"
+        assertEquals(context, PAYKIT_NON_WEB_PROFILE_LINK_CONTEXT)
+        assertTrue(AppError(PaykitException.Protocol("protocol_error", context)).isPaykitNonWebProfileLinkRejected())
+        assertFalse(
+            PaykitException.Protocol("protocol_error", "Pubky profile link URL must be a valid URI")
+                .isPaykitNonWebProfileLinkRejected()
+        )
+        assertFalse(PaykitException.Storage("protocol_error", context).isPaykitNonWebProfileLinkRejected())
     }
 
     @Test

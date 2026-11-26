@@ -1551,6 +1551,7 @@
     <string name="profile__intro_description">مع ملفك الشخصي المحمول، يمكن لجهات اتصالك الوصول إليك والدفع لك في أي مكان.</string>
     <string name="profile__intro_title">ملف شخصي\n&lt;accent&gt;محمول&lt;/accent&gt;</string>
     <string name="profile__link_error_label_length">يجب ألا يزيد التصنيف عن 100 حرفًا.</string>
+    <string name="profile__link_error_label_stored">لا يمكن حفظ تصنيف هذا الرابط. احذف الرابط وأضفه مرة أخرى.</string>
     <string name="profile__link_error_url_invalid">أدخل رابط ويب صالحًا، مثل example.com.</string>
     <string name="profile__link_error_url_length">يجب ألا يزيد الرابط عن 300 حرفًا.</string>
     <string name="profile__pay_contacts_description">استخدم Bitkit مع جهات اتصالك لإرسال المدفوعات مباشرةً، في أي وقت وفي أي مكان.</string>

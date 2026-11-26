@@ -102,7 +102,7 @@ fun AddLinkSheet(
                     onSave(label, url)
                 },
                 labelError = linkErrorText.takeIf { linkError == PubkyAppLinkError.LABEL_TOO_LONG },
-                urlError = linkErrorText.takeIf { linkError != PubkyAppLinkError.LABEL_TOO_LONG },
+                urlError = linkErrorText.takeIf { linkError?.isLabelError == false },
                 isSaveEnabled = label.isNotBlank() && url.isNotBlank() && linkError == null,
             )
         }
@@ -176,6 +176,7 @@ private fun LinkFormContent(
 
 @Composable
 fun pubkyAppLinkErrorText(error: PubkyAppLinkError): String = when (error) {
+    PubkyAppLinkError.LABEL_EMPTY -> stringResource(R.string.profile__link_error_label_stored)
     PubkyAppLinkError.LABEL_TOO_LONG -> stringResource(R.string.profile__link_error_label_length)
     PubkyAppLinkError.URL_TOO_LONG -> stringResource(R.string.profile__link_error_url_length)
     PubkyAppLinkError.URL_INVALID -> stringResource(R.string.profile__link_error_url_invalid)

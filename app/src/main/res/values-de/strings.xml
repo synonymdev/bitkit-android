@@ -1572,6 +1572,7 @@
     <string name="profile__intro_description">Mit deinem portablen Profil können deine Kontakte dich überall erreichen und bezahlen.</string>
     <string name="profile__intro_title">PORTABLES\n&lt;accent&gt;PROFIL&lt;/accent&gt;</string>
     <string name="profile__link_error_label_length">Die Bezeichnung darf höchstens 100 Zeichen lang sein.</string>
+    <string name="profile__link_error_label_stored">Die Bezeichnung dieses Links kann nicht gespeichert werden. Entferne den Link und füge ihn erneut hinzu.</string>
     <string name="profile__link_error_url_invalid">Gib einen gültigen Weblink ein, z. B. example.com.</string>
     <string name="profile__link_error_url_length">Der Link darf höchstens 300 Zeichen lang sein.</string>
     <string name="profile__pay_contacts_description">Nutze Bitkit mit deinen Kontakten, um Zahlungen direkt zu senden, jederzeit und überall.</string>

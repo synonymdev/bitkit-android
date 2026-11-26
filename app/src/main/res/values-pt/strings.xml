@@ -1550,6 +1550,7 @@
     <string name="profile__intro_description">Com o seu perfil portátil, os seus contactos podem encontrá-lo e pagar-lhe em qualquer lugar.</string>
     <string name="profile__intro_title">PERFIL\n&lt;accent&gt;PORTÁTIL&lt;/accent&gt;</string>
     <string name="profile__link_error_label_length">A etiqueta deve ter no máximo 100 caracteres.</string>
+    <string name="profile__link_error_label_stored">Não é possível guardar a etiqueta desta ligação. Remova a ligação e adicione-a novamente.</string>
     <string name="profile__link_error_url_invalid">Introduza uma ligação web válida, como example.com.</string>
     <string name="profile__link_error_url_length">A ligação deve ter no máximo 300 caracteres.</string>
     <string name="profile__pay_contacts_description">Use a Bitkit com os seus contactos para enviar pagamentos diretamente, a qualquer hora, em qualquer lugar.</string>

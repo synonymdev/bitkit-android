@@ -64,6 +64,45 @@ class PubkyAppLinkTest {
     }
 
     @Test
+    fun `characters the url parser accepts in a path or query are accepted`() {
+        listOf(
+            "https://example.com/?q=a|b",
+            "https://example.com/100%",
+            "https://example.com/a[1]{2}^\"x\"",
+            "https://bücher.de",
+            "https://my_site.example.com",
+        ).forEach {
+            assertNull(pubkyAppLinkError("Site", it, webOnly = true), it)
+            assertEquals(it, it.toPubkyAppLinkUrl(), it)
+        }
+        assertEquals("https://example.com/?q=a|b", "example.com/?q=a|b".toPubkyAppLinkUrl())
+    }
+
+    @Test
+    fun `hosts and ports the url parser refuses are refused`() {
+        listOf(
+            "https://exa|mple.com",
+            "https://exa%mple.com",
+            "https://",
+            "https://example.com:65536",
+            "https://example.com:port",
+            "https://[zz::1]",
+            "https://example.com/\u0001",
+        ).forEach {
+            assertEquals(PubkyAppLinkError.URL_INVALID, pubkyAppLinkError("Site", it, webOnly = false), it)
+        }
+        assertNull(pubkyAppLinkError("Site", "https://example.com:65535", webOnly = false))
+        assertNull(pubkyAppLinkError("Site", "https://[::1]:8080", webOnly = false))
+    }
+
+    @Test
+    fun `a label empty once on one line is refused after the url`() {
+        assertEquals(PubkyAppLinkError.LABEL_EMPTY, pubkyAppLinkError("\u0001\u0002", "example.com", webOnly = true))
+        assertEquals(PubkyAppLinkError.LABEL_EMPTY, pubkyAppLinkError("", "example.com", webOnly = true))
+        assertEquals(PubkyAppLinkError.URL_INVALID, pubkyAppLinkError("", "not a url", webOnly = true))
+    }
+
+    @Test
     fun `links normalize to the url pubky app stores`() {
         assertEquals("https://example.com", "example.com".toPubkyAppLinkUrl())
         assertEquals("mailto:me@example.com", "me@example.com".toPubkyAppLinkUrl())

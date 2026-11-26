@@ -2,8 +2,8 @@ package to.bitkit.ext
 
 import android.icu.text.MessageFormat
 import to.bitkit.env.Defaults
+import to.bitkit.models.linkUrlParts
 import to.bitkit.utils.Logger
-import java.net.URI
 
 private const val TAG = "StringExt"
 
@@ -64,9 +64,8 @@ fun String.isWebLink(): Boolean {
     if (value.isEmpty() || value.any { it.isWhitespace() }) return false
     val hasScheme = URI_SCHEME.containsMatchIn(value)
     if (!hasScheme && '@' in value.substringBefore('/')) return false
-    val uri = runCatching { URI(if (hasScheme) value else "https://$value") }.getOrNull() ?: return false
-    val host = uri.host ?: return false
-    return uri.scheme.lowercase() in WEB_LINK_SCHEMES &&
-        '.' in host &&
-        !host.substringAfterLast('.').all { it.isDigit() }
+    val parts = (if (hasScheme) value else "https://$value").linkUrlParts() ?: return false
+    return parts.scheme in WEB_LINK_SCHEMES &&
+        '.' in parts.host &&
+        !parts.host.substringAfterLast('.').all { it.isDigit() }
 }
