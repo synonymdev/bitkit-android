@@ -1793,6 +1793,7 @@
     <string name="wallet__payment_request_queued_description">La teva sol·licitud de pagament està a la cua i s\'enviarà automàticament</string>
     <string name="wallet__payment_request_rate_unavailable">Els tipus de canvi del pagament no estan disponibles o han caducat. Torna-ho a provar quan tinguis connexió.</string>
     <string name="wallet__payment_request_recipient">DESTINATARI</string>
+    <string name="wallet__payment_request_recipient_failed">No s\'ha pogut comprovar quins contactes poden rebre una sol·licitud de pagament. Comprova la connexió.</string>
     <string name="wallet__payment_request_recipient_no_match">Cap contacte desat coincident amb una connexió privada.</string>
     <string name="wallet__payment_request_recipient_unavailable">Les sol·licituds de pagament només es poden enviar a un contacte desat amb una connexió privada.</string>
     <string name="wallet__payment_request_request">Sol·licitar</string>

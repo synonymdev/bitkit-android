@@ -80,6 +80,7 @@ import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestTarget
+import to.bitkit.repositories.PaykitPaymentRequestTargetsStatus
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionDraft
@@ -131,6 +132,7 @@ fun CreateSubscriptionSheet(
     val requestNotifications = rememberSubscriptionNotificationsRequest()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val targets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
+    val targetsStatus by appViewModel.eligiblePaymentRequestTargetsStatus.collectAsStateWithLifecycle()
     val isCreating by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
     val receivingMethods by appViewModel.paykitReceivingMethods.collectAsStateWithLifecycle()
     var step by remember { mutableStateOf(SubscriptionCreationStep.Details) }
@@ -234,6 +236,7 @@ fun CreateSubscriptionSheet(
         )
         SubscriptionCreationStep.Recipient -> SubscriptionRecipient(
             targets = targets.toImmutableList(),
+            targetsStatus = targetsStatus,
             contacts = contacts.toImmutableList(),
             selectedTarget = selectedTarget,
             expiration = expiration,
@@ -465,6 +468,7 @@ private fun SubscriptionFrequencyPicker(
 @Composable
 internal fun SubscriptionRecipient(
     targets: ImmutableList<PaykitPaymentRequestTarget>,
+    targetsStatus: PaykitPaymentRequestTargetsStatus,
     contacts: ImmutableList<PubkyProfile>,
     selectedTarget: PaykitPaymentRequestTarget?,
     expiration: PaymentRequestExpiration,
@@ -478,6 +482,7 @@ internal fun SubscriptionRecipient(
 ) {
     PaymentRequestRecipientContent(
         targets = targets,
+        targetsStatus = targetsStatus,
         contacts = contacts,
         onBack = onBack,
         onPaste = onPaste,

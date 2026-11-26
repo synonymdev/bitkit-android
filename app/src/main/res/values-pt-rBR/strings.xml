@@ -1796,6 +1796,7 @@
     <string name="wallet__payment_request_queued_description">Sua solicitação de pagamento está na fila e será enviada automaticamente</string>
     <string name="wallet__payment_request_rate_unavailable">As cotações de pagamento estão indisponíveis ou expiraram. Tente novamente quando estiver online.</string>
     <string name="wallet__payment_request_recipient">DESTINATÁRIO</string>
+    <string name="wallet__payment_request_recipient_failed">Não foi possível verificar quais contatos podem receber uma solicitação de pagamento. Verifique sua conexão.</string>
     <string name="wallet__payment_request_recipient_no_match">Nenhum contato salvo correspondente com uma conexão privada.</string>
     <string name="wallet__payment_request_recipient_unavailable">Solicitações de pagamento só podem ser enviadas a um contato salvo com uma conexão privada.</string>
     <string name="wallet__payment_request_request">Solicitar</string>

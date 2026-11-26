@@ -540,6 +540,7 @@ class AppViewModel @Inject constructor(
     }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val eligiblePaymentRequestTargets = paykitPaymentRequestRepo.eligibleTargets
+    val eligiblePaymentRequestTargetsStatus = paykitPaymentRequestRepo.eligibleTargetsStatus
     val isCreatingPaymentRequest = paykitPaymentRequestRepo.isCreatingRequest
     private val _rejectingPaymentRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
     val rejectingPaymentRequestIds = _rejectingPaymentRequestIds.asStateFlow()

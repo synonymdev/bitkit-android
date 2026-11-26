@@ -1795,6 +1795,7 @@
     <string name="wallet__payment_request_queued_description">Twoje żądanie płatności jest w kolejce i zostanie wysłane automatycznie</string>
     <string name="wallet__payment_request_rate_unavailable">Kursy płatności są niedostępne lub nieaktualne. Spróbuj ponownie, gdy będziesz online.</string>
     <string name="wallet__payment_request_recipient">ODBIORCA</string>
+    <string name="wallet__payment_request_recipient_failed">Nie udało się sprawdzić, które kontakty mogą otrzymać żądanie płatności. Sprawdź połączenie.</string>
     <string name="wallet__payment_request_recipient_no_match">Brak pasującego zapisanego kontaktu z prywatnym połączeniem.</string>
     <string name="wallet__payment_request_recipient_unavailable">Żądania płatności można wysyłać tylko do zapisanego kontaktu z prywatnym połączeniem.</string>
     <string name="wallet__payment_request_request">Zażądaj</string>

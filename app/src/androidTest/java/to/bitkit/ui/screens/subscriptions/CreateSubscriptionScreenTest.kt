@@ -34,6 +34,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestTarget
+import to.bitkit.repositories.PaykitPaymentRequestTargetsStatus
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionMetadata
@@ -130,6 +131,7 @@ class CreateSubscriptionScreenTest {
             AppThemeSurface {
                 SubscriptionRecipient(
                     targets = persistentListOf(target, second),
+                    targetsStatus = PaykitPaymentRequestTargetsStatus.Loaded,
                     contacts = persistentListOf(contact, PubkyProfile.forDisplay(second.publicKey, "Bob", null)),
                     selectedTarget = selected,
                     expiration = expiration,
