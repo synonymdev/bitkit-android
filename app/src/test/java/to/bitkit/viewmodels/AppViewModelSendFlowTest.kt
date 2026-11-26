@@ -12234,6 +12234,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an earlier send recorded without its invoice lets the payment go ahead`() = test {
+        val bolt11 = "lnbcrt1migratedsend"
+        val invoice = lightningInvoice(bolt11, 1_000u)
+        val paymentHash = invoice.paymentHash.toHex()
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
+        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 0uL,
+            )
+        )
+        stubEarlierSend(paymentHash, "migrated:42", 1_000u)
+        setSendState(
+            SendUiState(address = bolt11, amount = 1_000u, payMethod = SendMethod.LIGHTNING, decodedInvoice = invoice)
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+        }
+        verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
     fun `an invoice sharing the payment hash of another paid invoice is refused before sending`() = test {
         val bolt11 = "lnbcrt1samehash"
         val invoice = lightningInvoice(bolt11, 1_000u)
