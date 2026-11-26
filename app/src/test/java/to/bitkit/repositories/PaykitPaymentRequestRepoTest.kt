@@ -1687,12 +1687,16 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `an automatic payment is refused once its contact is blocked`() = test {
+    fun `an automatic payment is refused for another identity or once its contact is blocked`() = test {
         val record = paymentRequestRecord()
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
         sut.refresh().getOrThrow()
         val request = sut.pendingRequests.value.single()
-        sut.ensureAutomaticPaymentAllowed(request).getOrThrow()
+        sut.ensureAutomaticPaymentAllowed(request, LOCAL_IDENTITY).getOrThrow()
+        assertEquals(
+            PaykitPaymentRequestError.RequestUnavailable,
+            sut.ensureAutomaticPaymentAllowed(request, COUNTERPARTY).exceptionOrNull(),
+        )
 
         whenever(paykitSdkService.linkedPeers()).thenReturn(
             listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED)),
@@ -1700,7 +1704,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertEquals(
             PaykitPaymentRequestError.RequestUnavailable,
-            sut.ensureAutomaticPaymentAllowed(request).exceptionOrNull(),
+            sut.ensureAutomaticPaymentAllowed(request, LOCAL_IDENTITY).exceptionOrNull(),
         )
     }
 

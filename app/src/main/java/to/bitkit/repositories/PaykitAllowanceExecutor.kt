@@ -111,9 +111,13 @@ class PaykitAllowancePayer @Inject constructor(
     ): Result<Unit> =
         paymentProofRepo.associateLightningPayment(request, paymentHash, paymentEndpointIdentifier, paymentAppId)
 
-    /** Pays [bolt11], checking again right before submission that [request]'s contact is not blocked. */
+    /**
+     * Pays [bolt11], checking again right before submission that [identity] is still active and [request]'s contact
+     * is not blocked.
+     */
     suspend fun payLightning(
         request: PaykitPaymentRequest,
+        identity: String,
         bolt11: String,
         sats: ULong?,
         paymentDeadlineAt: Instant?,
@@ -123,7 +127,7 @@ class PaykitAllowancePayer @Inject constructor(
         sats,
         paymentDeadlineAt,
         maxTotalRoutingFeeMsat,
-    ) { paymentRequestRepo.ensureAutomaticPaymentAllowed(request).isSuccess }
+    ) { paymentRequestRepo.ensureAutomaticPaymentAllowed(request, identity).isSuccess }
 
     /** Clears the proof when [error] proves the payment never left; returns whether it did. */
     suspend fun failLightningPayment(paymentHash: String, error: Throwable): Boolean =
@@ -988,6 +992,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         val maxRoutingFeeMsat = amountSats.safe() * MAX_ROUTING_FEE_MSAT_PER_SAT.safe()
         payer.payLightning(
             request,
+            identity,
             payment.endpoint.value,
             sats,
             request.submissionDeadline(null),

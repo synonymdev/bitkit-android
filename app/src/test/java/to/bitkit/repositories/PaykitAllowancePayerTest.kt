@@ -51,10 +51,10 @@ class PaykitAllowancePayerTest : BaseUnitTest() {
                 isAllowedAtSubmission = it.getArgument<suspend () -> Boolean>(4).invoke()
                 Result.failure(ServiceError.PaymentStoppedAtSubmission())
             }
-        whenever(paymentRequestRepo.ensureAutomaticPaymentAllowed(request))
+        whenever(paymentRequestRepo.ensureAutomaticPaymentAllowed(request, "identity"))
             .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
 
-        val result = sut.payLightning(request, "lnbc1", null, null, 10_000uL)
+        val result = sut.payLightning(request, "identity", "lnbc1", null, null, 10_000uL)
 
         assertFalse(requireNotNull(isAllowedAtSubmission))
         assertTrue(result.exceptionOrNull() is ServiceError.PaymentStoppedAtSubmission)
