@@ -1052,7 +1052,7 @@ class SparkExitRepo @Inject constructor(
         val hasSavingsSend = exit.isSavingsSendUnresolved || exit.isSavingsPaymentRefused ||
             attempt?.isUnresolved == true || attempt?.hasPositiveEvidence == true ||
             SparkExitMath.isSavingsPaymentRefused(record, attempt)
-        return SparkExitMath.savingsRefusal(record, exit.fundingState, hasSavingsSend)
+        return SparkExitMath.savingsRefusal(record, exit.fundingState, hasSavingsSend, exit.fundingSeenSats)
     }
 
     private suspend fun savingsSend(record: SparkExitRecord): OnchainSendAttempt? {

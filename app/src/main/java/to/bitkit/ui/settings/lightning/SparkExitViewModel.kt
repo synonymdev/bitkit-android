@@ -500,10 +500,8 @@ data class SparkExitUiState(
     private val savingsRefusal: SparkExitRecord.SavingsRefusal?
         get() {
             val record = record ?: return null
-            // Funding seen before stays seen when a later address read fails: never offered over it.
-            if (fundingSeenSats > 0uL) return null
             val hasSavingsSend = isSavingsSendUnresolved || isSavingsPaymentRefused
-            return SparkExitMath.savingsRefusal(record, fundingState, hasSavingsSend)
+            return SparkExitMath.savingsRefusal(record, fundingState, hasSavingsSend, fundingSeenSats)
         }
 
     /** Progress says the savings payment didn't go through and offers to pay it again. */
