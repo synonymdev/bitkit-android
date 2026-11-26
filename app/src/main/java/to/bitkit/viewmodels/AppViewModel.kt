@@ -8345,10 +8345,6 @@ class AppViewModel @Inject constructor(
 
     private class LightningRepeat(val paymentHash: String, val bolt11: String, val earlierSentSats: ULong?)
 
-    /**
-     * The earlier payment of the plain Lightning invoice being sent, or null when its hash was never paid. A contact's
-     * payment keeps its request, proof and route steps, so it is not decided here.
-     */
     private suspend fun lightningRepeat(contactPaymentContext: ContactPaymentContext?): LightningRepeat? {
         if (contactPaymentContext != null) return null
         val state = _sendUiState.value
@@ -8356,7 +8352,8 @@ class AppViewModel @Inject constructor(
         if (state.routedPaykitRoute?.serviceLeg != null || state.activePaykitSwapRoute != null) return null
         val invoice = state.decodedInvoice ?: return null
         val paymentHash = invoice.paymentHash.toHex()
-        val earlierSend = earlierLightningSend(paymentHash)
+        // A send recorded without its invoice ("No invoice", "migrated:<id>") cannot tell which invoice it paid.
+        val earlierSend = earlierLightningSend(paymentHash)?.takeIf { it.invoice.startsWith("ln", ignoreCase = true) }
         val wasPaidBefore = earlierSend != null ||
             synchronized(processedPaymentsLock) { paymentHash in processedPayments }
         if (!wasPaidBefore) return null
