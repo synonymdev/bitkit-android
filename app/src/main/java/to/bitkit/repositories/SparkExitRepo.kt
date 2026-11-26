@@ -303,7 +303,8 @@ class SparkExitRepo @Inject constructor(
     }
 
     private suspend fun tickLocked(): SparkExitRecord? {
-        val current = _state.value.record?.takeIf { it.needsDriving } ?: return _state.value.record
+        val loaded = _state.value.record?.takeIf { it.needsDriving } ?: return _state.value.record
+        val current = keepAcceptedSavingsSend(loaded)
         val chain = chain ?: return current
         Logger.debug("Driving Spark exit in phase '${current.phase}'", context = TAG)
         val tip = runSuspendCatching { chain.tipHeight() }.getOrNull()
@@ -1054,6 +1055,21 @@ class SparkExitRepo @Inject constructor(
         return attempt?.takeIf { it.address == address }
     }
 
+    /**
+     * A savings send to the funding address the node accepted is the exit's payment: kept on the record when a stop or
+     * failed save lost its txid, before a later send can take its place in the journal.
+     */
+    private suspend fun keepAcceptedSavingsSend(record: SparkExitRecord): SparkExitRecord {
+        if (!record.isActive || record.phase !is SparkExitRecord.Phase.AwaitingFunding) return record
+        if (record.fundingPaymentTxid != null) return record
+        val txid = savingsSend(record)?.takeIf { it.hasPositiveEvidence }?.txid ?: return record
+        Logger.warn("Keeping the accepted Spark exit funding '$txid' the record lost", context = TAG)
+        val paid = record.copy(fundingPaymentTxid = txid, savingsRefusal = null)
+        saveRecord(paid)
+        _state.update { it.copy(record = paid) }
+        return paid
+    }
+
     private suspend fun noteSavingsSend(record: SparkExitRecord) {
         val attempt = savingsSend(record)
         _state.update {
@@ -1156,6 +1172,7 @@ class SparkExitRepo @Inject constructor(
                 record.fundedSats == 0uL &&
                 record.fundingPaymentTxid == null &&
                 !exit.isSavingsSendUnresolved &&
+                !exit.isSavingsSendAccepted &&
                 exit.fundingSeenSats == 0uL
         }
 
@@ -1190,7 +1207,8 @@ class SparkExitRepo @Inject constructor(
                     val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }
                         .getOrElse { throw SparkExitCancelUnreadable() }
                     val isSending = attempt?.address == address && attempt.isUnresolved
-                    _state.update { it.copy(isSavingsSendUnresolved = isSending) }
+                    val isSent = attempt?.address == address && attempt.hasPositiveEvidence
+                    _state.update { it.copy(isSavingsSendUnresolved = isSending, isSavingsSendAccepted = isSent) }
                     if (!canCancel) throw SparkExitError("The Spark exit can no longer be cancelled")
                     val chain = requireNotNull(chain) { "No chain host for this network" }
                     val utxos = runSuspendCatching { chain.utxos(address) }

@@ -1823,7 +1823,8 @@ class SparkExitRepoTest : BaseUnitTest() {
     fun `a start's refused savings payment is never paid again once a savings send was accepted`() = test {
         // Stopped after the node accepted the payment, before its txid was saved: the journal holds the send.
         val refusal = SparkExitRecord.SavingsRefusal(20_000uL, 650uL)
-        SparkExitStore(File(Env.sparkExitRecordPath(0))).save(awaitingRecord().copy(savingsRefusal = refusal))
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(awaitingRecord().copy(savingsRefusal = refusal))
         val accepted = refusedSavingsPayment().copy(
             evidence = OnchainSendEvidence.Accepted,
             txid = "accepted",
@@ -1842,6 +1843,11 @@ class SparkExitRepoTest : BaseUnitTest() {
 
         assertTrue(sut.state.value.isSavingsSendAccepted, "progress offers the refused payment again")
         assertTrue(paid.isFailure)
+        // The tick keeps the payment on the record, before a later send can take its place in the journal.
+        val kept = assertNotNull(store.load())
+        assertEquals("accepted", kept.fundingPaymentTxid)
+        assertNull(kept.savingsRefusal)
+        assertFalse(sut.canCancel)
         verify(lightning, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),

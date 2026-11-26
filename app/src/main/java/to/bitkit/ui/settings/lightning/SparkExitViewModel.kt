@@ -351,9 +351,8 @@ class SparkExitViewModel @Inject constructor(
 
     /**
      * Pays the refused savings payment again: one a node refused over the inputs it already spends, and one refused
-     * before it went out at the new fee progress shows.
+     * before it went out at [shown], the new fee on screen when tapped.
      */
-    /** Pays the savings payment progress offers, a refused start's at [shown], the price on screen when tapped. */
     fun retrySavingsPayment(shown: SparkExitSavingsRetry?) {
         val state = _uiState.value
         if (state.isRetryingSavingsPayment || !state.offersSavingsRetry) return
