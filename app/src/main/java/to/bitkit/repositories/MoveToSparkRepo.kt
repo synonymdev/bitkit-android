@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import dagger.Lazy
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
@@ -52,6 +53,7 @@ class MoveToSparkRepo internal constructor(
     private val lightningRepo: LightningRepo,
     private val sparkRepo: SparkRepo,
     private val cacheStore: CacheStore,
+    private val activityRepo: Lazy<ActivityRepo>,
     private val paymentHashOf: (bolt11: String) -> String,
 ) {
     companion object {
@@ -90,7 +92,15 @@ class MoveToSparkRepo internal constructor(
         lightningRepo: LightningRepo,
         sparkRepo: SparkRepo,
         cacheStore: CacheStore,
-    ) : this(bgDispatcher, lightningRepo, sparkRepo, cacheStore, { Bolt11Invoice.fromStr(it).paymentHash() })
+        activityRepo: Lazy<ActivityRepo>,
+    ) : this(
+        bgDispatcher,
+        lightningRepo,
+        sparkRepo,
+        cacheStore,
+        activityRepo,
+        { Bolt11Invoice.fromStr(it).paymentHash() },
+    )
 
     private val watchedPaymentHashes = ConcurrentHashMap.newKeySet<String>()
 
@@ -150,8 +160,9 @@ class MoveToSparkRepo internal constructor(
      * Spark does not show in time, fails with [MoveToSparkError.UpdateUnsettled]; the funds then reach Spark on their
      * own. [onMove] gets the move's outcome as soon as the move returns, before the wait. A quote whose amount, with
      * Spark's balance, would not cover the payment of [bolt11] and Spark's fee for it, or a fee nothing can price,
-     * fails with [MoveToSparkError.UpdateFallsShort] before any move. When it waited for another move, such as the
-     * modal's, and Spark then covers the payment, it moves nothing and calls no [onMove].
+     * fails with [MoveToSparkError.UpdateFallsShort] before any move. When another move, such as the modal's, took
+     * the channels' balance before this one could pay, it moves nothing and calls no [onMove]: it returns once Spark
+     * covers the payment with its fee, or fails with [MoveToSparkError.UpdateFallsShort] when Spark does not in time.
      */
     suspend fun updateToSend(
         quote: MoveToSparkQuote,
@@ -166,7 +177,7 @@ class MoveToSparkRepo internal constructor(
                 if (!MoveToSparkMath.coversPayment(quote, sparkRepo.state.value, amountSats, feeSats)) {
                     throw MoveToSparkError.UpdateFallsShort(amountSats)
                 }
-                val outcome = moveUnlessCovered(quote, amountSats)
+                val outcome = moveUnlessCovered(quote, amountSats, feeSats)
                     ?: return@runSuspendCatching MoveToSparkOutcome.Moved(0uL, 0uL)
                 onMove(outcome)
                 val moved = outcome as? MoveToSparkOutcome.Moved ?: throw MoveToSparkError.UpdateUnsettled()
@@ -183,18 +194,22 @@ class MoveToSparkRepo internal constructor(
             }
         }
 
-    private suspend fun moveUnlessCovered(quote: MoveToSparkQuote, amountSats: ULong): MoveToSparkOutcome? {
-        val waited = !moveLock.tryLock()
-        if (waited) moveLock.lock()
-        try {
-            if (waited) {
+    private suspend fun moveUnlessCovered(
+        quote: MoveToSparkQuote,
+        amountSats: ULong,
+        feeSats: ULong,
+    ): MoveToSparkOutcome? = moveLock.withLock {
+        if (quote.amountSats.safe() + quote.feeSats.safe() <= movableSats()) return@withLock payPart(quote)
+        val covered = withTimeoutOrNull(SPARK_BALANCE_WAIT) {
+            while (!MoveToSparkMath.sparkCovers(sparkRepo.state.value, amountSats, feeSats)) {
                 sparkRepo.refreshState()
-                if (sparkRepo.canSend(amountSats)) return null
+                if (!MoveToSparkMath.sparkCovers(sparkRepo.state.value, amountSats, feeSats)) {
+                    delay(SPARK_BALANCE_RECHECK)
+                }
             }
-            return payPart(quote)
-        } finally {
-            moveLock.unlock()
         }
+        if (covered == null) throw MoveToSparkError.UpdateFallsShort(amountSats)
+        null
     }
 
     /**
@@ -264,7 +279,8 @@ class MoveToSparkRepo internal constructor(
 
             val invoice = sparkRepo.createInvoice(null, INVOICE_DESCRIPTION, INVOICE_EXPIRY_SECS).getOrThrow()
             val parts = mutableListOf<MoveToSparkQuote>()
-            val plannedSats = MoveToSparkMath.plannedSats(lightningRepo.lightningState.value.channels.filter { it.isUsable })
+            val usable = lightningRepo.lightningState.value.channels.filter { it.isUsable }
+            val plannedSats = MoveToSparkMath.plannedSats(usable)
             var leftSats = maxOf(limitSats, plannedSats)
             var wantedSats = limitSats
             while (parts.size < MAX_PARTS && MoveToSparkMath.hasMovableBalance(leftSats)) {
@@ -356,14 +372,14 @@ class MoveToSparkRepo internal constructor(
                 continue
             }
             when (outcome) {
-                is MoveToSparkOutcome.InFlight -> return outcome.copy(earlierSats = movedSats)
+                is MoveToSparkOutcome.InFlight ->
+                    return outcome.copy(earlierSats = movedSats, retriedHashes = retriedHashes.toList())
                 is MoveToSparkOutcome.Moved -> {
                     parts++
                     movedSats = movedSats.safe() + outcome.amountSats.safe()
                     paidMsat = paidMsat.safe() + outcome.feeMsat.safe()
                     feeLeftMsat = feeLeftMsat.safe() - outcome.feeMsat.safe()
-                    // A smaller part moved what the larger ones could not, so their failures are no failed moves.
-                    retriedHashes.forEach { hash -> cacheStore.addActivityToDeletedList(hash) }
+                    dropFromActivity(retriedHashes)
                     retriedHashes.clear()
                     lightningRepo.syncState()
                     val nowMsat = outboundMsat()
@@ -374,6 +390,12 @@ class MoveToSparkRepo internal constructor(
         }
         if (movedSats == 0uL) throw lastError ?: MoveToSparkError.NothingToMove()
         return MoveToSparkOutcome.Moved(movedSats, paidMsat / 1000uL, paidMsat)
+    }
+
+    private suspend fun dropFromActivity(retriedHashes: List<String>) = retriedHashes.forEach {
+        // A smaller part moved what the larger ones could not, so their failures are no failed moves.
+        cacheStore.addActivityToDeletedList(it)
+        activityRepo.get().handlePaymentEvent(it)
     }
 
     private fun feeRoseError(movedSats: ULong, paidMsat: ULong) = MoveToSparkError.FeeRose(movedSats, paidMsat / 1000uL)
@@ -502,6 +524,7 @@ class MoveToSparkRepo internal constructor(
                         }
                     }
                     settled.cancel()
+                    dropFromActivity(inFlight.retriedHashes)
                     moved
                 }
             }.onFailure {
@@ -608,10 +631,16 @@ object MoveToSparkMath {
      * Whether Spark can pay [amountSats] and its [feeSats] for the payment once [quote] has moved to it, also by the
      * rule the wait after the move applies, which keeps Spark's service fee aside.
      */
-    fun coversPayment(quote: MoveToSparkQuote, spark: SparkState, amountSats: ULong, feeSats: ULong): Boolean {
-        val have = spark.balanceSats.safe() + quote.amountSats.safe()
-        if (!spark.isUsable || have < amountSats.safe() + feeSats.safe()) return false
-        return SparkFees.sendableSats(have) >= amountSats
+    fun coversPayment(quote: MoveToSparkQuote, spark: SparkState, amountSats: ULong, feeSats: ULong): Boolean =
+        covers(spark.isUsable, spark.balanceSats.safe() + quote.amountSats.safe(), amountSats, feeSats)
+
+    /** Whether Spark can pay [amountSats] and its [feeSats] for the payment from its balance now. */
+    fun sparkCovers(spark: SparkState, amountSats: ULong, feeSats: ULong): Boolean =
+        covers(spark.isUsable, spark.balanceSats, amountSats, feeSats)
+
+    private fun covers(isUsable: Boolean, haveSats: ULong, amountSats: ULong, feeSats: ULong): Boolean {
+        if (!isUsable || haveSats < amountSats.safe() + feeSats.safe()) return false
+        return SparkFees.sendableSats(haveSats) >= amountSats
     }
 
     /** The open channels in [after] that could send at least [MIN_MOVE_SATS] in [before] and no longer can. */
@@ -763,13 +792,15 @@ sealed interface MoveToSparkOutcome {
 
     /**
      * The payment of [amountSats] left but had not settled when the move stopped waiting; Spark shows it once it does.
-     * [earlierSats] is what earlier parts of the same move had moved.
+     * [earlierSats] is what earlier parts of the same move had moved, and [retriedHashes] the payments of the larger
+     * parts this one replaced, which Activity drops once it settles.
      */
     data class InFlight(
         override val amountSats: ULong,
         val paymentHash: String,
         val paymentId: String,
         val earlierSats: ULong = 0uL,
+        val retriedHashes: List<String> = emptyList(),
     ) : MoveToSparkOutcome
 }
 

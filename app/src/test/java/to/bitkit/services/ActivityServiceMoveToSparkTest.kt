@@ -4,6 +4,7 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.deleteActivityById
 import com.synonym.bitkitcore.getActivityById
 import com.synonym.bitkitcore.updateActivity
 import com.synonym.bitkitcore.upsertActivity
@@ -21,8 +22,10 @@ import to.bitkit.async.ServiceQueue
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.ext.create
+import to.bitkit.models.WalletScope
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class ActivityServiceMoveToSparkTest : BaseUnitTest() {
     companion object {
@@ -93,6 +96,21 @@ class ActivityServiceMoveToSparkTest : BaseUnitTest() {
             assertEquals(ROUTING_FEE_SATS, stored.fee)
         }
 
+    @Test
+    fun `a failed move part that smaller parts replaced leaves no row`() = coreTest {
+        val cache = AppCacheData(
+            moveToSparkHashes = listOf(HASH),
+            deletedActivities = listOf(HASH),
+        )
+        assertEquals(true, cache.isActivityDeleted(HASH, WalletScope.default))
+        whenever(cacheStore.data).thenReturn(flowOf(cache))
+        row = Activity.Lightning(sparkReceive().copy(txType = PaymentType.SENT, status = PaymentState.FAILED))
+
+        sut().syncLdkNodePaymentsToActivities(listOf(channelSend(PaymentStatus.FAILED)))
+
+        assertNull(row)
+    }
+
     private fun coreTest(block: suspend () -> Unit) = test {
         ServiceQueue.CORE.background {
             mockStatic(Class.forName(BITKIT_CORE_FFI_CLASS)).use { native ->
@@ -104,6 +122,10 @@ class ActivityServiceMoveToSparkTest : BaseUnitTest() {
                 native.`when`<Unit> { upsertActivity(any()) }.thenAnswer {
                     row = it.arguments[0] as Activity
                     null
+                }
+                native.`when`<Boolean> { deleteActivityById(any(), any()) }.thenAnswer {
+                    row = null
+                    true
                 }
                 block()
             }

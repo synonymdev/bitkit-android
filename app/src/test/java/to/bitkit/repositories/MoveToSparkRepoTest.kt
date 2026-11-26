@@ -3,9 +3,9 @@ package to.bitkit.repositories
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.Event
@@ -52,6 +52,7 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     private val nodeEvents = MutableSharedFlow<Event>()
     private val inFlight = MoveToSparkOutcome.InFlight(50_000uL, paymentHash = "hash", paymentId = "id")
     private val cacheStore = CacheStore(InMemoryDataStore(AppCacheData()))
+    private val activityRepo = mock<ActivityRepo>()
     private val quote = MoveToSparkQuote(INVOICE, amountSats = 50_000uL, feeSats = 12uL)
     private lateinit var sut: MoveToSparkRepo
 
@@ -63,7 +64,14 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         sut = createSut()
     }
 
-    private fun createSut() = MoveToSparkRepo(testDispatcher, lightningRepo, sparkRepo, cacheStore) { "hash" }
+    private fun createSut() = MoveToSparkRepo(
+        bgDispatcher = testDispatcher,
+        lightningRepo = lightningRepo,
+        sparkRepo = sparkRepo,
+        cacheStore = cacheStore,
+        activityRepo = { activityRepo },
+        paymentHashOf = { "hash" },
+    )
 
     private fun sendable(sats: ULong, htlcCapSats: ULong = sats) {
         val channel = createChannelDetails().copy(
@@ -369,6 +377,7 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         sut.moveAll(plan).getOrThrow()
 
         assertTrue(cacheStore.data.first().isActivityDeleted("hash", WalletScope.default))
+        verify(activityRepo).handlePaymentEvent("hash")
     }
 
     @Test
@@ -848,6 +857,7 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `update to send moves the balance, then waits until Spark can pay`() = test {
+        sendable(60_000uL)
         sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
         whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.success(SPARK_FEE))
         whenever(
@@ -864,14 +874,18 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `update to send moves nothing once Spark covers the payment after another move held it`() = test {
+    fun `update to send moves nothing once another move took the channels and Spark covers the payment`() = test {
+        sendable(50_100uL)
         sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
         whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.success(SPARK_FEE))
-        whenever(
-            lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
-        ).thenReturn(Result.success("id"))
-        whenever(sparkRepo.refreshState()).thenReturn(Result.success(Unit))
-        whenever(sparkRepo.canSend(60_000uL)).thenReturn(true)
+        whenever(lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            sendable(0uL)
+            Result.success("id")
+        }
+        whenever(sparkRepo.refreshState()).doSuspendableAnswer {
+            sparkState.value = SparkState(isReady = true, balanceSats = 70_000uL)
+            Result.success(Unit)
+        }
         val moving = async { sut.move(quote) }
         var moved: MoveToSparkOutcome? = null
         val updating = async { sut.updateToSend(quote, INVOICE, 60_000uL) { moved = it } }
@@ -885,7 +899,22 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `update to send fails short once another move took the channels and Spark does not cover the payment`() =
+        test {
+            sendable(0uL)
+            sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
+            whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.success(SPARK_FEE))
+            whenever(sparkRepo.refreshState()).thenReturn(Result.success(Unit))
+
+            val result = sut.updateToSend(quote, INVOICE, 60_000uL)
+
+            assertIs<MoveToSparkError.UpdateFallsShort>(result.exceptionOrNull())
+            verify(lightningRepo, never()).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+        }
+
+    @Test
     fun `update to send fails as unsettled while the move is in flight`() = test {
+        sendable(60_000uL)
         sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
         whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.success(SPARK_FEE))
         whenever(
@@ -903,6 +932,7 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `update to send reports a settled move even when Spark never shows the balance`() = test {
+        sendable(60_000uL)
         sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
         whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.success(SPARK_FEE))
         whenever(

@@ -176,9 +176,8 @@ class MoveToSparkManager @Inject constructor(
     }
 
     private suspend fun done(outcome: MoveToSparkOutcome): MoveToSparkUiState.Done? {
-        walletRepo.syncNodeAndWallet()
         // The sync skips the channels' refresh while another sync runs, and they may still hold a failed part.
-        lightningRepo.syncState()
+        if (walletRepo.syncNodeAndWallet().isSuccess) lightningRepo.syncState()
         val hasRest = outcome is MoveToSparkOutcome.Moved &&
             MoveToSparkMath.hasMovableBalance(moveToSparkRepo.movableSats())
         return if (hasRest) null else MoveToSparkUiState.Done(outcome)
