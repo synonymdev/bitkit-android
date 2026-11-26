@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +28,7 @@ import to.bitkit.repositories.CANCELLED_REASON
 import to.bitkit.repositories.SparkExitBackgroundLimits
 import to.bitkit.repositories.SparkExitFundingState
 import to.bitkit.repositories.SparkExitRecord
+import to.bitkit.repositories.SparkExitSavingsRetry
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Display
@@ -58,6 +60,11 @@ fun SparkExitProgressScreen(
         viewModel.effects.collect { if (it == SparkExitEffect.Cancelled) onDone() }
     }
     val isEnded = uiState.record?.isActive == false
+    DisposableEffect(Unit) {
+        viewModel.startSavingsRetryPricing()
+        onDispose { viewModel.stopSavingsRetryPricing() }
+    }
+    LaunchedEffect(uiState.record?.savingsRefusal) { viewModel.loadSavingsRetry() }
     LaunchedEffect(isEnded) { if (isEnded) viewModel.onResultShown() }
     LifecycleResumeEffect(Unit) {
         viewModel.refreshBackgroundLimits()
@@ -85,7 +92,7 @@ private fun Content(
     onWalletOverview: () -> Unit = {},
     onNotificationSettings: () -> Unit = {},
     onPayHigherFee: () -> Unit = {},
-    onRetrySavingsPayment: () -> Unit = {},
+    onRetrySavingsPayment: (SparkExitSavingsRetry?) -> Unit = {},
 ) {
     val record = uiState.record
     ScreenColumn {
@@ -131,10 +138,10 @@ private fun Content(
                 )
                 VerticalSpacer(16.dp)
             }
-            if (uiState.isSavingsPaymentRefused) {
+            if (uiState.offersSavingsRetry) {
                 SecondaryButton(
                     text = stringResource(R.string.lightning__spark_exit__fund_savings),
-                    onClick = onRetrySavingsPayment,
+                    onClick = { onRetrySavingsPayment(uiState.savingsRetryOffer) },
                     isLoading = uiState.isRetryingSavingsPayment,
                     testTag = "SparkExitRetrySavings",
                 )
@@ -205,7 +212,7 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
     uiState.returned?.let { ReturnedNote(receivedSats = it.spendingSats, feesSats = it.feesSats) }
     val address = record.funding.firstOrNull()?.address
     val funding = uiState.progressFunding
-    if (uiState.isSavingsPaymentRefused) {
+    if (uiState.offersSavingsRetry) {
         VerticalSpacer(24.dp)
         BodyS(
             text = stringResource(R.string.lightning__spark_exit__savings_refused),
@@ -220,6 +227,14 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
             sats = funding.sats,
             modifier = Modifier.testTag("SparkExitProgressFundingAmount")
         )
+        // The new fee to confirm: what leaves savings once Pay from savings is tapped.
+        uiState.savingsRetryOffer?.let {
+            SparkExitAmountRow(
+                label = stringResource(R.string.lightning__spark_exit__fees_savings),
+                sats = it.totalSats,
+                modifier = Modifier.testTag("SparkExitProgressSavingsTotal")
+            )
+        }
         VerticalSpacer(32.dp)
         SparkExitFundingAddress(
             address = address,

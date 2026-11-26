@@ -388,6 +388,27 @@ object SparkExitMath {
     }
 
     /**
+     * The start's savings payment of [record]'s fee funding that was refused before it went out, for a fee above the
+     * one confirmed, while progress can offer to pay it at the new fee: before the exit holds any funding, while
+     * nothing reached the funding address, whose [funding] state is null until it was read, and while no savings send
+     * to it went out ([hasSavingsSend], one unresolved or refused by a node, which its own retry pays again). Funding
+     * seen before ([fundingSeenSats]) stays seen when a later address read fails: never offered over it.
+     */
+    fun savingsRefusal(
+        record: SparkExitRecord,
+        funding: SparkExitFundingState?,
+        hasSavingsSend: Boolean,
+        fundingSeenSats: ULong = 0uL,
+    ): SparkExitRecord.SavingsRefusal? {
+        if (!record.isActive || record.phase !is SparkExitRecord.Phase.AwaitingFunding) return null
+        if (fundingSeenSats > 0uL) return null
+        if (record.fundingPaymentTxid != null || hasSavingsSend) return null
+        if (record.fundingShortfallSats == null || record.fundedSats > 0uL) return null
+        if (funding != null && (funding !is SparkExitFundingState.Ask || funding.receivedSats > 0uL)) return null
+        return record.savingsRefusal
+    }
+
+    /**
      * What progress shows while the exit still needs fee funding, or null when it does not. [utxos] is what the funding
      * address holds, null when it could not be read. A payment from savings that has not confirmed, or new funding
      * covering the shortfall that has not, is waited for; only what is still missing is asked for, at least dust.

@@ -21,6 +21,7 @@ import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.FeeRates
+import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlAuthData
 import com.synonym.bitkitcore.LnurlChannelData
@@ -29,6 +30,7 @@ import com.synonym.bitkitcore.LnurlWithdrawData
 import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaykitEndpoint
 import com.synonym.bitkitcore.PaykitRoute
+import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PubkySwapRoutePayment
 import com.synonym.bitkitcore.PubkySwapRouteQuote
@@ -7125,6 +7127,7 @@ class AppViewModel @Inject constructor(
     private suspend fun proceedWithPayment(contactPaymentContext: ContactPaymentContext?) {
         val reviewedOnchainFeeSats = _sendUiState.value.onchainFeeUi.sats?.toULong() ?: 0uL
         val session = sendSession
+        val generation = sendStateGeneration
         delay(SCREEN_TRANSITION_DELAY) // wait for screen transitions when applicable
 
         if (showCommittedSwap()) return
@@ -7136,6 +7139,30 @@ class AppViewModel @Inject constructor(
                 it.copy(paykitSwapRoute = route.copy(quote = null, providerName = null), lightningFeeSats = 0)
             }
             setSendEffect(SendEffect.NavigateToAmount)
+            return
+        }
+        // Paying again an invoice already paid sends nothing: its earlier send of the same invoice is the receipt, with
+        // the amount it paid. A repeat nothing backs, as with another invoice sharing the payment hash, is refused.
+        val repeat = lightningRepeat(contactPaymentContext)
+        // A swipe from a send the user left neither pays nor shows a receipt or a refusal.
+        if (generation != sendStateGeneration) return
+        if (repeat != null) {
+            val earlierSentSats = repeat.earlierSentSats ?: run {
+                Logger.warn("Refused paying '${repeat.paymentHash}' again, no send of it backs it", context = TAG)
+                setSendEffect(SendEffect.NavigateToError(alreadyPaidFailure(repeat.bolt11)))
+                return
+            }
+            Logger.info("Showed the earlier send of '${repeat.paymentHash}' for paying it again", context = TAG)
+            onSendSuccess(
+                NewTransactionSheetDetails(
+                    type = NewTransactionSheetType.LIGHTNING,
+                    direction = NewTransactionSheetDirection.SENT,
+                    paymentHashOrTxId = repeat.paymentHash,
+                    sats = earlierSentSats.toLong(),
+                ),
+                allowDuplicateHash = true,
+                syncContact = false,
+            )
             return
         }
         if (!confirmSparkUpdateQuote()) return
@@ -8296,7 +8323,7 @@ class AppViewModel @Inject constructor(
             proofRequest = null
             Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
             // A repeat sends nothing, so it shows what the earlier payment sent, also when its amount was typed.
-            val sentSats = if (wasPaidBefore) earlierLightningSendSats(actualPaymentHash) else null
+            val sentSats = if (wasPaidBefore) earlierLightningSend(actualPaymentHash)?.value else null
             onSendSuccess(
                 NewTransactionSheetDetails(
                     type = NewTransactionSheetType.LIGHTNING,
@@ -8342,10 +8369,37 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun earlierLightningSendSats(paymentHash: String): ULong? =
+    private class LightningRepeat(val paymentHash: String, val bolt11: String, val earlierSentSats: ULong?)
+
+    /**
+     * The earlier payment of the plain Lightning invoice being sent, or null when its hash was never paid. A contact's
+     * payment keeps its request, proof and route steps, so it is not decided here.
+     */
+    private suspend fun lightningRepeat(contactPaymentContext: ContactPaymentContext?): LightningRepeat? {
+        if (contactPaymentContext != null) return null
+        val state = _sendUiState.value
+        if (state.payMethod != SendMethod.LIGHTNING || state.lnurl is LnurlParams.LnurlPay) return null
+        if (state.routedPaykitRoute?.serviceLeg != null || state.activePaykitSwapRoute != null) return null
+        val invoice = state.decodedInvoice ?: return null
+        val paymentHash = invoice.paymentHash.toHex()
+        val earlierSend = earlierLightningSend(paymentHash)
+        val wasPaidBefore = earlierSend != null ||
+            synchronized(processedPaymentsLock) { paymentHash in processedPayments }
+        if (!wasPaidBefore) return null
+        val earlierSentSats = earlierSend?.takeIf { it.invoice.equals(invoice.bolt11, ignoreCase = true) }?.value
+        return LightningRepeat(paymentHash, invoice.bolt11, earlierSentSats)
+    }
+
+    private suspend fun earlierLightningSend(paymentHash: String): LightningActivity? =
         (activityRepo.getActivity(paymentHash).getOrNull() as? Activity.Lightning)?.v1
-            ?.takeIf { it.txType == PaymentType.SENT }
-            ?.value
+            ?.takeIf { it.txType == PaymentType.SENT && it.status == PaymentState.SUCCEEDED }
+
+    private fun alreadyPaidFailure(bolt11: String) = SendFailureDetails(
+        message = context.getString(R.string.wallet__send_quickpay__already_paid),
+        failureType = "DuplicatePayment",
+        resetRoutingCachesOnRetry = false,
+        paymentRequest = bolt11,
+    )
 
     /**
      * Before a payment of [bolt11] for [amountSats] that fits only across the channels and Spark, moves the channels'
