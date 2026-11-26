@@ -472,6 +472,12 @@
     <string name="onboarding__multiple_header">&lt;accent&gt;Attention :&lt;/accent&gt;\nplusieurs appareils</string>
     <string name="onboarding__multiple_text">N\'installez pas votre phrase de récupération Bitkit sur plusieurs téléphones simultanément, car cela pourrait corrompre vos données.</string>
     <string name="other__bluetooth_enable">Activer le Bluetooth</string>
+    <string name="other__lnurl_auth_auth_prompt">S\'authentifier sur {domain} ?</string>
+    <string name="other__lnurl_auth_auth_title">S\'authentifier</string>
+    <string name="other__lnurl_auth_link_prompt">Associer le compte à {domain} ?</string>
+    <string name="other__lnurl_auth_link_title">Associer</string>
+    <string name="other__lnurl_auth_register_prompt">S\'inscrire sur {domain} ?</string>
+    <string name="other__lnurl_auth_register_title">S\'inscrire</string>
     <string name="other__nfc_enable">Activer le NFC</string>
     <string name="other__nfc_read_error_text">Ce tag NFC ne contient aucune demande de paiement utilisable par Bitkit.</string>
     <string name="other__nfc_read_error_title">Impossible de lire le NFC</string>

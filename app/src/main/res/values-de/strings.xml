@@ -473,6 +473,12 @@
     <string name="onboarding__multiple_header">&lt;accent&gt;Achtung:&lt;/accent&gt;\nMehrere Geräte</string>
     <string name="onboarding__multiple_text">Füge deine Wiederherstellungsphrase nicht mehreren Geräten gleichzeitig hinzu, da es zu unwiderruflichen Schäden deiner Daten kommen kann.</string>
     <string name="other__bluetooth_enable">Bluetooth aktivieren</string>
+    <string name="other__lnurl_auth_auth_prompt">Bei {domain} authentifizieren?</string>
+    <string name="other__lnurl_auth_auth_title">Authentifizieren</string>
+    <string name="other__lnurl_auth_link_prompt">Konto mit {domain} verknüpfen?</string>
+    <string name="other__lnurl_auth_link_title">Verknüpfen</string>
+    <string name="other__lnurl_auth_register_prompt">Bei {domain} registrieren?</string>
+    <string name="other__lnurl_auth_register_title">Registrieren</string>
     <string name="other__nfc_enable">NFC aktivieren</string>
     <string name="other__nfc_read_error_text">Dieses NFC-Tag enthält keine Zahlungsanforderung, die Bitkit verwenden kann.</string>
     <string name="other__nfc_read_error_title">NFC kann nicht gelesen werden</string>

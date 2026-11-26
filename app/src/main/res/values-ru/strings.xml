@@ -502,11 +502,17 @@
     <string name="other__high_balance__nav_title">Высокий Баланс</string>
     <string name="other__high_balance__text">&lt;accent&gt;Баланс вашего кошелька превышает $500.&lt;/accent&gt;\nДля вашей безопасности рассмотрите возможность перемещения части ваших сбережений в офлайн-кошелёк.</string>
     <string name="other__high_balance__title">Высокий\n&lt;accent&gt;Баланс&lt;/accent&gt;</string>
+    <string name="other__lnurl_auth_auth_prompt">Пройти аутентификацию на {domain}?</string>
+    <string name="other__lnurl_auth_auth_title">Подтвердить</string>
     <string name="other__lnurl_auth_error">Ошибка Входа (LNURL)</string>
     <string name="other__lnurl_auth_error_msg">Произошла ошибка при попытке входа. {raw}</string>
+    <string name="other__lnurl_auth_link_prompt">Привязать аккаунт к {domain}?</string>
+    <string name="other__lnurl_auth_link_title">Привязать</string>
     <string name="other__lnurl_auth_login_button">Войти</string>
     <string name="other__lnurl_auth_login_prompt">Войти на {domain}?</string>
     <string name="other__lnurl_auth_login_title">Вход</string>
+    <string name="other__lnurl_auth_register_prompt">Зарегистрироваться на {domain}?</string>
+    <string name="other__lnurl_auth_register_title">Регистрация</string>
     <string name="other__lnurl_auth_success_msg_domain">Вы успешно вошли на {domain}.</string>
     <string name="other__lnurl_auth_success_msg_no_domain">Вы успешно вошли.</string>
     <string name="other__lnurl_auth_success_title">Вход Выполнен</string>

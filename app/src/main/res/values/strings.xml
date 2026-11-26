@@ -664,11 +664,17 @@
     <string name="other__high_balance__nav_title">High Balance</string>
     <string name="other__high_balance__text">&lt;accent&gt;Your wallet balance exceeds $500.&lt;/accent&gt;\nFor your security, consider moving some of your savings to an offline wallet.</string>
     <string name="other__high_balance__title">High\n&lt;accent&gt;Balance&lt;/accent&gt;</string>
+    <string name="other__lnurl_auth_auth_prompt">Authenticate at {domain}?</string>
+    <string name="other__lnurl_auth_auth_title">Authenticate</string>
     <string name="other__lnurl_auth_error">Sign In Failed (LNURL)</string>
     <string name="other__lnurl_auth_error_msg">An error occurred when you attempted to sign in. {raw}</string>
+    <string name="other__lnurl_auth_link_prompt">Link account to {domain}?</string>
+    <string name="other__lnurl_auth_link_title">Link</string>
     <string name="other__lnurl_auth_login_button">Log In</string>
     <string name="other__lnurl_auth_login_prompt">Log in to {domain}?</string>
     <string name="other__lnurl_auth_login_title">Log In</string>
+    <string name="other__lnurl_auth_register_prompt">Register at {domain}?</string>
+    <string name="other__lnurl_auth_register_title">Register</string>
     <string name="other__lnurl_auth_success_msg_domain">You successfully signed in to {domain}.</string>
     <string name="other__lnurl_auth_success_msg_no_domain">You successfully signed in.</string>
     <string name="other__lnurl_auth_success_title">Signed In</string>

@@ -490,11 +490,17 @@
     <string name="other__high_balance__nav_title">Saldo alto</string>
     <string name="other__high_balance__text">&lt;accent&gt;El saldo de su monedero excede $500.&lt;/accent&gt;\nPor su seguridad, considere mover parte de sus ahorros a un monedero no conectado a Internet.</string>
     <string name="other__high_balance__title">Saldo\n&lt;accent&gt;alto&lt;/accent&gt;</string>
+    <string name="other__lnurl_auth_auth_prompt">¿Autenticarse en {domain}?</string>
+    <string name="other__lnurl_auth_auth_title">Autenticar</string>
     <string name="other__lnurl_auth_error">Error de inicio de sesión (LNURL)</string>
     <string name="other__lnurl_auth_error_msg">Se produjo un error al intentar iniciar sesión. {raw}</string>
+    <string name="other__lnurl_auth_link_prompt">¿Vincular la cuenta a {domain}?</string>
+    <string name="other__lnurl_auth_link_title">Vincular</string>
     <string name="other__lnurl_auth_login_button">Iniciar sesión</string>
     <string name="other__lnurl_auth_login_prompt">¿Iniciar sesión en {domain}?</string>
     <string name="other__lnurl_auth_login_title">Iniciar sesión</string>
+    <string name="other__lnurl_auth_register_prompt">¿Registrarse en {domain}?</string>
+    <string name="other__lnurl_auth_register_title">Registrarse</string>
     <string name="other__lnurl_auth_success_msg_domain">Has iniciado sesión correctamente en {domain}.</string>
     <string name="other__lnurl_auth_success_msg_no_domain">Has iniciado sesión correctamente.</string>
     <string name="other__lnurl_auth_success_title">Sesión iniciada</string>
