@@ -1571,8 +1571,9 @@ class LightningRepo @Inject constructor(
     ): Result<PaymentId> = payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat = null, onBeforeSend)
 
     /**
-     * Like [payInvoice], with [isAuthorizedAtSubmission] checked again where a node send is submitted, after its queue
-     * wait. When it is false, nothing is sent and the result fails with [ServiceError.PaymentStoppedAtSubmission].
+     * Like [payInvoice], with [isAuthorizedAtSubmission] checked again where the send is submitted: on the node's
+     * queue, or right before Spark sends. When it is false, nothing is sent and the result fails with
+     * [ServiceError.PaymentStoppedAtSubmission].
      */
     suspend fun payInvoiceAuthorizedAtSubmission(
         bolt11: String,
@@ -1632,8 +1633,8 @@ class LightningRepo @Inject constructor(
             var railBefore: LightningRail? = null
             var isChecked = false
             val authorizeSend: suspend () -> Boolean = authorize@{
-                // Spark's retry of a send whose leaves it couldn't select keeps the send's admission and rechecks only
-                // the caller's check at submission, which has no side effects.
+                // Spark's check right before it sends, and its retry of a send whose leaves it couldn't select, keep
+                // the send's admission and recheck only the caller's check at submission, which has no side effects.
                 if (isChecked) return@authorize isAuthorizedAtSubmission?.invoke() ?: true
                 isChecked = true
                 val isAuthorized = onBeforeSend().also { if (it) requireWalletRestoreComplete() }
