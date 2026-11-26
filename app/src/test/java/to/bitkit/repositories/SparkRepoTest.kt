@@ -3956,6 +3956,47 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send whose authorization lapses while its uncertainty is written never leaves`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(sentPayment(fees = 0))
+        var isAuthorized = true
+        whenever(cacheStore.addSparkUncertainSend(any(), any(), any())).thenAnswer {
+            isAuthorized = false
+            Unit
+        }
+        val sut = createSut()
+
+        val result = sut.payInvoice("lnbc1", 100uL, null, null) { isAuthorized }
+
+        assertIs<ServiceError.PaymentStoppedAtSubmission>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any(), anyOrNull())
+        verifyBlocking(cacheStore) { removeSparkUncertainSend("hash") }
+        verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
+        verifyBlocking(cacheStore) { restoreSparkSendAttempt("hash", null) }
+    }
+
+    @Test
+    fun `a spark send refused at submission stays refused when its cleanup fails`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        var isAuthorized = true
+        whenever(cacheStore.addSparkUncertainSend(any(), any(), any())).thenAnswer {
+            isAuthorized = false
+            Unit
+        }
+        whenever(cacheStore.removeSparkSendHash(any())).thenAnswer { throw IllegalStateException("disk full") }
+        val sut = createSut()
+
+        val result = sut.payInvoice("lnbc1", 100uL, null, null) { isAuthorized }
+
+        assertIs<ServiceError.PaymentStoppedAtSubmission>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any(), anyOrNull())
+    }
+
+    @Test
     fun `an older failed row never ends an uncertain spark send while spark can't resync`() = test {
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
@@ -5478,11 +5519,12 @@ class SparkRepoTest : BaseUnitTest() {
         advanceUntilIdle()
         var checks = 0
 
-        val result = sut.payInvoice("lnbc1", 100uL, onBeforeSend = { ++checks == 1 })
+        // Allowed at the first check and at submission, refused at the retry.
+        val result = sut.payInvoice("lnbc1", 100uL, onBeforeSend = { ++checks <= 2 })
 
         assertIs<PaymentPendingException>(result.exceptionOrNull())
         verify(sparkService, times(1)).send(any(), anyOrNull())
-        assertEquals(2, checks)
+        assertEquals(3, checks)
     }
 
     @Test

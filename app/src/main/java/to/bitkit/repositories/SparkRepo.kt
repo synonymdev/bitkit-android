@@ -564,9 +564,10 @@ class SparkRepo @Inject constructor(
      * payment, could not list its payments while an older build's send of the invoice is kept, or its fee was over
      * [maxTotalFeeMsat]; with [SparkError.InvoiceExpired], a
      * [SparkError.SendRefused], when Spark refuses an expired invoice at prepare or send; and with
-     * [ServiceError.PaymentDeadlineExpired] past [paymentDeadlineAt]. A failure inside the send is a
-     * [PaymentPendingException], as the payment may have been
-     * dispatched, and its event decides it. An invoice this wallet already sends is not sent again: one in flight or
+     * [ServiceError.PaymentDeadlineExpired] past [paymentDeadlineAt]. [onBeforeSend] runs once after the checks and
+     * again right before the send; refused there, it fails with [ServiceError.PaymentStoppedAtSubmission]. A failure
+     * inside the send is a [PaymentPendingException], as the payment may have been dispatched, and its event decides
+     * it. An invoice this wallet already sends is not sent again: one in flight or
      * pending fails with [PaymentPendingException], and one Spark completed returns its hash. After a restore, a
      * still-valid invoice created before it that the Spark operators can't show unsent fails with
      * [SparkError.RestoredInvoiceUnverified], under the same rule as the node's send.
@@ -632,7 +633,8 @@ class SparkRepo @Inject constructor(
                 Logger.info("Skipped Spark send of '$paymentHash', already paid", context = TAG)
                 return@runSuspendCatching paymentHash
             }
-            // A cancel, block or identity change can land while Spark prepares, so the last check runs right here.
+            // A cancel, block or identity change can land while Spark prepares, so the caller checks again here, and
+            // once more right before the send.
             if (!onBeforeSend()) throw PaymentAbortedBeforeSend()
             val isEntered = holdRestoreMutex.withLock {
                 sendsInFlight.putIfAbsent(paymentHash.lowercase(), bolt11) == null
@@ -676,13 +678,15 @@ class SparkRepo @Inject constructor(
                     spending {
                         // Kept until the call returns, so a send cut off by process death or cancellation stays held.
                         cacheStore.addSparkUncertainSend(paymentHash, clock.now().epochSeconds, attemptId)
-                        // The checks above and both writes suspend, so the deadline and an exit that started meanwhile
-                        // are checked last, before the send.
-                        runCatching {
+                        // The checks above and both writes suspend, so the caller's authorization, the deadline and
+                        // an exit that started meanwhile are checked last, before the send.
+                        runSuspendCatching {
+                            if (!onBeforeSend()) throw ServiceError.PaymentStoppedAtSubmission()
                             ensurePaymentDeadline(paymentDeadlineAt)
                             ensureNotExiting()
                         }.onFailure {
-                            dropUnsentSend()
+                            // The refusal reaches the caller even when its cleanup fails, as nothing went out.
+                            bestEffort("drop unsent Spark send '$paymentHash'") { dropUnsentSend() }
                             throw it
                         }
                         sendRetryingLeafSelection(prepared, attemptId, paymentDeadlineAt, onBeforeSend)
@@ -725,7 +729,7 @@ class SparkRepo @Inject constructor(
                 }
             }
         }.onFailure {
-            if (it is PaymentAbortedBeforeSend) {
+            if (it is PaymentAbortedBeforeSend || it is ServiceError.PaymentStoppedAtSubmission) {
                 Logger.debug("Aborted Spark invoice pay before send", context = TAG)
             } else {
                 Logger.error("Failed to pay invoice with Spark", it, context = TAG)
