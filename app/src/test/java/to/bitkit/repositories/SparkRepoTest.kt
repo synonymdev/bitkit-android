@@ -2024,12 +2024,12 @@ class SparkRepoTest : BaseUnitTest() {
     fun `a withdrawal refused once its journal is written never leaves`() = test {
         val sut = journaledSpark()
         var isBlocked = false
-        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+        whenever(cacheStore.update(any())).doSuspendableAnswer {
             cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
             // The contact is blocked while the journal is written.
             if (cacheData.value.pendingSparkWithdrawal != null) isBlocked = true
         }
-        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(contactWithdrawal())
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(contactWithdrawal())
 
         val result = sut.withdraw("bcrt1qcontact", 20_000uL, null, recheckBeforeSend = { !isBlocked })
 
@@ -2041,7 +2041,7 @@ class SparkRepoTest : BaseUnitTest() {
     @Test
     fun `a withdrawal refused once its journal is written stays refused when closing the journal fails`() = test {
         val sut = journaledSpark()
-        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+        whenever(cacheStore.update(any())).doSuspendableAnswer {
             // The journal opens, then closing it fails.
             if (cacheData.value.pendingSparkWithdrawal != null) throw IOException("disk full")
             cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))

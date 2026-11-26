@@ -1345,6 +1345,21 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a payment request's node send stopped at submission stays refused when dropping its record fails`() = test {
+        val store = spy(CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true))))
+        doSuspendableAnswer { throw IOException("disk full") }.whenever(store).removeLdkSendHash(any(), any())
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        var isAllowed = true
+
+        val result =
+            sut.payInvoiceRecheckedAtSubmission("bolt11", 1_000uL, null) { isAllowed.also { isAllowed = false } }
+
+        assertIs<ServiceError.PaymentStoppedAtSubmission>(result.exceptionOrNull())
+    }
+
+    @Test
     fun `a payment request's node send stopped at submission keeps an earlier send's record`() = test {
         val store =
             CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true, ldkSendHashes = listOf("bolt11"))))
