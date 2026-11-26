@@ -41,6 +41,10 @@ import kotlin.test.assertTrue
 
 @ComposeUi
 class ProfileRecoveryContentTest {
+    private companion object {
+        val GREEK: Locale = Locale.forLanguageTag("el")
+    }
+
     @get:Rule
     val compose = createComposeRule()
 
@@ -147,16 +151,18 @@ class ProfileRecoveryContentTest {
                 }
             }
         }
-        assertGutter(context.getString(R.string.profile__cleanup_pending))
+        assertGutter(cleanupText(Locale.ENGLISH))
         compose.runOnIdle {
-            locale = Locale.forLanguageTag("el")
+            locale = GREEK
             width = 320.dp
             fontScale = 1.3f
         }
-        val greek = context.createConfigurationContext(
-            Configuration(context.resources.configuration).apply { setLocale(Locale.forLanguageTag("el")) },
-        )
-        assertGutter(greek.getString(R.string.profile__cleanup_pending))
+        assertGutter(cleanupText(GREEK))
+    }
+
+    private fun cleanupText(locale: Locale): String {
+        val configuration = Configuration(context.resources.configuration).apply { setLocale(locale) }
+        return context.createConfigurationContext(configuration).getString(R.string.profile__cleanup_pending)
     }
 
     private fun assertGutter(text: String) {
