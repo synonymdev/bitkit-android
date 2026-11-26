@@ -355,10 +355,10 @@ data class SendPendingUiState(
     val isAbandoning: Boolean = false,
     val abandoned: Boolean = false,
     val abandonError: AbandonError? = null,
-    /** The attempt pays a Spark exit's funding, which its Progress pays again, never this screen. */
+    /** The attempt pays a Spark exit's funding: paid again while the exit asks, released once it no longer does. */
     val isSparkExitFunding: Boolean = false,
 ) {
-    val canRetry: Boolean get() = recoveryAttempt != null && !isSparkExitFunding
+    val canRetry: Boolean get() = recoveryAttempt != null && !(isSparkExitFunding && abandonableAttempt != null)
 }
 
 enum class AbandonError { MayStillConfirm, SyncUnavailable, ReleasePending }

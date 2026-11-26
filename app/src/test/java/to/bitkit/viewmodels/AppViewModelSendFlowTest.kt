@@ -20002,27 +20002,29 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `send pending never pays a Spark exit's funding again`() = test {
+    fun `send pending pays a Spark exit's funding again only while the exit asks for it`() = test {
         val original = OnchainSendAttempt(
             walletId = WalletScope.default, attemptId = "exit-funding", requestId = null, orderId = null,
             address = "bcrt1qexitfunding", amountSats = 5_000uL, isMaxAmount = false,
             feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
-            evidence = OnchainSendEvidence.Rejected,
+            evidence = OnchainSendEvidence.Unknown,
         )
-        whenever(paykitPaymentProofRepo.isSparkExitFunding(any())).thenReturn(true)
-        var authorized = false
+        var dispatched = 0
         whenever(lightningRepo.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any()))
             .doSuspendableAnswer { invocation ->
                 val authorize = invocation.getArgument<suspend (OnchainSendAttempt) -> Unit>(5)
                 runCatching {
                     authorize(original)
-                    authorized = true
+                    dispatched++
                     OnchainSendOutcome.Accepted("ab".repeat(32))
                 }
             }
 
+        assertTrue(sut.retryOriginalOnchainSend(original, 2uL).isSuccess)
+        verify(sparkExitRepo).authorizePayAgain(original)
+        whenever(sparkExitRepo.authorizePayAgain(any())).thenThrow(IllegalStateException("funded"))
         assertTrue(sut.retryOriginalOnchainSend(original, 2uL).isFailure)
-        assertFalse(authorized, "The exit's Progress owns its funding")
+        assertEquals(1, dispatched, "Paid again once the exit no longer asked")
     }
 
     @Test

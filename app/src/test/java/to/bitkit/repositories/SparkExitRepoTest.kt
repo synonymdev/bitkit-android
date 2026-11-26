@@ -1940,6 +1940,21 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an unresolved savings payment is paid again only while the exit asks and nothing arrived`() = test {
+        SparkExitStore(File(Env.sparkExitRecordPath(0))).save(awaitingRecord())
+        var utxos = "[]"
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain { utxos })
+        val unknown = refusedSavingsPayment().copy(evidence = OnchainSendEvidence.Unknown)
+
+        sut.authorizePayAgain(unknown)
+        assertTrue(runCatching { sut.authorizePayAgain(unknown.copy(releaseApproved = true)) }.isFailure)
+        utxos = """[{"txid":"${"f0".repeat(32)}","vout":0,"value":9000,"status":{"confirmed":false}}]"""
+        assertTrue(runCatching { sut.authorizePayAgain(unknown) }.isFailure, "another wallet funded it")
+        sut.authorizePayAgain(unknown.copy(address = "bcrt1qordinary"))
+        sut.onAppBackgrounded()
+    }
+
+    @Test
     fun `paying again from savings is refused once funding from another wallet arrived`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
         store.save(awaitingRecord())

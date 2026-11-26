@@ -568,6 +568,24 @@ class SendPendingViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `Spark exit funding the exit still asks for keeps its retry`() = test {
+        val original = pendingOriginal()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        whenever(paykitPaymentProofRepo.isSparkExitFunding(original)).thenReturn(true)
+        whenever(paykitPaymentProofRepo.onchainRequestHasEnded(original)).thenReturn(false)
+        sut.initOnchain(original.txid, amount)
+        // The release check polls while the exit still needs the payment, so the clock is never idle.
+        runCurrent()
+        assertTrue(sut.uiState.value.canRetry, "An unresolved exit funding is never left without a way out")
+        assertNull(sut.uiState.value.abandonableAttempt)
+        // Once the exit no longer needs it, the release takes the retry's place.
+        whenever(paykitPaymentProofRepo.onchainRequestHasEnded(original)).thenReturn(true)
+        advanceTimeBy(31.seconds)
+        runCurrent()
+        assertFalse(sut.uiState.value.canRetry)
+    }
+
+    @Test
     fun `ordinary send keeps its retry and offers no release`() = test {
         val original = pendingOriginal()
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)

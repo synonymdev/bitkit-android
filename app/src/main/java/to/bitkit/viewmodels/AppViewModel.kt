@@ -7728,8 +7728,8 @@ class AppViewModel @Inject constructor(
                 attempt.attemptId == original.attemptId && attempt.requestId == original.requestId &&
                     attempt.orderId == original.orderId && attempt.payerIdentity == original.payerIdentity
             )
-            // Read again right before dispatch: a Spark exit's funding is paid from its Progress, never from here.
-            check(!paykitPaymentProofRepo.isSparkExitFunding(attempt)) { "A Spark exit owns this payment" }
+            // Read right before dispatch: a Spark exit's funding is paid again only while the exit still asks for it.
+            sparkExitRepo.authorizePayAgain(attempt)
             if (request != null) {
                 val currentRequest =
                     (

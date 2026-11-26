@@ -49,10 +49,13 @@ object SparkExitFundingRelease {
     /**
      * Whether savings may pay [attempt] to the exit again now, over what its funding address holds ([utxos], null
      * when it could not be read): only while the exit still asks for funding there and nothing reached it, or while it
-     * waits for this very payment. A send to no exit's address is not this check's to refuse.
+     * waits for this very payment, and never once its release was approved. A send to no exit's address is not this
+     * check's to refuse.
      */
     fun mayPayAgain(attempt: OnchainSendAttempt, exit: Exit, utxos: List<EsploraUtxo>?): Boolean {
         if (!isExitFunding(attempt, exit)) return true
+        // A release approved for it is Send Pending's to finish.
+        if (attempt.releaseApproved) return false
         val record = exit.record?.takeIf { it.isActive && it.funding.firstOrNull()?.address == attempt.address }
         if (record == null || utxos == null) return false
         return when (val state = SparkExitMath.fundingState(record, utxos)) {
