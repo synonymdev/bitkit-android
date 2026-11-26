@@ -660,7 +660,12 @@ class SparkExitRepo @Inject constructor(
         // On a chain Spark does not read, the exit would never see the payment.
         require(option.extraSats == 0uL || sharesNodeChain()) { "Spark does not read the node's chain" }
         val txid = if (option.extraSats > 0uL) {
-            sendFunding(address, option.extraSats, option.feeRates, option.totalSats.safe() - option.extraSats.safe())
+            runSuspendCatching {
+                sendFunding(address, option.extraSats, option.feeRates, option.totalSats.safe() - option.extraSats.safe())
+            }.getOrElse {
+                // With no answer it may still go out: kept like a payment of unknown result.
+                pendingFundingTxid(it, address) ?: throw it
+            }
         } else {
             null
         }
@@ -687,6 +692,8 @@ class SparkExitRepo @Inject constructor(
                 it.copy(record = bumped, fundingState = SparkExitMath.fundingState(bumped, utxos = null))
             }
         }
+        // Progress says at once whether the payment may still land.
+        _state.value.record?.takeIf { it.isActive }?.let { noteSavingsSend(it) }
         if (_state.value.record?.needsDriving == true) work.schedulePeriodic()
         Logger.info(
             "Raised the Spark exit fee to '${option.rateSatPerVbyte}' sat/vB, paying '${option.extraSats}' sats",

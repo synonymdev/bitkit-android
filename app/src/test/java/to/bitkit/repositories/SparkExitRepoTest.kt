@@ -2163,6 +2163,23 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a higher fee paid from savings with no answer is kept as the exit's payment`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(runningRecord())
+        stubFunding { Result.failure(OnchainSendPendingError(IOException("no answer"), "bump")) }
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+
+        sut.payHigherFee(SparkExitFeeBumpOption(FeeRate.FAST, 9uL, 6_000uL, 6_400uL)).getOrThrow()
+        sut.onAppBackgrounded()
+
+        // It may still go out, so the exit keeps it and its higher fee, and watches for it.
+        val record = assertNotNull(store.load())
+        assertEquals("bump", record.fundingPaymentTxid)
+        assertEquals(9uL, record.feeRateSatPerVbyte)
+    }
+
+    @Test
     fun `a higher fee is never paid from savings on a chain spark does not read`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
         store.save(runningRecord())
