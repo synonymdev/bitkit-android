@@ -3,14 +3,20 @@ package to.bitkit.repositories
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -78,6 +84,287 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any(), anyOrNull()) }
             .thenReturn(Result.success(Unit))
+    }
+
+    @Test
+    fun `wipe revokes repository removal before draining the sharing mutex`() = test {
+        val sut = createSut()
+        val repository = PubkyIdentityOperations()
+        val entered = CompletableDeferred<Unit>()
+        val cleanup = CompletableDeferred<Unit>()
+        val finishCleanup = CompletableDeferred<Unit>()
+        val removing = launch {
+            sut.withProfileRemoval {
+                repository.remove {
+                    entered.complete(Unit)
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        withContext(NonCancellable) {
+                            cleanup.complete(Unit)
+                            finishCleanup.await()
+                        }
+                    }
+                }
+            }
+        }
+        entered.await()
+        var reachedSdk = false
+        val wiping = async {
+            sut.withWalletWipe(repository::wipe) { reachedSdk = true }
+        }
+        cleanup.await()
+        assertFalse(reachedSdk)
+        assertTrue(sut.setEnabled(true).isFailure)
+        finishCleanup.complete(Unit)
+        withTimeout(1_000) {
+            wiping.await()
+            removing.join()
+        }
+        assertTrue(reachedSdk)
+        assertTrue(sut.setEnabled(false).isSuccess)
+    }
+
+    @Test
+    fun `removal drains sharing rollback and rejects queued changes`() = test {
+        val publication = CompletableDeferred<Unit>()
+        val enteredRemoval = CompletableDeferred<Unit>()
+        val finishRemoval = CompletableDeferred<Unit>()
+        whenever(publicPaykitRepo.syncPaykitApp(isNull(), canSync = any())).doSuspendableAnswer {
+            publication.await()
+            Result.failure(IllegalStateException("Uncertain publication"))
+        }
+        val sut = createSut()
+        val enabling = async { sut.setEnabled(true) }
+        runCurrent()
+        val queued = async { sut.setEnabled(false) }
+        runCurrent()
+        val removing = async {
+            sut.withProfileRemoval {
+                assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+                assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+                enteredRemoval.complete(Unit)
+                finishRemoval.await()
+            }
+        }
+        runCurrent()
+        assertFalse(enteredRemoval.isCompleted)
+        assertTrue(sut.disablePaykit().isFailure)
+        publication.complete(Unit)
+        runCurrent()
+        assertTrue(enabling.await().isFailure)
+        assertTrue(queued.await().isFailure)
+        assertTrue(enteredRemoval.isCompleted)
+        var reconciled = false
+        sut.reconcilePendingEndpoints { reconciled = true }
+        assertFalse(reconciled)
+        finishRemoval.complete(Unit)
+        removing.await()
+        assertTrue(sut.setEnabled(false).isSuccess)
+    }
+
+    @Test
+    fun `public sharing requests made during removal or wipe cannot reach a replacement sign in`() = test {
+        val refused = mutableListOf<Boolean>()
+        for (wipe in listOf(false, true)) {
+            for (enabled in listOf(false, true)) {
+                settingsFlow.value = SettingsData(
+                    hasConfirmedPublicPaykitEndpoints = !enabled,
+                    sharesPublicPaykitEndpoints = !enabled,
+                )
+                whenever(pubkyRepo.currentSignIn()).thenReturn(PubkySignIn("original", 1L))
+                val previous = settingsFlow.value
+                val sut = createSut()
+                clearInvocations(publicPaykitRepo)
+                val entered = CompletableDeferred<Unit>()
+                val release = CompletableDeferred<Unit>()
+                val hold: suspend () -> Unit = {
+                    entered.complete(Unit)
+                    release.await()
+                }
+                val barrier = async {
+                    if (wipe) {
+                        sut.withWalletWipe(admitRepository = { it() }, operation = hold)
+                    } else {
+                        sut.withProfileRemoval(hold)
+                    }
+                }
+                entered.await()
+                val request = async { sut.setPublicEnabled(enabled) }
+                runCurrent()
+                whenever(pubkyRepo.currentSignIn()).thenReturn(PubkySignIn("replacement", 2L))
+                release.complete(Unit)
+                barrier.await()
+                val result = request.await()
+                refused += result.isFailure && settingsFlow.value == previous
+                if (result.isFailure) verifyNoInteractions(publicPaykitRepo)
+            }
+        }
+        assertEquals(listOf(true, true, true, true), refused)
+    }
+
+    @Test
+    fun `sharing requests queued on IO cannot cross a completed removal`() = test {
+        val operations = listOf<suspend ContactPaymentSettingsRepo.() -> Result<Unit>>(
+            { setPublicEnabled(true) },
+            { setEnabled(true) },
+            { disablePaykit() },
+        )
+        val refused = mutableListOf<Boolean>()
+        for (operation in operations) {
+            settingsFlow.value = SettingsData()
+            whenever(pubkyRepo.currentSignIn()).thenReturn(PubkySignIn("original", 1L))
+            val previous = settingsFlow.value
+            val sut = createSut(StandardTestDispatcher(testScheduler))
+            clearInvocations(publicPaykitRepo, privatePaykitRepo)
+            val request = async(start = CoroutineStart.UNDISPATCHED) { sut.operation() }
+            assertFalse(request.isCompleted)
+            sut.withProfileRemoval {
+                whenever(pubkyRepo.currentSignIn()).thenReturn(PubkySignIn("replacement", 2L))
+            }
+            runCurrent()
+            val result = request.await()
+            refused += result.isFailure && settingsFlow.value == previous
+            if (result.isFailure) verifyNoInteractions(publicPaykitRepo, privatePaykitRepo)
+        }
+        assertEquals(listOf(true, true, true), refused)
+    }
+
+    @Test
+    fun `disabling private sharing without a live identity retains app cleanup`() = test {
+        whenever(pubkyRepo.currentSignIn()).thenReturn(null)
+        settingsFlow.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        var canSync: (suspend () -> Boolean)? = null
+        whenever(publicPaykitRepo.syncPaykitApp(eq(false), canSync = any())).doSuspendableAnswer {
+            canSync = it.getArgument(1)
+            Result.success(Unit)
+        }
+
+        assertTrue(createSut().disablePaykit().isSuccess)
+
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+        assertFalse(requireNotNull(canSync).invoke())
+    }
+
+    @Test
+    fun `cancelled private-only disable retains app cleanup demand`() = test {
+        settingsFlow.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        whenever(privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
+        val disable = launch { createSut().disablePaykit() }
+        runCurrent()
+        assertFalse(disable.isCompleted)
+        disable.cancelAndJoin()
+
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+    }
+
+    @Test
+    fun `sharing accepts fresh snapshots of the same identity generation`() = test {
+        whenever(pubkyRepo.currentSignIn()).thenAnswer { PubkySignIn("identity", 1L) }
+        whenever(pubkyRepo.isCurrent(any())).thenAnswer {
+            val signIn = it.getArgument<PubkySignIn>(0)
+            signIn.publicKey == "identity" && signIn.generation == 1L
+        }
+        val sut = createSut()
+        val results = listOf(
+            sut.setPublicEnabled(true),
+            sut.setEnabled(true),
+            sut.setEnabled(false),
+            sut.disablePaykit(),
+        )
+        assertEquals(List(4) { true }, results.map { it.isSuccess })
+    }
+
+    @Test
+    fun `queued sharing requests retain the original identity generation`() = test {
+        val operations = listOf<suspend ContactPaymentSettingsRepo.() -> Result<Unit>>(
+            { setPublicEnabled(true) },
+            { setEnabled(true) },
+            { setEnabled(false) },
+            { disablePaykit() },
+        )
+        val refused = mutableListOf<Boolean>()
+        for (waitForMutex in listOf(false, true)) {
+            for (operation in operations) {
+                settingsFlow.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+                var signIn = PubkySignIn("identity", 1L)
+                whenever(pubkyRepo.currentSignIn()).thenAnswer { signIn }
+                whenever(pubkyRepo.isCurrent(any())).thenAnswer { it.getArgument<PubkySignIn>(0) == signIn }
+                val previous = settingsFlow.value
+                val sut = createSut(StandardTestDispatcher(testScheduler))
+                val release = CompletableDeferred<Unit>()
+                val reconciliation = if (waitForMutex) {
+                    launch { sut.reconcilePendingEndpoints { release.await() } }.also { runCurrent() }
+                } else {
+                    null
+                }
+                clearInvocations(publicPaykitRepo, privatePaykitRepo)
+                val request = async(start = CoroutineStart.UNDISPATCHED) { sut.operation() }
+                if (waitForMutex) runCurrent()
+                assertFalse(request.isCompleted)
+                signIn = PubkySignIn("identity", 2L)
+                release.complete(Unit)
+                runCurrent()
+                reconciliation?.join()
+                val result = request.await()
+                refused += result.isFailure && settingsFlow.value == previous
+                if (result.isFailure) verifyNoInteractions(publicPaykitRepo, privatePaykitRepo)
+            }
+        }
+        assertEquals(List(8) { true }, refused)
+    }
+
+    @Test
+    fun `disablePaykit preserves replacement state after private cleanup suspends`() = test {
+        var signIn = PubkySignIn("identity", 1L)
+        whenever(pubkyRepo.currentSignIn()).thenAnswer { signIn }
+        whenever(pubkyRepo.isCurrent(any())).thenAnswer { it.getArgument<PubkySignIn>(0) == signIn }
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitBolt11 = "old-invoice",
+        )
+        val cleanup = CompletableDeferred<Unit>()
+        whenever(privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any(), anyOrNull()))
+            .doSuspendableAnswer {
+                cleanup.await()
+                Result.success(Unit)
+            }
+        val remoteOwners = mutableListOf<PubkySignIn>()
+        whenever(publicPaykitRepo.syncPublishedEndpoints(any(), any(), anyOrNull())).thenAnswer {
+            val canPublish = it.getArgument<(() -> Boolean)?>(2)
+            if (canPublish?.invoke() != false) remoteOwners += signIn
+            Result.success(Unit)
+        }
+        val sut = createSut()
+        val disable = async { sut.disablePaykit() }
+        runCurrent()
+        assertFalse(disable.isCompleted)
+        signIn = PubkySignIn("identity", 2L)
+        val replacement = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitBolt11 = "replacement-invoice",
+            publicPaykitCleanupPending = true,
+        )
+        settingsFlow.value = replacement
+        cleanup.complete(Unit)
+        val result = disable.await()
+
+        assertTrue(result.isFailure && settingsFlow.value == replacement && remoteOwners.isEmpty())
+    }
+
+    @Test
+    fun `cancelled removal reservation releases sharing admission`() = test {
+        val sut = createSut()
+        val removal = launch { sut.withProfileRemoval { awaitCancellation() } }
+        runCurrent()
+        assertTrue(sut.setEnabled(true).isFailure)
+        removal.cancelAndJoin()
+        assertTrue(sut.setEnabled(true).isSuccess)
     }
 
     @Test
@@ -355,7 +642,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
                     privateCleanup.await()
                     cleanupResult
                 }
-            whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false, appSyncPriority = Priority.Interactive))
+            whenever(publicPaykitRepo.syncPublishedEndpoints(eq(false), eq(Priority.Interactive), any()))
                 .doSuspendableAnswer {
                     publicCleanup.await()
                     cleanupResult
@@ -389,7 +676,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
                     eq(listOf(CONTACT_KEY)),
                     anyOrNull(),
                 )
-                verify(publicPaykitRepo).syncPublishedEndpoints(publish = false, appSyncPriority = Priority.Interactive)
+                verify(publicPaykitRepo).syncPublishedEndpoints(eq(false), eq(Priority.Interactive), any())
                 verify(publicPaykitRepo).syncPaykitApp(isNull(), canSync = any())
                 verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(
                     argThat { invoke().toSet() == setOf(CONTACT_KEY) },
@@ -428,6 +715,25 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertTrue(disable.await().isSuccess)
         assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+    }
+
+    @Test
+    fun `reconciliation queued on IO cannot cross removal or wipe`() = test {
+        for (wipe in listOf(false, true)) {
+            val sut = createSut(StandardTestDispatcher(testScheduler))
+            var reconciled = false
+            val reconciliation = async(start = CoroutineStart.UNDISPATCHED) {
+                sut.reconcilePendingEndpoints { reconciled = true }
+            }
+            if (wipe) {
+                sut.withWalletWipe({ it() }) { }
+            } else {
+                sut.withProfileRemoval { }
+            }
+            runCurrent()
+            reconciliation.await()
+            assertFalse(reconciled, "Queued reconciliation crossed teardown (wipe=$wipe)")
+        }
     }
 
     @Test
@@ -502,12 +808,12 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
     }
 
-    private fun createSut() = ContactPaymentSettingsRepo(
+    private fun createSut(dispatcher: CoroutineDispatcher = testDispatcher) = ContactPaymentSettingsRepo(
         settingsStore = settingsStore,
         publicPaykitRepo = publicPaykitRepo,
         privatePaykitRepo = privatePaykitRepo,
         pubkyRepo = pubkyRepo,
-        ioDispatcher = testDispatcher,
+        ioDispatcher = dispatcher,
     )
 
     @Test

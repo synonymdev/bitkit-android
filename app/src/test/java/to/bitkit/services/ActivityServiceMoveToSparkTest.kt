@@ -20,8 +20,17 @@ import org.mockito.kotlin.whenever
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
+import to.bitkit.data.PrivatePaykitCacheData
+import to.bitkit.data.PrivatePaykitCacheStore
+import to.bitkit.data.ProfileRemovalStore
 import to.bitkit.ext.create
+import to.bitkit.repositories.PaykitPaymentRequestRepo
+import to.bitkit.repositories.PaykitReceivedPaymentContacts
+import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
+import to.bitkit.repositories.PrivatePaykitContactResolver
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.connectionRecoveryFixture
+import javax.inject.Provider
 import kotlin.test.assertEquals
 
 class ActivityServiceMoveToSparkTest : BaseUnitTest() {
@@ -30,6 +39,29 @@ class ActivityServiceMoveToSparkTest : BaseUnitTest() {
         private const val HASH = "payment-hash"
         private const val MOVED_SATS = 50_000uL
         private const val ROUTING_FEE_SATS = 3uL
+    }
+
+    private val recovery = connectionRecoveryFixture(mock())
+    private val receiptCache = mock<PrivatePaykitCacheStore>()
+    private val reservations = mock<PrivatePaykitAddressReservationRepo>()
+    private val requests = mock<PaykitPaymentRequestRepo>()
+    private val resolver by lazy {
+        PrivatePaykitContactResolver(
+            testDispatcher,
+            receiptCache,
+            Provider { reservations },
+            Provider { requests },
+            ProfileRemovalStore.inMemoryForTesting(),
+            Provider { recovery },
+        )
+    }
+
+    private suspend fun prepareReceipt() {
+        whenever(receiptCache.data).thenReturn(flowOf(PrivatePaykitCacheData()))
+        whenever(requests.receivedPaymentContacts).thenReturn(PaykitReceivedPaymentContacts.Empty)
+        whenever(reservations.receiptAssignments()).thenReturn(
+            PrivatePaykitAddressReservationRepo.ReceiptAssignments(emptyList(), 0L),
+        )
     }
 
     private val cacheStore = mock<CacheStore>()
@@ -42,7 +74,7 @@ class ActivityServiceMoveToSparkTest : BaseUnitTest() {
             whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
             row = Activity.Lightning(sparkReceive())
 
-            sut().syncLdkNodePaymentsToActivities(listOf(channelSend()))
+            sut().syncLdkNodePaymentsToActivities({ listOf(channelSend()) })
 
             val stored = (row as Activity.Lightning).v1
             assertEquals(PaymentType.SENT, stored.txType)
@@ -56,11 +88,11 @@ class ActivityServiceMoveToSparkTest : BaseUnitTest() {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         row = Activity.Lightning(sparkReceive())
 
-        sut().syncLdkNodePaymentsToActivities(listOf(channelSend(PaymentStatus.PENDING)))
+        sut().syncLdkNodePaymentsToActivities({ listOf(channelSend(PaymentStatus.PENDING)) })
 
         assertEquals(sparkReceive(), (row as Activity.Lightning).v1)
 
-        sut().syncLdkNodePaymentsToActivities(listOf(channelSend()))
+        sut().syncLdkNodePaymentsToActivities({ listOf(channelSend()) })
 
         val stored = (row as Activity.Lightning).v1
         assertEquals(PaymentType.SENT, stored.txType)
@@ -86,7 +118,7 @@ class ActivityServiceMoveToSparkTest : BaseUnitTest() {
                 )
             )
 
-            sut().syncLdkNodePaymentsToActivities(listOf(channelSend()))
+            sut().syncLdkNodePaymentsToActivities({ listOf(channelSend()) })
 
             val stored = (row as Activity.Lightning).v1
             assertEquals(PaymentState.SUCCEEDED, stored.status)
@@ -94,6 +126,7 @@ class ActivityServiceMoveToSparkTest : BaseUnitTest() {
         }
 
     private fun coreTest(block: suspend () -> Unit) = test {
+        prepareReceipt()
         ServiceQueue.CORE.background {
             mockStatic(Class.forName(BITKIT_CORE_FFI_CLASS)).use { native ->
                 native.`when`<Activity?> { getActivityById(any(), any()) }.thenAnswer { row }
@@ -115,7 +148,7 @@ class ActivityServiceMoveToSparkTest : BaseUnitTest() {
         cacheStore = cacheStore,
         lightningService = mock(),
         settingsStore = mock(),
-        privatePaykitContactResolver = mock(),
+        privatePaykitContactResolver = Provider { resolver },
     )
 
     private fun sparkReceive() = LightningActivity.create(
