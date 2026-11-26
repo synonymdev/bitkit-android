@@ -7,18 +7,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertLeftPositionInRootIsEqualTo
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.test.espresso.Espresso.pressBackUnconditionally
+import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.R
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
+import kotlin.math.abs
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @ComposeUi
 class ProfileRecoveryContentTest {
@@ -79,6 +85,47 @@ class ProfileRecoveryContentTest {
         pressBackUnconditionally()
         compose.onNodeWithTag("ProfileRecoveryDisconnect").assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, back) }
+    }
+
+    @Test
+    fun cleanupRecoveryContentKeepsStandardGutter() {
+        compose.setContent {
+            AppThemeSurface {
+                CompositionLocalProvider(LocalInspectionMode provides true) {
+                    ProfileContent(
+                        uiState = ProfileUiState(
+                            recoveryPending = true,
+                            recoveryCanDisconnect = true,
+                            recoveryCanRetry = true,
+                            isSigningOut = true,
+                        ),
+                        onBackClick = {},
+                        onClickEdit = {},
+                        onClickCopy = {},
+                        onClickShare = {},
+                        onClickSignOut = {},
+                        onDismissSignOutDialog = {},
+                        onConfirmSignOut = {},
+                        onClickRetry = {},
+                        onClickAddTag = {},
+                        onRemoveTag = {},
+                        onDismissAddTagSheet = {},
+                        onSaveTag = {},
+                        onDismissCopiedPopup = {},
+                    )
+                }
+            }
+        }
+        val rootRight = compose.onRoot().getUnclippedBoundsInRoot().right
+        compose.onNodeWithText(context.getString(R.string.profile__cleanup_pending))
+            .assertLeftPositionInRootIsEqualTo(16.dp)
+        listOf("ProfileRecoveryRetry", "ProfileRecoveryDisconnect").forEach {
+            val node = compose.onNodeWithTag(it).assertLeftPositionInRootIsEqualTo(16.dp)
+            val right = node.getUnclippedBoundsInRoot().right
+            assertTrue(abs((rootRight - 16.dp - right).value) < 0.5f, "'$it' right edge '$right' is off the gutter")
+        }
+        val progress = compose.onNodeWithTag("ProfileRecoveryProgress").assertIsDisplayed().getUnclippedBoundsInRoot()
+        assertTrue(progress.left >= 16.dp && progress.right <= rootRight - 16.dp, "progress '$progress' crosses the gutter")
     }
 
     @Test
