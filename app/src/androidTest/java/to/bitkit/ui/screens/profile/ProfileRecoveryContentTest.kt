@@ -4,6 +4,7 @@ import android.content.res.Configuration
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -17,6 +18,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertLeftPositionInRootIsEqualTo
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -24,6 +26,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -108,6 +111,7 @@ class ProfileRecoveryContentTest {
     fun cleanupRecoveryContentKeepsStandardGutter() {
         var locale by mutableStateOf(Locale.ENGLISH)
         var width by mutableStateOf<Dp?>(null)
+        var height by mutableStateOf<Dp?>(null)
         var fontScale by mutableFloatStateOf(1f)
         compose.setContent {
             val configuration = Configuration(LocalConfiguration.current).apply { setLocale(locale) }
@@ -123,6 +127,7 @@ class ProfileRecoveryContentTest {
                         Box(
                             modifier = Modifier
                                 .then(width?.let { Modifier.width(it) } ?: Modifier.fillMaxWidth())
+                                .then(height?.let { Modifier.height(it) } ?: Modifier)
                                 .testTag("RecoveryFrame")
                         ) {
                             ProfileContent(
@@ -158,6 +163,12 @@ class ProfileRecoveryContentTest {
             fontScale = 1.3f
         }
         assertGutter(cleanupText(GREEK))
+        compose.runOnIdle {
+            height = 400.dp
+            fontScale = 1.5f
+        }
+        compose.onNodeWithTag("ProfileRecoveryDisconnect").assertIsNotDisplayed()
+        compose.onNodeWithTag("ProfileRecoveryDisconnect").performScrollTo().assertIsDisplayed()
     }
 
     private fun cleanupText(locale: Locale): String {
