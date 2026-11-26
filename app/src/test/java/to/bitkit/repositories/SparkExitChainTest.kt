@@ -418,10 +418,10 @@ class SparkExitChainTest : BaseUnitTest() {
     fun `mainnet reads bitkit electrs and broadcasts there first`() {
         val hosts = checkNotNull(EsploraSparkExitChain.defaultHosts("mainnet"))
 
-        assertEquals(listOf("https://bitkit.to/electrs"), hosts.reads)
+        assertEquals(listOf("https://api.bitkit.to/electrs"), hosts.reads)
         assertEquals(
             listOf(
-                SparkExitBroadcastHost("https://bitkit.to/electrs", listOf("/txs/package")),
+                SparkExitBroadcastHost("https://api.bitkit.to/electrs", listOf("/txs/package")),
                 SparkExitBroadcastHost("https://mempool.space/api", listOf("/v1/txs/package", "/txs/package")),
                 SparkExitBroadcastHost("https://blockstream.info/api", listOf("/v1/txs/package", "/txs/package")),
             ),
