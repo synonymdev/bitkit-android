@@ -208,12 +208,13 @@ class PubkyAuthRequestTest {
     }
 
     @Test
-    fun `relay origin shows only the authorization destination`() {
+    fun `relay display url keeps the path and drops user info and fragment`() {
         val origins = mapOf(
-            "https://Relay.Example:8443/inbox/" to "https://relay.example:8443",
-            "https://httprelay.pubky.app/inbox/" to "https://httprelay.pubky.app",
-            "http://user@10.0.2.2:15412/link?x=1#y" to "http://10.0.2.2:15412",
-            "https://trusted.example@relay.example/inbox/" to "https://relay.example",
+            "https://Relay.Example:8443/inbox/" to "https://relay.example:8443/inbox/",
+            "https://httprelay.pubky.app/link" to "https://httprelay.pubky.app/link",
+            "https://httprelay.pubky.app" to "https://httprelay.pubky.app",
+            "http://user@10.0.2.2:15412/link?x=1#y" to "http://10.0.2.2:15412/link?x=1",
+            "https://trusted.example@relay.example/in%20box/" to "https://relay.example/in%20box/",
             "ftp://relay.example/inbox/" to null,
             "relay.example/inbox/" to null,
             "https:///inbox/" to null,
@@ -229,7 +230,7 @@ class PubkyAuthRequestTest {
                 capabilities = "/pub/example.app/:rw",
             ).getOrThrow()
 
-            assertEquals(origin, request.relayOrigin, relay)
+            assertEquals(origin, request.relayDisplayUrl, relay)
         }
     }
 

@@ -581,7 +581,7 @@
     <string name="profile__add_link_label_placeholder">Bijvoorbeeld \'Website\'</string>
     <string name="profile__add_link_note">Let op: Iedere link die u toevoegt is openbaar beschikbaar.</string>
     <string name="profile__add_tag">Tag toevoegen</string>
-    <string name="profile__auth_approval_relay">Autorisatierelay</string>
+    <string name="profile__auth_approval_relay">Relay</string>
     <string name="profile__create_nav_title">Profiel aanmaken</string>
     <string name="profile__edit_nav_title">Profiel Bewerken</string>
     <string name="profile__nav_title">Profiel</string>

@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -517,8 +518,8 @@ private fun ColumnScope.ApprovalDetails(
                     BodyM(text = stringResource(R.string.profile__auth_approval_usdt_disabled), color = Colors.White64)
                     VerticalSpacer(24.dp)
                 }
-                uiState.relayOrigin?.let {
-                    RelayOriginSection(relayOrigin = it)
+                uiState.relayUrl?.let {
+                    RelaySection(relayUrl = it)
                     VerticalSpacer(32.dp)
                 }
                 if (uiState.permissions.isNotEmpty()) {
@@ -677,9 +678,22 @@ private fun PermissionsSection(permissions: ImmutableList<PubkyAuthPermission>) 
 }
 
 @Composable
-private fun RelayOriginSection(relayOrigin: String) {
+private fun RelaySection(relayUrl: String) {
     Section(title = stringResource(R.string.profile__auth_approval_relay)) {
-        BodySSB(text = relayOrigin, modifier = Modifier.testTag("PubkyAuthRelayOrigin"))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Icon(
+                painter = painterResource(R.drawable.ic_globe),
+                contentDescription = null,
+                tint = Colors.White,
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .size(16.dp)
+            )
+            HorizontalSpacer(4.dp)
+            SelectionContainer(modifier = Modifier.weight(1f)) {
+                BodySSB(text = relayUrl.asLiteralRequestText(), modifier = Modifier.testTag("PubkyAuthRelayOrigin"))
+            }
+        }
         HorizontalDivider(color = Colors.White10)
     }
 }
@@ -837,7 +851,7 @@ private fun AuthorizePreview() {
                     permissions = persistentListOf(
                         PubkyAuthPermission(path = "/pub/paykit/", accessLevel = "rw"),
                     ),
-                    relayOrigin = "https://httprelay.pubky.app",
+                    relayUrl = "https://httprelay.pubky.app/inbox/",
                     bitkitClaim = PubkyAuthClaim(Item.PAYKIT_ACCESS_V1, Item.WATCH_ONLY_ACCOUNT_V1),
                     profile = PubkyProfile(
                         publicKey = "pk8e3qm5f4kgczagxhertyuiop1gxag",

@@ -586,7 +586,7 @@
     <string name="profile__add_tag">Vložit tag</string>
     <string name="profile__auth_approval_authorize">Autorizovat</string>
     <string name="profile__auth_approval_details">Podrobnosti</string>
-    <string name="profile__auth_approval_relay">Autorizační relay</string>
+    <string name="profile__auth_approval_relay">Relay</string>
     <string name="profile__auth_approval_title">Autorizovat</string>
     <string name="profile__create_nav_title">Vytvořit profil</string>
     <string name="profile__edit_nav_title">Upravit profil</string>

@@ -567,7 +567,7 @@
     <string name="profile__add_tag">Ajouter une étiquette</string>
     <string name="profile__auth_approval_authorize">Autoriser</string>
     <string name="profile__auth_approval_details">Détails</string>
-    <string name="profile__auth_approval_relay">Relais d\'autorisation</string>
+    <string name="profile__auth_approval_relay">Relais</string>
     <string name="profile__auth_approval_title">Autoriser</string>
     <string name="profile__create_nav_title">Créer un profil</string>
     <string name="profile__edit_nav_title">Modifier le profil</string>
