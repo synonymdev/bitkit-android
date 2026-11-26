@@ -1,0 +1,20 @@
+<journey name="repay paid invoice">
+  <description>
+    Paying again a Lightning invoice this wallet already paid ends the swipe: the Confirm screen moves on to
+    the Success sheet of the earlier payment instead of keeping its swipe spinner. Spark skips the second
+    payment, so nothing is sent twice. Precondition: onboarded dev wallet with at least 5 000 sats in Spark and
+    no Lightning channel (a channel pays over the node, which refuses the repeat with an error instead),
+    QuickPay off, and a 1 000-sat Lightning invoice from another node (for example `./spark invoice
+    1000` on the bitkit-docker Spark stack), handed to the app as a deep link. The Success sheet's own tag ("SendSuccess") sits on a wrapper
+    `android layout` leaves out, so the steps check its Close button. Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;invoice&gt;" to.bitkit.dev`</action>
+    <action>Verify the Confirm screen (tag "SendConfirm") shows 1 000 sats; swipe to pay</action>
+    <action>Verify the Success sheet opens within 30 seconds, with its Close button (tag "Close"); tap Close and verify the wallet home screen is visible, with the spending balance lower by about 1 000 sats</action>
+    <action>Run the same `adb shell am start … "lightning:&lt;invoice&gt;" …` command again with the same invoice</action>
+    <action>Verify the Confirm screen (tag "SendConfirm") shows 1 000 sats again; swipe to pay</action>
+    <action>Verify the Success sheet opens within 30 seconds, with its Close button (tag "Close"); without the fix the swipe kept its spinner on Confirm until Back</action>
+    <action>Tap Close and verify the spending balance did not drop a second time, and the home activity list shows one Sent row for this invoice</action>
+  </actions>
+</journey>

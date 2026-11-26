@@ -23,6 +23,7 @@ import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaykitEndpoint
 import com.synonym.bitkitcore.PaykitRoute
+import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PubkySwapRoutePayment
 import com.synonym.bitkitcore.PubkySwapRouteQuote
 import com.synonym.bitkitcore.Scanner
@@ -134,6 +135,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.ext.toHex
 import to.bitkit.ext.toSendFailureDetails
 import to.bitkit.models.BalanceState
 import to.bitkit.models.ConvertedAmount
@@ -824,6 +826,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }.thenReturn(QuickPayCompletionOutcome.None)
         whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
             .thenReturn(Result.failure(Exception("activity not found")))
+        whenever { activityRepo.getActivity(any(), any()) }.thenReturn(Result.success(null))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         whenever { blocktankRepo.refreshInfo() }.thenReturn(Result.success(Unit))
@@ -12065,6 +12068,111 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
             sut.onSendSuccess(details, allowDuplicateHash = true)
             assertEquals(SendEffect.PaymentSuccess, awaitItem())
+        }
+    }
+
+    @Test
+    fun `paying an invoice already paid this session shows its success again`() = test {
+        val bolt11 = "lnbcrt1alreadypaid"
+        val invoice = lightningInvoice(bolt11, 1_000u)
+        val paymentHash = invoice.paymentHash.toHex()
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
+        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 0uL,
+            )
+        )
+        val state = SendUiState(
+            address = bolt11,
+            amount = 1_000u,
+            payMethod = SendMethod.LIGHTNING,
+            decodedInvoice = invoice,
+        )
+
+        sut.sendEffect.test {
+            setSendState(state)
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+
+            setSendState(state)
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+        }
+    }
+
+    @Test
+    fun `repaying an amountless invoice with another amount shows the amount sent`() = test {
+        val bolt11 = "lnbcrt1amountless"
+        val invoice = lightningInvoice(bolt11, 0u)
+        val paymentHash = invoice.paymentHash.toHex()
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 1_000u)).thenReturn(Result.success(paymentHash))
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 2_000u)).thenReturn(Result.success(paymentHash))
+        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 0uL,
+            )
+        )
+        val earlier = mock<LightningActivity> {
+            on { value } doReturn 1_000u
+            on { txType } doReturn PaymentType.SENT
+        }
+        whenever(activityRepo.getActivity(paymentHash)).thenReturn(Result.success(BitkitActivity.Lightning(earlier)))
+        val state = SendUiState(address = bolt11, payMethod = SendMethod.LIGHTNING, decodedInvoice = invoice)
+
+        sut.sendEffect.test {
+            setSendState(state.copy(amount = 1_000u))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+
+            setSendState(state.copy(amount = 2_000u))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+        }
+        assertEquals(1_000L, sut.successSendUiState.value.sats)
+    }
+
+    @Test
+    fun `a payment shown by its event during the swipe shows its success once`() = test {
+        val bolt11 = "lnbcrt1eventfirst"
+        val invoice = lightningInvoice(bolt11, 1_000u)
+        val paymentHash = invoice.paymentHash.toHex()
+        val details = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.LIGHTNING,
+            direction = NewTransactionSheetDirection.SENT,
+            paymentHashOrTxId = paymentHash,
+            sats = 1_000L,
+        )
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).doSuspendableAnswer {
+            sut.onSendSuccess(details)
+            Result.success(paymentHash)
+        }
+        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 0uL,
+            )
+        )
+        setSendState(
+            SendUiState(address = bolt11, amount = 1_000u, payMethod = SendMethod.LIGHTNING, decodedInvoice = invoice)
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+            expectNoEvents()
         }
     }
 

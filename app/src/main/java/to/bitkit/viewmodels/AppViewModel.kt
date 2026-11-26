@@ -8204,6 +8204,8 @@ class AppViewModel @Inject constructor(
         var proofRequest = preparedPaymentProofRequest
         var createdMetadataPaymentId: String? = null
         val paymentHash = decodedInvoice.paymentHash.toHex()
+        // Paying again an invoice already paid this session shows its success again, so the swipe ends.
+        val wasPaidBefore = synchronized(processedPaymentsLock) { paymentHash in processedPayments }
         associateLightningPaymentProof(incomingPaymentRequest, paymentHash).onFailure {
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(proofRequest)
@@ -8267,13 +8269,16 @@ class AppViewModel @Inject constructor(
         result.onSuccess { actualPaymentHash ->
             proofRequest = null
             Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
+            // A repeat sends nothing, so it shows what the earlier payment sent, also when its amount was typed.
+            val sentSats = if (wasPaidBefore) earlierLightningSendSats(actualPaymentHash) else null
             onSendSuccess(
                 NewTransactionSheetDetails(
                     type = NewTransactionSheetType.LIGHTNING,
                     direction = NewTransactionSheetDirection.SENT,
                     paymentHashOrTxId = actualPaymentHash,
-                    sats = displayAmountSats.toLong(),
+                    sats = (sentSats ?: displayAmountSats).toLong(),
                 ),
+                allowDuplicateHash = wasPaidBefore,
             )
             lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
         }.onFailure { error ->
@@ -8310,6 +8315,11 @@ class AppViewModel @Inject constructor(
             setSendEffect(SendEffect.NavigateToError(failure))
         }
     }
+
+    private suspend fun earlierLightningSendSats(paymentHash: String): ULong? =
+        (activityRepo.getActivity(paymentHash).getOrNull() as? Activity.Lightning)?.v1
+            ?.takeIf { it.txType == PaymentType.SENT }
+            ?.value
 
     /**
      * Before a payment of [bolt11] for [amountSats] that fits only across the channels and Spark, moves the channels'
