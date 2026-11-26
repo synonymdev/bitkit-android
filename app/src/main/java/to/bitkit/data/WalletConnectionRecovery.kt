@@ -145,6 +145,7 @@ class WalletConnectionRecovery @Inject constructor(
     /** Drains original owners before credentials, settings or the SDK wipe barrier can change. */
     suspend fun <T> withIdentityChange(
         isStillNeeded: suspend () -> Boolean = { true },
+        beforeClientsSuspend: suspend () -> Unit = {},
         block: suspend () -> T,
     ): T {
         check(currentCoroutineContext()[ReceiptOperation] == null) { "Wallet replacement cannot drain itself" }
@@ -155,6 +156,8 @@ class WalletConnectionRecovery @Inject constructor(
             try {
                 currentCoroutineContext().ensureActive()
                 beginWipe()
+                currentCoroutineContext().ensureActive()
+                beforeClientsSuspend()
                 currentCoroutineContext().ensureActive()
                 vssClients.withSuspendedClients { block() }
             } finally {

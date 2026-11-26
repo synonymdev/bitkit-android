@@ -19,6 +19,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import javax.inject.Inject
@@ -27,6 +28,17 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.seconds
 
 class MnemonicNotAvailableException : Exception("Mnemonic not available")
+
+internal class BackupClientSetupTimeout(cause: TimeoutCancellationException) :
+    AppError("Backup client setup timed out", cause)
+
+internal suspend fun VssBackupClient.ensureSetupForUpload() {
+    val result = setup()
+    currentCoroutineContext().ensureActive()
+    val error = result.exceptionOrNull()
+    if (error is TimeoutCancellationException) throw BackupClientSetupTimeout(error)
+    result.getOrThrow()
+}
 
 @Singleton
 class VssBackupClient @Inject constructor(

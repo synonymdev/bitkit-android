@@ -74,13 +74,16 @@ class WipeWalletUseCase @Inject constructor(
         var credentialsMayBeErased = false
         val result = try {
             runSuspendCatching {
-                connectionRecovery.withIdentityChange(isStillNeeded = {
-                    expectedPendingAttemptId?.let { profileRemovalStore.requirePendingWalletReset(it) }
-                    backupRepo.setWiping(true)
-                    lightningRepo.setWiping(true)
-                    wipeAdmitted = true
-                    true
-                }) {
+                connectionRecovery.withIdentityChange(
+                    isStillNeeded = {
+                        expectedPendingAttemptId?.let { profileRemovalStore.requirePendingWalletReset(it) }
+                        backupRepo.setWiping(true)
+                        lightningRepo.setWiping(true)
+                        wipeAdmitted = true
+                        true
+                    },
+                    beforeClientsSuspend = { backupRepo.reset() },
+                ) {
                     expectedPendingAttemptId?.let { profileRemovalStore.requirePendingWalletReset(it) }
                     contactPaymentSettingsRepo.get().withWalletWipe(pubkyRepo::withWalletWipeAdmission) {
                         paykitSdkService.withWalletWipe {
@@ -89,7 +92,7 @@ class WipeWalletUseCase @Inject constructor(
                             val attemptId = pending.attemptId ?: UUID.randomUUID().toString()
                             profileRemovalStore.withAccess(attemptId, ProfileRemovalScope.WALLET_WIPE) {
                                 privatePaykitRepo.get().withProfileDeletionPaused { pause ->
-                                    stopNode().getOrThrow()
+                                    lightningRepo.stop().getOrThrow()
                                     profileRemovalStore.begin(attemptId)
                                     if (pending.scope != ProfileRemovalScope.WALLET_WIPE) cleanupRemote()
                                     wipeLocal(walletIndex, pause) { credentialsMayBeErased = true }.getOrThrow()
@@ -109,20 +112,15 @@ class WipeWalletUseCase @Inject constructor(
             if (wipeAdmitted) {
                 lightningRepo.setWiping(false)
                 backupRepo.setWiping(false)
+                if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
+                    backupRepo.startObservingBackups()
+                }
             }
             wipeMutex.unlock()
         }
         return result.onFailure {
             Logger.error("Failed to wipe wallet", it, context = TAG)
-            if (wipeAdmitted && lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
-                backupRepo.startObservingBackups()
-            }
         }
-    }
-
-    private suspend fun stopNode(): Result<Unit> {
-        backupRepo.reset()
-        return lightningRepo.stop()
     }
 
     private suspend fun cleanupRemote() {
