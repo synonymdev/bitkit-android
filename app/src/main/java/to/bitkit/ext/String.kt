@@ -53,19 +53,26 @@ fun String.formatPlural(argMap: Map<Any, Any>): String =
         }
 
 private val WEB_LINK_SCHEMES = setOf("http", "https")
-private val URI_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*:")
+
+/** A URI scheme and its colon at the start of a value. */
+internal val URI_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*:")
 
 /**
  * Whether this is an http(s) link, with or without its scheme: the only links a social v1 profile accepts.
  * A value with any other scheme, including a bare `host:port`, is refused, as the profile write keeps it unchanged.
+ * Paykit needs the literal `http://` or `https://`, so a scheme without `//`, or a `\` in the authority, is refused.
  */
 fun String.isWebLink(): Boolean {
     val value = trim()
     if (value.isEmpty() || value.any { it.isWhitespace() }) return false
     val hasScheme = URI_SCHEME.containsMatchIn(value)
     if (!hasScheme && '@' in value.substringBefore('/')) return false
-    val parts = (if (hasScheme) value else "https://$value").linkUrlParts() ?: return false
+    val url = if (hasScheme) value else "https://$value"
+    val afterScheme = url.substringAfter(':')
+    if (!afterScheme.startsWith("//") || '\\' in afterScheme.drop(2).takeWhile { it !in "/?#" }) return false
+    val parts = url.linkUrlParts() ?: return false
+    val host = parts.host.removeSuffix(".")
     return parts.scheme in WEB_LINK_SCHEMES &&
-        '.' in parts.host &&
-        !parts.host.substringAfterLast('.').all { it.isDigit() }
+        '.' in host &&
+        !host.substringAfterLast('.').all { it.isDigit() }
 }

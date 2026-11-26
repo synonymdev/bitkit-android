@@ -92,6 +92,10 @@ class PubkyAppLinkTest {
             assertEquals(PubkyAppLinkError.URL_INVALID, pubkyAppLinkError("Site", it, webOnly = false), it)
         }
         assertNull(pubkyAppLinkError("Site", "https://example.com:65535", webOnly = false))
+        assertNull(pubkyAppLinkError("Site", "https://example.com.", webOnly = true))
+        assertNull(pubkyAppLinkError("Site", "https://1.2.3.4.", webOnly = false))
+        assertNull(pubkyAppLinkError("Site", "https:example.com", webOnly = false))
+        assertEquals(PubkyAppLinkError.URL_INVALID, pubkyAppLinkError("Site", "https:example.com", webOnly = true))
         assertNull(pubkyAppLinkError("Site", "https://[::1]:8080", webOnly = false))
     }
 

@@ -165,7 +165,6 @@ private fun Content(
                 onLinkUrlChange = onLinkUrlChange,
                 linkErrors = uiState.linkErrors
                     .mapValues { (_, error) ->
-                        // A form row edits only the URL, so a label pubky.app refuses means adding the link again.
                         if (error.isLabelError) {
                             stringResource(R.string.profile__link_error_label_stored)
                         } else {

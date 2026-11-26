@@ -94,7 +94,7 @@ fun AddLinkSheet(
             LinkFormContent(
                 label = label,
                 url = url,
-                onLabelChange = { label = it },
+                onLabelChange = { label = it.filterNot(Char::isISOControl) },
                 onUrlChange = { url = it },
                 onShowSuggestions = { showSuggestions = true },
                 onSave = {

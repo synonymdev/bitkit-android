@@ -1,5 +1,6 @@
 package to.bitkit.models
 
+import to.bitkit.ext.URI_SCHEME
 import to.bitkit.ext.isWebLink
 
 /** pubky.app link limits from pubky-app-specs, as Paykit checks them when it publishes a profile. */
@@ -13,7 +14,6 @@ private const val MAX_PORT = 65_535
 private const val FORBIDDEN_HOST_CHARS = " #%/:<>?@[\\]^|"
 
 private val ISO_DATE = Regex("""\d{4}-\d{2}-\d{2}""")
-private val URL_SCHEME = Regex("""^([A-Za-z][A-Za-z0-9+.-]*):""")
 private val SPECIAL_SCHEMES = setOf("http", "https", "ws", "wss", "ftp", "file")
 private val IPV4 = Regex("""\d{1,3}(\.\d{1,3}){3}""")
 
@@ -71,7 +71,7 @@ class LinkUrlParts(val scheme: String, val host: String)
  */
 fun String.linkUrlParts(): LinkUrlParts? {
     if (any { it.isISOControl() }) return null
-    val scheme = URL_SCHEME.find(this)?.groupValues?.get(1)?.lowercase() ?: return null
+    val scheme = URI_SCHEME.find(this)?.value?.dropLast(1)?.lowercase() ?: return null
     if (scheme !in SPECIAL_SCHEMES) return LinkUrlParts(scheme, host = "")
     val authority = substring(scheme.length + 1).trimStart('/', '\\').takeWhile { it !in "/?#\\" }
     val hostAndPort = authority.substringAfterLast('@')
@@ -100,8 +100,9 @@ private fun String.isValidPort(): Boolean {
 }
 
 private fun String.isValidIpv4Ending(): Boolean {
-    if (startsWith('[') || !substringAfterLast('.').all { it.isDigit() }) return true
-    val numbers = split('.').map { it.toLongOrNull() ?: return false }
+    val name = removeSuffix(".")
+    if (startsWith('[') || !name.substringAfterLast('.').all { it.isDigit() }) return true
+    val numbers = name.split('.').map { it.toLongOrNull() ?: return false }
     if (numbers.size !in 1..4) return false
     val lastLimit = (1L shl (8 * (5 - numbers.size))) - 1
     return numbers.dropLast(1).all { it <= 255 } && numbers.last() <= lastLimit
@@ -111,7 +112,7 @@ private fun String.normalizedLinkUrl(): String? {
     val value = trim().takeIf { it.isNotEmpty() } ?: return null
     val isPhone = value.isPhoneNumber()
     if (!isPhone && value.any { it.isWhitespace() }) return null
-    val scheme = if (isPhone) null else URL_SCHEME.find(value)?.groupValues?.get(1)
+    val scheme = if (isPhone) null else URI_SCHEME.find(value)?.value?.dropLast(1)
     return when {
         scheme != null -> scheme.lowercase() + value.substring(scheme.length)
         value.isEmailAddress() -> "mailto:$value"
