@@ -82,6 +82,7 @@ class EditProfileViewModel @Inject constructor(
                     it.copy(
                         isLoading = false,
                         publicKey = publicKey,
+                        rejectedLink = null,
                         removal = removal,
                         name = profile.name,
                         bio = profile.bio,
@@ -140,7 +141,6 @@ class EditProfileViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 links = (it.links + ProfileEditLink(label = label, url = url)).toImmutableList(),
-                rejectedLinkIndex = null,
                 showAddLinkSheet = false,
             )
         }
@@ -152,17 +152,13 @@ class EditProfileViewModel @Inject constructor(
                 links = it.links.mapIndexed { i, link ->
                     if (i == index) link.copy(url = url) else link
                 }.toImmutableList(),
-                rejectedLinkIndex = null,
             )
         }
     }
 
     fun removeLink(index: Int) {
         _uiState.update {
-            it.copy(
-                links = it.links.filterIndexed { i, _ -> i != index }.toImmutableList(),
-                rejectedLinkIndex = null,
-            )
+            it.copy(links = it.links.filterIndexed { i, _ -> i != index }.toImmutableList())
         }
     }
 
@@ -244,14 +240,14 @@ class EditProfileViewModel @Inject constructor(
                 _effects.emit(EditProfileEffect.SaveSuccess)
             }.onFailure {
                 Logger.error("Failed to save profile", it, context = TAG)
-                val rejectedLink = it.rejectedLinkIndex(state.links)
-                _uiState.update { it.copy(isSaving = false, rejectedLinkIndex = rejectedLink) }
+                val rejectedLink = it.rejectedLink(state.links)
+                _uiState.update { it.copy(isSaving = false, rejectedLink = rejectedLink) }
                 val changed = it is PubkyProfileChangedError
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.profile__edit_save_error),
-                    description = rejectedLink?.let { index ->
-                        context.getString(R.string.profile__edit_link_error, state.links[index].label)
+                    description = rejectedLink?.let { link ->
+                        context.getString(R.string.profile__edit_link_error, link.label)
                     } ?: it.profileSaveErrorText(context),
                 )
                 if (changed) reloadAfterExternalEdit()
@@ -347,7 +343,8 @@ data class EditProfileUiState(
     val links: ImmutableList<ProfileEditLink> = persistentListOf(),
     val storedLinks: ImmutableList<ProfileEditLink> = persistentListOf(),
     val storedLinkUrls: ImmutableSet<String> = persistentSetOf(),
-    val rejectedLinkIndex: Int? = null,
+    /** The link pubky.app last refused; it stays marked until that link is edited or removed. */
+    val rejectedLink: ProfileEditLink? = null,
     val tags: ImmutableList<String> = persistentListOf(),
     val imageUrl: String? = null,
     val newAvatarUri: Uri? = null,
@@ -373,7 +370,7 @@ data class EditProfileUiState(
             if (sentLinks == storedLinks) return persistentMapOf()
             return links.withIndex().mapNotNull { (index, link) ->
                 val error = when {
-                    index == rejectedLinkIndex -> PubkyAppLinkError.URL_INVALID
+                    link == rejectedLink -> PubkyAppLinkError.URL_INVALID
                     link.url.isBlank() -> PubkyAppLinkError.URL_INVALID
                     else -> pubkyAppLinkError(link.label, link.url, webOnly = link.url !in storedLinkUrls)
                 }
@@ -423,9 +420,9 @@ sealed interface EditProfileEffect {
     data object DisconnectSuccess : EditProfileEffect
 }
 
-private fun Throwable.rejectedLinkIndex(links: List<ProfileEditLink>): Int? {
+private fun Throwable.rejectedLink(links: List<ProfileEditLink>): ProfileEditLink? {
     if (!isPaykitNonWebProfileLinkRejected()) return null
-    return links.indexOfFirst { !(it.url.toPubkyAppLinkUrl() ?: it.url).isSocialV1WebUri() }.takeIf { it >= 0 }
+    return links.firstOrNull { !(it.url.toPubkyAppLinkUrl() ?: it.url).isSocialV1WebUri() }
 }
 
 internal fun Throwable.profileSaveErrorText(context: Context): String? = when (this) {

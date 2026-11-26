@@ -245,6 +245,37 @@ class EditProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a pubky app refusal stays on its link until that link changes`() = test {
+        val sut = createSut(
+            links = listOf(
+                PubkyProfileLink("Site", "https://example.com"),
+                PubkyProfileLink("Email", "mailto:a@example.com"),
+            )
+        )
+        advanceUntilIdle()
+        whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), anyOrNull(), any())).thenReturn(
+            Result.failure(
+                PaykitException.Protocol(
+                    "protocol_error",
+                    "Pubky profile link URL must be a canonical http or https URL",
+                )
+            )
+        )
+        sut.addLink("Blog", "https://blog.example.com")
+        sut.save()
+        advanceUntilIdle()
+
+        sut.updateLinkUrl(2, "https://blog.example.org")
+        assertEquals(mapOf(1 to PubkyAppLinkError.URL_INVALID), sut.uiState.value.linkErrors)
+
+        sut.removeLink(0)
+        assertEquals(mapOf(0 to PubkyAppLinkError.URL_INVALID), sut.uiState.value.linkErrors)
+
+        sut.updateLinkUrl(0, "https://example.org")
+        assertTrue(sut.uiState.value.linkErrors.isEmpty())
+    }
+
+    @Test
     fun `an added link is held to the publisher limits`() = test {
         val sut = createSut()
         advanceUntilIdle()
@@ -277,7 +308,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.save()
         advanceUntilIdle()
 
-        assertEquals(1, sut.uiState.value.rejectedLinkIndex)
+        assertEquals("mailto:a@example.com", sut.uiState.value.rejectedLink?.url)
         assertEquals(mapOf(1 to PubkyAppLinkError.URL_INVALID), sut.uiState.value.linkErrors)
         verify(context).getString(R.string.profile__edit_link_error, "Email")
     }
@@ -294,7 +325,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         sut.save()
         advanceUntilIdle()
 
-        assertEquals(null, sut.uiState.value.rejectedLinkIndex)
+        assertEquals(null, sut.uiState.value.rejectedLink)
         assertTrue(sut.uiState.value.linkErrors.isEmpty())
     }
 
