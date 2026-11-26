@@ -931,8 +931,8 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     /**
-     * Clears the Lightning proofs of [paymentHash], only those of [requestId] when given, so a request that sent nothing
-     * leaves another request's proof of the same invoice.
+     * Clears the Lightning proofs of [paymentHash], only those of [requestId] when given, so a request that sent
+     * nothing leaves another request's proof of the same invoice.
      */
     suspend fun failLightningPayment(paymentHash: String, requestId: PaykitPaymentRequestId? = null) = removeProofs {
         it.kind == PaykitPaymentProofKind.Lightning &&
