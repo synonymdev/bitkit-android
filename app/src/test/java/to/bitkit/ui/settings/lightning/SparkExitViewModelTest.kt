@@ -325,13 +325,18 @@ class SparkExitViewModelTest : BaseUnitTest() {
         assertEquals(20_650uL, sut.uiState.value.savingsRetryOffer?.totalSats)
         assertTrue(sut.uiState.value.offersSavingsRetry)
 
-        sut.retrySavingsPayment()
+        // A higher price published after the screen showed 650 is never what the tap pays.
+        val newer = retry.copy(feeSats = 900uL)
+        whenever(repo.priceSavingsRefusal()).thenReturn(Result.success(newer))
+        sut.loadSavingsRetry()
+        sut.retrySavingsPayment(retry)
 
         verify(repo).paySavingsRefusal(retry)
+        verify(repo, never()).paySavingsRefusal(newer)
         verify(repo, never()).retrySavingsPayment()
-        verify(repo, times(2)).priceSavingsRefusal()
-        // Once the refusal is at 800, the price at 650 is never offered.
-        val raised = SparkExitFixtures.record().copy(savingsRefusal = refusal.copy(feeSats = 800uL))
+        verify(repo, times(3)).priceSavingsRefusal()
+        // Once the refusal is at 1,000, the latest price at 900 is never offered.
+        val raised = SparkExitFixtures.record().copy(savingsRefusal = refusal.copy(feeSats = 1_000uL))
         exitState.value = SparkExitState(record = raised)
         assertNull(sut.uiState.value.savingsRetryOffer)
     }

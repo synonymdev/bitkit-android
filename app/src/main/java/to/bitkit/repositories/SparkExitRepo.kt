@@ -949,7 +949,9 @@ class SparkExitRepo @Inject constructor(
                 .getOrThrow()
             val record = _state.value.record ?: return@withLock
             val paid = record.copy(fundingPaymentTxid = txid, savingsRefusal = null)
-            saveRecord(paid)
+            // Kept as paid even when the save fails, so progress never offers to pay it again; a later tick saves it.
+            runCatching { saveRecord(paid) }
+                .onFailure { Logger.error("Failed to save the Spark exit funding payment '$txid'", it, context = TAG) }
             _state.update {
                 it.copy(record = paid, fundingState = SparkExitMath.fundingState(paid, utxos = null))
             }
@@ -1039,8 +1041,10 @@ class SparkExitRepo @Inject constructor(
     private suspend fun savingsRefusal(exit: SparkExitState): SparkExitRecord.SavingsRefusal? {
         val record = exit.record ?: return null
         val attempt = savingsSend(record)
+        // An accepted send counts too: its txid may not be on the record yet, after a stop or a failed save.
         val hasSavingsSend = exit.isSavingsSendUnresolved || exit.isSavingsPaymentRefused ||
-            attempt?.isUnresolved == true || SparkExitMath.isSavingsPaymentRefused(record, attempt)
+            exit.isSavingsSendAccepted || attempt?.isUnresolved == true || attempt?.hasPositiveEvidence == true ||
+            SparkExitMath.isSavingsPaymentRefused(record, attempt)
         return SparkExitMath.savingsRefusal(record, exit.fundingState, hasSavingsSend)
     }
 
@@ -1055,6 +1059,7 @@ class SparkExitRepo @Inject constructor(
         _state.update {
             it.copy(
                 isSavingsSendUnresolved = attempt?.isUnresolved == true,
+                isSavingsSendAccepted = attempt?.hasPositiveEvidence == true,
                 isSavingsPaymentRefused = SparkExitMath.isSavingsPaymentRefused(record, attempt),
             )
         }
@@ -1374,6 +1379,8 @@ data class SparkExitState(
     val fundingSeenSats: ULong = 0uL,
     /** A savings send to the funding address is unresolved and may be retried: cancel stays off. */
     val isSavingsSendUnresolved: Boolean = false,
+    /** A savings send to the funding address was accepted, though the record may not hold its txid yet. */
+    val isSavingsSendAccepted: Boolean = false,
     /** A node refused the savings payment of the exit's fee funding: progress says so and offers to pay again. */
     val isSavingsPaymentRefused: Boolean = false,
     /** How many payments make up [fundingSeenSats] before the exit starts: each adds its own input fee. */

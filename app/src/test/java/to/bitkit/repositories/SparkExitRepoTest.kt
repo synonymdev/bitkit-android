@@ -1820,6 +1820,39 @@ class SparkExitRepoTest : BaseUnitTest() {
     )
 
     @Test
+    fun `a start's refused savings payment is never paid again once a savings send was accepted`() = test {
+        // Stopped after the node accepted the payment, before its txid was saved: the journal holds the send.
+        val refusal = SparkExitRecord.SavingsRefusal(20_000uL, 650uL)
+        SparkExitStore(File(Env.sparkExitRecordPath(0))).save(awaitingRecord().copy(savingsRefusal = refusal))
+        val accepted = refusedSavingsPayment().copy(
+            evidence = OnchainSendEvidence.Accepted,
+            txid = "accepted",
+            refusalReason = null,
+            localFollowupComplete = true,
+        )
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(accepted)
+        stubFunding { Result.success(OnchainSendOutcome.Accepted("twice")) }
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain())
+        sut.load().getOrThrow()
+
+        sut.tick().getOrThrow()
+        val retry = SparkExitSavingsRetry(20_000uL, 650uL, FeeRates(fast = 7u, mid = 4u, slow = 1u), canPay = true)
+        val paid = sut.paySavingsRefusal(retry)
+        sut.onAppBackgrounded()
+
+        assertTrue(sut.state.value.isSavingsSendAccepted, "progress offers the refused payment again")
+        assertTrue(paid.isFailure)
+        verify(lightning, never()).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
+        )
+    }
+
+    @Test
     fun `a refused savings payment is shown, and a payment still unanswered is not`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
         store.save(awaitingRecord())

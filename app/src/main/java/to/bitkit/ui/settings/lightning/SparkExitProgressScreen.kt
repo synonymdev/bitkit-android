@@ -28,6 +28,7 @@ import to.bitkit.repositories.CANCELLED_REASON
 import to.bitkit.repositories.SparkExitBackgroundLimits
 import to.bitkit.repositories.SparkExitFundingState
 import to.bitkit.repositories.SparkExitRecord
+import to.bitkit.repositories.SparkExitSavingsRetry
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Display
@@ -91,7 +92,7 @@ private fun Content(
     onWalletOverview: () -> Unit = {},
     onNotificationSettings: () -> Unit = {},
     onPayHigherFee: () -> Unit = {},
-    onRetrySavingsPayment: () -> Unit = {},
+    onRetrySavingsPayment: (SparkExitSavingsRetry?) -> Unit = {},
 ) {
     val record = uiState.record
     ScreenColumn {
@@ -140,7 +141,7 @@ private fun Content(
             if (uiState.offersSavingsRetry) {
                 SecondaryButton(
                     text = stringResource(R.string.lightning__spark_exit__fund_savings),
-                    onClick = onRetrySavingsPayment,
+                    onClick = { onRetrySavingsPayment(uiState.savingsRetryOffer) },
                     isLoading = uiState.isRetryingSavingsPayment,
                     testTag = "SparkExitRetrySavings",
                 )
