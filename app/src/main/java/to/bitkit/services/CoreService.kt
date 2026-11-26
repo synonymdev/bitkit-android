@@ -893,8 +893,17 @@ class ActivityService(
             return
         }
 
+        // A move's part that did not route, whose amount smaller parts then moved, is no failed payment to show.
+        val cache = cacheStore.data.first()
+        if (cache.isActivityDeleted(payment.id, defaultWalletId) && payment.id.lowercase() in cache.moveToSparkHashes) {
+            if (getActivityById(walletId = defaultWalletId, activityId = payment.id) != null) {
+                deleteActivityById(walletId = defaultWalletId, activityId = payment.id)
+            }
+            return
+        }
+
         val pendingMessage = payment.id.takeIf { payment.direction == PaymentDirection.OUTBOUND }
-            ?.let { cacheStore.data.first().pendingLightningMessages[it] }
+            ?.let { cache.pendingLightningMessages[it] }
 
         // A send whose hash we received in Spark paid our own invoice, a move to Spark; once it succeeds it replaces
         // that receive.

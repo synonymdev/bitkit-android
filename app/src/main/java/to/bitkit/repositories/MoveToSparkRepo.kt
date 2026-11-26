@@ -150,7 +150,8 @@ class MoveToSparkRepo internal constructor(
      * Spark does not show in time, fails with [MoveToSparkError.UpdateUnsettled]; the funds then reach Spark on their
      * own. [onMove] gets the move's outcome as soon as the move returns, before the wait. A quote whose amount, with
      * Spark's balance, would not cover the payment of [bolt11] and Spark's fee for it, or a fee nothing can price,
-     * fails with [MoveToSparkError.UpdateFallsShort] before any move.
+     * fails with [MoveToSparkError.UpdateFallsShort] before any move. When it waited for another move, such as the
+     * modal's, and Spark then covers the payment, it moves nothing and calls no [onMove].
      */
     suspend fun updateToSend(
         quote: MoveToSparkQuote,
@@ -165,7 +166,9 @@ class MoveToSparkRepo internal constructor(
                 if (!MoveToSparkMath.coversPayment(quote, sparkRepo.state.value, amountSats, feeSats)) {
                     throw MoveToSparkError.UpdateFallsShort(amountSats)
                 }
-                val outcome = move(quote).getOrThrow().also(onMove)
+                val outcome = moveUnlessCovered(quote, amountSats)
+                    ?: return@runSuspendCatching MoveToSparkOutcome.Moved(0uL, 0uL)
+                onMove(outcome)
                 val moved = outcome as? MoveToSparkOutcome.Moved ?: throw MoveToSparkError.UpdateUnsettled()
                 val shown = withTimeoutOrNull(SPARK_BALANCE_WAIT) {
                     while (!sparkRepo.canSend(amountSats)) {
@@ -179,6 +182,20 @@ class MoveToSparkRepo internal constructor(
                 Logger.warn("Failed to update the spending balance for '$amountSats' sats", it, context = TAG)
             }
         }
+
+    private suspend fun moveUnlessCovered(quote: MoveToSparkQuote, amountSats: ULong): MoveToSparkOutcome? {
+        val waited = !moveLock.tryLock()
+        if (waited) moveLock.lock()
+        try {
+            if (waited) {
+                sparkRepo.refreshState()
+                if (sparkRepo.canSend(amountSats)) return null
+            }
+            return payPart(quote)
+        } finally {
+            moveLock.unlock()
+        }
+    }
 
     /**
      * The fee Spark charges for paying [bolt11] once the spending balance is updated; Spark's service fee alone when
@@ -247,8 +264,7 @@ class MoveToSparkRepo internal constructor(
 
             val invoice = sparkRepo.createInvoice(null, INVOICE_DESCRIPTION, INVOICE_EXPIRY_SECS).getOrThrow()
             val parts = mutableListOf<MoveToSparkQuote>()
-            val plannedSats = lightningRepo.lightningState.value.channels.filter { it.isUsable }
-                .fold(0uL) { total, channel -> total.safe() + MoveToSparkMath.plannedSats(channel).safe() }
+            val plannedSats = MoveToSparkMath.plannedSats(lightningRepo.lightningState.value.channels.filter { it.isUsable })
             var leftSats = maxOf(limitSats, plannedSats)
             var wantedSats = limitSats
             while (parts.size < MAX_PARTS && MoveToSparkMath.hasMovableBalance(leftSats)) {
@@ -320,6 +336,7 @@ class MoveToSparkRepo internal constructor(
         var parts = 0
         var lastError: Throwable? = null
         var lastOutboundMsat = outboundMsat()
+        val retriedHashes = mutableListOf<String>()
         while (parts < MAX_PARTS) {
             val quote = next ?: nextPart(partSats)?.getOrElse {
                 lastError = it
@@ -330,6 +347,7 @@ class MoveToSparkRepo internal constructor(
             val outcome = runSuspendCatching { payPart(quote, feeCapMsat = feeLeftMsat) }.getOrElse {
                 lastError = it
                 if (it !is MoveToSparkError.TooLarge) break
+                retriedHashes += paymentHashOf(quote.invoice).lowercase()
                 lightningRepo.syncState()
                 partSats = MoveToSparkMath.smallerAmount(quote.amountSats) ?: run {
                     if (feeRose(quote.amountSats, feeLeftMsat)) throw feeRoseError(movedSats, paidMsat)
@@ -344,7 +362,9 @@ class MoveToSparkRepo internal constructor(
                     movedSats = movedSats.safe() + outcome.amountSats.safe()
                     paidMsat = paidMsat.safe() + outcome.feeMsat.safe()
                     feeLeftMsat = feeLeftMsat.safe() - outcome.feeMsat.safe()
-                    partSats = outcome.amountSats
+                    // A smaller part moved what the larger ones could not, so their failures are no failed moves.
+                    retriedHashes.forEach { hash -> cacheStore.addActivityToDeletedList(hash) }
+                    retriedHashes.clear()
                     lightningRepo.syncState()
                     val nowMsat = outboundMsat()
                     if (nowMsat >= lastOutboundMsat) break
@@ -626,14 +646,26 @@ object MoveToSparkMath {
     }
 
     /**
-     * What [channel] can send across a move's parts: its outbound capacity, less the commitment fee a channel we
-     * funded keeps back. Such a channel counts its send limit when the limit is what it clears to, plus what the rest
-     * clears to once that limit has moved, as LDK leaves a part under the dust limit, when that rest can be a part.
-     * When a peer's HTLC cap holds the limit lower, it counts the larger of the two commitment types' predictions,
-     * within the limit and capacity.
+     * What [channels] can send across a move's parts: each one's outbound capacity, less the commitment fee a channel
+     * we funded keeps back. Such a channel counts its send limit when the limit is what it clears to, and LDK leaves
+     * what the rest clears to once that limit has moved under the dust limit. Those rests count when each passes its
+     * peer's HTLC minimum and together they can be a part, as one payment can route them across the channels. When a
+     * peer's HTLC cap holds the limit lower, it counts the larger of the two commitment types' predictions, within the
+     * limit and capacity.
      */
-    fun plannedSats(channel: ChannelDetails): ULong {
-        if (!channel.isOutbound) return msatFloorOf(channel.outboundCapacityMsat)
+    fun plannedSats(channels: List<ChannelDetails>): ULong {
+        var sentSats = 0uL
+        var restSats = 0uL
+        channels.forEach {
+            val (sent, rest) = plannedParts(it)
+            sentSats = sentSats.safe() + sent.safe()
+            restSats = restSats.safe() + rest.safe()
+        }
+        return if (hasMovableBalance(restSats)) sentSats.safe() + restSats.safe() else sentSats
+    }
+
+    private fun plannedParts(channel: ChannelDetails): Pair<ULong, ULong> {
+        if (!channel.isOutbound) return msatFloorOf(channel.outboundCapacityMsat) to 0uL
         val limitMsat = channel.nextOutboundHtlcLimitMsat
         val capacityMsat = channel.outboundCapacityMsat.toLong()
         val feerate = channel.feerateSatPer1000Weight.toLong()
@@ -647,10 +679,10 @@ object MoveToSparkMath {
             val leftMsat = matched.minOf { clearedLimitMsat(restMsat, feerate, isLegacy = it) }
                 .coerceAtLeast(0L)
                 .toULong()
-            val partMinMsat = maxOf(MIN_MOVE_SATS * 1000uL, channel.nextOutboundHtlcMinimumMsat)
-            return msatFloorOf(if (leftMsat < partMinMsat) limitMsat else limitMsat.safe() + leftMsat.safe())
+            val restSats = if (leftMsat < channel.nextOutboundHtlcMinimumMsat) 0uL else msatFloorOf(leftMsat)
+            return msatFloorOf(limitMsat) to restSats
         }
-        return msatFloorOf(maxOf(limitMsat, minOf(channel.outboundCapacityMsat, clearedMsat.max().toULong())))
+        return msatFloorOf(maxOf(limitMsat, minOf(channel.outboundCapacityMsat, clearedMsat.max().toULong()))) to 0uL
     }
 
     /**

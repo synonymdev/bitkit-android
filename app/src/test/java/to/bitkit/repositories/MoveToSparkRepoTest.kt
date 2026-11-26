@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
@@ -26,6 +27,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.ext.createChannelDetails
+import to.bitkit.models.WalletScope
 import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.InMemoryDataStore
@@ -360,6 +362,42 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a split move drops the failed parts it moved in smaller parts from Activity`() = test {
+        channelsRouting(50_000uL, maxPaySats = 30_000uL)
+        val plan = MoveToSparkPlan(sut.quoteAll().getOrThrow().firstPart, feeSats = 100uL)
+
+        sut.moveAll(plan).getOrThrow()
+
+        assertTrue(cacheStore.data.first().isActivityDeleted("hash", WalletScope.default))
+    }
+
+    @Test
+    fun `a move that moves nothing keeps its failed parts in Activity`() = test {
+        channelsRouting(1_800uL, maxPaySats = 1_000uL)
+
+        sut.moveAll(sut.quoteAll().getOrThrow())
+
+        assertFalse(cacheStore.data.first().isActivityDeleted("hash", WalletScope.default))
+    }
+
+    @Test
+    fun `a part capped while the peer was away keeps later parts at the earlier size`() = test {
+        channelsRouting(100_000uL, maxRouteSats = 30_000uL)
+        var syncs = 0
+        whenever(lightningRepo.syncState()).thenAnswer {
+            if (++syncs != 1) return@thenAnswer Unit
+            val channel = lightningState.value.channels.single()
+            lightningState.value = LightningState(
+                channels = persistentListOf(channel.copy(nextOutboundHtlcLimitMsat = 2_000_000uL)),
+            )
+        }
+
+        val error = sut.moveAll(sut.quoteAll().getOrThrow()).exceptionOrNull()
+
+        assertEquals(24_874uL + 1_988uL + 24_874uL * 2uL, assertIs<MoveToSparkError.FeeRose>(error).movedSats)
+    }
+
+    @Test
     fun `a move stops when the next part's fee would pass the quoted total`() = test {
         channelsRouting(50_000uL, maxPaySats = 30_000uL)
         val plan = sut.quoteAll().getOrThrow()
@@ -640,17 +678,50 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         val anchorMsat = MoveToSparkMath.clearedLimitMsat(100_000_000L, 2_500L, isLegacy = false)
         val atReserve = funded.copy(nextOutboundHtlcLimitMsat = anchorMsat.toULong())
 
-        assertEquals((anchorMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(funded))
-        assertEquals((anchorMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(atReserve))
+        assertEquals((anchorMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(listOf(funded)))
+        assertEquals((anchorMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(listOf(atReserve)))
         val legacyMsat = MoveToSparkMath.clearedLimitMsat(100_000_000L, 4_000L, isLegacy = true)
         val legacy = funded.copy(feerateSatPer1000Weight = 4_000u, nextOutboundHtlcLimitMsat = legacyMsat.toULong())
         val restMsat = MoveToSparkMath.clearedLimitMsat(100_000_000L - legacyMsat, 4_000L, isLegacy = true)
         assertTrue(restMsat >= 1_000_000L)
-        assertEquals(((legacyMsat + restMsat) / 1000L).toULong(), MoveToSparkMath.plannedSats(legacy))
+        assertEquals(((legacyMsat + restMsat) / 1000L).toULong(), MoveToSparkMath.plannedSats(listOf(legacy)))
         val peerMin = legacy.copy(nextOutboundHtlcMinimumMsat = restMsat.toULong() + 1uL)
-        assertEquals((legacyMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(peerMin))
-        assertEquals(100_000uL, MoveToSparkMath.plannedSats(funded.copy(isOutbound = false)))
+        assertEquals((legacyMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(listOf(peerMin)))
+        assertEquals(100_000uL, MoveToSparkMath.plannedSats(listOf(funded.copy(isOutbound = false))))
     }
+
+    @Test
+    fun `a plan leaves out a channel's rest that cannot be a part once the fee guess is reserved`() {
+        // 2 904 sat/kW: a 100 000-sat legacy channel leaves a rest of exactly 1 000 sats, under the 1 012 a part needs.
+        val limitMsat = MoveToSparkMath.clearedLimitMsat(100_000_000L, 2_904L, isLegacy = true)
+        val restMsat = MoveToSparkMath.clearedLimitMsat(100_000_000L - limitMsat, 2_904L, isLegacy = true)
+        val channel = legacyChannel(limitMsat, feerate = 2_904u)
+
+        assertEquals(1_000L, restMsat / 1000L)
+        assertEquals((limitMsat / 1000L).toULong(), MoveToSparkMath.plannedSats(listOf(channel)))
+    }
+
+    @Test
+    fun `a plan counts small rests on several channels that one payment can route together`() {
+        val limitMsat = MoveToSparkMath.clearedLimitMsat(100_000_000L, 2_500L, isLegacy = true)
+        val restSats = (MoveToSparkMath.clearedLimitMsat(100_000_000L - limitMsat, 2_500L, isLegacy = true) / 1000L)
+            .toULong()
+        val channels = List(2) { legacyChannel(limitMsat, feerate = 2_500u).copy(channelId = "channel_$it") }
+
+        assertFalse(MoveToSparkMath.hasMovableBalance(restSats))
+        assertTrue(MoveToSparkMath.hasMovableBalance(restSats * 2uL))
+        assertEquals(
+            ((limitMsat / 1000L).toULong() + restSats) * 2uL,
+            MoveToSparkMath.plannedSats(channels),
+        )
+    }
+
+    private fun legacyChannel(limitMsat: Long, feerate: UInt) = createChannelDetails().copy(
+        isOutbound = true,
+        outboundCapacityMsat = 100_000_000uL,
+        nextOutboundHtlcLimitMsat = limitMsat.toULong(),
+        feerateSatPer1000Weight = feerate,
+    )
 
     @Test
     fun `a channel with capacity left is emptied for good only on two unchanged reads at its reserve`() {
@@ -790,6 +861,27 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
         assertEquals(MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL), updating.await().getOrThrow())
         verify(sparkRepo).refreshState()
+    }
+
+    @Test
+    fun `update to send moves nothing once Spark covers the payment after another move held it`() = test {
+        sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
+        whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.success(SPARK_FEE))
+        whenever(
+            lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+        ).thenReturn(Result.success("id"))
+        whenever(sparkRepo.refreshState()).thenReturn(Result.success(Unit))
+        whenever(sparkRepo.canSend(60_000uL)).thenReturn(true)
+        val moving = async { sut.move(quote) }
+        var moved: MoveToSparkOutcome? = null
+        val updating = async { sut.updateToSend(quote, INVOICE, 60_000uL) { moved = it } }
+
+        nodeEvents.emit(Event.PaymentSuccessful("id", "hash", null, 9_000uL))
+
+        assertIs<MoveToSparkOutcome.Moved>(moving.await().getOrThrow())
+        assertEquals(MoveToSparkOutcome.Moved(0uL, feeSats = 0uL), updating.await().getOrThrow())
+        assertNull(moved)
+        verify(lightningRepo, times(1)).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
     }
 
     @Test

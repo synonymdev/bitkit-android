@@ -7,6 +7,7 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -209,6 +210,25 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a last part that fails late quotes the rest when a running sync skips the channel refresh`() = test {
+        val lastPart = MoveToSparkOutcome.InFlight(20_000uL, "hash_3", "id_3", earlierSats = 30_000uL)
+        val lastSettled = CompletableDeferred<Result<MoveToSparkOutcome.Moved>>()
+        var nodeMovableSats = 0uL
+        var cachedMovableSats = 0uL
+        whenever(moveToSparkRepo.movableSats()).thenAnswer { cachedMovableSats.toLong() }
+        doAnswer { cachedMovableSats = nodeMovableSats }.whenever(lightningRepo).syncState()
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(lastPart))
+        whenever { moveToSparkRepo.awaitSettled(eq(lastPart)) }.doSuspendableAnswer { lastSettled.await() }
+        val sut = createViewModel()
+        sut.move()
+
+        nodeMovableSats = 20_000uL
+        lastSettled.complete(Result.failure(MoveToSparkError.PaymentFailed(null)))
+
+        assertEquals(MoveToSparkUiState.Confirm(plan), sut.uiState.value)
+    }
+
+    @Test
     fun `a move that leaves a balance worth moving shows the fee for the rest`() = test {
         whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
         whenever(moveToSparkRepo.movableSats()).thenReturn(50_000uL)
@@ -233,7 +253,7 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a rest whose quote fails for another reason after a move shows the balance updated`() = test {
+    fun `a rest whose quote fails for another reason after a move offers to try again`() = test {
         whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
         whenever(moveToSparkRepo.movableSats()).thenReturn(50_000uL)
         val sut = createViewModel()
@@ -241,7 +261,7 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
 
         sut.move()
 
-        assertEquals(MoveToSparkUiState.Done(moved), sut.uiState.value)
+        assertEquals(MoveToSparkUiState.Failed(MoveToSparkFailure.SPARK_UNAVAILABLE), sut.uiState.value)
     }
 
     @Test
