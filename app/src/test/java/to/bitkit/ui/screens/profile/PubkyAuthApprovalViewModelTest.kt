@@ -38,6 +38,7 @@ import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthClaim.Item
 import to.bitkit.models.PubkyAuthPermission
 import to.bitkit.models.PubkyAuthRequest
+import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
 import to.bitkit.models.WatchOnlyAccountRecord
@@ -375,6 +376,39 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `request for another pubky prepares nothing when this pubky was unknown at load`() = test {
+        val other = "5jsjx1o6fzu6aeeo697r3i5rx15zq41kikcye8wtwdqm4nb4tryo"
+        val authUrl = "pubkyauth://signin_grant?x-bitkit-claim=paykit-access-v1.watch-only-account-v1&spk=$other"
+        val request = authRequest(
+            authUrl,
+            PubkyAuthClaim.REQUIRED_CAPABILITIES,
+            PubkyAuthClaim(Item.PAYKIT_ACCESS_V1, Item.WATCH_ONLY_ACCOUNT_V1),
+        ).copy(expectedSigner = other)
+        whenever(context.getString(R.string.profile__auth_error_other_pubky, "5jsj...tryo"))
+            .thenReturn("This request is for 5jsj...tryo, not this wallet's pubky.")
+        whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(Result.success(request))
+        whenever { pubkyRepo.checkExpectedSigner(authUrl) }
+            .thenReturn(Result.failure(PubkyAuthRequestError.SignerMismatch(other)))
+        val sut = createSut()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        sut.load(authUrl)
+        advanceUntilIdle()
+        assertEquals(ApprovalState.WatchOnlyConsent, sut.uiState.value.state)
+        sut.approveWatchOnlyConsent(authUrl)
+        sut.confirmAuthorize(authUrl)
+        advanceUntilIdle()
+
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        assertEquals("This request is for 5jsj...tryo, not this wallet's pubky.", toasts.single().description)
+        verifyNoInteractions(watchOnlyAccountRepo)
+        verifyBlocking(pubkyRepo, never()) { approveAuth(any(), any(), any()) }
+        verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any(), any()) }
+        toastJob.cancel()
+    }
+
+    @Test
     fun `request naming this pubky reaches consent and is approved`() = test {
         val signer = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
         val authUrl = "pubkyauth://signin_grant?caps=/pub/example/:rw&spk=$signer"
@@ -384,6 +418,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             Result.success(authRequest(authUrl, capabilities).copy(expectedSigner = signer)),
         )
         whenever { pubkyRepo.approveAuth(authUrl, capabilities, clientId) }.thenReturn(Result.success(Unit))
+        whenever { pubkyRepo.checkExpectedSigner(authUrl) }.thenReturn(Result.success(Unit))
         val sut = createSut()
 
         sut.load(authUrl)

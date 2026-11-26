@@ -2104,6 +2104,7 @@ class PubkyRepo @Inject constructor(
 
     suspend fun parseAuthUrl(authUrl: String): Result<PubkyAuthRequest> = runSuspendCatching {
         withContext(ioDispatcher) {
+            validatedExpectedSigner(authUrl)
             if (PubkyAuthRequest.isSignupUrl(authUrl) && !PubkyAuthRequest.isGrantSignupUrl(authUrl)) {
                 val request = PubkyAuthRequest.parseSignup(authUrl).getOrThrow()
                 pubkyService.validateSignupRequest(
@@ -2231,8 +2232,25 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    /** Fails when [authUrl] names a pubky other than the one that would sign it, before anything is prepared. */
+    suspend fun checkExpectedSigner(authUrl: String): Result<Unit> = runSuspendCatching {
+        withContext(ioDispatcher) {
+            val secretKeyHex = requireNotNull(activeSecretKeyHex()) {
+                "No secret key available — use Ring to manage authorizations"
+            }
+            requireExpectedSigner(authUrl, secretKeyHex)
+        }
+    }
+
+    private suspend fun validatedExpectedSigner(authUrl: String): String? {
+        val expectedSigner = PubkyAuthRequest.parseExpectedSigner(authUrl).getOrThrow() ?: return null
+        runSuspendCatching { pubkyService.validatePublicKey(expectedSigner) }
+            .onFailure { throw PubkyAuthRequestError.InvalidUrl(it) }
+        return expectedSigner
+    }
+
     private suspend fun requireExpectedSigner(authUrl: String, secretKeyHex: String) {
-        val expectedSigner = PubkyAuthRequest.parseExpectedSigner(authUrl).getOrThrow() ?: return
+        val expectedSigner = validatedExpectedSigner(authUrl) ?: return
         val signer = pubkyService.publicKeyFromSecret(secretKeyHex)
         if (!PubkyAuthRequest.isExpectedSigner(expectedSigner, signer)) {
             throw PubkyAuthRequestError.SignerMismatch(expectedSigner)

@@ -292,6 +292,12 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         request: PubkyAuthRequest,
         authUrl: String,
     ): Boolean {
+        if (request.expectedSigner != null) {
+            pubkyRepo.checkExpectedSigner(authUrl).onFailure {
+                handleApprovalFailure(it, authUrl)
+                return false
+            }
+        }
         val endpoint = runSuspendCatching {
             validatedUsdtEndpoint(request)
         }.getOrElse {

@@ -213,7 +213,7 @@ class PubkyAuthRequestTest {
 
     @Test
     fun `grant sign-in reads the pubky it must be approved with`() {
-        assertEquals(SIGNER.length, 52)
+        assertEquals(52, SIGNER.length)
         assertNull(PubkyAuthRequest.parseExpectedSigner(grantSigninUrl()).getOrThrow())
         assertEquals(SIGNER, PubkyAuthRequest.parseExpectedSigner(grantSigninUrl("spk=$SIGNER")).getOrThrow())
         assertEquals(SIGNER, PubkyAuthRequest.parseExpectedSigner(grantSigninUrl("%73pk=$SIGNER#spk=x")).getOrThrow())
@@ -280,6 +280,18 @@ class PubkyAuthRequestTest {
             PubkyAuthRequest.parseExpectedSigner(grantSigninUrl("spk=${SIGNER.take(26)}\t${SIGNER.drop(26)}"))
                 .exceptionOrNull(),
         )
+    }
+
+    @Test
+    fun `control characters cannot hide the expected signer`() {
+        val hidden = listOf("s\tpk=$SIGNER", "sp\nk=$SIGNER", "spk\r=$SIGNER", "spk=$SIGNER\u007F", "\t&spk=$SIGNER")
+
+        hidden.forEach {
+            assertIs<PubkyAuthRequestError.InvalidUrl>(
+                PubkyAuthRequest.parseExpectedSigner(grantSigninUrl(it)).exceptionOrNull(),
+                it,
+            )
+        }
     }
 
     @Test

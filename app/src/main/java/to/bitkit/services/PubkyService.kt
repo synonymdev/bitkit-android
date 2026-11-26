@@ -147,6 +147,11 @@ class PubkyService @Inject constructor(
             Unit
         }
 
+    suspend fun validatePublicKey(publicKey: String): Unit = ServiceQueue.PUBKY.background {
+        PaykitPublicKeys.normalize(publicKey)
+        Unit
+    }
+
     suspend fun approveAuth(
         authUrl: String,
         expectedCapabilities: String,

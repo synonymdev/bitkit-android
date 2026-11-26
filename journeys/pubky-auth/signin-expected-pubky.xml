@@ -17,7 +17,7 @@
     <action>Verify the authorize button (id "PubkyAuthAuthorize") is visible and the profile card (id "PubkyAuthProfile") shows the first and last four characters of OWN</action>
     <action>Tap Cancel</action>
     <action>Open BASE&amp;spk=OTHER</action>
-    <action>Verify an error toast reads "This request is for 8um7...d1ty, not this wallet's pubky."</action>
+    <action>Verify an error toast reads "This request is for 8um7...1dty, not this wallet's pubky."</action>
     <action>Wait 5 seconds, then verify the authorize button (id "PubkyAuthAuthorize") is not visible</action>
     <action>Open BASE&amp;spk=OWN&amp;spk=OWN</action>
     <action>Verify the invalid request toast is shown and the authorize button (id "PubkyAuthAuthorize") is not visible</action>
