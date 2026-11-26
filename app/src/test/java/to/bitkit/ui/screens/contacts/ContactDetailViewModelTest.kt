@@ -301,7 +301,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             advanceUntilIdle()
 
@@ -339,7 +339,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         now += 10.seconds
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             advanceUntilIdle()
 
@@ -412,7 +412,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         eligibleTargets.value = emptyList()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             advanceUntilIdle()
 
@@ -457,7 +457,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         sut.onClickPay()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.payContact()
             paymentStarted.await()
             eligibleTargets.value = emptyList()
@@ -492,7 +492,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         sut.onClickPay()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.payContact()
             advanceUntilIdle()
             assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
@@ -524,7 +524,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         sut.onClickPay()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.payContact()
             paymentStarted.await()
             assertTrue(sut.uiState.value.isPayLoading)
@@ -551,7 +551,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             paymentStarted.await()
             assertTrue(sut.uiState.value.isPayLoading)
@@ -574,7 +574,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             advanceUntilIdle()
             assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
@@ -606,7 +606,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         sut.onClickPay()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.payContact()
             paymentStarted.await()
             cancelAndIgnoreRemainingEvents()
@@ -617,7 +617,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
 
         assertTrue(sut.uiState.value.isPayLoading)
         assertTrue(sut.uiState.value.showRequestOrPaySheet)
-        sut.effects.test {
+        sut.pendingPayments.test {
             val payment = assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
             assertEquals(openedPayment.paymentRequest, payment.paymentRequest)
             assertTrue(sut.claimPendingPayment(payment))
@@ -626,7 +626,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
             advanceUntilIdle()
             expectNoEvents()
         }
-        sut.effects.test { expectNoEvents() }
+        sut.pendingPayments.test { expectNoEvents() }
         assertFalse(sut.uiState.value.isPayLoading)
         assertFalse(sut.uiState.value.showRequestOrPaySheet)
         verify(privatePaykitRepo, times(1)).beginSavedContactPayment(TEST_PUBLIC_KEY)
@@ -643,7 +643,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         val scanJob = Job()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             advanceUntilIdle()
             assertTrue(sut.claimPendingPayment(assertIs<ContactDetailEffect.OpenPayment>(awaitItem())))
@@ -654,7 +654,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
 
         assertFalse(scanJob.isCancelled)
         assertTrue(sut.uiState.value.isPayLoading)
-        sut.effects.test { expectNoEvents() }
+        sut.pendingPayments.test { expectNoEvents() }
 
         scanJob.complete()
         advanceUntilIdle()
@@ -681,7 +681,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertFalse(sut.uiState.value.isPayLoading)
-        sut.effects.test { expectNoEvents() }
+        sut.pendingPayments.test { expectNoEvents() }
     }
 
     @Test
@@ -694,7 +694,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             advanceUntilIdle()
             val payment = assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
@@ -734,7 +734,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertFalse(isPaymentCancelled)
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.dismissRequestOrPaySheet()
             advanceUntilIdle()
 
@@ -766,7 +766,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
 
         assertFalse(sut.uiState.value.isPayLoading)
         verify(context).getString(R.string.slashtags__error_pay_not_opened_msg)
-        sut.effects.test {
+        sut.pendingPayments.test {
             expectNoEvents()
 
             sut.onClickPay()
@@ -794,7 +794,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         val check = checkStarted.await()
 
         try {
-            sut.effects.test {
+            sut.pendingPayments.test {
                 sut.onClickPay()
                 advanceTimeBy(2.seconds)
 
@@ -831,7 +831,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             advanceUntilIdle()
 
@@ -858,7 +858,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             advanceUntilIdle()
             sut.payContact()
@@ -895,7 +895,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         sut.onClickPay()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.payContact()
             advanceUntilIdle()
 

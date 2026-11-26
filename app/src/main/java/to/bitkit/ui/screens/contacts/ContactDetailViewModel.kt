@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -84,7 +83,7 @@ class ContactDetailViewModel @Inject constructor(
 
     /** Replays the resolved payment until [claimPendingPayment] takes it, so a recreated or resumed screen gets it. */
     val pendingPayments: Flow<ContactDetailEffect.OpenPayment> = pendingPayment.filterNotNull()
-    val effects: Flow<ContactDetailEffect> = merge(_effects.asSharedFlow(), pendingPayments)
+    val effects = _effects.asSharedFlow()
 
     private var contactLoad: Job? = null
     private var payJob: Job? = null

@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.contacts
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -105,14 +106,16 @@ fun ContactDetailScreen(
         }
     }
 
+    BackHandler(enabled = uiState.isPayLoading && !uiState.showRequestOrPaySheet) {
+        viewModel.dismissRequestOrPaySheet()
+        onBackClick()
+    }
+
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
-            when (it) {
-                is ContactDetailEffect.OpenPayment -> Unit
-                ContactDetailEffect.ContactDeleted -> {
-                    viewModel.dismissRequestOrPaySheet()
-                    onContactDeleted()
-                }
+            if (it is ContactDetailEffect.ContactDeleted) {
+                viewModel.dismissRequestOrPaySheet()
+                onContactDeleted()
             }
         }
     }
