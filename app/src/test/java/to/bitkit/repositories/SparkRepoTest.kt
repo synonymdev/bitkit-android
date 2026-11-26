@@ -2106,6 +2106,35 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a withdrawal spark refuses for its balance stays refused when closing its journal fails`() = test {
+        val sut = journaledSpark()
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer {
+            whenever { cacheStore.update(any()) }.thenAnswer { throw IOException("disk full") }
+            throw SdkException.InsufficientFunds(null)
+        }
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact")
+
+        assertIs<SparkError.SendRefused>(result.exceptionOrNull())
+    }
+
+    @Test
+    fun `a withdrawal spark refuses for a fee rise stays refused when closing its journal fails`() = test {
+        val sut = journaledSpark()
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer {
+            whenever { cacheStore.update(any()) }.thenAnswer { throw IOException("disk full") }
+            throw SdkException.InvalidInput(
+                "The onchain fee rose to 900 sats at the slowest speed, above the 500 sats quoted for this payment. " +
+                    "Please re-prepare the payment.",
+            )
+        }
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact")
+
+        assertIs<SparkError.SendRefused>(result.exceptionOrNull())
+    }
+
+    @Test
     fun `a withdrawal spark refuses for a fee that rose past its quote closes its journal at once`() = test {
         val sut = journaledSpark()
         whenever { sparkService.send(any(), anyOrNull()) }.thenAnswer {
@@ -3489,7 +3518,7 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertIs<SparkError.InvoiceExpired>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
 
-        verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
+        verifyBlocking(cacheStore) { dropSparkUnsentSend("hash", true, null) }
     }
 
     @Test
@@ -3503,7 +3532,22 @@ class SparkRepoTest : BaseUnitTest() {
         val error = sut.payInvoice("lnbc1", 100uL).exceptionOrNull()
 
         assertIs<SparkError.SendRefused>(error)
-        verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
+        verifyBlocking(cacheStore) { dropSparkUnsentSend("hash", true, null) }
+    }
+
+    @Test
+    fun `a spark refusal stays a refusal when dropping the unsent send fails`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw SdkException.InsufficientFunds(null) }
+        val diskFull = IOException("disk full")
+        whenever(cacheStore.dropSparkUnsentSend(any(), any(), anyOrNull())).thenAnswer { throw diskFull }
+        val sut = createSut()
+
+        val error = sut.payInvoice("lnbc1", 100uL).exceptionOrNull()
+
+        assertIs<SparkError.SendRefused>(error)
     }
 
     @Test
@@ -3951,8 +3995,7 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertIs<ServiceError.PaymentDeadlineExpired>(result.exceptionOrNull())
         verify(sparkService, never()).send(any(), anyOrNull())
-        verifyBlocking(cacheStore) { removeSparkUncertainSend("hash") }
-        verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
+        verifyBlocking(cacheStore) { dropSparkUnsentSend("hash", true, null) }
     }
 
     @Test
@@ -3972,9 +4015,7 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertIs<ServiceError.PaymentStoppedAtSubmission>(result.exceptionOrNull())
         verify(sparkService, never()).send(any(), anyOrNull())
-        verifyBlocking(cacheStore) { removeSparkUncertainSend("hash") }
-        verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
-        verifyBlocking(cacheStore) { restoreSparkSendAttempt("hash", null) }
+        verifyBlocking(cacheStore) { dropSparkUnsentSend("hash", true, null) }
     }
 
     @Test
@@ -3987,7 +4028,8 @@ class SparkRepoTest : BaseUnitTest() {
             isAuthorized = false
             Unit
         }
-        whenever(cacheStore.removeSparkSendHash(any())).thenAnswer { throw IllegalStateException("disk full") }
+        val diskFull = IllegalStateException("disk full")
+        whenever(cacheStore.dropSparkUnsentSend(any(), any(), anyOrNull())).thenAnswer { throw diskFull }
         val sut = createSut()
 
         val result = sut.payInvoice("lnbc1", 100uL, null, null) { isAuthorized }

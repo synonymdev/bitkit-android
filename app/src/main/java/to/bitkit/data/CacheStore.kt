@@ -213,12 +213,25 @@ class CacheStore internal constructor(
         }
     }
 
-    /** Puts back [previous], the attempt kept before a send whose key never reached Spark, or drops the invoice's. */
-    suspend fun restoreSparkSendAttempt(paymentHash: String, previous: SparkSendAttempt?) {
+    /**
+     * Drops the send of [paymentHash] that never reached Spark in one write: its hold, its hash and, when
+     * [restoresAttempt], its attempt, putting back [previous]. A failed write leaves the whole send held.
+     */
+    suspend fun dropSparkUnsentSend(paymentHash: String, restoresAttempt: Boolean, previous: SparkSendAttempt?) {
         val hash = paymentHash.lowercase()
         store.updateData {
             val attempts = it.sparkSendAttempts - hash
-            it.copy(sparkSendAttempts = if (previous == null) attempts else attempts + (hash to previous))
+            it.copy(
+                sparkUncertainSends = it.sparkUncertainSends - hash,
+                sparkSendAttemptIds = it.sparkSendAttemptIds - hash,
+                sparkSendHashes = it.sparkSendHashes - hash,
+                sparkSendExpiries = it.sparkSendExpiries - hash,
+                sparkSendAttempts = when {
+                    !restoresAttempt -> it.sparkSendAttempts
+                    previous == null -> attempts
+                    else -> attempts + (hash to previous)
+                },
+            )
         }
     }
 
