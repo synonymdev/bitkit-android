@@ -103,11 +103,13 @@ class SendFeeViewModelTest : BaseUnitTest() {
 
     @Test
     fun `delete clears the preset fee`() = test {
-        sut.init(createSendUiState())
+        sut.init(createSendUiState().copy(speed = TransactionSpeed.Custom(12u)))
+        assertEquals("12", sut.uiState.value.input)
 
         sut.onKeyPress(KEY_DELETE)
 
         assertEquals("", sut.uiState.value.input)
+        assertFalse(sut.uiState.value.isPresetSelected)
     }
 
     @Test
