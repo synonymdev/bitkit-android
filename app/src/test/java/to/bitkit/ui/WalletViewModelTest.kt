@@ -401,10 +401,15 @@ class WalletViewModelTest : BaseUnitTest() {
         )
         lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
 
-        sut.restoreWallet("mnemonic", "passphrase")
-        walletState.value = walletState.value.copy(walletExists = true)
-        advanceUntilIdle()
+        ToastEventBus.events.test {
+            sut.restoreWallet("mnemonic", "passphrase")
+            walletState.value = walletState.value.copy(walletExists = true)
+            advanceUntilIdle()
 
+            val toast = awaitItem()
+            assertFalse(toast.autoHide)
+            assertFalse(toast.interruptible)
+        }
         assertEquals(RestoreState.Completed(emptySet()), sut.restoreState.value)
         verify(pubkySwapsRouteRepo).restoredSwaps()
         verify(pubkySwapsRouteRepo).awaitClaim(eq("swap"), any(), anyOrNull())

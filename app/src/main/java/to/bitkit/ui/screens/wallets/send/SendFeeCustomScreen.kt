@@ -1,10 +1,12 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,6 +53,7 @@ fun SendFeeCustomScreen(
 
     Content(
         input = uiState.input,
+        isPresetSelected = uiState.isPresetSelected,
         totalFeeText = uiState.totalFeeText,
         onKeyPress = viewModel::onKeyPress,
         onBack = onBack,
@@ -63,6 +66,7 @@ private fun Content(
     input: String,
     totalFeeText: String,
     modifier: Modifier = Modifier,
+    isPresetSelected: Boolean = false,
     onKeyPress: (String) -> Unit = {},
     onBack: () -> Unit = {},
     onContinue: () -> Unit = {},
@@ -87,6 +91,7 @@ private fun Content(
                 text = input.ifEmpty { "0" },
                 symbol = BITCOIN_SYMBOL,
                 showSymbol = true,
+                modifier = Modifier.presetSelection(isPresetSelected),
             )
 
             if (isValid) {
@@ -112,6 +117,10 @@ private fun Content(
     }
 }
 
+/** Highlights a preset fee as selected text, so the user sees the next key replaces it. */
+internal fun Modifier.presetSelection(selected: Boolean): Modifier =
+    if (selected) background(Colors.Brand32, RoundedCornerShape(4.dp)) else this
+
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
@@ -119,6 +128,7 @@ private fun Preview() {
         BottomSheetPreview {
             Content(
                 input = "5",
+                isPresetSelected = true,
                 totalFeeText = "₿ 256 for this transaction ($0.25)",
                 modifier = Modifier.sheetHeight(),
             )

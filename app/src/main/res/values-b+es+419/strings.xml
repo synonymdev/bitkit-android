@@ -491,11 +491,17 @@
     <string name="other__high_balance__nav_title">Saldo Elevado</string>
     <string name="other__high_balance__text">&lt;accent&gt;Su saldo supera los 500 dólares.&lt;/accent&gt;\nPor su seguridad, considere trasladar parte de sus fondos a una billetera offline.</string>
     <string name="other__high_balance__title">Saldo\n&lt;accent&gt;Elevado&lt;/accent&gt;</string>
+    <string name="other__lnurl_auth_auth_prompt">¿Autenticarse en {domain}?</string>
+    <string name="other__lnurl_auth_auth_title">Autenticar</string>
     <string name="other__lnurl_auth_error">Fallo al iniciar sesión (LNURL)</string>
     <string name="other__lnurl_auth_error_msg">Se ha producido un error al intentar iniciar sesión. {raw}</string>
+    <string name="other__lnurl_auth_link_prompt">¿Vincular la cuenta a {domain}?</string>
+    <string name="other__lnurl_auth_link_title">Vincular</string>
     <string name="other__lnurl_auth_login_button">Iniciar sesión</string>
     <string name="other__lnurl_auth_login_prompt">¿Iniciar sesión en {domain}?</string>
     <string name="other__lnurl_auth_login_title">Iniciar sesión</string>
+    <string name="other__lnurl_auth_register_prompt">¿Registrarse en {domain}?</string>
+    <string name="other__lnurl_auth_register_title">Registrarse</string>
     <string name="other__lnurl_auth_success_msg_domain">Ha iniciado sesión con éxito en {domain}.</string>
     <string name="other__lnurl_auth_success_msg_no_domain">Ha iniciado sesión correctamente.</string>
     <string name="other__lnurl_auth_success_title">Autenticado</string>
@@ -1436,6 +1442,8 @@
     <string name="hardware__search_error">No se pudieron buscar billeteras de hardware. Revise su conexión y vuelva a intentarlo.</string>
     <string name="hardware__send_broadcast_failed_text">Revise su conexión y vuelva a intentarlo.</string>
     <string name="hardware__send_broadcast_failed_title">Pago no confirmado</string>
+    <string name="hardware__send_broadcast_uncertain_text">Es posible que su transacción se haya transmitido. Revise su actividad antes de volver a intentarlo.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Es posible que la transacción se haya enviado</string>
     <string name="hardware__send_confirm_address">A LA DIRECCIÓN (CONFIRME EN EL DISPOSITIVO)</string>
     <string name="hardware__send_onchain_only_text">Desde esta billetera, Trezor solo puede enviar a una dirección de Bitcoin.</string>
     <string name="hardware__send_onchain_only_text_jade">Desde esta billetera, Jade solo puede enviar a una dirección de Bitcoin.</string>

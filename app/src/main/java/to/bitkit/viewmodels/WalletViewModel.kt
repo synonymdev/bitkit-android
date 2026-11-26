@@ -598,13 +598,15 @@ class WalletViewModel @Inject constructor(
                 swaps.restored.forEach { swapId ->
                     launch {
                         pubkySwapsRouteRepo.awaitClaim(swapId).onSuccess {
-                            // The claim also opens the received sheet above the toasts: stay until dismissed so the
-                            // user still sees why the money came back once that sheet closes.
+                            // The claim also opens the received sheet above the toasts: stay until dismissed, with
+                            // later toasts waiting behind, so the user still sees why the money came back once that
+                            // sheet closes.
                             ToastEventBus.send(
                                 type = Toast.ToastType.INFO,
                                 title = context.getString(R.string.wallet__swap_route_restored_title),
                                 description = context.getString(R.string.wallet__swap_route_restored_text),
                                 autoHide = false,
+                                interruptible = false,
                             )
                         }
                     }

@@ -472,6 +472,12 @@
     <string name="onboarding__multiple_header">&lt;accent&gt;Attention :&lt;/accent&gt;\nplusieurs appareils</string>
     <string name="onboarding__multiple_text">N\'installez pas votre phrase de récupération Bitkit sur plusieurs téléphones simultanément, car cela pourrait corrompre vos données.</string>
     <string name="other__bluetooth_enable">Activer le Bluetooth</string>
+    <string name="other__lnurl_auth_auth_prompt">S\'authentifier sur {domain} ?</string>
+    <string name="other__lnurl_auth_auth_title">S\'authentifier</string>
+    <string name="other__lnurl_auth_link_prompt">Associer le compte à {domain} ?</string>
+    <string name="other__lnurl_auth_link_title">Associer</string>
+    <string name="other__lnurl_auth_register_prompt">S\'inscrire sur {domain} ?</string>
+    <string name="other__lnurl_auth_register_title">S\'inscrire</string>
     <string name="other__nfc_enable">Activer le NFC</string>
     <string name="other__nfc_read_error_text">Ce tag NFC ne contient aucune demande de paiement utilisable par Bitkit.</string>
     <string name="other__nfc_read_error_title">Impossible de lire le NFC</string>
@@ -1430,6 +1436,8 @@
     <string name="hardware__search_error">Impossible de rechercher des portefeuilles matériels. Vérifiez votre connexion et réessayez.</string>
     <string name="hardware__send_broadcast_failed_text">Vérifiez votre connexion et réessayez.</string>
     <string name="hardware__send_broadcast_failed_title">Paiement non confirmé</string>
+    <string name="hardware__send_broadcast_uncertain_text">Votre transaction a peut-être été diffusée. Vérifiez votre activité avant de réessayer.</string>
+    <string name="hardware__send_broadcast_uncertain_title">La transaction a peut-être été envoyée</string>
     <string name="hardware__send_confirm_address">VERS L\'ADRESSE (CONFIRMER SUR L\'APPAREIL)</string>
     <string name="hardware__send_onchain_only_text">Trezor ne peut envoyer qu\'à une adresse Bitcoin depuis ce portefeuille.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade ne peut envoyer qu\'à une adresse Bitcoin depuis ce portefeuille.</string>

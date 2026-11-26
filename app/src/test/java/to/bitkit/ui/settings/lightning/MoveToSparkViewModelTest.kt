@@ -7,6 +7,9 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -15,6 +18,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.ext.createChannelDetails
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.MoveToSparkError
@@ -56,6 +60,7 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     fun setUp() {
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(moveToSparkRepo.movableSats()).thenReturn(0uL)
+        whenever { moveToSparkRepo.movableSatsSettled() }.doSuspendableAnswer { moveToSparkRepo.movableSats() }
         whenever { moveToSparkRepo.quoteAll() }.thenReturn(Result.success(plan))
         whenever { moveToSparkRepo.moveAll(eq(plan)) }
             .thenReturn(Result.success(firstMove), Result.success(secondMove))
@@ -73,6 +78,19 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
         firstSettled.complete(Result.failure(MoveToSparkError.PaymentFailed(null)))
 
         assertEquals(MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN), sut.uiState.value)
+    }
+
+    @Test
+    fun `late failure of the only part reads the channels again for Try Again`() = test {
+        lightningState.value = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
+        val sut = createViewModel()
+        sut.move()
+        clearInvocations(lightningRepo)
+
+        firstSettled.complete(Result.failure(MoveToSparkError.PaymentFailed(null)))
+
+        assertEquals(MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN), sut.uiState.value)
+        verify(lightningRepo).syncState()
     }
 
     @Test
@@ -209,6 +227,36 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a last part that fails late quotes the rest when a running sync skips the channel refresh`() = test {
+        lightningState.value = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
+        val lastPart = MoveToSparkOutcome.InFlight(20_000uL, "hash_3", "id_3", earlierSats = 30_000uL)
+        val lastSettled = CompletableDeferred<Result<MoveToSparkOutcome.Moved>>()
+        var nodeMovableSats = 0uL
+        var cachedMovableSats = 0uL
+        whenever(moveToSparkRepo.movableSats()).thenAnswer { cachedMovableSats.toLong() }
+        doAnswer { cachedMovableSats = nodeMovableSats }.whenever(lightningRepo).syncState()
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(lastPart))
+        whenever { moveToSparkRepo.awaitSettled(eq(lastPart)) }.doSuspendableAnswer { lastSettled.await() }
+        val sut = createViewModel()
+        sut.move()
+
+        nodeMovableSats = 20_000uL
+        lastSettled.complete(Result.failure(MoveToSparkError.PaymentFailed(null)))
+
+        assertEquals(MoveToSparkUiState.Confirm(plan), sut.uiState.value)
+    }
+
+    @Test
+    fun `a move leaves the cached channels when the node is not running`() = test {
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
+        val sut = createViewModel()
+
+        sut.move()
+
+        verify(lightningRepo, never()).syncState()
+    }
+
+    @Test
     fun `a move that leaves a balance worth moving shows the fee for the rest`() = test {
         whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
         whenever(moveToSparkRepo.movableSats()).thenReturn(50_000uL)
@@ -218,6 +266,40 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
 
         assertEquals(MoveToSparkUiState.Confirm(plan), sut.uiState.value)
         verify(moveToSparkRepo, times(2)).quoteAll()
+    }
+
+    @Test
+    fun `a late success quotes the rest its HTLC held until it cleared`() = test {
+        doReturn(50_000uL).whenever(moveToSparkRepo).movableSatsSettled()
+        val sut = createViewModel()
+        sut.move()
+
+        firstSettled.complete(Result.success(moved))
+
+        assertEquals(MoveToSparkUiState.Confirm(plan), sut.uiState.value)
+    }
+
+    @Test
+    fun `a move that settles in the wait reads what is left without waiting again`() = test {
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
+        val sut = createViewModel()
+
+        sut.move()
+
+        assertEquals(MoveToSparkUiState.Done(moved), sut.uiState.value)
+        verify(moveToSparkRepo, never()).movableSatsSettled()
+    }
+
+    @Test
+    fun `a move that fails reads the channels again for Try Again`() = test {
+        lightningState.value = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.failure(MoveToSparkError.PaymentFailed(null)))
+        val sut = createViewModel()
+
+        sut.move()
+
+        assertEquals(MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN), sut.uiState.value)
+        verify(lightningRepo).syncState()
     }
 
     @Test
@@ -233,7 +315,7 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a rest whose quote fails for another reason after a move shows the balance updated`() = test {
+    fun `a rest whose quote fails for another reason after a move offers to try again`() = test {
         whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
         whenever(moveToSparkRepo.movableSats()).thenReturn(50_000uL)
         val sut = createViewModel()
@@ -241,7 +323,36 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
 
         sut.move()
 
+        assertEquals(MoveToSparkUiState.Failed(MoveToSparkFailure.SPARK_UNAVAILABLE), sut.uiState.value)
+    }
+
+    @Test
+    fun `try again after a partial move shows it moved once the rest no longer routes`() = test {
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
+        whenever(moveToSparkRepo.movableSats()).thenReturn(50_000uL)
+        val sut = createViewModel()
+        whenever(moveToSparkRepo.quoteAll()).thenReturn(Result.failure(MoveToSparkError.SparkUnavailable()))
+        sut.move()
+        whenever(moveToSparkRepo.quoteAll()).thenReturn(Result.failure(MoveToSparkError.TooLarge(50_000uL)))
+
+        sut.quote()
+
         assertEquals(MoveToSparkUiState.Done(moved), sut.uiState.value)
+    }
+
+    @Test
+    fun `a new opening after a move left in flight quotes afresh`() = test {
+        doReturn(50_000uL).whenever(moveToSparkRepo).movableSatsSettled()
+        val sut = createViewModel()
+        sut.move()
+        sut.close()
+        whenever(moveToSparkRepo.quoteAll()).thenReturn(Result.failure(MoveToSparkError.SparkUnavailable()))
+        firstSettled.complete(Result.success(moved))
+        whenever(moveToSparkRepo.quoteAll()).thenReturn(Result.failure(MoveToSparkError.TooLarge(50_000uL)))
+
+        val reopened = createViewModel()
+
+        assertEquals(MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN), reopened.uiState.value)
     }
 
     @Test

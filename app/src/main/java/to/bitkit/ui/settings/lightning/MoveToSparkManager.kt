@@ -68,13 +68,21 @@ class MoveToSparkManager @Inject constructor(
     @Volatile
     private var isMoveInFlight = false
 
+    /** What a move moved before its rest failed to quote, so Try Again still ends on that move's outcome. */
+    @Volatile
+    private var movedBeforeRest: MoveToSparkOutcome.Moved? = null
+
     /**
      * Opens the screen: quotes a new move, unless one is quoting or a move is running or still shows its outcome.
      * Returns the screen's token for [reset].
      */
     fun start(): Int {
         val screen = latestScreen.incrementAndGet()
-        if (!keepsOutcome && quoteJob?.isActive != true) quote()
+        if (!keepsOutcome && quoteJob?.isActive != true) {
+            // A new opening quotes afresh, not as the Try Again of a move shown before.
+            movedBeforeRest = null
+            quote()
+        }
         return screen
     }
 
@@ -87,6 +95,7 @@ class MoveToSparkManager @Inject constructor(
         generation.incrementAndGet()
         quoteJob?.cancel()
         keepsOutcome = false
+        movedBeforeRest = null
         _uiState.update { MoveToSparkUiState.Quoting }
     }
 
@@ -97,13 +106,15 @@ class MoveToSparkManager @Inject constructor(
         moveJob?.cancel()
         keepsOutcome = false
         isMoveInFlight = false
+        movedBeforeRest = null
         _uiState.update { MoveToSparkUiState.Quoting }
     }
 
     /** Quotes moving everything the channels can send, in parts when one payment does not route. */
-    fun quote() = quote(moved = null)
+    fun quote() = quote(movedNow = null)
 
-    private fun quote(moved: MoveToSparkOutcome.Moved?) {
+    private fun quote(movedNow: MoveToSparkOutcome.Moved?) {
+        val moved = movedNow ?: movedBeforeRest
         val quoteGeneration = generation.incrementAndGet()
         keepsOutcome = false
         _uiState.update { MoveToSparkUiState.Quoting }
@@ -112,7 +123,9 @@ class MoveToSparkManager @Inject constructor(
             val quoted = moveToSparkRepo.quoteAll().fold(
                 onSuccess = { MoveToSparkUiState.Confirm(it) },
                 onFailure = {
-                    if (moved != null) {
+                    // A rest that no longer routes ends the move; any other failure leaves a rest to try again.
+                    val restStops = it is MoveToSparkError.TooLarge || it is MoveToSparkError.NothingToMove
+                    if (moved != null && restStops) {
                         MoveToSparkUiState.Done(moved)
                     } else {
                         it.toUiState()
@@ -121,6 +134,7 @@ class MoveToSparkManager @Inject constructor(
             )
             if (generation.get() != quoteGeneration) return@launch
             keepsOutcome = quoted is MoveToSparkUiState.Done
+            movedBeforeRest = moved.takeIf { quoted is MoveToSparkUiState.Failed }
             _uiState.update { quoted }
         }
     }
@@ -163,6 +177,8 @@ class MoveToSparkManager @Inject constructor(
                             if (moved != null) closeEmptied(channelsBefore, paymentsBefore)
                             requote(moveGeneration, moved)
                         } else if (generation.get() == moveGeneration) {
+                            // Try Again quotes from the channels, which may still hold the failed part.
+                            refreshChannels()
                             _uiState.update { error.toUiState() }
                         }
                     },
@@ -173,11 +189,18 @@ class MoveToSparkManager @Inject constructor(
         }
     }
 
-    private suspend fun done(outcome: MoveToSparkOutcome): MoveToSparkUiState.Done? {
+    private suspend fun done(outcome: MoveToSparkOutcome, waitsForHtlcs: Boolean = false): MoveToSparkUiState.Done? {
         walletRepo.syncNodeAndWallet()
-        val hasRest = outcome is MoveToSparkOutcome.Moved &&
-            MoveToSparkMath.hasMovableBalance(moveToSparkRepo.movableSats())
+        refreshChannels()
+        // The parts' loop already waited out their HTLCs, so only a late outcome waits here.
+        val movableSats = if (waitsForHtlcs) moveToSparkRepo.movableSatsSettled() else moveToSparkRepo.movableSats()
+        val hasRest = outcome is MoveToSparkOutcome.Moved && MoveToSparkMath.hasMovableBalance(movableSats)
         return if (hasRest) null else MoveToSparkUiState.Done(outcome)
+    }
+
+    private fun refreshChannels() {
+        // The sync skips the channels' refresh while another sync runs, and they may still hold a failed part.
+        if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) lightningRepo.syncState()
     }
 
     private fun requote(moveGeneration: Int, moved: MoveToSparkOutcome.Moved?) {
@@ -198,7 +221,13 @@ class MoveToSparkManager @Inject constructor(
         if (generation.get() != moveGeneration || !uiState.value.isInFlight()) return
         val moved = settled.getOrNull() ?: earlierSats.takeIf { it > 0uL }
             ?.let { MoveToSparkOutcome.Moved(it, feeSats = 0uL) }
-        val late = if (moved == null) MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN) else done(moved)
+        val late = if (moved == null) {
+            // Try Again quotes from the channels, which still hold the failed part until they are read again.
+            refreshChannels()
+            MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN)
+        } else {
+            done(moved, waitsForHtlcs = true)
+        }
         if (late == null) {
             if (uiState.value.isInFlight()) requote(moveGeneration, moved)
             return

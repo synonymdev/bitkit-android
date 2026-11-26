@@ -488,11 +488,17 @@
     <string name="other__high_balance__nav_title">Saldo alt</string>
     <string name="other__high_balance__text">&lt;accent&gt;El saldo de la teva cartera supera els 500 $.&lt;/accent&gt;\nPer a la teva seguretat, considera moure part dels teus estalvis a una cartera fora de línia.</string>
     <string name="other__high_balance__title">Saldo\n&lt;accent&gt;alt&lt;/accent&gt;</string>
+    <string name="other__lnurl_auth_auth_prompt">Autenticar-se a {domain}?</string>
+    <string name="other__lnurl_auth_auth_title">Autenticar</string>
     <string name="other__lnurl_auth_error">Inici de sessió fallit (LNURL)</string>
     <string name="other__lnurl_auth_error_msg">S\'ha produït un error quan has intentat iniciar sessió. {raw}</string>
+    <string name="other__lnurl_auth_link_prompt">Vincular el compte a {domain}?</string>
+    <string name="other__lnurl_auth_link_title">Vincular</string>
     <string name="other__lnurl_auth_login_button">Iniciar sessió</string>
     <string name="other__lnurl_auth_login_prompt">Iniciar sessió a {domain}?</string>
     <string name="other__lnurl_auth_login_title">Iniciar sessió</string>
+    <string name="other__lnurl_auth_register_prompt">Registrar-se a {domain}?</string>
+    <string name="other__lnurl_auth_register_title">Registrar-se</string>
     <string name="other__lnurl_auth_success_msg_domain">Has iniciat sessió correctament a {domain}.</string>
     <string name="other__lnurl_auth_success_msg_no_domain">Has iniciat sessió amb èxit.</string>
     <string name="other__lnurl_auth_success_title">Sessió iniciada</string>
@@ -1429,6 +1435,8 @@
     <string name="hardware__search_error">No s\'han pogut cercar carteres de maquinari. Comprova la connexió i torna-ho a provar.</string>
     <string name="hardware__send_broadcast_failed_text">Comprova la connexió i torna-ho a provar.</string>
     <string name="hardware__send_broadcast_failed_title">Pagament no confirmat</string>
+    <string name="hardware__send_broadcast_uncertain_text">És possible que la teva transacció s\'hagi difós. Comprova la teva activitat abans de tornar-ho a provar.</string>
+    <string name="hardware__send_broadcast_uncertain_title">És possible que la transacció s\'hagi enviat</string>
     <string name="hardware__send_confirm_address">A L\'ADREÇA (CONFIRMA AL DISPOSITIU)</string>
     <string name="hardware__send_onchain_only_text">Des d\'aquesta cartera, Trezor només pot enviar a una adreça Bitcoin.</string>
     <string name="hardware__send_onchain_only_text_jade">Des d\'aquesta cartera, Jade només pot enviar a una adreça Bitcoin.</string>

@@ -1,0 +1,22 @@
+<journey name="fast transfer relaunch">
+  <description>
+    Verifies that a Fast transfer to spending keeps its speed and its fee prompt after a relaunch: the "TRANSFER IN
+    PROGRESS" banner shows and opens the transfer at once, still at the fast speed, a changed fee still asks Wait or
+    Approve, and the transfer still claims early within the fee approved. Whether Spark reprices the fast transfer is
+    the provider's call, so the fee prompt steps are conditional; SparkRepoTest.kt's relaunch tests cover the kept claim, the
+    kept choice and the resumed early claim.
+
+    Precondition: as in spark-transfer-to-spending.xml: a dev build with Spark connected on its regtest and
+    reading Bitkit's chain, Savings funded on that chain (at least 20 000 sats, confirmed) and no channels. Start
+    on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the Savings balance card (testTag "ActivitySavings"), tap "Transfer To Spending" (testTag "TransferToSpending"), tap "Get Started" (testTag "SpendingIntro-button") if the intro appears, tap "25%" (testTag "SpendingAmountQuarter") and tap "Continue" (testTag "SpendingAmountContinue")</action>
+    <action>Verify "Fast" (testTag "SpendingConfirmInstant") is selected and swipe the "Swipe To Transfer" handle (testTag "GRAB") fully to the right</action>
+    <action>Verify the status screen (testTag "LightningSettingUp") opens with the text (testTag "SettingUpText") ending "This should take a few minutes.", then tap "Continue Using Bitkit" (testTag "TransferSuccess-button")</action>
+    <action>Relaunch the app at once, verify Home shows the "TRANSFER IN PROGRESS" banner (testTag "ActivityBanner"), tap it and verify the status screen opens at once at the same or a later step, with the text still ending "This should take a few minutes." or the headline "Fast transfer fee changed", never "about 30 minutes."</action>
+    <action>If the headline is "Fast transfer fee changed", verify "Wait" (testTag "SettingUpWait") and "Approve" (testTag "SettingUpPay"), relaunch the app, tap the banner and verify the same headline with both buttons; tap "Approve" and verify the label "Adding To Spending Balance" or "Transfer Successful" (testTag "TransferSuccess") follows</action>
+    <action>Otherwise wait up to 3 minutes for "Transfer Successful" (testTag "TransferSuccess"), the label never showing "Using Normal Transfer Speed"</action>
+    <action>Tap "Awesome!" (testTag "TransferSuccess-button"), verify Home no longer shows the banner, relaunch the app and verify the banner stays gone</action>
+  </actions>
+</journey>

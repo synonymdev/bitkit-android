@@ -880,6 +880,51 @@ class ActivityService(
         }
     }
 
+    private suspend fun dropRetriedBefore(paymentId: String) {
+        val retried = cacheStore.data.first().moveToSparkRetriedBefore[paymentId.lowercase()] ?: return
+        retried.forEach { cacheStore.addActivityToDeletedList(it) }
+        cacheStore.takeMoveRetriedBefore(paymentId)
+        retried.forEach { hash ->
+            runSuspendCatching {
+                if (getActivityById(walletId = defaultWalletId, activityId = hash) != null) {
+                    deleteActivityById(walletId = defaultWalletId, activityId = hash)
+                }
+            }.onFailure { Logger.warn("Failed to drop the retried move part '$hash' from Activity", it, context = TAG) }
+        }
+    }
+
+    private suspend fun writeLightning(payment: PaymentDetails, ln: LightningActivity) {
+        if (getActivityById(walletId = defaultWalletId, activityId = payment.id) != null) {
+            updateActivity(activityId = payment.id, activity = Activity.Lightning(ln))
+        } else {
+            upsertActivity(Activity.Lightning(ln))
+        }
+        // A retried move part dropped while this sync wrote it leaves again.
+        if (ln.status != PaymentState.SUCCEEDED) dropsRetriedMovePart(payment)
+    }
+
+    private suspend fun dropsRetriedMovePart(payment: PaymentDetails): Boolean {
+        val paymentId = payment.id
+        // A smaller move part that settled after a restart still drops the failures of the larger parts it replaced;
+        // one that failed keeps them.
+        if (payment.direction == PaymentDirection.OUTBOUND) {
+            when (payment.status) {
+                PaymentStatus.SUCCEEDED -> dropRetriedBefore(paymentId)
+                PaymentStatus.FAILED -> cacheStore.takeMoveRetriedBefore(paymentId)
+                PaymentStatus.PENDING -> Unit
+            }
+        }
+        // A move's part that did not route, whose amount smaller parts then moved, is no failed payment to show.
+        val cache = cacheStore.data.first()
+        if (!cache.isActivityDeleted(paymentId, defaultWalletId) || paymentId.lowercase() !in cache.moveToSparkHashes) {
+            return false
+        }
+        if (getActivityById(walletId = defaultWalletId, activityId = paymentId) != null) {
+            deleteActivityById(walletId = defaultWalletId, activityId = paymentId)
+        }
+        return true
+    }
+
     private suspend fun processBolt11(
         kind: PaymentKind.Bolt11,
         payment: PaymentDetails,
@@ -892,6 +937,8 @@ class ActivityService(
         ) {
             return
         }
+
+        if (dropsRetriedMovePart(payment)) return
 
         val pendingMessage = payment.id.takeIf { payment.direction == PaymentDirection.OUTBOUND }
             ?.let { cacheStore.data.first().pendingLightningMessages[it] }
@@ -964,11 +1011,7 @@ class ActivityService(
         }.withPendingMessage(pendingMessage = pendingMessage, description = kind.description)
 
         if (existingActivity != Activity.Lightning(ln)) invalidatePaykitContactBackfill()
-        if (getActivityById(walletId = defaultWalletId, activityId = payment.id) != null) {
-            updateActivity(activityId = payment.id, activity = Activity.Lightning(ln))
-        } else {
-            upsertActivity(Activity.Lightning(ln))
-        }
+        writeLightning(payment, ln)
 
         if (pendingMessage != null) cacheStore.removePendingLightningMessage(payment.id)
     }

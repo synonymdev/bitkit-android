@@ -473,6 +473,12 @@
     <string name="onboarding__multiple_header">&lt;accent&gt;Achtung:&lt;/accent&gt;\nMehrere Geräte</string>
     <string name="onboarding__multiple_text">Füge deine Wiederherstellungsphrase nicht mehreren Geräten gleichzeitig hinzu, da es zu unwiderruflichen Schäden deiner Daten kommen kann.</string>
     <string name="other__bluetooth_enable">Bluetooth aktivieren</string>
+    <string name="other__lnurl_auth_auth_prompt">Bei {domain} authentifizieren?</string>
+    <string name="other__lnurl_auth_auth_title">Authentifizieren</string>
+    <string name="other__lnurl_auth_link_prompt">Konto mit {domain} verknüpfen?</string>
+    <string name="other__lnurl_auth_link_title">Verknüpfen</string>
+    <string name="other__lnurl_auth_register_prompt">Bei {domain} registrieren?</string>
+    <string name="other__lnurl_auth_register_title">Registrieren</string>
     <string name="other__nfc_enable">NFC aktivieren</string>
     <string name="other__nfc_read_error_text">Dieses NFC-Tag enthält keine Zahlungsanforderung, die Bitkit verwenden kann.</string>
     <string name="other__nfc_read_error_title">NFC kann nicht gelesen werden</string>
@@ -1431,6 +1437,8 @@
     <string name="hardware__search_error">Die Suche nach Hardware-Wallets ist fehlgeschlagen. Überprüfe deine Verbindung und versuche es erneut.</string>
     <string name="hardware__send_broadcast_failed_text">Überprüfe deine Verbindung und versuche es erneut.</string>
     <string name="hardware__send_broadcast_failed_title">Zahlung nicht bestätigt</string>
+    <string name="hardware__send_broadcast_uncertain_text">Deine Transaktion wurde möglicherweise übertragen. Bitte prüfe deine Aktivität, bevor du es erneut versuchst.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Transaktion wurde möglicherweise gesendet</string>
     <string name="hardware__send_confirm_address">AN ADRESSE (AM GERÄT BESTÄTIGEN)</string>
     <string name="hardware__send_onchain_only_text">Trezor kann von diesem Wallet nur an eine Bitcoin-Adresse senden.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade kann von diesem Wallet nur an eine Bitcoin-Adresse senden.</string>

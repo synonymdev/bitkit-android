@@ -1630,7 +1630,12 @@ class LightningRepo @Inject constructor(
             var isAdmitted = false
             var isRefused = false
             var railBefore: LightningRail? = null
-            val authorizeSend: suspend () -> Boolean = {
+            var isChecked = false
+            val authorizeSend: suspend () -> Boolean = authorize@{
+                // Spark's retry of a send whose leaves it couldn't select keeps the send's admission and rechecks only
+                // the caller's check at submission, which has no side effects.
+                if (isChecked) return@authorize isAuthorizedAtSubmission?.invoke() ?: true
+                isChecked = true
                 val isAuthorized = onBeforeSend().also { if (it) requireWalletRestoreComplete() }
                 if (isAuthorized) {
                     isAdmitted = admitSend(key, LightningRail.Spark) {

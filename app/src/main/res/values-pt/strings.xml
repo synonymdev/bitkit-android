@@ -467,6 +467,12 @@
     <string name="onboarding__multiple_header">&lt;accent&gt;Cuidado:&lt;/accent&gt;\nvários dispositivos</string>
     <string name="onboarding__multiple_text">Não instale sua frase de recuperação do Bitkit em vários telefones simultaneamente, isso pode corromper seus dados.</string>
     <string name="other__bluetooth_enable">Ativar Bluetooth</string>
+    <string name="other__lnurl_auth_auth_prompt">Autenticar-se em {domain}?</string>
+    <string name="other__lnurl_auth_auth_title">Autenticar</string>
+    <string name="other__lnurl_auth_link_prompt">Associar a conta a {domain}?</string>
+    <string name="other__lnurl_auth_link_title">Associar</string>
+    <string name="other__lnurl_auth_register_prompt">Registar-se em {domain}?</string>
+    <string name="other__lnurl_auth_register_title">Registar</string>
     <string name="other__nfc_enable">Ativar NFC</string>
     <string name="other__nfc_read_error_text">Esta etiqueta não contém um pedido de pagamento que a Bitkit possa utilizar.</string>
     <string name="other__nfc_read_error_title">Incapaz de Ler o NFC</string>
@@ -1402,6 +1408,8 @@
     <string name="hardware__search_error">Não foi possível procurar carteiras de hardware. Verifique a ligação e tente novamente.</string>
     <string name="hardware__send_broadcast_failed_text">Verifique a ligação e tente novamente.</string>
     <string name="hardware__send_broadcast_failed_title">Pagamento não confirmado</string>
+    <string name="hardware__send_broadcast_uncertain_text">A sua transação pode ter sido transmitida. Verifique a sua atividade antes de tentar novamente.</string>
+    <string name="hardware__send_broadcast_uncertain_title">A transação pode ter sido enviada</string>
     <string name="hardware__send_confirm_address">PARA O ENDEREÇO (CONFIRME NO DISPOSITIVO)</string>
     <string name="hardware__send_onchain_only_text">O Trezor só pode enviar para um endereço Bitcoin a partir desta carteira.</string>
     <string name="hardware__send_onchain_only_text_jade">O Jade só pode enviar para um endereço Bitcoin a partir desta carteira.</string>

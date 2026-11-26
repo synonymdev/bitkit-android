@@ -20,6 +20,7 @@ import to.bitkit.models.QuickPayLedger
 import to.bitkit.models.WalletScope
 import to.bitkit.repositories.PendingSparkWithdrawal
 import to.bitkit.repositories.SentSparkWithdrawal
+import to.bitkit.repositories.SparkSentDeposit
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -200,6 +201,27 @@ class CacheStore internal constructor(
         }
     }
 
+    /**
+     * Keeps [attempt] as the latest attempt at paying the invoice with [paymentHash], which expires at [expiresAt],
+     * and drops the attempts of invoices expired before [now], both in epoch seconds.
+     */
+    suspend fun setSparkSendAttempt(paymentHash: String, attempt: Int, expiresAt: Long, now: Long) {
+        val hash = paymentHash.lowercase()
+        store.updateData {
+            val live = it.sparkSendAttempts.filterValues { kept -> kept.expiresAt >= now }
+            it.copy(sparkSendAttempts = live + (hash to SparkSendAttempt(attempt, expiresAt)))
+        }
+    }
+
+    /** Puts back [previous], the attempt kept before a send whose key never reached Spark, or drops the invoice's. */
+    suspend fun restoreSparkSendAttempt(paymentHash: String, previous: SparkSendAttempt?) {
+        val hash = paymentHash.lowercase()
+        store.updateData {
+            val attempts = it.sparkSendAttempts - hash
+            it.copy(sparkSendAttempts = if (previous == null) attempts else attempts + (hash to previous))
+        }
+    }
+
     suspend fun addSparkUnsavedOwnFailure(paymentId: String) {
         if (paymentId in store.data.first().sparkUnsavedOwnFailures) return
         store.updateData { it.copy(sparkUnsavedOwnFailures = it.sparkUnsavedOwnFailures + paymentId) }
@@ -214,6 +236,20 @@ class CacheStore internal constructor(
         val hash = paymentHash.lowercase()
         if (hash in store.data.first().moveToSparkHashes) return
         store.updateData { it.copy(moveToSparkHashes = it.moveToSparkHashes + hash) }
+    }
+
+    /** Keeps [retriedHashes], the move parts that did not route before the part [paymentHash], until it settles. */
+    suspend fun setMoveRetriedBefore(paymentHash: String, retriedHashes: List<String>) {
+        store.updateData {
+            it.copy(moveToSparkRetriedBefore = it.moveToSparkRetriedBefore + (paymentHash.lowercase() to retriedHashes))
+        }
+    }
+
+    /** Removes the parts kept for [paymentHash], once they are dropped from Activity or the part failed. */
+    suspend fun takeMoveRetriedBefore(paymentHash: String) {
+        val hash = paymentHash.lowercase()
+        if (hash !in store.data.first().moveToSparkRetriedBefore) return
+        store.updateData { it.copy(moveToSparkRetriedBefore = it.moveToSparkRetriedBefore - hash) }
     }
 
     /** Keeps [paymentHash] with its invoice's expiry in epoch seconds, [expiresAt], when known. */
@@ -395,6 +431,8 @@ data class AppCacheData(
     val pendingSparkWithdrawal: PendingSparkWithdrawal? = null,
     /** The latest Spark withdrawals to Paykit contacts that settled as sent, so a restart never reads one as unsent. */
     val sentSparkWithdrawals: List<SentSparkWithdrawal> = listOf(),
+    /** Deposits the transfer flow sent that Spark has not claimed yet, by txid, so a relaunch follows each claim. */
+    val sparkSentDeposits: Map<String, SparkSentDeposit> = mapOf(),
     /** Pubky Swaps routes committed or restored whose claim has not confirmed yet, so each start resumes them. */
     val unfinishedPubkySwaps: List<String> = listOf(),
     /** The hold payment hash of each unfinished Pubky Swaps route by swap id, so its failure stops the swap. */
@@ -413,6 +451,8 @@ data class AppCacheData(
      * only its own outcome settles it. A hold without one waits for a paid attempt or its invoice's expiry.
      */
     val sparkSendAttemptIds: Map<String, String> = mapOf(),
+    /** The latest attempt at each invoice Spark sent, by hash, whose number picks the attempt's idempotency key. */
+    val sparkSendAttempts: Map<String, SparkSendAttempt> = mapOf(),
     /**
      * Payment ids of Spark send attempts whose own failure a failed Activity write still has to save over an earlier
      * attempt's row, kept across a restart until it saves.
@@ -423,6 +463,11 @@ data class AppCacheData(
      * Activity shows the move as one.
      */
     val moveToSparkHashes: List<String> = listOf(),
+    /**
+     * The payment hashes of the move parts that did not route and were retried smaller, by the hash of the smaller part
+     * still in flight, kept across a restart so its late success still drops their failures from Activity.
+     */
+    val moveToSparkRetriedBefore: Map<String, List<String>> = mapOf(),
     /** Hashes of the Lightning sends the node started, so Spark holds off while the node can't list them. */
     val ldkSendHashes: List<String> = listOf(),
     /** Invoice expiry in epoch seconds of the [ldkSendHashes] that know it. */
@@ -462,6 +507,10 @@ data class AppCacheData(
 
     fun invalidateReceiveOnchainAddress() = copy(bip21 = "", onchainAddress = "")
 }
+
+/** An attempt at paying an invoice through Spark, the [attempt]th, of an invoice that expires at [expiresAt]. */
+@Serializable
+data class SparkSendAttempt(val attempt: Int, val expiresAt: Long)
 
 @Serializable
 data class CachedUsdtBalance(

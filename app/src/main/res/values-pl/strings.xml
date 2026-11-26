@@ -474,6 +474,12 @@
     <string name="onboarding__multiple_header">&lt;accent&gt;Uwaga:&lt;/accent&gt;\nwiele urządzeń</string>
     <string name="onboarding__multiple_text">Nie instaluj swojej frazy odzyskiwania Bitkit na kilku telefonach jednocześnie, ponieważ może to uszkodzić Twoje dane.</string>
     <string name="other__bluetooth_enable">Włącz Bluetooth</string>
+    <string name="other__lnurl_auth_auth_prompt">Uwierzytelnić się w {domain}?</string>
+    <string name="other__lnurl_auth_auth_title">Uwierzytelnij</string>
+    <string name="other__lnurl_auth_link_prompt">Połączyć konto z {domain}?</string>
+    <string name="other__lnurl_auth_link_title">Połącz</string>
+    <string name="other__lnurl_auth_register_prompt">Zarejestrować się w {domain}?</string>
+    <string name="other__lnurl_auth_register_title">Zarejestruj</string>
     <string name="other__nfc_enable">Włącz NFC</string>
     <string name="other__nfc_read_error_text">Ten tag nie zawiera żądania płatności, którego Bitkit może użyć.</string>
     <string name="other__nfc_read_error_title">Nie można odczytać NFC</string>
@@ -1433,6 +1439,8 @@
     <string name="hardware__search_error">Nie udało się wyszukać portfeli sprzętowych. Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="hardware__send_broadcast_failed_text">Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="hardware__send_broadcast_failed_title">Płatność niepotwierdzona</string>
+    <string name="hardware__send_broadcast_uncertain_text">Twoja transakcja mogła zostać rozgłoszona. Sprawdź swoją aktywność przed ponowną próbą.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Transakcja mogła zostać wysłana</string>
     <string name="hardware__send_confirm_address">NA ADRES (POTWIERDŹ NA URZĄDZENIU)</string>
     <string name="hardware__send_onchain_only_text">Trezor może wysyłać z tego portfela tylko na adres Bitcoin.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade może wysyłać z tego portfela tylko na adres Bitcoin.</string>

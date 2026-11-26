@@ -23,6 +23,7 @@ import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaykitEndpoint
 import com.synonym.bitkitcore.PaykitRoute
+import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PubkySwapRoutePayment
 import com.synonym.bitkitcore.PubkySwapRouteQuote
 import com.synonym.bitkitcore.Scanner
@@ -134,6 +135,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.ext.toHex
 import to.bitkit.ext.toSendFailureDetails
 import to.bitkit.models.BalanceState
 import to.bitkit.models.ConvertedAmount
@@ -169,6 +171,8 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.HealthRepo
+import to.bitkit.repositories.HwRetainedSend
+import to.bitkit.repositories.HwRetainedSendRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
@@ -266,6 +270,7 @@ import to.bitkit.ui.components.SubscriptionRoute
 import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.screens.paymentrequests.paymentRequestLifecycleStatusRes
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
+import to.bitkit.ui.screens.wallets.send.HwRetainedSendStatus
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRetryRoute
 import to.bitkit.ui.sheets.SendRoute
@@ -311,6 +316,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val lightningRepo = mock<LightningRepo>()
     private val walletRepo = mock<WalletRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
+    private val hwRetainedSendRepo = mock<HwRetainedSendRepo>()
     private val settingsStore = mock<SettingsStore>()
     private val currencyRepo = mock<CurrencyRepo>()
     private val connectivityRepo = mock<ConnectivityRepo>()
@@ -773,6 +779,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private var walletGeneration = 0L
 
     private fun stubRepositories() {
+        whenever { hwRetainedSendRepo.record(any()) }.thenReturn(Result.success(null))
         // The router pays the endpoint of the selected source: Lightning from Spending, on-chain from Savings.
         // Result is an inline class, so a suspend answer returns its value unboxed.
         whenever { paykitRouteRepo.route(any(), any(), any(), any(), any()) }.thenAnswer {
@@ -820,6 +827,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }.thenReturn(QuickPayCompletionOutcome.None)
         whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
             .thenReturn(Result.failure(Exception("activity not found")))
+        whenever { activityRepo.getActivity(any(), any()) }.thenReturn(Result.success(null))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         whenever { blocktankRepo.refreshInfo() }.thenReturn(Result.success(Unit))
@@ -1023,6 +1031,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaymentRepo = pendingPaymentRepo,
         walletRepo = walletRepo,
         hwWalletRepo = hwWalletRepo,
+        hwRetainedSendRepo = hwRetainedSendRepo,
         backupRepo = backupRepo,
         settingsStore = settingsStore,
         currencyRepo = currencyRepo,
@@ -1136,12 +1145,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a sent toast reaches the queue with its progress flag`() = test {
+    fun `a sent toast reaches the queue with its replace key`() = test {
         val progressToast = Toast(
             type = Toast.ToastType.INFO,
             title = "Applying changes",
             autoHide = false,
-            replacedByNext = true,
+            replaceKey = "AddressType",
         )
         clearInvocations(toastManager)
 
@@ -7550,6 +7559,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
         )
 
+        applyRetainedStatus(HwRetainedSendStatus.None)
         sut.setSendEvent(SendEvent.SwipeToPay)
         advanceUntilIdle()
 
@@ -7558,6 +7568,648 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.setSendEvent(SendEvent.PayConfirmed)
             assertEquals(SendEffect.NavigateToHardwareSign, awaitItem())
         }
+    }
+
+    @Test
+    fun `a blocking retained send warns before every other sanity check`() = test {
+        stubRetainedReviewFiatValue()
+        setSendState(retainedReviewState().copy(hardwareAvailableSats = 1_000uL))
+        applyRetainedStatus(HwRetainedSendStatus.Blocking)
+
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceUntilIdle()
+
+        assertEquals(SanityWarning.RETAINED_HARDWARE_SEND, sut.sendUiState.value.showSanityWarningDialog)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+
+        sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.RETAINED_HARDWARE_SEND))
+        advanceUntilIdle()
+
+        assertEquals(SanityWarning.OVER_HALF_BALANCE, sut.sendUiState.value.showSanityWarningDialog)
+    }
+
+    @Test
+    fun `cancelling the retained send warning stays on the review without consent`() = test {
+        stubRetainedReviewFiatValue()
+        setSendState(retainedReviewState())
+        applyRetainedStatus(HwRetainedSendStatus.Blocking)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+            assertEquals(SanityWarning.RETAINED_HARDWARE_SEND, sut.sendUiState.value.showSanityWarningDialog)
+
+            sut.setSendEvent(SendEvent.DismissAmountWarning)
+            advanceUntilIdle()
+
+            assertNull(sut.sendUiState.value.showSanityWarningDialog)
+            assertFalse(sut.sendUiState.value.shouldConfirmPay)
+            assertNull(sut.sendUiState.value.retainedSendToReplace)
+            assertTrue(sut.sendUiState.value.needsRetainedSendWarning)
+            expectNoEvents()
+
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+            assertEquals(SanityWarning.RETAINED_HARDWARE_SEND, sut.sendUiState.value.showSanityWarningDialog)
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun `consent to replace a retained send does not carry to another wallet address or amount`() = test {
+        stubRetainedReviewFiatValue()
+        val changes = listOf<(SendUiState) -> SendUiState>(
+            { it.copy(hardwareWalletId = "another-wallet") },
+            { it.copy(address = "bcrt1qother") },
+            { it.copy(amount = 2_000uL) },
+        )
+        for (change in changes) {
+            setSendState(retainedReviewState())
+            applyRetainedStatus(HwRetainedSendStatus.Blocking)
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+            sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.RETAINED_HARDWARE_SEND))
+            advanceUntilIdle()
+            assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.retainedSendToReplace)
+
+            setSendState(change(sut.sendUiState.value).copy(shouldConfirmPay = false))
+
+            assertNull(sut.sendUiState.value.retainedSendToReplace)
+            assertTrue(sut.sendUiState.value.isRetainedSendCheckPending)
+
+            applyRetainedStatus(HwRetainedSendStatus.Blocking)
+
+            assertNull(sut.sendUiState.value.retainedSendToReplace)
+            assertTrue(sut.sendUiState.value.needsRetainedSendWarning)
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+            assertEquals(SanityWarning.RETAINED_HARDWARE_SEND, sut.sendUiState.value.showSanityWarningDialog)
+        }
+    }
+
+    @Test
+    fun `consent to replace a retained send is handed over once to the sign flow`() = test {
+        stubRetainedReviewFiatValue()
+        setSendState(retainedReviewState())
+        applyRetainedStatus(HwRetainedSendStatus.Blocking)
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.RETAINED_HARDWARE_SEND))
+        advanceUntilIdle()
+        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.retainedSendToReplace)
+
+        // Returning from the PIN screen reads the same record again, before anything was signed.
+        applyRetainedStatus(HwRetainedSendStatus.Blocking)
+        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.retainedSendToReplace)
+
+        sut.consumeRetainedSendConsent()
+
+        assertNull(sut.sendUiState.value.retainedSendToReplace)
+        assertFalse(SanityWarning.RETAINED_HARDWARE_SEND in sut.sendUiState.value.confirmedWarnings)
+        assertTrue(sut.sendUiState.value.isRetainedSendCheckPending)
+
+        setSendState(sut.sendUiState.value.copy(shouldConfirmPay = false, showSanityWarningDialog = null))
+        applyRetainedStatus(HwRetainedSendStatus.Blocking)
+
+        assertNull(sut.sendUiState.value.retainedSendToReplace)
+        assertTrue(sut.sendUiState.value.needsRetainedSendWarning)
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceUntilIdle()
+        assertEquals(SanityWarning.RETAINED_HARDWARE_SEND, sut.sendUiState.value.showSanityWarningDialog)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+    }
+
+    @Test
+    fun `a near-max retained payment reaches its review without composing`() = test {
+        stubRetainedRecord()
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
+            .thenReturn(Result.failure(AppError("insufficient funds")))
+        setSendState(nearMaxRetainedState())
+
+        sut.setSendEvent(SendEvent.AmountChange(RETAINED_AMOUNT_SATS))
+        advanceUntilIdle()
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+        }
+
+        verify(hwWalletRepo, never()).estimateFundingMiningFee(any(), any(), any(), any())
+        val state = sut.sendUiState.value
+        assertTrue(state.isRetainedHardwarePayment)
+        assertEquals(TransactionSpeed.Custom(RETAINED_RETRY.feeRate.toUInt()), state.speed)
+        assertEquals(OnchainFeeUi(FeeRate.CUSTOM, RETAINED_RETRY.miningFeeSats.toLong()), state.onchainFeeUi)
+        assertFalse(state.isRetainedSendCheckPending)
+    }
+
+    @Test
+    fun `a payment that does not match the retained send still composes and can fail`() = test {
+        stubRetainedRecord()
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
+            .thenReturn(Result.failure(AppError("insufficient funds")))
+        val changes = listOf<(SendUiState) -> SendUiState>(
+            { it.copy(amount = 40_000uL) },
+            { it.copy(address = "bcrt1qother", amount = 40_000uL) },
+        )
+        for (change in changes) {
+            clearInvocations(hwWalletRepo)
+            val state = change(nearMaxRetainedState())
+            setSendState(state)
+
+            sut.setSendEvent(SendEvent.AmountChange(state.amount))
+            advanceUntilIdle()
+            assertTrue(sut.sendUiState.value.isAmountInputValid)
+
+            sut.sendEffect.test {
+                sut.setSendEvent(SendEvent.AmountContinue)
+                advanceUntilIdle()
+                expectNoEvents()
+            }
+
+            verify(hwWalletRepo).estimateFundingMiningFee(any(), any(), any(), any())
+            assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+        }
+
+        setSendState(nearMaxRetainedState())
+        sut.setSendEvent(SendEvent.AmountChange(RETAINED_AMOUNT_SATS - 1uL))
+        advanceUntilIdle()
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+
+        setSendState(nearMaxRetainedState().copy(address = "bcrt1qother"))
+        sut.setSendEvent(SendEvent.AmountChange(RETAINED_AMOUNT_SATS))
+        advanceUntilIdle()
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `a refused retained retry gets no amount or fee exception`() = test {
+        stubRetainedRecord(retryWasRefused = true)
+        setSendState(nearMaxRetainedState())
+
+        sut.setSendEvent(SendEvent.AmountChange(RETAINED_AMOUNT_SATS))
+        sut.refreshRetainedRetryAmount()
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+        assertNull(sut.sendUiState.value.retainedRetryAmountSats)
+    }
+
+    @Test
+    fun `an observed retained send gets no amount or fee exception`() = test {
+        stubRetainedRecord(observed = true)
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
+            .thenReturn(Result.failure(AppError("insufficient funds")))
+        setSendState(nearMaxRetainedState())
+
+        sut.setSendEvent(SendEvent.AmountChange(RETAINED_AMOUNT_SATS))
+        sut.refreshRetainedRetryAmount()
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+        assertNull(sut.sendUiState.value.retainedRetryAmountSats)
+
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).estimateFundingMiningFee(any(), any(), any(), any())
+        assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+    }
+
+    @Test
+    fun `a shop payment never reads the retained send record`() = test {
+        stubRetainedRecord()
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
+            .thenReturn(Result.failure(AppError("insufficient funds")))
+        setSendState(
+            nearMaxRetainedState().copy(
+                incomingPaymentRequestId = PaykitPaymentRequestId("request", "counterparty"),
+            )
+        )
+
+        sut.setSendEvent(SendEvent.AmountChange(RETAINED_AMOUNT_SATS))
+        sut.refreshRetainedRetryAmount()
+        advanceUntilIdle()
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+        assertNull(sut.sendUiState.value.retainedRetryAmountSats)
+
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).estimateFundingMiningFee(any(), any(), any(), any())
+        verify(hwRetainedSendRepo, never()).record(any())
+        assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+    }
+
+    @Test
+    fun `the amount input cap reaches only a retained amount for the same address`() = test {
+        stubRetainedRecord()
+        setSendState(nearMaxRetainedState())
+
+        sut.refreshRetainedRetryAmount()
+        assertEquals(RETAINED_AMOUNT_SATS, sut.sendUiState.value.retainedRetryAmountSats)
+
+        setSendState(nearMaxRetainedState().copy(address = "bcrt1qother"))
+        sut.refreshRetainedRetryAmount()
+        assertNull(sut.sendUiState.value.retainedRetryAmountSats)
+    }
+
+    @Test
+    fun `switching to the hardware wallet accepts the retained amount`() = test {
+        stubRetainedRecord()
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = RETAINED_AMOUNT_SATS))
+        whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any()))
+            .thenReturn(Result.success(RETAINED_AMOUNT_SATS - 500uL))
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
+            .thenReturn(Result.failure(AppError("insufficient funds")))
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL)
+        setSendState(
+            SendUiState(address = REGTEST_ADDRESS, amount = RETAINED_AMOUNT_SATS, payMethod = SendMethod.ONCHAIN)
+        )
+
+        sut.setSendEvent(SendEvent.PaymentMethodSelect(SendFundingSource.Hardware(HARDWARE_WALLET_ID)))
+        advanceUntilIdle()
+
+        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `scanning a near-max amount passes the balance gate only for the retained payment`() = test {
+        stubRetainedRecord()
+        whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any()))
+            .thenReturn(Result.success(RETAINED_AMOUNT_SATS - 500uL))
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any())).thenReturn(Result.success(250uL))
+        whenever(coreService.decode(any())).thenAnswer {
+            val sats = it.getArgument<String>(0).substringAfter("sats=").toULong()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, sats, null, null, null))
+        }
+        whenever(coreService.validateBitcoinAddress(REGTEST_ADDRESS)).thenReturn(
+            ValidationResult(REGTEST_ADDRESS, NetworkType.REGTEST, AddressType.P2WPKH),
+        )
+        whenever(formatMoneyValue(any())).thenReturn("499 sats")
+        sut.setIsAuthenticated(true)
+        sut.showSheet(Sheet.Send(hardwareWalletId = HARDWARE_WALLET_ID))
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        sut.onScanResult("bitcoin:$REGTEST_ADDRESS?sats=${RETAINED_AMOUNT_SATS - 1uL}")
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(check { assertEquals("InsufficientSavingsToast", it.testTag) })
+        clearInvocations(toastManager)
+
+        sut.onScanResult("bitcoin:$REGTEST_ADDRESS?sats=$RETAINED_AMOUNT_SATS")
+        advanceUntilIdle()
+
+        verify(toastManager, never()).enqueue(any())
+        assertEquals(RETAINED_AMOUNT_SATS, sut.sendUiState.value.amount)
+    }
+
+    @Test
+    fun `a home scan of a near-max retained payment picks its wallet and retries at the original fee`() = test {
+        val input = stubHomeNearMaxRetainedScan(scanSats = NEAR_MAX_RETAINED.amountSats)
+
+        sut.showScannerSheet()
+        sut.onScannerSheetResult(input)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        val state = sut.sendUiState.value
+        assertEquals(HARDWARE_WALLET_ID, state.hardwareWalletId)
+        assertEquals(NEAR_MAX_RETAINED.amountSats, state.amount)
+        assertTrue(state.isRetainedHardwarePayment)
+        assertEquals(TransactionSpeed.Custom(NEAR_MAX_RETAINED.feeRate.toUInt()), state.speed)
+        assertEquals(OnchainFeeUi(FeeRate.CUSTOM, NEAR_MAX_RETAINED.miningFeeSats.toLong()), state.onchainFeeUi)
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `a home scan of a new near-max payment is still held to today's fee`() = test {
+        val cases = listOf(
+            NEAR_MAX_RETAINED.amountSats - 1uL to NEAR_MAX_RETAINED,
+            NEAR_MAX_RETAINED.amountSats to NEAR_MAX_RETAINED.copy(observed = true),
+            NEAR_MAX_RETAINED.amountSats to NEAR_MAX_RETAINED.copy(retryWasRefused = true),
+        )
+        for ((scanSats, record) in cases) {
+            sut.hideSheet()
+            advanceUntilIdle()
+            clearInvocations(toastManager)
+            val input = stubHomeNearMaxRetainedScan(scanSats = scanSats, record = record)
+
+            sut.showScannerSheet()
+            sut.onScannerSheetResult(input)
+            advanceUntilIdle()
+
+            assertFalse(sut.currentSheet.value is Sheet.Send)
+            assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+            val toasts = argumentCaptor<Toast>()
+            verify(toastManager, atLeast(1)).enqueue(toasts.capture())
+            assertTrue(toasts.allValues.any { it.testTag == "InsufficientSavingsToast" })
+        }
+    }
+
+    /** The retained send spent the whole wallet at 1 sat/vB; today's Fast rate is 3 sat/vB. */
+    private suspend fun stubHomeNearMaxRetainedScan(
+        scanSats: ULong,
+        record: HwRetainedSend = NEAR_MAX_RETAINED,
+    ): String {
+        val input = stubOnchainAmountScan(amountSats = scanSats)
+        val onchainInfo = mock<IBtInfoOnchain>()
+        val btInfo = mock<IBtInfo>()
+        whenever(onchainInfo.feeRates).thenReturn(FeeRates(fast = 3u, mid = 2u, slow = 1u))
+        whenever(btInfo.onchain).thenReturn(onchainInfo)
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(info = btInfo)))
+        settingsData.value = SettingsData(defaultTransactionSpeed = TransactionSpeed.Fast)
+        balanceState.value = BalanceState(maxSendOnchainSats = 0u)
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = record.totalSpent))
+        whenever(hwWalletRepo.maxSpendableFunding(any(), any(), any()))
+            .thenReturn(Result.success(record.totalSpent - 1_350uL))
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()))
+            .thenReturn(Result.failure(Exception("insufficient funds for amount and fee")))
+        whenever(hwRetainedSendRepo.record(any())).thenReturn(Result.success(record))
+        return input
+    }
+
+    @Test
+    fun `going back to amount releases the ordinary fee lock and the review locks it again`() = test {
+        stubRetainedRecord()
+        settingsData.value = SettingsData(coinSelectAuto = false, defaultTransactionSpeed = TransactionSpeed.Fast)
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = RETAINED_AMOUNT_SATS))
+        setSendState(nearMaxRetainedState())
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+        assertTrue(sut.sendUiState.value.isRetainedHardwarePayment)
+        assertFalse(sut.sendUiState.value.canSwitchFundingSource)
+
+        sut.releaseRetainedFeeLock()
+
+        val released = sut.sendUiState.value
+        assertFalse(released.isRetainedHardwarePayment)
+        assertEquals(TransactionSpeed.Fast, released.speed)
+        assertEquals(OnchainFeeUi(FeeRate.fromSpeed(TransactionSpeed.Fast)), released.onchainFeeUi)
+        assertTrue(released.isAmountInputValid)
+        assertTrue(released.canSwitchFundingSource)
+
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+
+        val relocked = sut.sendUiState.value
+        assertTrue(relocked.isRetainedHardwarePayment)
+        assertEquals(TransactionSpeed.Custom(RETAINED_RETRY.feeRate.toUInt()), relocked.speed)
+    }
+
+    @Test
+    fun `an edited payment is estimated at the default speed instead of the locked rate`() = test {
+        stubRetainedRecord()
+        settingsData.value = SettingsData(coinSelectAuto = false, defaultTransactionSpeed = TransactionSpeed.Slow)
+        val feeRates = FeeRates(fast = 30u, mid = 20u, slow = 10u)
+        whenever(hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any())).thenReturn(Result.success(111uL))
+        val changes = listOf<(SendUiState) -> SendUiState>(
+            { it.copy(amount = RETAINED_AMOUNT_SATS - 1uL) },
+            { it.copy(address = "bcrt1qother") },
+        )
+        for (change in changes) {
+            clearInvocations(hwWalletRepo)
+            setSendState(nearMaxRetainedState().copy(feeRates = feeRates, hardwareAvailableSats = 100_000uL))
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+            assertTrue(sut.sendUiState.value.isRetainedHardwarePayment)
+
+            setSendState(change(sut.sendUiState.value))
+            sut.setSendEvent(SendEvent.AmountContinue)
+            advanceUntilIdle()
+
+            assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+            assertEquals(TransactionSpeed.Slow, sut.sendUiState.value.speed)
+            verify(hwWalletRepo, atLeast(1)).estimateFundingMiningFee(any(), any(), any(), eq(10uL))
+            verify(hwWalletRepo, never()).estimateFundingMiningFee(any(), any(), any(), eq(RETAINED_RETRY.feeRate))
+        }
+    }
+
+    @Test
+    fun `a Shop payment keeps its lock when going back to amount`() = test {
+        reopenRetainedHardwareRequest(balanceSats = 1_000_000uL, amountSats = 30_000uL)
+        val state = sut.sendUiState.value
+        assertTrue(state.isRetainedHardwarePayment)
+        clearInvocations(settingsStore)
+
+        sut.releaseRetainedFeeLock()
+
+        assertEquals(state, sut.sendUiState.value)
+        verify(settingsStore, never()).data
+    }
+
+    @Test
+    fun `a blocking answer clears the fee lock before the warning so yes send signs the shown fee`() = test {
+        stubRetainedReviewFiatValue()
+        settingsData.value = SettingsData(coinSelectAuto = false, defaultTransactionSpeed = TransactionSpeed.Fast)
+        setSendState(retainedReviewState())
+        applyRetainedStatus(RETAINED_RETRY)
+        assertTrue(sut.sendUiState.value.isRetainedHardwarePayment)
+        assertFalse(sut.sendUiState.value.needsRetainedSendWarning)
+
+        // The watcher marked the record while the review was open: the next read answers Blocking.
+        applyRetainedStatus(HwRetainedSendStatus.Blocking)
+
+        assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+        assertEquals(TransactionSpeed.Fast, sut.sendUiState.value.speed)
+        assertTrue(sut.sendUiState.value.needsRetainedSendWarning)
+    }
+
+    @Test
+    fun `a stale retained lock is revalidated when the record has gone`() = test {
+        stubRetainedRecord()
+        settingsData.value = SettingsData(coinSelectAuto = false)
+        setSendState(nearMaxRetainedState())
+        sut.setSendEvent(SendEvent.AmountContinue)
+        advanceUntilIdle()
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+
+        whenever(hwRetainedSendRepo.record(any())).thenReturn(Result.success(null))
+        applyRetainedStatus(HwRetainedSendStatus.None)
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `a retry status locks the original fee and the fee cannot be edited`() = test {
+        setSendState(retainedReviewState())
+        applyRetainedStatus(RETAINED_RETRY)
+
+        val locked = sut.sendUiState.value
+        assertTrue(locked.isRetainedHardwarePayment)
+        assertEquals(TransactionSpeed.Custom(RETAINED_RETRY.feeRate.toUInt()), locked.speed)
+        assertEquals(OnchainFeeUi(FeeRate.CUSTOM, RETAINED_RETRY.miningFeeSats.toLong()), locked.onchainFeeUi)
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.SpeedAndFee)
+            sut.onSelectSpeed(TransactionSpeed.Custom(0u))
+            sut.onSelectSpeed(TransactionSpeed.Fast)
+            sut.setTransactionSpeed(TransactionSpeed.Fast)
+            advanceUntilIdle()
+
+            assertEquals(locked, sut.sendUiState.value)
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun `moving to another amount or address releases the fee lock`() = test {
+        settingsData.value = SettingsData(coinSelectAuto = false, defaultTransactionSpeed = TransactionSpeed.Fast)
+        val changes = listOf<(SendUiState) -> SendUiState>(
+            { it.copy(amount = 2_000uL) },
+            { it.copy(address = "bcrt1qother") },
+        )
+        for (change in changes) {
+            setSendState(retainedReviewState())
+            applyRetainedStatus(RETAINED_RETRY)
+            assertTrue(sut.sendUiState.value.isRetainedHardwarePayment)
+
+            setSendState(change(sut.sendUiState.value))
+            applyRetainedStatus(HwRetainedSendStatus.Blocking)
+            advanceUntilIdle()
+
+            assertFalse(sut.sendUiState.value.isRetainedHardwarePayment)
+            assertEquals(TransactionSpeed.Fast, sut.sendUiState.value.speed)
+            assertEquals(FeeRate.fromSpeed(TransactionSpeed.Fast), sut.sendUiState.value.onchainFeeUi.rate)
+        }
+    }
+
+    @Test
+    fun `retained status reads settings only when a fee lock is released`() = test {
+        setSendState(retainedReviewState())
+        clearInvocations(settingsStore)
+
+        applyRetainedStatus(HwRetainedSendStatus.None)
+        applyRetainedStatus(RETAINED_RETRY)
+
+        verify(settingsStore, never()).data
+
+        applyRetainedStatus(HwRetainedSendStatus.None)
+
+        verify(settingsStore, atLeast(1)).data
+    }
+
+    @Test
+    fun `reopened Shop hardware request keeps its exact retained state and ignores the status`() = test {
+        val (request, signed) = reopenRetainedHardwareRequest(balanceSats = 1_000_000uL, amountSats = 30_000uL)
+        val state = sut.sendUiState.value
+
+        assertEquals(
+            state.copy(
+                isRetainedHardwarePayment = true,
+                address = REGTEST_ADDRESS,
+                addressInput = REGTEST_ADDRESS,
+                isAddressInputValid = true,
+                amount = request.amount.atomic,
+                isAmountInputValid = true,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Custom(signed.feeRate.toUInt()),
+                onchainFeeUi = OnchainFeeUi(rate = FeeRate.CUSTOM, sats = signed.miningFeeSats.toLong()),
+            ),
+            state,
+        )
+        clearInvocations(settingsStore)
+
+        sut.applyRetainedSendStatus(
+            HARDWARE_WALLET_ID,
+            state.address,
+            state.amount,
+            HwRetainedSendStatus.Blocking,
+        )
+
+        assertEquals(state, sut.sendUiState.value)
+        assertFalse(state.isRetainedSendCheckPending)
+        verify(settingsStore, never()).data
+    }
+
+    @Test
+    fun `swipe and confirm do nothing while the retained record check is pending`() = test {
+        stubRetainedReviewFiatValue()
+        setSendState(retainedReviewState())
+        assertTrue(sut.sendUiState.value.isRetainedSendCheckPending)
+        assertFalse(sut.sendUiState.value.isHardwareReviewReady)
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+            assertFalse(sut.sendUiState.value.shouldConfirmPay)
+            assertNull(sut.sendUiState.value.showSanityWarningDialog)
+
+            setSendState(sut.sendUiState.value.copy(shouldConfirmPay = true))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            expectNoEvents()
+
+            setSendState(sut.sendUiState.value.copy(shouldConfirmPay = false))
+            applyRetainedStatus(HwRetainedSendStatus.None)
+            assertTrue(sut.sendUiState.value.isHardwareReviewReady)
+
+            sut.setSendEvent(SendEvent.SwipeToPay)
+            advanceUntilIdle()
+            assertTrue(sut.sendUiState.value.shouldConfirmPay)
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            assertEquals(SendEffect.NavigateToHardwareSign, awaitItem())
+        }
+    }
+
+    private fun retainedReviewState() = SendUiState(
+        address = REGTEST_ADDRESS,
+        amount = 1_000uL,
+        isAmountInputValid = true,
+        hardwareWalletId = HARDWARE_WALLET_ID,
+        hardwareAvailableSats = 100_000uL,
+        payMethod = SendMethod.ONCHAIN,
+        onchainFeeUi = OnchainFeeUi(sats = 100L),
+    )
+
+    private fun nearMaxRetainedState() = retainedReviewState().copy(
+        amount = RETAINED_AMOUNT_SATS,
+        isAmountInputValid = false,
+        hardwareAvailableSats = RETAINED_AMOUNT_SATS - 500uL,
+        speed = TransactionSpeed.Fast,
+    )
+
+    private suspend fun stubRetainedRecord(retryWasRefused: Boolean = false, observed: Boolean = false) {
+        whenever(hwRetainedSendRepo.record(any())).thenReturn(
+            Result.success(
+                HwRetainedSend(
+                    walletId = HARDWARE_WALLET_ID,
+                    address = REGTEST_ADDRESS,
+                    amountSats = RETAINED_AMOUNT_SATS,
+                    serializedTx = "00",
+                    miningFeeSats = RETAINED_RETRY.miningFeeSats,
+                    feeRate = RETAINED_RETRY.feeRate,
+                    totalSpent = RETAINED_AMOUNT_SATS + RETAINED_RETRY.miningFeeSats,
+                    retryWasRefused = retryWasRefused,
+                    observed = observed,
+                )
+            )
+        )
+    }
+
+    private suspend fun applyRetainedStatus(status: HwRetainedSendStatus) {
+        val state = sut.sendUiState.value
+        sut.applyRetainedSendStatus(requireNotNull(state.hardwareWalletId), state.address, state.amount, status)
+    }
+
+    private fun stubRetainedReviewFiatValue() {
+        settingsData.value = SettingsData(coinSelectAuto = false)
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(
+            Result.success(
+                ConvertedAmount(
+                    value = BigDecimal.ZERO,
+                    formatted = "0.00",
+                    symbol = "$",
+                    currency = USD,
+                    flag = "",
+                    sats = 1_000,
+                )
+            )
+        )
     }
 
     @Test
@@ -10199,6 +10851,390 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `camera scan still decoding does not route after enter manually`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input))
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `duplicate camera scan keeps the decoding scan cancellable by enter manually`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input))
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.AddressContinue(input))
+            advanceUntilIdle()
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `paste still decoding does not route after enter manually`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        stubClipboard(input)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.Paste)
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `camera scan still decoding does not route after contacts`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+        isPaykitEnabled.value = true
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input))
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+            sut.setSendEvent(SendEvent.Contacts)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToContacts, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `paste still preparing does not reopen send after the sheet closes`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        stubClipboard(input)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever { blocktankRepo.refreshInfo() }.doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+            Result.success(Unit)
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.Paste)
+        advanceUntilIdle()
+        assertTrue(entered.isCompleted)
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(coreService, never()).decode(input)
+    }
+
+    @Test
+    fun `the same code scanned again after enter manually routes`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        val release = CompletableDeferred<Unit>()
+        var decodes = 0
+        whenever(coreService.decode(input)).doSuspendableAnswer {
+            if (decodes++ == 0) release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(input))
+            advanceUntilIdle()
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            sut.onSendRecipientShown()
+            sut.setSendEvent(SendEvent.AddressContinue(input, isRecipientRead = true))
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(2, decodes)
+    }
+
+    @Test
+    fun `a paste replacing a camera scan still decoding routes and the replaced scan does not`() = test {
+        val scanned = stubOnchainAmountScan(amountSats = 10_000u)
+        val pasted = "bitcoin:$REGTEST_ADDRESS?amount=20000"
+        stubClipboard(pasted)
+        val release = CompletableDeferred<Unit>()
+        whenever(coreService.decode(scanned)).doSuspendableAnswer {
+            release.await()
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 10_000u, null, null, null))
+        }
+        whenever(coreService.decode(pasted)).thenReturn(
+            Scanner.OnChain(OnChainInvoice(REGTEST_ADDRESS, 20_000u, null, null, null)),
+        )
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.AddressContinue(scanned))
+            advanceUntilIdle()
+            sut.setSendEvent(SendEvent.Paste)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+
+            release.complete(Unit)
+            advanceUntilIdle()
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+        assertEquals(20_000uL, sut.sendUiState.value.amount)
+    }
+
+    @Test
+    fun `login request from the recipient camera opens its sheet`() = test {
+        val lnurl = "lnurl1recipientcameraauth"
+        val data = com.synonym.bitkitcore.LnurlAuthData(uri = lnurl, tag = "login", k1 = "k1", domain = "example.com")
+        // Decoding suspends, as it does on device, so the scan is still running once its handle is kept.
+        val decoded = CompletableDeferred<Unit>()
+        whenever { coreService.decode(lnurl) }.doSuspendableAnswer {
+            decoded.await()
+            Scanner.LnurlAuth(data)
+        }
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.AddressContinue(lnurl))
+        advanceUntilIdle()
+        decoded.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.LnurlAuth(domain = "example.com", lnurl = lnurl, k1 = "k1"), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `pasted login request opens its sheet`() = test {
+        val lnurl = "lnurl1recipientpasteauth"
+        val data = com.synonym.bitkitcore.LnurlAuthData(uri = lnurl, tag = "login", k1 = "k1", domain = "example.com")
+        stubClipboard(lnurl)
+        val decoded = CompletableDeferred<Unit>()
+        whenever { coreService.decode(lnurl) }.doSuspendableAnswer {
+            decoded.await()
+            Scanner.LnurlAuth(data)
+        }
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.Paste)
+        advanceUntilIdle()
+        decoded.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.LnurlAuth(domain = "example.com", lnurl = lnurl, k1 = "k1"), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `a camera frame delivered after enter manually does not route`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.onSendRecipientShown()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            sut.setSendEvent(SendEvent.AddressContinue(input, isRecipientRead = true))
+            sut.setSendEvent(SendEvent.AddressContinue(input, isNearbyRead = true))
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(coreService, never()).decode(input)
+    }
+
+    @Test
+    fun `a camera frame delivered after contacts does not route`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+        isPaykitEnabled.value = true
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.onSendRecipientShown()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.Contacts)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToContacts, awaitItem())
+
+            sut.setSendEvent(SendEvent.AddressContinue(input, isRecipientRead = true))
+            advanceUntilIdle()
+
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(coreService, never()).decode(input)
+    }
+
+    @Test
+    fun `a camera frame delivered after send closes does not reopen it`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.onSendRecipientShown()
+        sut.hideSheet()
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.AddressContinue(input, isRecipientRead = true))
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(coreService, never()).decode(input)
+    }
+
+    @Test
+    fun `the recipient screen reads again once it is shown after enter manually`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            sut.onSendRecipientShown()
+            sut.setSendEvent(SendEvent.AddressContinue(input, isRecipientRead = true))
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `an address continued after enter manually routes`() = test {
+        val input = stubOnchainAmountScan(amountSats = 10_000u)
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.EnterManually)
+            advanceUntilIdle()
+            assertEquals(SendEffect.NavigateToAddress, awaitItem())
+
+            sut.setSendEvent(SendEvent.AddressContinue(input))
+            advanceUntilIdle()
+
+            assertEquals(SendEffect.NavigateToConfirm, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `a pasted contact's refresh is not cancelled by a later send visit`() = test {
+        enablePaykitUi()
+        pubkyContacts.value = listOf(PubkyProfile.placeholder(testPublicKey))
+        stubClipboard(testPublicKey)
+        val release = CompletableDeferred<Unit>()
+        var isRefreshed = false
+        whenever { refreshContactPaykitLink(any()) }.doSuspendableAnswer {
+            release.await()
+            isRefreshed = true
+            Result.success(Unit)
+        }
+        sut.setIsAuthenticated(true)
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.Paste)
+        advanceUntilIdle()
+        assertNull(sut.currentSheet.value)
+
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        sut.setSendEvent(SendEvent.EnterManually)
+        advanceUntilIdle()
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertTrue(isRefreshed, "A later Send visit cancelled the contact's refresh")
+    }
+
+    @Test
     fun `nearby read still decoding does not route after contacts`() = test {
         val input = stubOnchainAmountScan(amountSats = 10_000u)
         val entered = CompletableDeferred<Unit>()
@@ -10492,6 +11528,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private fun stubHardwareFunding() {
         hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
         whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }.thenReturn(Result.success(48_000uL))
+    }
+
+    private fun stubClipboard(text: String) {
+        val item = mock<ClipData.Item> { on { this.text } doReturn text }
+        val clipData = mock<ClipData> { on { getItemAt(0) } doReturn item }
+        whenever(clipboardManager.primaryClip).thenReturn(clipData)
     }
 
     private suspend fun stubOnchainAmountScan(amountSats: ULong): String {
@@ -11291,6 +12333,111 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
             sut.onSendSuccess(details, allowDuplicateHash = true)
             assertEquals(SendEffect.PaymentSuccess, awaitItem())
+        }
+    }
+
+    @Test
+    fun `paying an invoice already paid this session shows its success again`() = test {
+        val bolt11 = "lnbcrt1alreadypaid"
+        val invoice = lightningInvoice(bolt11, 1_000u)
+        val paymentHash = invoice.paymentHash.toHex()
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
+        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 0uL,
+            )
+        )
+        val state = SendUiState(
+            address = bolt11,
+            amount = 1_000u,
+            payMethod = SendMethod.LIGHTNING,
+            decodedInvoice = invoice,
+        )
+
+        sut.sendEffect.test {
+            setSendState(state)
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+
+            setSendState(state)
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+        }
+    }
+
+    @Test
+    fun `repaying an amountless invoice with another amount shows the amount sent`() = test {
+        val bolt11 = "lnbcrt1amountless"
+        val invoice = lightningInvoice(bolt11, 0u)
+        val paymentHash = invoice.paymentHash.toHex()
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 1_000u)).thenReturn(Result.success(paymentHash))
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 2_000u)).thenReturn(Result.success(paymentHash))
+        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 0uL,
+            )
+        )
+        val earlier = mock<LightningActivity> {
+            on { value } doReturn 1_000u
+            on { txType } doReturn PaymentType.SENT
+        }
+        whenever(activityRepo.getActivity(paymentHash)).thenReturn(Result.success(BitkitActivity.Lightning(earlier)))
+        val state = SendUiState(address = bolt11, payMethod = SendMethod.LIGHTNING, decodedInvoice = invoice)
+
+        sut.sendEffect.test {
+            setSendState(state.copy(amount = 1_000u))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+
+            setSendState(state.copy(amount = 2_000u))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+        }
+        assertEquals(1_000L, sut.successSendUiState.value.sats)
+    }
+
+    @Test
+    fun `a payment shown by its event during the swipe shows its success once`() = test {
+        val bolt11 = "lnbcrt1eventfirst"
+        val invoice = lightningInvoice(bolt11, 1_000u)
+        val paymentHash = invoice.paymentHash.toHex()
+        val details = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.LIGHTNING,
+            direction = NewTransactionSheetDirection.SENT,
+            paymentHashOrTxId = paymentHash,
+            sats = 1_000L,
+        )
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).doSuspendableAnswer {
+            sut.onSendSuccess(details)
+            Result.success(paymentHash)
+        }
+        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 0uL,
+            )
+        )
+        setSendState(
+            SendUiState(address = bolt11, amount = 1_000u, payMethod = SendMethod.LIGHTNING, decodedInvoice = invoice)
+        )
+
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+            expectNoEvents()
         }
     }
 
@@ -24333,6 +25480,19 @@ private const val SAMROCK_SETUP_URL =
 /** Stands in for the epoch second a seed restore began. */
 private const val RESTORE_STARTED_AT = 1_700_000_000L
 private const val HARDWARE_WALLET_ID = "trezor:wallet"
+private val RETAINED_RETRY = HwRetainedSendStatus.Retry(feeRate = 7uL, miningFeeSats = 300uL)
+private const val RETAINED_AMOUNT_SATS = 50_000uL
+private val NEAR_MAX_RETAINED = HwRetainedSend(
+    walletId = HARDWARE_WALLET_ID,
+    address = REGTEST_ADDRESS,
+    amountSats = 13_085_910uL,
+    serializedTx = "00",
+    miningFeeSats = 450uL,
+    feeRate = 1uL,
+    totalSpent = 13_086_360uL,
+    retryWasRefused = false,
+    observed = false,
+)
 private const val REGTEST_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"
 private const val PREPARED_FEE_ADDRESS = "bcrt1qpreparedfee"
 private const val SWAP_QUOTE_ID = "swap-quote"
