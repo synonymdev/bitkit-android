@@ -1044,7 +1044,7 @@ class SparkExitRepo @Inject constructor(
         val attempt = savingsSend(record)
         // An accepted send counts too: its txid may not be on the record yet, after a stop or a failed save.
         val hasSavingsSend = exit.isSavingsSendUnresolved || exit.isSavingsPaymentRefused ||
-            exit.isSavingsSendAccepted || attempt?.isUnresolved == true || attempt?.hasPositiveEvidence == true ||
+            attempt?.isUnresolved == true || attempt?.hasPositiveEvidence == true ||
             SparkExitMath.isSavingsPaymentRefused(record, attempt)
         return SparkExitMath.savingsRefusal(record, exit.fundingState, hasSavingsSend)
     }
@@ -1056,16 +1056,19 @@ class SparkExitRepo @Inject constructor(
     }
 
     /**
-     * A savings send to the funding address the node accepted is the exit's payment: kept on the record when a stop or
-     * failed save lost its txid, before a later send can take its place in the journal.
+     * A refused start's savings payment the node accepted, whose txid a stop or failed save lost, is the exit's
+     * payment: kept on the record before a later send can take its place in the journal. Only while the refusal is on
+     * record, so a payment the exit forgot since (dropped, or short) is never kept again.
      */
     private suspend fun keepAcceptedSavingsSend(record: SparkExitRecord): SparkExitRecord {
         if (!record.isActive || record.phase !is SparkExitRecord.Phase.AwaitingFunding) return record
-        if (record.fundingPaymentTxid != null) return record
+        if (record.fundingPaymentTxid != null || record.savingsRefusal == null) return record
         val txid = savingsSend(record)?.takeIf { it.hasPositiveEvidence }?.txid ?: return record
         Logger.warn("Keeping the accepted Spark exit funding '$txid' the record lost", context = TAG)
         val paid = record.copy(fundingPaymentTxid = txid, savingsRefusal = null)
-        saveRecord(paid)
+        // Kept as paid even when the save fails, as after the payment; a later tick saves it.
+        runCatching { saveRecord(paid) }
+            .onFailure { Logger.error("Failed to save the Spark exit funding payment '$txid'", it, context = TAG) }
         _state.update { it.copy(record = paid) }
         return paid
     }
@@ -1075,7 +1078,6 @@ class SparkExitRepo @Inject constructor(
         _state.update {
             it.copy(
                 isSavingsSendUnresolved = attempt?.isUnresolved == true,
-                isSavingsSendAccepted = attempt?.hasPositiveEvidence == true,
                 isSavingsPaymentRefused = SparkExitMath.isSavingsPaymentRefused(record, attempt),
             )
         }
@@ -1172,7 +1174,6 @@ class SparkExitRepo @Inject constructor(
                 record.fundedSats == 0uL &&
                 record.fundingPaymentTxid == null &&
                 !exit.isSavingsSendUnresolved &&
-                !exit.isSavingsSendAccepted &&
                 exit.fundingSeenSats == 0uL
         }
 
@@ -1199,6 +1200,8 @@ class SparkExitRepo @Inject constructor(
             // Runs to its end once begun, so a cancel that settled the transfer always releases Spark.
             withContext(NonCancellable) {
                 tickMutex.withLock {
+                    // A refused start's accepted savings payment the record lost is kept first, so it stops the cancel.
+                    _state.value.record?.let { keepAcceptedSavingsSend(it) }
                     val record = _state.value.record ?: throw SparkExitError("No Spark exit to cancel")
                     val address = requireNotNull(record.funding.firstOrNull()?.address) {
                         "No Spark exit funding address"
@@ -1207,8 +1210,7 @@ class SparkExitRepo @Inject constructor(
                     val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }
                         .getOrElse { throw SparkExitCancelUnreadable() }
                     val isSending = attempt?.address == address && attempt.isUnresolved
-                    val isSent = attempt?.address == address && attempt.hasPositiveEvidence
-                    _state.update { it.copy(isSavingsSendUnresolved = isSending, isSavingsSendAccepted = isSent) }
+                    _state.update { it.copy(isSavingsSendUnresolved = isSending) }
                     if (!canCancel) throw SparkExitError("The Spark exit can no longer be cancelled")
                     val chain = requireNotNull(chain) { "No chain host for this network" }
                     val utxos = runSuspendCatching { chain.utxos(address) }
@@ -1397,8 +1399,6 @@ data class SparkExitState(
     val fundingSeenSats: ULong = 0uL,
     /** A savings send to the funding address is unresolved and may be retried: cancel stays off. */
     val isSavingsSendUnresolved: Boolean = false,
-    /** A savings send to the funding address was accepted, though the record may not hold its txid yet. */
-    val isSavingsSendAccepted: Boolean = false,
     /** A node refused the savings payment of the exit's fee funding: progress says so and offers to pay again. */
     val isSavingsPaymentRefused: Boolean = false,
     /** How many payments make up [fundingSeenSats] before the exit starts: each adds its own input fee. */

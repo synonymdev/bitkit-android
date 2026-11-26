@@ -1835,19 +1835,17 @@ class SparkExitRepoTest : BaseUnitTest() {
         stubFunding { Result.success(OnchainSendOutcome.Accepted("twice")) }
         val sut = quotedSut(FakeSparkExitRecovering(), fundingChain())
         sut.load().getOrThrow()
-
-        sut.tick().getOrThrow()
         val retry = SparkExitSavingsRetry(20_000uL, 650uL, FeeRates(fast = 7u, mid = 4u, slow = 1u), canPay = true)
-        val paid = sut.paySavingsRefusal(retry)
-        sut.onAppBackgrounded()
 
-        assertTrue(sut.state.value.isSavingsSendAccepted, "progress offers the refused payment again")
+        val paid = sut.paySavingsRefusal(retry)
+        // Cancel keeps the payment on the record first, before a later send can take its place in the journal.
+        val cancelled = sut.cancel()
+
         assertTrue(paid.isFailure)
-        // The tick keeps the payment on the record, before a later send can take its place in the journal.
+        assertTrue(cancelled.isFailure)
         val kept = assertNotNull(store.load())
         assertEquals("accepted", kept.fundingPaymentTxid)
         assertNull(kept.savingsRefusal)
-        assertFalse(sut.canCancel)
         verify(lightning, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
@@ -1856,6 +1854,34 @@ class SparkExitRepoTest : BaseUnitTest() {
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
         )
+    }
+
+    @Test
+    fun `a tick keeps a refused start's accepted savings payment once, never one the exit forgot since`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        val refusal = SparkExitRecord.SavingsRefusal(20_000uL, 650uL)
+        store.save(awaitingRecord().copy(savingsRefusal = refusal))
+        val accepted = refusedSavingsPayment().copy(
+            evidence = OnchainSendEvidence.Accepted,
+            txid = "accepted",
+            refusalReason = null,
+            localFollowupComplete = true,
+        )
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(accepted)
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain())
+        sut.load().getOrThrow()
+
+        sut.tick().getOrThrow()
+        sut.onAppBackgrounded()
+        assertEquals("accepted", assertNotNull(store.load()).fundingPaymentTxid)
+        // The exit forgot the payment (dropped, or short): the journal still holds it, and it is never kept again.
+        store.save(awaitingRecord())
+        val later = quotedSut(FakeSparkExitRecovering(), fundingChain())
+        later.load().getOrThrow()
+        later.tick().getOrThrow()
+        later.onAppBackgrounded()
+
+        assertNull(assertNotNull(store.load()).fundingPaymentTxid)
     }
 
     @Test

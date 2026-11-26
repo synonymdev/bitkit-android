@@ -107,7 +107,6 @@ class SparkExitViewModel @Inject constructor(
                 canCancel = sparkExitRepo.canCancel,
                 isSavingsPaymentRefused = exit.isSavingsPaymentRefused,
                 isSavingsSendUnresolved = exit.isSavingsSendUnresolved,
-                isSavingsSendAccepted = exit.isSavingsSendAccepted,
                 staysOnSparkSats = SparkExitMath.staysOnSparkSats(balanceSats, exit.record),
                 isSettling = exit.isSettling,
                 networkFees = exit.networkFees,
@@ -440,8 +439,6 @@ data class SparkExitUiState(
     val isRetryingSavingsPayment: Boolean = false,
     /** A savings send to the funding address went out and is not known accepted or refused yet. */
     val isSavingsSendUnresolved: Boolean = false,
-    /** A savings send to the funding address was accepted, though the record may not hold its txid yet. */
-    val isSavingsSendAccepted: Boolean = false,
     /** The start's savings payment, refused before it went out for a higher fee, priced again for progress. */
     val savingsRetry: SparkExitSavingsRetry? = null,
     val backgroundLimits: SparkExitBackgroundLimits = SparkExitBackgroundLimits(),
@@ -503,7 +500,7 @@ data class SparkExitUiState(
     private val savingsRefusal: SparkExitRecord.SavingsRefusal?
         get() {
             val record = record ?: return null
-            val hasSavingsSend = isSavingsSendUnresolved || isSavingsPaymentRefused || isSavingsSendAccepted
+            val hasSavingsSend = isSavingsSendUnresolved || isSavingsPaymentRefused
             return SparkExitMath.savingsRefusal(record, fundingState, hasSavingsSend)
         }
 

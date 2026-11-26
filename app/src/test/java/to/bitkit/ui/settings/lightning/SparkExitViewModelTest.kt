@@ -324,8 +324,6 @@ class SparkExitViewModelTest : BaseUnitTest() {
         sut.loadSavingsRetry()
         assertEquals(20_650uL, sut.uiState.value.savingsRetryOffer?.totalSats)
         assertTrue(sut.uiState.value.offersSavingsRetry)
-        // A savings send the node accepted is never paid again, also before its txid is on the record.
-        assertFalse(sut.uiState.value.copy(isSavingsSendAccepted = true).offersSavingsRetry)
 
         // A higher price published after the screen showed 650 is never what the tap pays.
         val newer = retry.copy(feeSats = 900uL)
