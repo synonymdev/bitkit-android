@@ -1919,13 +1919,19 @@ class SparkExitRepoTest : BaseUnitTest() {
         whenever(lightning.currentOnchainSendAttempt()).thenReturn(refused)
         whenever(
             lightning.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
-        ).thenReturn(Result.success(OnchainSendOutcome.Accepted("again")))
+        ).doSuspendableAnswer {
+            whenever(lightning.currentOnchainSendAttempt())
+                .thenReturn(refused.copy(evidence = OnchainSendEvidence.Accepted, txid = "again"))
+            Result.success(OnchainSendOutcome.Accepted("again"))
+        }
         whenever(lightning.completeAcceptedOrdinaryFollowup(any())).thenReturn(Unit)
         val sut = quotedSut(FakeSparkExitRecovering())
         sut.load().getOrThrow()
         sut.tick().getOrThrow()
+        assertTrue(sut.state.value.isSavingsSendUnresolved)
 
         sut.retrySavingsPayment().getOrThrow()
+        sut.onAppBackgrounded()
 
         // The same attempt at the rate the user approved: it spends the refused payment's inputs, so at most one of
         // the two can ever confirm. No new payment picks other coins.
@@ -1940,7 +1946,35 @@ class SparkExitRepoTest : BaseUnitTest() {
         )
         assertEquals("again", assertNotNull(store.load()).fundingPaymentTxid)
         assertFalse(sut.state.value.isSavingsPaymentRefused)
+        assertFalse(sut.state.value.isSavingsSendUnresolved, "an accepted payment says nothing about landing")
+    }
+
+    @Test
+    fun `paying again from savings with no answer keeps the payment as the exit's own`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(awaitingRecord())
+        val refused = refusedSavingsPayment()
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(refused)
+        whenever(
+            lightning.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
+        ).doSuspendableAnswer {
+            // The error carries no txid: the send journal holds it, unresolved, for the funding address.
+            whenever(lightning.currentOnchainSendAttempt())
+                .thenReturn(refused.copy(evidence = OnchainSendEvidence.Unknown, txid = "maybe"))
+            Result.failure(OnchainSendPendingError(IOException("no answer")))
+        }
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+        sut.tick().getOrThrow()
+
+        assertTrue(sut.retrySavingsPayment().isFailure)
         sut.onAppBackgrounded()
+
+        assertEquals("maybe", assertNotNull(store.load()).fundingPaymentTxid)
+        assertEquals(SparkExitFundingState.Paid, sut.state.value.fundingState)
+        assertFalse(sut.state.value.isSavingsPaymentRefused, "it may still land, so it is not offered again")
+        assertTrue(sut.state.value.isSavingsSendUnresolved)
+        assertFalse(sut.canCancel, "savings may have paid this exit")
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
