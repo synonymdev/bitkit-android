@@ -3,6 +3,7 @@ package to.bitkit.ui.settings.lightning
 import android.content.Context
 import com.synonym.bitkitcore.FeeRates
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -36,6 +37,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 class SparkExitViewModelTest : BaseUnitTest() {
     private val exitState = MutableStateFlow(SparkExitState())
@@ -338,23 +340,28 @@ class SparkExitViewModelTest : BaseUnitTest() {
     fun `a refused savings payment is priced only while progress is open`() = test {
         val refusal = SparkExitRecord.SavingsRefusal(20_000uL, 650uL)
         exitState.value = SparkExitState(record = SparkExitFixtures.record().copy(savingsRefusal = refusal))
-        val retry = SparkExitSavingsRetry(20_000uL, 650uL, FeeRates(fast = 7u, mid = 4u, slow = 1u), canPay = true)
-        whenever(repo.priceSavingsRefusal()).thenReturn(Result.success(retry))
+        // No price yet, as before the node runs: pricing goes on every 15 seconds.
+        whenever(repo.priceSavingsRefusal()).thenReturn(Result.failure(IllegalStateException("Node not running")))
         val sut = SparkExitViewModel(mock(), repo, sparkRepo)
 
         sut.loadSavingsRetry()
         verify(repo, never()).priceSavingsRefusal()
 
-        // A closing screen leaves a screen opened before its close finished priced.
         sut.startSavingsRetryPricing()
         sut.startSavingsRetryPricing()
-        sut.stopSavingsRetryPricing()
         sut.loadSavingsRetry()
         verify(repo, times(1)).priceSavingsRefusal()
 
+        // A screen closing after another opened leaves the open one priced.
         sut.stopSavingsRetryPricing()
+        delay(16.seconds)
+        verify(repo, times(2)).priceSavingsRefusal()
+
+        // The last screen closing stops the pricing still running, and a refresh never starts it again.
+        sut.stopSavingsRetryPricing()
+        delay(16.seconds)
         sut.loadSavingsRetry()
-        verify(repo, times(1)).priceSavingsRefusal()
+        verify(repo, times(2)).priceSavingsRefusal()
     }
 
     @Test
