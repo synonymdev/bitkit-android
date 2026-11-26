@@ -8812,7 +8812,12 @@ class AppViewModel @Inject constructor(
         onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> {
         val sent = if (rechecksAtSubmission) {
-            lightningRepo.payInvoiceRecheckedAtSubmission(bolt11, amount, paymentDeadlineAt, onBeforeSend = onBeforeSend)
+            lightningRepo.payInvoiceRecheckedAtSubmission(
+                bolt11,
+                amount,
+                paymentDeadlineAt,
+                onBeforeSend = onBeforeSend
+            )
         } else {
             lightningRepo.payInvoice(bolt11, amount, paymentDeadlineAt, onBeforeSend)
         }

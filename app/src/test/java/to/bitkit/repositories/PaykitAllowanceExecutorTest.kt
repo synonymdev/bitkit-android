@@ -246,7 +246,9 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         whenever(payer.releasePaymentList(any(), any(), any())).thenReturn(Result.success(Unit))
         whenever(payer.prepareProof(any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
         whenever(payer.associateLightningPayment(any(), any(), any(), any())).thenReturn(Result.success(Unit))
-        whenever(payer.payLightning(any(), any(), anyOrNull(), anyOrNull(), any())).thenReturn(Result.success(PAYMENT_HASH))
+        whenever(
+            payer.payLightning(any(), any(), anyOrNull(), anyOrNull(), any())
+        ).thenReturn(Result.success(PAYMENT_HASH))
         whenever(payer.failLightningPayment(any(), any())).thenReturn(true)
         whenever(payer.lightningPaymentStatus(any())).thenAnswer { nodeStatuses[it.getArgument<String>(0)] }
         whenever(payer.canListLightningPayments()).thenAnswer { nodeListsPayments }
