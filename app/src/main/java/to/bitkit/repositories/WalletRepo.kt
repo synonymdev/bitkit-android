@@ -344,7 +344,7 @@ class WalletRepo @Inject constructor(
 
     /** Creates a fresh invoice and BIP21 for the current request, keeping its amount, description and tags. */
     suspend fun refreshBip21(): Result<Unit> = updateReceiveState(
-        beforeLock = { _walletState.update { it.copy(bip21 = "", hasReceiveInvoiceError = false) } },
+        beforeLock = { _walletState.update { it.copy(hasReceiveInvoiceError = false) } },
     ) {
         runSuspendCatching { refreshBip21Locked().getOrThrow() }.onFailure {
             _walletState.update { state -> state.copy(hasReceiveInvoiceError = true) }

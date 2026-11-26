@@ -62,6 +62,8 @@ import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.test.idleSparkRepo
 import to.bitkit.ui.screens.wallets.receive.ReceiveTab
 import to.bitkit.ui.screens.wallets.receive.getInvoiceForTab
+import to.bitkit.ui.screens.wallets.receive.getSavingsCopyText
+import to.bitkit.ui.screens.wallets.receive.nearbyReceiveRequest
 import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeIncomplete
 import to.bitkit.usecases.WipeWalletUseCase
@@ -2269,6 +2271,41 @@ class WalletRepoTest : BaseUnitTest() {
         assertTrue(state.hasReceiveInvoiceError)
         assertEquals(SATS, state.bip21AmountSats)
         assertEquals("note", state.bip21Description)
+    }
+
+    @Test
+    fun `refreshBip21 keeps the savings request when the address check and new invoice fail`() = test {
+        stubReceiveInvoices(INVOICE)
+        sut.setOnchainAddress(ADDRESS)
+        sut.updateBip21Invoice(SATS, "note").getOrThrow()
+        whenever(coreService.isAddressUsed(any())).doSuspendableAnswer { throw AppError("electrum unavailable") }
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any(), any())).thenReturn(Result.failure(error))
+        val states = mutableListOf<WalletState>()
+        sut.walletState.onEach { states.add(it) }.launchIn(backgroundScope)
+        states.clear()
+
+        assertTrue(sut.refreshBip21().isFailure)
+
+        val savingsRequest = "bitcoin:$ADDRESS?amount=0.00001&message=note"
+        val state = sut.walletState.value
+        assertTrue(state.hasReceiveInvoiceError)
+        assertEquals(savingsRequest, getSavingsCopyText(state.bip21, state.onchainAddress))
+        assertTrue(states.isNotEmpty())
+        states.forEach {
+            assertEquals(savingsRequest, getSavingsCopyText(it.bip21, it.onchainAddress))
+            listOf(ReceiveTab.AUTO, ReceiveTab.SPENDING).forEach { tab ->
+                val invoice = getInvoiceForTab(
+                    tab = tab,
+                    bip21 = it.bip21,
+                    bolt11 = it.bolt11,
+                    isNodeRunning = true,
+                    onchainAddress = it.onchainAddress,
+                    isReceiveInvoiceUpdating = it.isReceiveInvoiceUpdating,
+                )
+                val nearby = nearbyReceiveRequest(tab, invoice, it.hasReceiveInvoiceError, it.isReceiveInvoiceUpdating)
+                assertEquals(null, nearby)
+            }
+        }
     }
 
     @Test
