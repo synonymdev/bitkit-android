@@ -16709,7 +16709,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setSendEvent(SendEvent.PayConfirmed)
         advanceUntilIdle()
 
-        verify(paykitPaymentProofRepo, never()).failLightningPayment(paymentHash)
+        verify(paykitPaymentProofRepo, never())
+            .failLightningPayment(eq(paymentHash), anyOrNull<PaykitPaymentRequestId>())
         verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
         verify(pendingPaymentRepo).track(paymentHash)
     }
