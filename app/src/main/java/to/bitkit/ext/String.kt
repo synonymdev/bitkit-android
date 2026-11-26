@@ -69,7 +69,11 @@ fun String.isWebLink(): Boolean {
     if (!hasScheme && '@' in value.substringBefore('/')) return false
     val url = if (hasScheme) value else "https://$value"
     val afterScheme = url.substringAfter(':')
-    if (!afterScheme.startsWith("//") || '\\' in afterScheme.drop(2).takeWhile { it !in "/?#" }) return false
+    if (!afterScheme.startsWith("//")) return false
+    val authority = afterScheme.drop(2).takeWhile { it !in "/?#" }
+    val hostAndPort = authority.substringAfterLast('@')
+    val rawHost = if (hostAndPort.startsWith('[')) hostAndPort else hostAndPort.substringBefore(':')
+    if ('\\' in authority || rawHost.isEmpty()) return false
     val parts = url.linkUrlParts() ?: return false
     val host = parts.host.removeSuffix(".")
     return parts.scheme in WEB_LINK_SCHEMES &&
