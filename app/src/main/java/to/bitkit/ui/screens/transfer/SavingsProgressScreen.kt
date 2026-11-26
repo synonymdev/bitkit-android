@@ -38,8 +38,8 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.screens.transfer.components.TransferAnimationView
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.phoneScreenWidth
 import to.bitkit.ui.utils.removeAccentTags
-import to.bitkit.ui.utils.screenWidth
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 import to.bitkit.viewmodels.AppViewModel
@@ -247,7 +247,7 @@ internal fun SavingsProgressContent(
                     keepAssetRatios = true,
                     innerRingShare = INNER_RING_SHARE,
                     figureShare = FIGURE_SHARE,
-                    maxSize = screenWidth() * RING_SCREEN_SHARE,
+                    maxSize = phoneScreenWidth() * RING_SCREEN_SHARE,
                 )
             } else {
                 Box(

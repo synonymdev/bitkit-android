@@ -42,37 +42,41 @@ fun TransferIntroScreen(
             .background(MaterialTheme.colorScheme.background)
             .systemBarsPadding()
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.lightning),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .padding(top = 130.dp)
-                .fillMaxWidth()
-        )
+        Column(modifier = Modifier.fillMaxSize()) {
+            Image(
+                painter = painterResource(id = R.drawable.lightning),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .padding(top = 130.dp)
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                Display(
+                    stringResource(R.string.lightning__transfer_intro__title).withAccent(accentColor = Colors.Purple)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                BodyM(stringResource(R.string.lightning__transfer_intro__text_spark), color = Colors.White64)
+
+                Spacer(modifier = Modifier.height(32.dp))
+                PrimaryButton(
+                    text = stringResource(R.string.lightning__transfer_intro__button),
+                    onClick = onContinueClick,
+                    modifier = Modifier.testTag("TransferIntro-button")
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
         AppTopBar(
             titleText = stringResource(R.string.lightning__funding__nav_title),
             onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
         )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .align(Alignment.BottomCenter)
-        ) {
-            Display(stringResource(R.string.lightning__transfer_intro__title).withAccent(accentColor = Colors.Purple))
-            Spacer(modifier = Modifier.height(8.dp))
-            BodyM(stringResource(R.string.lightning__transfer_intro__text_spark), color = Colors.White64)
-
-            Spacer(modifier = Modifier.height(32.dp))
-            PrimaryButton(
-                text = stringResource(R.string.lightning__transfer_intro__button),
-                onClick = onContinueClick,
-                modifier = Modifier.testTag("TransferIntro-button")
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-        }
     }
 }
 

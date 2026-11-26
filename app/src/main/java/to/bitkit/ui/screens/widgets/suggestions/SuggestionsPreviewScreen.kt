@@ -34,10 +34,12 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SUGGESTION_GRID_SPACING
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SuggestionCard
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.suggestionGridColumns
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
@@ -173,14 +175,14 @@ fun SuggestionsPreviewGrid(
     modifier: Modifier = Modifier,
     suggestions: ImmutableList<Suggestion> = previewSuggestions,
 ) {
-    val rows = (suggestions.size + 1) / 2
-
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val cardSize = (maxWidth - 16.dp) / 2
-        val gridHeight = (cardSize * rows) + (16.dp * (rows - 1))
+        val columns = suggestionGridColumns(maxWidth)
+        val rows = (suggestions.size + columns - 1) / columns
+        val cardSize = (maxWidth - SUGGESTION_GRID_SPACING * (columns - 1)) / columns
+        val gridHeight = (cardSize * rows) + (SUGGESTION_GRID_SPACING * (rows - 1))
 
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Fixed(columns),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             userScrollEnabled = false,

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -40,6 +41,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.coerceAtMost
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.createBitmap
 import com.google.zxing.BarcodeFormat
@@ -66,6 +68,9 @@ private const val QUIET_ZONE_MIN = 2
 private const val QUIET_ZONE_MAX = 4
 private const val QUIET_ZONE_RATIO = 150
 
+/** Largest edge of a QR code, so tablets show it at phone size instead of stretching it to the screen width */
+private val QR_MAX_SIZE = 400.dp
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QrCodeImage(
@@ -85,12 +90,14 @@ fun QrCodeImage(
 
     BoxWithConstraints(
         contentAlignment = Alignment.Center,
-        modifier = modifier
+        modifier = Modifier
+            .widthIn(max = QR_MAX_SIZE)
+            .then(modifier)
             .aspectRatio(1f)
             .clip(AppShapes.small)
             .background(Color.White)
     ) {
-        val bitmap = rememberQrBitmap(content, size)
+        val bitmap = rememberQrBitmap(content, size.coerceAtMost(QR_MAX_SIZE))
 
         LaunchedEffect(bitmap) {
             onBitmapGenerated(bitmap)

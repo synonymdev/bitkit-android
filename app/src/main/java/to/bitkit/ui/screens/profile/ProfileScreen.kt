@@ -8,6 +8,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -34,12 +35,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
@@ -74,6 +78,7 @@ import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.TopBarGradient
+import to.bitkit.ui.theme.TopBarHeight
 
 @Composable
 fun ProfileScreen(
@@ -198,6 +203,21 @@ private fun Content(
     }
 }
 
+/** Gap between the top bar and the profile header */
+private val QR_BLOCK_TOP_GAP = 24.dp
+
+/** Space kept under the profile actions so they never touch the screen edge */
+private val QR_BLOCK_BOTTOM_GAP = 16.dp
+
+/** Gap between the header, the QR code and the actions */
+private val QR_BLOCK_SPACING = 16.dp
+
+/** Side inset of the QR code within the screen padding */
+private val QR_SIDE_INSET = 32.dp
+
+/** Smallest QR code edge; below it the block scrolls instead of shrinking the code further */
+private val QR_MIN_SIZE = 200.dp
+
 @Composable
 private fun ProfileBody(
     profile: PubkyProfile,
@@ -212,145 +232,184 @@ private fun ProfileBody(
     onClickRetry: () -> Unit,
     needsUpdate: Boolean,
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-    ) {
-        TopBarSpacer()
-        VerticalSpacer(24.dp)
-
-        CenteredProfileHeader(
-            publicKey = profile.publicKey,
-            name = profile.name,
-            bio = profile.bio,
-            imageUrl = profile.imageUrl,
-            nameTestTag = "ProfileViewName",
-            notesTestTag = "ProfileViewNotes",
-        )
-
-        VerticalSpacer(16.dp)
-
-        Box(
-            contentAlignment = Alignment.Center,
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val qrBlockMaxHeight = maxHeight - TopBarHeight - QR_BLOCK_TOP_GAP - QR_BLOCK_BOTTOM_GAP
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp)
-                .clickableAlpha(onClick = onClickCopy)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
         ) {
-            QrCodeImage(
-                content = profile.publicKey,
-                modifier = Modifier.fillMaxWidth(),
-                testTag = "ProfileQRCode",
-            )
-            if (profile.imageUrl != null) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(68.dp)
-                        .background(Color.White, CircleShape)
-                ) {
-                    PubkyImage(
-                        uri = profile.imageUrl,
-                        size = 50.dp,
-                    )
-                }
-            }
-        }
+            TopBarSpacer()
+            VerticalSpacer(QR_BLOCK_TOP_GAP)
 
-        VerticalSpacer(16.dp)
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            ActionButton(
-                onClick = onClickEdit,
-                iconRes = R.drawable.ic_pencil,
-                enabled = canEdit,
-                modifier = Modifier.testTag("ProfileEdit")
-            )
-            ActionButton(
-                onClick = onClickCopy,
-                iconRes = R.drawable.ic_copy_simple,
-                modifier = Modifier.testTag("ProfileCopy")
-            )
-            ActionButton(
-                onClick = onClickShare,
-                iconRes = R.drawable.ic_share,
-                modifier = Modifier.testTag("ProfileShare")
-            )
-        }
-
-        VerticalSpacer(32.dp)
-        HorizontalDivider()
-
-        profile.links.forEachIndexed { index, link ->
-            LinkRow(label = link.label, value = link.url, linkIndex = index)
-        }
-
-        VerticalSpacer(16.dp)
-        Text13Up(
-            text = stringResource(R.string.profile__edit_tags),
-            color = Colors.White64,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("ProfileViewTagsHeader")
-        )
-        VerticalSpacer(8.dp)
-        if (profile.tags.isNotEmpty()) {
-            @OptIn(ExperimentalLayoutApi::class)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                profile.tags.forEach { tag ->
-                    TagButton(
-                        text = tag,
-                        onClick = if (canEdit) ({ onRemoveTag(tag) }) else null,
-                        accessibilityLabel = stringResource(R.string.common__remove_tag, tag).takeIf { canEdit },
-                        displayIconClose = canEdit,
-                    )
-                }
-            }
-            VerticalSpacer(8.dp)
-        }
-        Row(modifier = Modifier.fillMaxWidth()) {
-            PrimaryButton(
-                text = stringResource(R.string.profile__add_tag),
-                onClick = onClickAddTag,
-                enabled = canEdit,
-                size = ButtonSize.Small,
-                fullWidth = false,
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_tag),
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
+            QrFitColumn(
+                maxHeight = qrBlockMaxHeight,
+                header = {
+                    CenteredProfileHeader(
+                        publicKey = profile.publicKey,
+                        name = profile.name,
+                        bio = profile.bio,
+                        imageUrl = profile.imageUrl,
+                        nameTestTag = "ProfileViewName",
+                        notesTestTag = "ProfileViewNotes",
                     )
                 },
-                modifier = Modifier.testTag("ProfileAddTag")
+                qr = {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickableAlpha(onClick = onClickCopy)
+                    ) {
+                        QrCodeImage(
+                            content = profile.publicKey,
+                            modifier = Modifier.fillMaxWidth(),
+                            testTag = "ProfileQRCode",
+                        )
+                        if (profile.imageUrl != null) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(68.dp)
+                                    .background(Color.White, CircleShape)
+                            ) {
+                                PubkyImage(
+                                    uri = profile.imageUrl,
+                                    size = 50.dp,
+                                )
+                            }
+                        }
+                    }
+                },
+                actions = {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        ActionButton(
+                            onClick = onClickEdit,
+                            iconRes = R.drawable.ic_pencil,
+                            enabled = canEdit,
+                            modifier = Modifier.testTag("ProfileEdit")
+                        )
+                        ActionButton(
+                            onClick = onClickCopy,
+                            iconRes = R.drawable.ic_copy_simple,
+                            modifier = Modifier.testTag("ProfileCopy")
+                        )
+                        ActionButton(
+                            onClick = onClickShare,
+                            iconRes = R.drawable.ic_share,
+                            modifier = Modifier.testTag("ProfileShare")
+                        )
+                    }
+                },
             )
-        }
 
-        VerticalSpacer(16.dp)
-        if (!canEdit) {
-            if (needsUpdate) UpdateRequiredHint()
-            SecondaryButton(
-                text = stringResource(R.string.profile__retry_load),
-                onClick = onClickRetry,
-                enabled = !isLoading,
-                modifier = Modifier.testTag("ProfileRetry")
+            VerticalSpacer(32.dp)
+            HorizontalDivider()
+
+            profile.links.forEachIndexed { index, link ->
+                LinkRow(label = link.label, value = link.url, linkIndex = index)
+            }
+
+            VerticalSpacer(16.dp)
+            Text13Up(
+                text = stringResource(R.string.profile__edit_tags),
+                color = Colors.White64,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("ProfileViewTagsHeader")
             )
             VerticalSpacer(8.dp)
-            TextButton(
-                onClick = rememberDebouncedClick(onClick = onClickSignOut),
-                modifier = Modifier.testTag("ProfileSignOut")
-            ) {
-                BodyS(text = stringResource(R.string.profile__sign_out), color = Colors.White64)
+            if (profile.tags.isNotEmpty()) {
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    profile.tags.forEach { tag ->
+                        TagButton(
+                            text = tag,
+                            onClick = if (canEdit) ({ onRemoveTag(tag) }) else null,
+                            accessibilityLabel = stringResource(R.string.common__remove_tag, tag).takeIf { canEdit },
+                            displayIconClose = canEdit,
+                        )
+                    }
+                }
+                VerticalSpacer(8.dp)
+            }
+            Row(modifier = Modifier.fillMaxWidth()) {
+                PrimaryButton(
+                    text = stringResource(R.string.profile__add_tag),
+                    onClick = onClickAddTag,
+                    enabled = canEdit,
+                    size = ButtonSize.Small,
+                    fullWidth = false,
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_tag),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("ProfileAddTag")
+                )
+            }
+
+            VerticalSpacer(16.dp)
+            if (!canEdit) {
+                if (needsUpdate) UpdateRequiredHint()
+                SecondaryButton(
+                    text = stringResource(R.string.profile__retry_load),
+                    onClick = onClickRetry,
+                    enabled = !isLoading,
+                    modifier = Modifier.testTag("ProfileRetry")
+                )
+                VerticalSpacer(8.dp)
+                TextButton(
+                    onClick = rememberDebouncedClick(onClick = onClickSignOut),
+                    modifier = Modifier.testTag("ProfileSignOut")
+                ) {
+                    BodyS(text = stringResource(R.string.profile__sign_out), color = Colors.White64)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QrFitColumn(
+    maxHeight: Dp,
+    header: @Composable () -> Unit,
+    qr: @Composable () -> Unit,
+    actions: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Layout(
+        contents = listOf(header, qr, actions),
+        modifier = modifier,
+    ) { (headerMeasurables, qrMeasurables, actionsMeasurables), constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0, maxHeight = Constraints.Infinity)
+        val headerPlaceables = headerMeasurables.map { it.measure(loose) }
+        val actionsPlaceables = actionsMeasurables.map { it.measure(loose) }
+        val spacing = QR_BLOCK_SPACING.roundToPx()
+        val fixedHeight = headerPlaceables.sumOf { it.height } + actionsPlaceables.sumOf { it.height } + spacing * 2
+        val maxQrWidth = (constraints.maxWidth - QR_SIDE_INSET.roundToPx() * 2).coerceAtLeast(0)
+        val qrSize = (maxHeight.roundToPx() - fixedHeight)
+            .coerceAtLeast(QR_MIN_SIZE.roundToPx())
+            .coerceAtMost(maxQrWidth)
+        val qrPlaceables = qrMeasurables.map { it.measure(Constraints(maxWidth = qrSize, maxHeight = qrSize)) }
+        val rows = listOf(headerPlaceables, qrPlaceables, actionsPlaceables)
+        val height = rows.sumOf { row -> row.maxOfOrNull { it.height } ?: 0 } + spacing * 2
+        layout(constraints.maxWidth, height) {
+            var y = 0
+            rows.forEach { row ->
+                row.forEach { it.placeRelative((constraints.maxWidth - it.width) / 2, y) }
+                y += (row.maxOfOrNull { it.height } ?: 0) + spacing
             }
         }
     }

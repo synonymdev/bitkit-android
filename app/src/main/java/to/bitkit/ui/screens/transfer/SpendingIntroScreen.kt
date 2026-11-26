@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -37,37 +38,41 @@ fun SpendingIntroScreen(
         modifier = Modifier
             .screen()
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.coin_stack_x),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .padding(top = 130.dp)
-                .fillMaxWidth()
-        )
+        Column(modifier = Modifier.fillMaxSize()) {
+            Image(
+                painter = painterResource(id = R.drawable.coin_stack_x),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .padding(top = 130.dp)
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                Display(
+                    stringResource(R.string.lightning__spending_intro__title).withAccent(accentColor = Colors.Purple)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                BodyM(stringResource(R.string.lightning__spending_intro__text), color = Colors.White64)
+
+                Spacer(modifier = Modifier.height(32.dp))
+                PrimaryButton(
+                    text = stringResource(R.string.lightning__spending_intro__button),
+                    onClick = onContinueClick,
+                    modifier = Modifier.testTag("SpendingIntro-button")
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
         AppTopBar(
             titleText = stringResource(R.string.lightning__transfer__nav_title),
             onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
         )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .align(Alignment.BottomCenter)
-        ) {
-            Display(stringResource(R.string.lightning__spending_intro__title).withAccent(accentColor = Colors.Purple))
-            Spacer(modifier = Modifier.height(8.dp))
-            BodyM(stringResource(R.string.lightning__spending_intro__text), color = Colors.White64)
-
-            Spacer(modifier = Modifier.height(32.dp))
-            PrimaryButton(
-                text = stringResource(R.string.lightning__spending_intro__button),
-                onClick = onContinueClick,
-                modifier = Modifier.testTag("SpendingIntro-button")
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-        }
     }
 }
 
