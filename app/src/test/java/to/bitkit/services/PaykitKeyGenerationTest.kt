@@ -188,30 +188,63 @@ class PaykitKeyGenerationTest {
     }
 
     @Test
-    fun `session key rotation rebuilds cached session access with the refreshed key`() {
+    fun `session key rotation retains live capsule and revokes prior admission before replacement`() {
         val keychain = mock<Keychain>()
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved-session")
         val initialKey = mock<PaykitIdentitySecretKey> { on { keyGeneration() }.thenReturn(2uL) }
         val rotatedKey = mock<PaykitIdentitySecretKey> { on { keyGeneration() }.thenReturn(3uL) }
         val initialAccess = mock<PubkySessionAccess>()
+        val attachedAccess = mock<PubkySessionAccess>()
         whenever(initialAccess.exportSessionSecret()).thenReturn("saved-session")
         whenever(initialAccess.exportPaykitIdentitySecretKey()).thenReturn(initialKey)
-        val provider = PaykitSdkSessionProvider(keychain, mock())
+        whenever(initialAccess.withPaykitIdentitySecretKey(rotatedKey)).thenReturn(attachedAccess)
+        whenever(attachedAccess.exportSessionSecret()).thenReturn("saved-session")
+        var invalidations = 0
+        val provider = PaykitSdkSessionProvider(keychain, mock()) { invalidations++ }
         provider.setLiveSessionAccess(initialAccess)
         provider.setPaykitIdentitySecretKey(initialKey)
         assertSame(initialAccess, provider.loadSessionAccess())
 
-        mockConstruction(PubkySessionAccess::class.java) { access, context ->
-            assertEquals(BitkitPaykitSdkConfig.clientId, context.arguments()[0])
-            assertEquals("saved-session", context.arguments()[1])
-            assertSame(rotatedKey, context.arguments()[3])
-            whenever(access.exportSessionSecret()).thenReturn("saved-session")
-        }.use { sessions ->
+        assertEquals(1, invalidations)
+        mockConstruction(PubkySessionAccess::class.java).use { sessions ->
             provider.setPaykitIdentitySecretKey(rotatedKey)
             val refreshedAccess = provider.loadSessionAccess()
-            assertSame(sessions.constructed().single(), refreshedAccess)
+            assertSame(attachedAccess, refreshedAccess)
             assertSame(refreshedAccess, provider.loadSessionAccess())
-            assertEquals(1, sessions.constructed().size)
+            assertEquals(0, sessions.constructed().size)
+            assertEquals(2, invalidations)
+        }
+    }
+
+    @Test
+    fun `bootstrap nil key and same generation replacement use immutable attachment without reconstruction`() {
+        val keychain = mock<Keychain>()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved-session")
+        val bootstrap = mock<PubkySessionAccess>()
+        val first = mock<PubkySessionAccess>()
+        val second = mock<PubkySessionAccess>()
+        listOf(bootstrap, first, second).forEach {
+            whenever(it.exportSessionSecret()).thenReturn("saved-session")
+        }
+        val firstKey = mock<PaykitIdentitySecretKey> { on { keyGeneration() }.thenReturn(1uL) }
+        val replacement = mock<PaykitIdentitySecretKey> { on { keyGeneration() }.thenReturn(1uL) }
+        var invalidations = 0
+        whenever(bootstrap.withPaykitIdentitySecretKey(firstKey)).thenAnswer {
+            assertEquals(2, invalidations)
+            first
+        }
+        whenever(first.withPaykitIdentitySecretKey(replacement)).thenAnswer {
+            assertEquals(3, invalidations)
+            second
+        }
+        val provider = PaykitSdkSessionProvider(keychain, mock()) { invalidations++ }
+        mockConstruction(PubkySessionAccess::class.java).use { sessions ->
+            provider.setLiveSessionAccess(bootstrap)
+            provider.setPaykitIdentitySecretKey(firstKey)
+            assertSame(first, provider.loadSessionAccess())
+            provider.setPaykitIdentitySecretKey(replacement)
+            assertSame(second, provider.loadSessionAccess())
+            assertEquals(0, sessions.constructed().size)
         }
     }
 

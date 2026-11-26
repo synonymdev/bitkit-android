@@ -2,7 +2,9 @@
   <description>
     Allowances can be turned off from Dev Settings. With them off the Subscriptions screen shows only
     the Overview and Payments tabs, and a request covered by an Active allowance is not paid
-    automatically: it opens as an ordinary Payment Request. Turning them back on shows the tab again.
+    automatically: it opens as an ordinary Payment Request. Turning them back on restores both the tab
+    and its Active allowance row. On Android, repeat the off/on sequence while contact loading is
+    delayed, then let it finish: the latest enabled state must restore the row without restarting the app.
   </description>
   <actions>
     <action>Launch the E2E Bitkit app on both instances with an Active allowance, per set-and-accept.xml</action>

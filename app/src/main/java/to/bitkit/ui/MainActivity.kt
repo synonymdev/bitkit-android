@@ -48,6 +48,7 @@ import to.bitkit.R
 import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.androidServices.LightningNodeService.Companion.ACTION_START_SERVICE
 import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
+import to.bitkit.data.WalletResetRecovery
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.nfc.NfcRepeatGuard
@@ -67,7 +68,9 @@ import to.bitkit.ui.onboarding.TermsOfUseScreen
 import to.bitkit.ui.onboarding.WarningMultipleDevicesScreen
 import to.bitkit.ui.screens.CriticalUpdateScreen
 import to.bitkit.ui.screens.MigrationLoadingScreen
+import to.bitkit.ui.screens.MigrationRecoveryScreen
 import to.bitkit.ui.screens.SplashScreen
+import to.bitkit.ui.screens.recovery.WalletResetRecoveryScreen
 import to.bitkit.ui.sheets.ForgotPinSheet
 import to.bitkit.ui.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
@@ -140,7 +143,11 @@ class MainActivity : FragmentActivity() {
                 val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
                 val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
                 val keepActive by settingsViewModel.keepBitkitActiveInBackground.collectAsStateWithLifecycle()
-                val walletExists = walletViewModel.walletExists
+                val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
+                val walletExists = walletState.walletExists
+                val walletResetRecovery = walletState.walletResetRecovery
+                val isCheckingRNMigration by walletViewModel.isCheckingRNMigration.collectAsStateWithLifecycle()
+                val isRNMigrationUnavailable by walletViewModel.isRNMigrationUnavailable.collectAsStateWithLifecycle()
                 val isShowingMigrationLoading by walletViewModel.isShowingMigrationLoading.collectAsStateWithLifecycle()
                 val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
                 val isCriticalUpdateRequired by appViewModel.isCriticalUpdateRequired.collectAsStateWithLifecycle()
@@ -157,9 +164,10 @@ class MainActivity : FragmentActivity() {
                     notificationsGranted,
                     keepActive,
                     restoreState,
+                    walletResetRecovery,
                 ) {
                     val canStartService = walletExists && notificationsGranted && keepActive && restoreState.isIdle()
-                    if (canStartService && !isRecoveryMode) {
+                    if (canStartService && !isRecoveryMode && walletResetRecovery == WalletResetRecovery.Clear) {
                         tryStartForegroundService()
                     } else {
                         stopForegroundService()
@@ -169,8 +177,12 @@ class MainActivity : FragmentActivity() {
                 RootDestination(
                     isCriticalUpdateRequired = isCriticalUpdateRequired,
                     isShowingMigrationLoading = isShowingMigrationLoading,
+                    isCheckingRNMigration = isCheckingRNMigration,
+                    isRNMigrationUnavailable = isRNMigrationUnavailable,
                     walletExists = walletExists,
                     isRecoveryMode = isRecoveryMode,
+                    walletResetRecovery = walletResetRecovery,
+                    resetRecovery = { WalletResetRecoveryScreen(walletViewModel, appViewModel, settingsViewModel) },
                     criticalUpdate = {
                         val lifecycle = LocalLifecycleOwner.current.lifecycle
                         DisposableEffect(lifecycle, walletExists, isRecoveryMode, notificationsGranted, keepActive) {
@@ -189,6 +201,9 @@ class MainActivity : FragmentActivity() {
                         CriticalUpdateScreen()
                     },
                     migrationLoading = { MigrationLoadingScreen(isVisible = true) },
+                    migrationRecovery = {
+                        MigrationRecoveryScreen(onRetry = walletViewModel::refreshWalletResetRecovery)
+                    },
                     onboarding = {
                         CompositionLocalProvider(LocalAppViewModel provides appViewModel) {
                             OnboardingNav(
@@ -262,7 +277,9 @@ class MainActivity : FragmentActivity() {
 
                 val transactionSheetDetails by appViewModel.transactionSheet.collectAsStateWithLifecycle()
                 val hideBalance by settingsViewModel.hideBalance.collectAsStateWithLifecycle()
-                if (isAuthenticated && transactionSheetDetails != NewTransactionSheetDetails.EMPTY) {
+                if (isAuthenticated && walletResetRecovery == WalletResetRecovery.Clear &&
+                    transactionSheetDetails != NewTransactionSheetDetails.EMPTY
+                ) {
                     NewTransactionSheet(
                         appViewModel = appViewModel,
                         bottomSheetOverlayState = bottomSheetOverlayState,
@@ -428,15 +445,23 @@ class MainActivity : FragmentActivity() {
 fun RootDestination(
     isCriticalUpdateRequired: Boolean,
     isShowingMigrationLoading: Boolean,
+    isCheckingRNMigration: Boolean,
+    isRNMigrationUnavailable: Boolean,
     walletExists: Boolean,
     isRecoveryMode: Boolean,
     criticalUpdate: @Composable () -> Unit,
     migrationLoading: @Composable () -> Unit,
+    migrationRecovery: @Composable () -> Unit,
     onboarding: @Composable () -> Unit,
     wallet: @Composable () -> Unit,
+    walletResetRecovery: WalletResetRecovery,
+    resetRecovery: @Composable () -> Unit,
 ) {
     when {
         isCriticalUpdateRequired -> criticalUpdate()
+        walletResetRecovery != WalletResetRecovery.Clear -> resetRecovery()
+        isRNMigrationUnavailable -> migrationRecovery()
+        isCheckingRNMigration -> migrationLoading()
         isShowingMigrationLoading && !isRecoveryMode -> migrationLoading()
         !walletExists && !isRecoveryMode -> onboarding()
         else -> wallet()

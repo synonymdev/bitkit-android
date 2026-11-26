@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import to.bitkit.di.json
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.utils.Logger
@@ -138,6 +139,7 @@ data class PrivatePaykitCacheData(
     val contacts: Map<String, PrivatePaykitContactCacheData> = emptyMap(),
     val cleanupPending: Boolean = false,
     val deletedContactCleanupPendingPublicKeys: Set<String> = emptySet(),
+    @Transient internal val receiptSourceReadable: Boolean = true,
 )
 
 @Serializable
@@ -172,6 +174,7 @@ data class PrivatePaykitReservationData(
     val publicAssignments: Map<String, PrivatePaykitStoredAssignmentData> = emptyMap(),
     val quarantinedPublicAddresses: Set<String> = emptySet(),
     val restoredReservedReceiveIndexCeilingsByAddressType: Map<String, Int> = emptyMap(),
+    @Transient internal val receiptSourceReadable: Boolean = true,
 )
 
 @Serializable
@@ -181,7 +184,7 @@ data class PrivatePaykitStoredAssignmentData(
     val address: String = "",
 )
 
-private object PrivatePaykitCacheSerializer : Serializer<PrivatePaykitCacheData> {
+internal object PrivatePaykitCacheSerializer : Serializer<PrivatePaykitCacheData> {
     private const val TAG = "PrivatePaykitCacheSerializer"
 
     override val defaultValue: PrivatePaykitCacheData = PrivatePaykitCacheData()
@@ -191,15 +194,16 @@ private object PrivatePaykitCacheSerializer : Serializer<PrivatePaykitCacheData>
             json.decodeFromString<PrivatePaykitCacheData>(input.readBytes().decodeToString())
         }.getOrElse {
             Logger.error("Failed to deserialize PrivatePaykitCacheData", it, context = TAG)
-            defaultValue
+            defaultValue.copy(receiptSourceReadable = false)
         }
 
     override suspend fun writeTo(t: PrivatePaykitCacheData, output: OutputStream) {
+        check(t.receiptSourceReadable) { "Cannot persist an incomplete invoice cache" }
         output.write(json.encodeToString(t).encodeToByteArray())
     }
 }
 
-private object PrivatePaykitReservationSerializer : Serializer<PrivatePaykitReservationData> {
+internal object PrivatePaykitReservationSerializer : Serializer<PrivatePaykitReservationData> {
     private const val TAG = "PrivatePaykitReservationSerializer"
 
     override val defaultValue: PrivatePaykitReservationData = PrivatePaykitReservationData()
@@ -209,10 +213,11 @@ private object PrivatePaykitReservationSerializer : Serializer<PrivatePaykitRese
             json.decodeFromString<PrivatePaykitReservationData>(input.readBytes().decodeToString())
         }.getOrElse {
             Logger.error("Failed to deserialize PrivatePaykitReservationData", it, context = TAG)
-            defaultValue
+            defaultValue.copy(receiptSourceReadable = false)
         }
 
     override suspend fun writeTo(t: PrivatePaykitReservationData, output: OutputStream) {
+        check(t.receiptSourceReadable) { "Cannot persist an incomplete reservation ledger" }
         output.write(json.encodeToString(t).encodeToByteArray())
     }
 }

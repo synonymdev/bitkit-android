@@ -92,6 +92,7 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PreparedOnchainSend
 import to.bitkit.repositories.PreparedOnchainSendRefused
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
@@ -958,6 +959,22 @@ class LightningServiceTest : BaseUnitTest() {
         setupDone.await() // proceeds once released (build then fails on the mocked deps, which is fine)
     }
 
+    @Test
+    fun `wipeStorage reports a refused local delete and succeeds after access is restored`() = runGateTest {
+        gated.node = null
+        val directory = File(Env.ldkStoragePath(0)).apply { mkdirs() }
+        val sentinel = File(directory, "retained-node-state").apply { writeText("test-data") }
+        assertTrue(directory.setWritable(false, false))
+        try {
+            assertFailsWith<AppError> { gated.wipeStorage(0) }
+            assertTrue(sentinel.exists())
+        } finally {
+            assertTrue(directory.setWritable(true, true))
+        }
+        gated.wipeStorage(0)
+        assertFalse(directory.exists())
+    }
+
     // Regression (c): with no pending release the gate must add no latency.
     @Test
     fun `wipeStorage proceeds immediately when no release is pending`() = runGateTest {
@@ -1199,6 +1216,46 @@ class LightningServiceTest : BaseUnitTest() {
     }
 
     @Test
+    fun `release never adds an unconfirmed wallet coin`() = test {
+        val original = releaseCoin("11", 1_200uL)
+        val unconfirmed = releaseCoin("33", 90_000uL)
+        // The original's coin alone cannot fund the release; any set with the extra coin can.
+        stubRelease(
+            coins = listOf(original, unconfirmed),
+            confirmedTxids = emptySet(),
+            funds = { utxos -> unconfirmed in utxos },
+        )
+
+        val prepared = runCatching { sut.prepareRelease(releaseAttempt(original)) }.getOrNull()
+
+        val spent = prepared?.receipt?.inputs.orEmpty().map { it.txid }
+        assertFalse(
+            unconfirmed.outpoint.txid in spent,
+            "Release spends an unconfirmed coin; nodes holding a candidate reject it (BIP125 rule 2)",
+        )
+    }
+
+    @Test
+    fun `release adds confirmed wallet coins largest first until they fund it`() = test {
+        val original = releaseCoin("11", 1_200uL)
+        val large = releaseCoin("22", 50_000uL)
+        val medium = releaseCoin("33", 40_000uL)
+        val dust = releaseCoin("44", 600uL)
+        val coins = listOf(dust, original, medium, large)
+        stubRelease(
+            coins = coins,
+            confirmedTxids = coins.map { it.outpoint.txid }.toSet(),
+            funds = { utxos -> utxos.sumOf { it.valueSats } >= 80_000uL },
+        )
+
+        val prepared = sut.prepareRelease(releaseAttempt(original))
+
+        // The original's coin alone and with the largest coin both fall short; the next set pays without the dust.
+        assertEquals(listOf(original, large, medium).map { it.outpoint.txid }, prepared.receipt.inputs.map { it.txid })
+        assertTrue(requireNotNull(prepared.receipt.miningFeeSats) > RELEASE_CANDIDATE_FEE)
+    }
+
+    @Test
     fun `build without paykit server accounts when the node rejects one`() = test {
         val account = OnchainWalletAccountConfig(AddressType.NATIVE_SEGWIT, 1u, "xpub-1")
         val built = mock<Node>()
@@ -1388,46 +1445,6 @@ class LightningServiceTest : BaseUnitTest() {
         isTrackingEnabled = enabled,
         setupState = WatchOnlyAccountSetupState.Active,
     )
-
-    @Test
-    fun `release never adds an unconfirmed wallet coin`() = test {
-        val original = releaseCoin("11", 1_200uL)
-        val unconfirmed = releaseCoin("33", 90_000uL)
-        // The original's coin alone cannot fund the release; any set with the extra coin can.
-        stubRelease(
-            coins = listOf(original, unconfirmed),
-            confirmedTxids = emptySet(),
-            funds = { utxos -> unconfirmed in utxos },
-        )
-
-        val prepared = runCatching { sut.prepareRelease(releaseAttempt(original)) }.getOrNull()
-
-        val spent = prepared?.receipt?.inputs.orEmpty().map { it.txid }
-        assertFalse(
-            unconfirmed.outpoint.txid in spent,
-            "Release spends an unconfirmed coin; nodes holding a candidate reject it (BIP125 rule 2)",
-        )
-    }
-
-    @Test
-    fun `release adds confirmed wallet coins largest first until they fund it`() = test {
-        val original = releaseCoin("11", 1_200uL)
-        val large = releaseCoin("22", 50_000uL)
-        val medium = releaseCoin("33", 40_000uL)
-        val dust = releaseCoin("44", 600uL)
-        val coins = listOf(dust, original, medium, large)
-        stubRelease(
-            coins = coins,
-            confirmedTxids = coins.map { it.outpoint.txid }.toSet(),
-            funds = { utxos -> utxos.sumOf { it.valueSats } >= 80_000uL },
-        )
-
-        val prepared = sut.prepareRelease(releaseAttempt(original))
-
-        // The original's coin alone and with the largest coin both fall short; the next set pays without the dust.
-        assertEquals(listOf(original, large, medium).map { it.outpoint.txid }, prepared.receipt.inputs.map { it.txid })
-        assertTrue(requireNotNull(prepared.receipt.miningFeeSats) > RELEASE_CANDIDATE_FEE)
-    }
 
     @Test
     fun `release falls back to every confirmed wallet coin`() = test {

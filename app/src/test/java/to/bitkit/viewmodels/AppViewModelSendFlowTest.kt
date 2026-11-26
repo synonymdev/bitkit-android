@@ -1,6 +1,7 @@
 package to.bitkit.viewmodels
 
 import android.app.Activity
+import android.app.Application
 import android.app.NotificationManager
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -150,6 +151,7 @@ import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPricing
 import to.bitkit.models.PubkyProfile
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.SendFailureDetails
@@ -191,6 +193,8 @@ import to.bitkit.repositories.OnchainSendNotDispatchedError
 import to.bitkit.repositories.OnchainSendOutcome
 import to.bitkit.repositories.OnchainSendReviewInterruptedError
 import to.bitkit.repositories.PaykitAllowanceEvent
+import to.bitkit.repositories.PaykitAllowanceExecutor
+import to.bitkit.repositories.PaykitAllowanceLocalState
 import to.bitkit.repositories.PaykitAllowanceRepo
 import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitOnchainPaymentProofResolution
@@ -304,7 +308,7 @@ import com.synonym.bitkitcore.Activity as BitkitActivity
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(application = Application::class, sdk = [34])
 class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private lateinit var sut: AppViewModel
@@ -445,6 +449,93 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun tearDown() {
         sut.stopPaykitPaymentRequestPolling()
         App.currentActivity = null
+    }
+
+    @Test
+    fun `recovery PIN policy waits for durable settings before exposing disabled`() = test {
+        val loaded = CompletableDeferred<to.bitkit.data.SettingsData>()
+        whenever(settingsStore.data).thenReturn(kotlinx.coroutines.flow.flow { emit(loaded.await()) })
+        sut.recoveryPinRequired.test {
+            assertEquals(null, awaitItem())
+            runCurrent()
+            expectNoEvents()
+            loaded.complete(to.bitkit.data.SettingsData(isPinEnabled = true))
+            assertEquals(true, awaitItem())
+            awaitComplete()
+        }
+    }
+
+    @Test
+    fun `recovery requires an existing keychain PIN even when settings say disabled`() = test {
+        whenever(keychain.loadString(Keychain.Key.PIN.name)).thenReturn("test-pin")
+        sut.recoveryPinRequired.test {
+            assertEquals(null, awaitItem())
+            assertEquals(true, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `unreadable recovery PIN never becomes disabled`() = test {
+        whenever(keychain.loadString(Keychain.Key.PIN.name)).thenThrow(IllegalStateException("unreadable test PIN"))
+        sut.recoveryPinRequired.test {
+            assertEquals(null, awaitItem())
+            assertEquals(null, awaitItem())
+            awaitComplete()
+        }
+    }
+
+    @Test
+    fun `recovery PIN exhaustion stays bounded without automatic wipe`() = test {
+        val access = mock<Keychain.BlockingAccess>()
+        whenever(keychain.accessBlocking<Boolean>(any())).thenAnswer {
+            it.getArgument<Keychain.BlockingAccess.() -> Boolean>(0).invoke(access)
+        }
+        whenever(access.load(Keychain.Key.PIN.name)).thenReturn("test-pin".toByteArray())
+        var attempts = "1"
+        whenever(access.load(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)).thenAnswer { attempts.toByteArray() }
+        org.mockito.kotlin.doAnswer {
+            attempts = it.getArgument<ByteArray>(1).decodeToString()
+            Unit
+        }.whenever(access).upsert(eq(Keychain.Key.PIN_ATTEMPTS_REMAINING.name), any())
+        sut.mainScreenEffect.test {
+            assertFalse(sut.validateRecoveryPin("wrong"))
+            assertEquals("0", attempts)
+            assertFalse(sut.validateRecoveryPin("test-pin"))
+            assertFalse(sut.validateRecoveryPin("wrong"))
+            runCurrent()
+            expectNoEvents()
+            verify(access, times(1)).upsert(eq(Keychain.Key.PIN_ATTEMPTS_REMAINING.name), any())
+        }
+    }
+
+    @Test
+    fun `recovery PIN requires acknowledged attempt persistence`() = test {
+        val access = mock<Keychain.BlockingAccess>()
+        whenever(keychain.accessBlocking<Boolean>(any())).thenAnswer {
+            it.getArgument<Keychain.BlockingAccess.() -> Boolean>(0).invoke(access)
+        }
+        whenever(access.load(Keychain.Key.PIN.name)).thenReturn("test-pin".toByteArray())
+        whenever(access.load(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)).thenReturn("2".toByteArray())
+        org.mockito.kotlin.doThrow(IllegalStateException("test storage refused"))
+            .whenever(access).upsert(any(), any())
+        assertFalse(sut.validateRecoveryPin("test-pin"))
+        verify(access).upsert(eq(Keychain.Key.PIN_ATTEMPTS_REMAINING.name), any())
+    }
+
+    @Test
+    fun `recovery PIN rejects malformed accounting and accepts a persisted valid attempt`() = test {
+        val access = mock<Keychain.BlockingAccess>()
+        whenever(keychain.accessBlocking<Boolean>(any())).thenAnswer {
+            it.getArgument<Keychain.BlockingAccess.() -> Boolean>(0).invoke(access)
+        }
+        whenever(access.load(Keychain.Key.PIN.name)).thenReturn("test-pin".toByteArray())
+        whenever(access.load(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)).thenReturn("broken".toByteArray())
+        assertFalse(sut.validateRecoveryPin("test-pin"))
+        verify(access, never()).upsert(any(), any())
+        whenever(access.load(Keychain.Key.PIN_ATTEMPTS_REMAINING.name)).thenReturn("2".toByteArray())
+        assertTrue(sut.validateRecoveryPin("test-pin"))
+        verify(access).upsert(eq(Keychain.Key.PIN_ATTEMPTS_REMAINING.name), any())
     }
 
     @Test
@@ -847,6 +938,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { pubkyRepo.awaitIdentityReady() }.thenAnswer {
             if (pubkyPublicKey.value != null) PubkyIdentityReadiness.Ready else PubkyIdentityReadiness.Missing
         }
+        whenever { pubkyRepo.requiresProfileRecovery() }.thenReturn(false)
+        whenever(pubkyRepo.profileRecoveryPending).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contacts).thenReturn(pubkyContacts)
         whenever { pubkyRepo.refreshContacts() }.thenReturn(true)
         whenever { pubkyRepo.importShopContacts() }.thenReturn(Result.success(Unit))
@@ -966,7 +1059,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.contactPublicKeyForPrivateInvoicePaymentHash(any()) }
             .thenReturn(null)
-        whenever { publicPaykitRepo.refreshPublishedBolt11ForPayment(any(), any()) }
+        whenever { publicPaykitRepo.refreshPublishedBolt11ForPayment(any(), any(), any()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.handleReceivedPayment(any()) }
             .thenReturn(Result.success(Unit))
@@ -3468,6 +3561,60 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `off on during allowance admission activates the latest enabled state`() = test {
+        val sdk = mock<PaykitSdkService>()
+        val executor = mock<PaykitAllowanceExecutor>()
+        whenever(executor.events).thenReturn(MutableSharedFlow())
+        whenever(executor.localState(any())).thenReturn(PaykitAllowanceLocalState())
+        whenever(executor.isLedgerBehind(any())).thenReturn(false)
+        whenever(sdk.listAllowances(any())).thenReturn(emptyList())
+        val realAllowances = PaykitAllowanceRepo(
+            ioDispatcher = testDispatcher,
+            paykitSdkService = sdk,
+            executor = executor,
+            lightningRepo = lightningRepo,
+            activityRepo = activityRepo,
+            clock = Clock.System,
+            backupRepo = { backupRepo },
+        )
+        val activationStarted = CompletableDeferred<Unit>()
+        val finishActivation = CompletableDeferred<Unit>()
+        var holdNextAdmission = true
+        whenever { paykitAllowanceRepo.activate(anyOrNull(), any()) }.doSuspendableAnswer {
+            val identity = it.getArgument<String?>(0)
+            val admission = it.getArgument<suspend () -> Boolean>(1)
+            realAllowances.activate(identity) {
+                if (holdNextAdmission) {
+                    holdNextAdmission = false
+                    activationStarted.complete(Unit)
+                    finishActivation.await()
+                }
+                admission()
+            }
+        }
+        whenever { paykitAllowanceRepo.pause(anyOrNull()) }.doSuspendableAnswer {
+            realAllowances.pause(it.getArgument(0))
+        }
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        activationStarted.await()
+
+        areAllowancesEnabled.value = false
+        runCurrent()
+        verify(executor).stopAdmitting()
+        areAllowancesEnabled.value = true
+        runCurrent()
+        verify(executor, never()).activate(any())
+
+        finishActivation.complete(Unit)
+        runCurrent()
+
+        val identity = requireNotNull(PubkyPublicKeyFormat.normalized(testPublicKey))
+        verify(executor).activate(identity)
+        verify(executor).recover(identity)
+    }
+
+    @Test
     fun `allowance admission rechecks deletion after the settings read`() = test {
         val settingsReadStarted = CompletableDeferred<Unit>()
         val finishSettingsRead = CompletableDeferred<Unit>()
@@ -5940,6 +6087,74 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `pending removal blocks scanner and signup authorization before retained key fallback`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        whenever(pubkyRepo.requiresProfileRecovery()).thenReturn(true)
+        whenever(pubkyRepo.localIdentityPublicKey()).thenReturn(testPublicKey)
+        whenever(context.getString(R.string.profile__cleanup_pending)).thenReturn("Complete local cleanup")
+        listOf("pubkyauth://signin_grant", grantSignupAuthUrl, legacyAuthorizedSignupAuthUrl).forEach { authUrl ->
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+            advanceUntilIdle()
+            assertNull(sut.currentSheet.value)
+            sut.showScannerSheet()
+            advanceUntilIdle()
+            sut.onScannerSheetResult(authUrl)
+            advanceUntilIdle()
+            assertFalse(sut.currentSheet.value is Sheet.PubkyAuth)
+            sut.hideSheet()
+            advanceUntilIdle()
+        }
+        verify(pubkyRepo, never()).localIdentityPublicKey()
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(context, atLeastOnce()).getString(R.string.profile__cleanup_pending)
+    }
+
+    @Test
+    fun `pending removal ends offline auth waiting and releases the scan queue`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        val pending = MutableStateFlow<Boolean?>(false)
+        whenever(pubkyRepo.profileRecoveryPending).thenReturn(pending)
+        whenever(pubkyRepo.requiresProfileRecovery()).thenAnswer { pending.value == true }
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
+        whenever(pubkyRepo.awaitIdentityReady()).thenAnswer {
+            if (pending.value == true) PubkyIdentityReadiness.RecoveryRequired else PubkyIdentityReadiness.Unavailable
+        }
+        connectivityState.value = ConnectivityState.DISCONNECTED
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "pubkyauth://signin_grant".toUri()))
+        advanceTimeBy(10_000)
+        runCurrent()
+        pending.value = true
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+        verify(toastManager).dismiss(check { assertTrue(it.isLoading) })
+        verify(pubkyRepo, never()).localIdentityPublicKey()
+        val bolt11 = "lnbcrt1postpendingcleanupscan"
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        connectivityState.value = ConnectivityState.CONNECTED
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        assertTrue(sut.currentSheet.value is Sheet.Send)
+    }
+
+    @Test
+    fun `auth sheet cannot install after pending starts during its transition`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        sut.showScannerSheet()
+        advanceUntilIdle()
+        sut.showSheet(Sheet.PubkyAuth("pubkyauth://signin_grant"))
+        runCurrent()
+        whenever(pubkyRepo.requiresProfileRecovery()).thenReturn(true)
+        advanceUntilIdle()
+        assertNull(sut.currentSheet.value)
+        verify(context).getString(R.string.profile__cleanup_pending)
     }
 
     @Test
@@ -20088,6 +20303,101 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `wallet wipe drains background public address preparation before clearing reservations`() = test {
+        enablePublicPaykitSharing()
+        pubkyPublicKey.value = testPublicKey
+        advanceUntilIdle()
+        settingsData.update {
+            it.copy(publicPaykitLightningEnabled = false, publicPaykitUsdtEnabled = false)
+        }
+        val ledger = MutableStateFlow(PrivatePaykitReservationData())
+        val reservationStore = mock<PrivatePaykitReservationStore>()
+        whenever(reservationStore.data).thenReturn(ledger)
+        whenever(reservationStore.update(any())).thenAnswer {
+            ledger.update(it.getArgument<(PrivatePaykitReservationData) -> PrivatePaykitReservationData>(0))
+        }
+        whenever(reservationStore.reset()).thenAnswer { ledger.value = PrivatePaykitReservationData() }
+        whenever(cacheStore.data).thenReturn(MutableStateFlow(AppCacheData(onchainAddress = "bcrt1qordinary")))
+        val derived = CompletableDeferred<Unit>()
+        val deliverAddress = CompletableDeferred<Unit>()
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).doSuspendableAnswer {
+            val oldWalletAddress = AddressDerivationInfo("bcrt1qoldwallet", 1)
+            derived.complete(Unit)
+            deliverAddress.await()
+            Result.success(oldWalletAddress)
+        }
+        val reservations = PrivatePaykitAddressReservationRepo(
+            testDispatcher,
+            reservationStore,
+            settingsStore,
+            coreService,
+            lightningRepo,
+            cacheStore,
+            keychain,
+        )
+        val publisher = PublicPaykitRepo(
+            testDispatcher,
+            pubkyRepo,
+            lightningRepo,
+            coreService,
+            mock(),
+            settingsStore,
+            Clock.System,
+            usdtRepo,
+            reservations,
+        )
+        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any(), any())).doSuspendableAnswer {
+            publisher.syncCurrentPublishedEndpoints(it.getArgument(0), it.getArgument(1), it.getArgument(2))
+        }
+        walletState.update { it.copy(onchainAddress = "bcrt1qchanged") }
+        runCurrent()
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertTrue(derived.isCompleted)
+
+        val wipe = async {
+            contactPaymentSettingsRepo.withWalletWipe(
+                admitRepository = { operation ->
+                    isProfileDeletionInProgress.value = true
+                    operation()
+                },
+            ) {
+                reservations.clear()
+            }
+        }
+        runCurrent()
+        val clearedBeforeDelivery = wipe.isCompleted
+        deliverAddress.complete(Unit)
+        wipe.await()
+        runCurrent()
+
+        assertFalse(clearedBeforeDelivery, "Wipe must drain the admitted public preparation")
+        assertEquals(PrivatePaykitReservationData(), ledger.value)
+    }
+
+    @Test
+    fun `public invoice expiry waits for sharing admission without losing its refresh`() = test {
+        enablePublicPaykitSharing()
+        pubkyPublicKey.value = testPublicKey
+        advanceUntilIdle()
+        val finishCleanup = CompletableDeferred<Unit>()
+        val cleanup = launch {
+            contactPaymentSettingsRepo.reconcilePendingEndpoints { finishCleanup.await() }
+        }
+        runCurrent()
+        clearInvocations(publicPaykitRepo)
+
+        settingsData.update { it.copy(publicPaykitBolt11ExpiresAtMillis = 1L) }
+        runCurrent()
+        verify(publicPaykitRepo, never()).syncCurrentPublishedEndpoints(any(), any(), any())
+        finishCleanup.complete(Unit)
+        cleanup.join()
+        advanceUntilIdle()
+
+        verify(publicPaykitRepo).syncCurrentPublishedEndpoints(eq(false), eq(false), any())
+    }
+
+    @Test
     fun `public Paykit publication coalesces startup and resumes with the latest address`() = test {
         enablePublicPaykitSharing()
         sut.startPaykitPaymentRequestPolling()
@@ -20914,7 +21224,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo).handleReceivedPayment("received-hash")
         verify(paykitPaymentRequestRepo, never()).refresh(any(), any())
         val publicationAdmission = argumentCaptor<() -> Boolean>()
-        verify(publicPaykitRepo).refreshPublishedBolt11ForPayment(eq("received-hash"), publicationAdmission.capture())
+        verify(
+            publicPaykitRepo
+        ).refreshPublishedBolt11ForPayment(eq("received-hash"), publicationAdmission.capture(), any())
         assertFalse(publicationAdmission.firstValue())
         isProfileDeletionInProgress.value = false
         assertTrue(publicationAdmission.firstValue())
@@ -20984,7 +21296,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 privateCleanup.await()
                 Result.success(Unit)
             }
-        whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false, appSyncPriority = Priority.Interactive))
+        whenever(publicPaykitRepo.syncPublishedEndpoints(eq(false), eq(Priority.Interactive), any()))
             .doSuspendableAnswer {
                 publicCleanup.await()
                 Result.success(Unit)
@@ -21008,8 +21320,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(privatePaykitRepo, never()).retryPendingEndpointRemoval(any<Collection<String>>(), any())
         verify(publicPaykitRepo, times(1)).syncPublishedEndpoints(
-            publish = false,
-            appSyncPriority = Priority.Interactive,
+            publish = eq(false),
+            appSyncPriority = eq(Priority.Interactive),
+            isStillCurrent = any(),
         )
         assertTrue(settingsData.value.publicPaykitCleanupPending)
         publicCleanup.complete(Unit)

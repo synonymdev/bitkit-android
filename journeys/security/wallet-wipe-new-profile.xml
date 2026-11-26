@@ -11,6 +11,7 @@
     <action>Return Home and leave the app active for at least 10 seconds so background Paykit work can run</action>
     <action>Open Settings, select Security, and open Reset wallet (identifier "ResetAndRestore")</action>
     <action>Tap Reset Wallet and confirm the reset</action>
+    <action>While reset is running, verify only busy progress is offered: no failed-reset message, second Reset action or seed display</action>
     <action>Wait for reset to finish and verify wallet onboarding is visible</action>
     <action>Accept the terms, skip the introduction, and create a new wallet</action>
     <action>Wait for Home, then open Profile from the header</action>

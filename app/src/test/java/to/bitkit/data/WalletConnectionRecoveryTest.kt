@@ -5,12 +5,15 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -22,6 +25,8 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import to.bitkit.async.ServiceQueue
+import to.bitkit.data.backup.VssClientCoordinator
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.entities.ConfigEntity
 import to.bitkit.data.keychain.Keychain
@@ -45,6 +50,7 @@ class WalletConnectionRecoveryTest : BaseUnitTest() {
     private val keychain = mock<Keychain>()
     private val db = mock<AppDb>()
     private val binding = mock<VssStoreIdProvider>()
+    private val vssClients = VssClientCoordinator()
     private val config = MutableStateFlow(listOf(ConfigEntity()))
     private var record: String? = null
     private var pending = false
@@ -82,7 +88,148 @@ class WalletConnectionRecoveryTest : BaseUnitTest() {
     @After
     fun tearDown() = runBlocking { settings.reset() }
 
-    private fun instance(store: SettingsStore = settings) = WalletConnectionRecovery(keychain, db, binding, store)
+    private fun instance(store: SettingsStore = settings) = WalletConnectionRecovery(
+        keychain,
+        db,
+        binding,
+        store,
+        vssClients,
+    )
+
+    @Test
+    fun `identity change waits for VSS cleanup and keeps admission closed through credentials`() = test {
+        val cleanup = CompletableDeferred<Unit>()
+        var changed = false
+        var drained = false
+        val old = launch {
+            vssClients.withWallet {
+                try {
+                    awaitCancellation()
+                } finally {
+                    withContext(NonCancellable) {
+                        cleanup.await()
+                        drained = true
+                    }
+                }
+            }
+        }
+        runCurrent()
+        val transition = launch {
+            sut.withIdentityChange {
+                assertTrue(drained)
+                assertFailsWith<CancellationException> { vssClients.withWallet {} }
+                changed = true
+            }
+        }
+        runCurrent()
+        assertFalse(changed)
+        cleanup.complete(Unit)
+        transition.join()
+        assertTrue(changed)
+        old.join()
+        vssClients.withWallet {}
+    }
+
+    @Test
+    fun `receipt checks derive the wallet binding only once per admitted operation`() = test {
+        var derivations = 0
+        whenever(binding.getBackupWalletBinding(0)).thenAnswer {
+            derivations += 1
+            "original-wallet"
+        }
+        repeat(2) { operation ->
+            sut.withReceiptOperation { receipt ->
+                repeat(200) { receipt.requireCurrent() }
+                receipt.commitReceiptState { assertEquals(operation + 1, derivations) }
+            }
+        }
+    }
+
+    @Test
+    fun `receipt admission rejects unavailable wallet credentials before entering Core work`() = test {
+        whenever(binding.getBackupWalletBinding(0)).thenAnswer { throw AppError("binding unavailable") }
+        var entered = false
+        assertFailsWith<AppError> { sut.withReceiptOperation { entered = true } }
+        assertFalse(entered)
+    }
+
+    @Test
+    fun `receipt work can complete while restoration holds the ordinary operation lock`() = test {
+        sut.withOperation(sut.captureOwner()) {
+            sut.withReceiptOperation { receipt ->
+                receipt.requireCurrent()
+                assertEquals("committed", receipt.commitReceiptState { "committed" })
+            }
+        }
+    }
+
+    @Test
+    fun `receipt scope rejects escaped writes and recursive replacement`() = test {
+        lateinit var escaped: WalletConnectionRecovery.Session
+        sut.withReceiptOperation {
+            escaped = it
+            assertFailsWith<IllegalStateException> { sut.withIdentityChange { error("must not replace") } }
+        }
+        assertFailsWith<CancellationException> { escaped.commitReceiptState { error("must not write") } }
+    }
+
+    @Test
+    fun `cancelled original receipt cannot write through the Core replacement job`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val attempted = CompletableDeferred<Boolean>()
+        var committed = false
+        val operation = launch {
+            sut.withReceiptOperation { receipt ->
+                ServiceQueue.CORE.background {
+                    entered.complete(Unit)
+                    release.await()
+                    val failure = runCatching { receipt.commitReceiptState { committed = true } }.exceptionOrNull()
+                    attempted.complete(failure is CancellationException)
+                }
+            }
+        }
+        entered.await()
+        operation.cancel()
+        runCurrent()
+        assertFalse(operation.isCompleted, "Admission must outlive the Core worker")
+        release.complete(Unit)
+        assertTrue(attempted.await())
+        operation.join()
+        assertFalse(committed)
+    }
+
+    @Test
+    fun `same seed replacement drains the actual Core receipt before any credential cleanup`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val attempted = CompletableDeferred<Boolean>()
+        var committed = false
+        val operation = launch {
+            sut.withReceiptOperation { receipt ->
+                ServiceQueue.CORE.background {
+                    entered.complete(Unit)
+                    release.await()
+                    val failure = runCatching { receipt.commitReceiptState { committed = true } }.exceptionOrNull()
+                    attempted.complete(failure is CancellationException)
+                }
+            }
+        }
+        entered.await()
+        var replaced = false
+        val replacement = launch { sut.withIdentityChange { replaced = true } }
+        runCurrent()
+        assertFalse(replaced)
+        assertFalse(operation.isCompleted)
+        release.complete(Unit)
+        assertTrue(attempted.await())
+        operation.join()
+        replacement.join()
+        assertTrue(replaced)
+        assertFalse(committed)
+        sut.withReceiptOperation { it.commitReceiptState { committed = true } }
+        assertTrue(committed)
+    }
 
     @Test
     fun `queued wallet generation is revoked during same seed replacement`() = test {
@@ -420,6 +567,31 @@ class WalletConnectionRecoveryTest : BaseUnitTest() {
         val result = capture.await()
         assertTrue(rejectedWithoutWaiting)
         assertTrue(result.exceptionOrNull() is CancellationException)
+    }
+
+    @Test
+    fun `cancellation during local drain preserves native owner and skips identity change`() = test {
+        val original = vssClients.owners.value
+        val draining = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var replaced = false
+        val replacement = launch {
+            sut.withIdentityChange(beforeClientsSuspend = {
+                withContext(NonCancellable) {
+                    draining.complete(Unit)
+                    release.await()
+                }
+            }) { replaced = true }
+        }
+        draining.await()
+        replacement.cancel()
+        runCurrent()
+        assertFalse(replacement.isCompleted)
+        release.complete(Unit)
+        replacement.join()
+        assertFalse(replaced)
+        assertEquals(original, vssClients.owners.value)
+        vssClients.withWallet { }
     }
 
     @Test

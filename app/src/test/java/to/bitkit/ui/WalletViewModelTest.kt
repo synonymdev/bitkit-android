@@ -2,6 +2,7 @@ package to.bitkit.ui
 
 import android.content.Context
 import app.cash.turbine.test
+import com.synonym.bitkitcore.BoltzSwapEvent
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
@@ -24,6 +25,7 @@ import org.lightningdevkit.ldknode.PeerDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -32,15 +34,16 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
-import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WalletConnectionRecovery
+import to.bitkit.data.WalletResetRecovery
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.keychain.hasPendingWalletRestore
 import to.bitkit.ext.of
+import to.bitkit.models.BackupCategory
 import to.bitkit.models.BalanceState
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.BackupRepo
@@ -102,12 +105,15 @@ class WalletViewModelTest : BaseUnitTest() {
     private val walletState = MutableStateFlow(WalletState())
     private val balanceState = MutableStateFlow(BalanceState())
     private val isRecoveryMode = MutableStateFlow(false)
+    private val isWiping = MutableStateFlow(false)
     private val isOnline = MutableStateFlow(ConnectivityState.CONNECTED)
 
     @Before
     fun setUp() = runBlocking {
         whenever(context.getString(any())).thenReturn("")
         whenever(walletRepo.walletState).thenReturn(walletState)
+        whenever(backupRepo.isWiping).thenReturn(isWiping)
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.success(Unit))
         whenever(walletRepo.refreshReceiveState()).thenReturn(Result.success(Unit))
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
@@ -124,23 +130,237 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(1uL))
 
         connectionRecovery = connectionRecoveryFixture(settingsStore, recoveryKeychain) { currentBinding }
-        sut = WalletViewModel(
-            context = context,
-            bgDispatcher = testDispatcher,
-            walletRepo = walletRepo,
-            lightningRepo = lightningRepo,
-            settingsStore = settingsStore,
-            backupRepo = backupRepo,
-            blocktankRepo = blocktankRepo,
-            pubkyRepo = pubkyRepo,
-            migrationService = migrationService,
-            connectivityRepo = connectivityRepo,
-            boltzService = boltzService,
-            connectionRecovery = connectionRecovery,
-            pubkySwapsRouteRepo = pubkySwapsRouteRepo,
-            sparkRepo = sparkRepo,
-            moveToSparkManager = moveToSparkManager,
-        )
+        sut = createViewModel()
+    }
+
+    private fun createViewModel() = WalletViewModel(
+        context = context,
+        bgDispatcher = testDispatcher,
+        walletRepo = walletRepo,
+        lightningRepo = lightningRepo,
+        settingsStore = settingsStore,
+        backupRepo = backupRepo,
+        blocktankRepo = blocktankRepo,
+        pubkyRepo = pubkyRepo,
+        migrationService = migrationService,
+        connectivityRepo = connectivityRepo,
+        boltzService = boltzService,
+        connectionRecovery = connectionRecovery,
+        pubkySwapsRouteRepo = pubkySwapsRouteRepo,
+        sparkRepo = sparkRepo,
+        moveToSparkManager = moveToSparkManager,
+    )
+
+    @Test
+    fun `clear cleanup state resumes deferred rn migration`() = test {
+        walletState.value = WalletState(walletResetRecovery = WalletResetRecovery.Unavailable)
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.failure(AppError("temporarily unreadable")))
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(migrationService.hasRNWalletData()).thenReturn(true)
+        createViewModel()
+        advanceUntilIdle()
+        verify(migrationService, never()).migrateFromReactNative()
+
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.success(Unit))
+        walletState.value = WalletState(walletResetRecovery = WalletResetRecovery.Clear)
+        advanceUntilIdle()
+
+        verify(migrationService).migrateFromReactNative()
+    }
+
+    @Test
+    fun `read retry resumes deferred rn migration without a state emission`() = test {
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.failure(AppError("temporarily unreadable")))
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(migrationService.hasRNWalletData()).thenReturn(true)
+        val recovering = createViewModel()
+        advanceUntilIdle()
+        verify(migrationService, never()).migrateFromReactNative()
+
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.success(Unit))
+        recovering.refreshWalletResetRecovery()
+        advanceUntilIdle()
+
+        verify(migrationService).migrateFromReactNative()
+    }
+
+    @Test
+    fun `reconnect resumes deferred migration once and blocks replacement while held`() = test {
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.failure(AppError("temporarily unreadable")))
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(migrationService.hasRNWalletData()).thenReturn(true)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(migrationService.migrateFromReactNative()).doSuspendableAnswer {
+            entered.complete(Unit)
+            release.await()
+        }
+        val recovering = createViewModel()
+        advanceUntilIdle()
+        assertTrue(recovering.isCheckingRNMigration.value)
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.success(Unit))
+        isOnline.value = ConnectivityState.DISCONNECTED
+        runCurrent()
+        isOnline.value = ConnectivityState.CONNECTED
+        entered.await()
+        recovering.refreshWalletResetRecovery()
+        walletState.value = WalletState(walletResetRecovery = WalletResetRecovery.Unavailable)
+        walletState.value = WalletState(walletResetRecovery = WalletResetRecovery.Clear)
+        recovering.createWallet(null)
+        recovering.restoreWallet("replacement", null)
+        assertTrue(recovering.isCheckingRNMigration.value)
+        verify(walletRepo, never()).createWallet(anyOrNull())
+        verify(walletRepo, never()).restoreWallet(any(), anyOrNull())
+        verify(backupRepo, never()).setRestorePending(true)
+        release.complete(Unit)
+        advanceUntilIdle()
+        verify(migrationService).migrateFromReactNative()
+        assertFalse(recovering.isCheckingRNMigration.value)
+        recovering.refreshWalletResetRecovery()
+        advanceUntilIdle()
+        verify(migrationService).migrateFromReactNative()
+    }
+
+    @Test
+    fun `unavailable migration metadata does not classify rn data as absent`() = test {
+        var unreadable = true
+        whenever(migrationService.isMigrationChecked()).doSuspendableAnswer {
+            check(!unreadable) { "metadata unreadable" }
+            false
+        }
+        val recovering = createViewModel()
+        advanceUntilIdle()
+        assertTrue(recovering.isCheckingRNMigration.value)
+        assertTrue(recovering.isRNMigrationUnavailable.value)
+        verify(migrationService, never()).markMigrationChecked()
+        unreadable = false
+        whenever(migrationService.hasRNWalletData()).thenReturn(true)
+        recovering.refreshWalletResetRecovery()
+        advanceUntilIdle()
+        verify(migrationService).migrateFromReactNative()
+        assertFalse(recovering.isCheckingRNMigration.value)
+        assertFalse(recovering.isRNMigrationUnavailable.value)
+    }
+
+    @Test
+    fun `native migration status write failure offers retry without replacing the wallet`() = test {
+        whenever(walletRepo.walletExists()).thenReturn(true)
+        walletState.value = WalletState(walletExists = true)
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(migrationService.hasNativeWalletData()).thenReturn(true)
+        var unwritable = true
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        whenever(migrationService.markMigrationChecked()).doSuspendableAnswer {
+            check(!unwritable) { "metadata write failed" }
+            entered.complete(Unit)
+            release.await()
+        }
+        val recovering = createViewModel()
+        advanceUntilIdle()
+        assertTrue(recovering.walletExists)
+        assertTrue(recovering.isCheckingRNMigration.value)
+        assertTrue(recovering.isRNMigrationUnavailable.value)
+        recovering.createWallet(null)
+        recovering.restoreWallet("replacement", null)
+        verify(walletRepo, never()).createWallet(anyOrNull())
+        verify(walletRepo, never()).restoreWallet(any(), anyOrNull())
+        verify(migrationService, never()).migrateFromReactNative()
+
+        unwritable = false
+        clearInvocations(migrationService)
+        recovering.refreshWalletResetRecovery()
+        entered.await()
+        recovering.refreshWalletResetRecovery()
+        assertTrue(recovering.isCheckingRNMigration.value)
+        assertFalse(recovering.isRNMigrationUnavailable.value)
+        release.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(recovering.walletExists)
+        assertFalse(recovering.isCheckingRNMigration.value)
+        assertFalse(recovering.isRNMigrationUnavailable.value)
+        verify(migrationService).markMigrationChecked()
+        verify(migrationService, never()).migrateFromReactNative()
+    }
+
+    @Test
+    fun `unavailable cleanup keeps retries from migrating or exposing onboarding`() = test {
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.failure(AppError("reset pending")))
+        val recovering = createViewModel()
+        recovering.refreshWalletResetRecovery()
+        isOnline.value = ConnectivityState.DISCONNECTED
+        runCurrent()
+        isOnline.value = ConnectivityState.CONNECTED
+        advanceUntilIdle()
+        assertTrue(recovering.isCheckingRNMigration.value)
+        verify(migrationService, never()).migrateFromReactNative()
+        verify(migrationService, never()).markMigrationChecked()
+    }
+
+    @Test
+    fun `fresh installation completes migration classification without importing`() = test {
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(migrationService.hasRNWalletData()).thenReturn(false)
+        val recovering = createViewModel()
+        advanceUntilIdle()
+        assertFalse(recovering.isCheckingRNMigration.value)
+        verify(migrationService).markMigrationChecked()
+        verify(migrationService, never()).migrateFromReactNative()
+    }
+
+    @Test
+    fun `failed inner cleanup admission retains migration for explicit retry`() = test {
+        var checks = 0
+        whenever(migrationService.isMigrationChecked()).doSuspendableAnswer {
+            checks += 1
+            if (checks >= 2) {
+                whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.failure(AppError("read failed")))
+            }
+            false
+        }
+        whenever(migrationService.hasRNWalletData()).thenReturn(true)
+        val recovering = createViewModel()
+        advanceUntilIdle()
+        assertTrue(recovering.isCheckingRNMigration.value)
+        verify(migrationService, never()).migrateFromReactNative()
+        verify(migrationService, never()).markMigrationChecked()
+
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.success(Unit))
+        recovering.refreshWalletResetRecovery()
+        advanceUntilIdle()
+        verify(migrationService).migrateFromReactNative()
+        assertFalse(recovering.isCheckingRNMigration.value)
+    }
+
+    @Test
+    fun `native wallet completes migration classification without importing rn data`() = test {
+        whenever(migrationService.isMigrationChecked()).thenReturn(false)
+        whenever(migrationService.hasNativeWalletData()).thenReturn(true)
+        val recovering = createViewModel()
+        advanceUntilIdle()
+        assertFalse(recovering.isCheckingRNMigration.value)
+        verify(migrationService).markMigrationChecked()
+        verify(migrationService, never()).migrateFromReactNative()
+    }
+
+    @Test
+    fun `active wipe rejects a queued reset recovery action`() = test {
+        isWiping.value = true
+        sut.finishPendingWalletReset("original").join()
+        verify(walletRepo, never()).wipeWallet(any(), anyOrNull())
+        assertFalse(sut.isFinishingWalletReset.value)
+    }
+
+    @Test
+    fun `failed reset admission blocks restore preparation and replacement seed`() = test {
+        whenever(walletRepo.checkWalletAvailable()).thenReturn(Result.failure(AppError("reset pending")))
+        sut.restoreWallet("replacement", null)
+        sut.createWallet(null)
+        verify(walletRepo, never()).restoreWallet(any(), anyOrNull())
+        verify(walletRepo, never()).createWallet(anyOrNull())
+        verify(backupRepo, never()).setRestorePending(true)
+        verify(lightningRepo, never()).setInitNodeLifecycleState()
     }
 
     @Test
@@ -152,6 +372,27 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(boltzService).startUpdates(anyOrNull(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `swap balance observation survives a retired wallet refresh`() = test {
+        val events = MutableSharedFlow<BoltzSwapEvent>()
+        whenever(boltzService.events).thenReturn(events)
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever(boltzService.isSwapEnabled()).thenReturn(true)
+        var refreshes = 0
+        whenever(walletRepo.syncBalances()).doSuspendableAnswer {
+            if (++refreshes == 1) throw CancellationException("Wallet retired")
+        }
+        sut.ensureSwapUpdatesRunning()
+        runCurrent()
+
+        events.emit(BoltzSwapEvent.Claimed(swapId = "first", txid = "first-transaction"))
+        runCurrent()
+        events.emit(BoltzSwapEvent.Claimed(swapId = "second", txid = "second-transaction"))
+        runCurrent()
+
+        assertEquals(2, refreshes)
     }
 
     @Test
@@ -1018,11 +1259,48 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `post restore profile failure allows proceeding only while safety markers stay clear`() = test {
-        whenever(
-            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
-        ).thenReturn(Result.success(emptySet()))
-        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("profile cache unavailable") }
+    fun `completed wallet restore retains failed categories without waiting for optional identity activation`() = test {
+        val release = CompletableDeferred<Unit>()
+        val failedCategories = setOf(BackupCategory.SETTINGS, BackupCategory.WIDGETS)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.success(failedCategories))
+        whenever(pubkyRepo.initialize()).doSuspendableAnswer {
+            release.await()
+            Result.success(Unit)
+        }
+        try {
+            sut.onBackupRestoreRetry()
+            runCurrent()
+            assertEquals(RestoreState.Completed(failedCategories), sut.restoreState.value)
+            verify(pubkyRepo).scheduleInitializationAfterRestore()
+            verify(pubkyRepo, never()).initialize()
+            verify(backupRepo).setRestorePending(false)
+        } finally {
+            release.complete(Unit)
+        }
+    }
+
+    @Test
+    fun `most recent backup restore preserves failed categories while identity activates separately`() = test {
+        val failedCategories = setOf(BackupCategory.METADATA)
+        whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.success(failedCategories))
+        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("identity unavailable") }
+
+        sut.restoreWallet("mnemonic", "passphrase")
+        walletState.value = walletState.value.copy(walletExists = true)
+        advanceUntilIdle()
+
+        assertEquals(RestoreState.Completed(failedCategories), sut.restoreState.value)
+        verify(pubkyRepo).scheduleInitializationAfterRestore()
+        verify(pubkyRepo, never()).initialize()
+    }
+
+    @Test
+    fun `proceed rechecks safety markers after an optional restore failure`() = test {
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("metadata cache unavailable")))
         sut.onBackupRestoreRetry()
         advanceUntilIdle()
         assertEquals(RestoreState.BackupFailed(1, hasPendingWalletRestore = false), sut.restoreState.value)
@@ -1030,6 +1308,7 @@ class WalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         assertEquals(RestoreState.BackupFailed(2, hasPendingWalletRestore = false), sut.restoreState.value)
         assertEquals(null, sut.connectionStartupError.value)
+        verify(pubkyRepo, never()).scheduleInitializationAfterRestore()
 
         whenever(backupRepo.hasPendingWalletRestore()).thenReturn(true)
         var dismissed = false
@@ -1212,7 +1491,7 @@ class WalletViewModelTest : BaseUnitTest() {
         walletState.value = walletState.value.copy(walletExists = true)
         advanceUntilIdle()
 
-        verifyBlocking(pubkyRepo) { initialize() }
+        verify(pubkyRepo).scheduleInitializationAfterRestore()
     }
 
     @Test
@@ -1814,10 +2093,8 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `backup only retry with saved correction counts one retry`() = test {
         stubRecoveryRecord()
-        whenever(
-            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
-        ).thenReturn(Result.success(emptySet()))
-        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("profile cache unavailable") }
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("restore completion unavailable")))
         whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(Result.success(Unit))
         lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
         sut.onBackupRestoreRetry()
@@ -1980,12 +2257,10 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `optional profile failure cannot replay a completed correction over later settings`() = test {
+    fun `restore completion failure cannot replay a completed correction over later settings`() = test {
         val stored = stubRecoveryRecord()
-        whenever(
-            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
-        ).thenReturn(Result.success(emptySet()))
-        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("profile unavailable") }
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("restore completion unavailable")))
         whenever(lightningRepo.restartNode(anyOrNull(), any())).thenReturn(Result.success(Unit))
         whenever(
             lightningRepo.start(any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()),
@@ -2012,10 +2287,8 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `proceed retains an unapplied correction until explicit retry`() = test {
         stubRecoveryRecord()
-        whenever(
-            backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull())
-        ).thenReturn(Result.success(emptySet()))
-        whenever(pubkyRepo.initialize()).doSuspendableAnswer { throw AppError("profile unavailable") }
+        whenever(backupRepo.performFullRestoreFromLatestBackup(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("restore completion unavailable")))
         lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
         repeat(2) {
             sut.onBackupRestoreRetry()
