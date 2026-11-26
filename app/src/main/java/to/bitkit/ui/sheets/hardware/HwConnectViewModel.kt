@@ -97,7 +97,7 @@ class HwConnectViewModel @Inject constructor(
                 foundDeviceId = deviceId,
                 deviceModel = deviceModel.ifBlank { resolveHwWalletName(label = null, model = null, vendor = vendor) },
                 vendor = vendor,
-                errorMessage = null,
+                errorMessage = if (it.foundDeviceId == deviceId) it.errorMessage else null,
             )
         }
         scanUsbBeforeConnect = deviceId.startsWith(USB_DEVICE_PATH_PREFIX)

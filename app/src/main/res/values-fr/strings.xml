@@ -222,6 +222,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit n\'a pas pu lire la progression enregistrée de ce transfert, il la reconstruit donc à partir de la chaîne.</string>
     <string name="lightning__spark_exit__receive">Vous recevez (estimation)</string>
     <string name="lightning__spark_exit__savings_refused">Votre paiement depuis l\'épargne n\'a pas abouti. Payez à nouveau ou financez depuis un autre portefeuille.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Votre paiement depuis l\'épargne n\'est pas encore confirmé. Attendez-le avant de payer depuis un autre portefeuille.</string>
     <string name="lightning__spark_exit__send_to_address">Envoyer à l\'adresse</string>
     <string name="lightning__spark_exit__step_funding">Confirmation des frais d\'urgence</string>
     <string name="lightning__spark_exit__step_publish">Publication de la transaction de sortie</string>

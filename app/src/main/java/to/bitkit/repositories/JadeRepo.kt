@@ -36,6 +36,7 @@ import to.bitkit.data.PendingNameUpdate
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.isJadeDeviceBusy
+import to.bitkit.ext.isJadeDeviceLocked
 import to.bitkit.ext.isJadeUserCancellation
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
@@ -359,6 +360,7 @@ class JadeRepo @Inject constructor(
                 expectedAddress = expectedAddress,
             )
         }.onFailure {
+            markLockedIfLoggedOut(it)
             Logger.error("Jade verifyAddress failed", it, context = TAG)
             _state.update { s -> s.copy(error = errorMessage(it)) }
         }
@@ -370,6 +372,7 @@ class JadeRepo @Inject constructor(
             val signed = jadeService.signPsbt(network = Env.network.toJadeNetwork(), psbtBase64 = psbtBase64)
             jadeService.finalizePsbt(originalPsbt = psbtBase64, signedPsbt = signed)
         }.onFailure {
+            markLockedIfLoggedOut(it)
             Logger.error("Jade signPsbt failed", it, context = TAG)
             _state.update { s -> s.copy(error = errorMessage(it)) }
         }
@@ -377,7 +380,10 @@ class JadeRepo @Inject constructor(
 
     suspend fun getMasterFingerprint(): Result<String> = withContext(ioDispatcher) {
         runSuspendCatching { jadeService.getMasterFingerprint(Env.network.toJadeNetwork()) }
-            .onFailure { Logger.error("Jade getMasterFingerprint failed", it, context = TAG) }
+            .onFailure {
+                markLockedIfLoggedOut(it)
+                Logger.error("Jade getMasterFingerprint failed", it, context = TAG)
+            }
     }
 
     suspend fun disconnect(): Result<Unit> = withContext(ioDispatcher) {
@@ -721,6 +727,14 @@ class JadeRepo @Inject constructor(
             runSuspendCatching { jadeService.disconnect() }
             _state.update { it.copy(connected = null) }
         }
+    }
+
+    private fun markLockedIfLoggedOut(error: Throwable) {
+        if (!error.isJadeDeviceLocked()) return
+        val current = _state.value.connected ?: return
+        Logger.info("Marked Jade '${current.id}' locked after it logged out on the device", context = TAG)
+        val locked = current.copy(versionInfo = current.versionInfo.copy(jadeState = JadeState.LOCKED))
+        _state.update { it.copy(connected = locked) }
     }
 
     private suspend fun unlockConnected(): JadeVersionInfo {

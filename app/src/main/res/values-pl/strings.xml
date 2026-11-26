@@ -224,6 +224,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit nie mógł odczytać zapisanego postępu tego transferu, więc odbudowuje go z łańcucha.</string>
     <string name="lightning__spark_exit__receive">Otrzymasz (szacunkowo)</string>
     <string name="lightning__spark_exit__savings_refused">Twoja płatność z Oszczędności nie przeszła. Zapłać ponownie lub sfinansuj z innego portfela.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Twoja płatność z Oszczędności nie jest jeszcze potwierdzona. Poczekaj na nią, zanim zapłacisz z innego portfela.</string>
     <string name="lightning__spark_exit__send_to_address">Wyślij na adres</string>
     <string name="lightning__spark_exit__step_funding">Potwierdzenie opłat awaryjnych</string>
     <string name="lightning__spark_exit__step_publish">Publikowanie transakcji wyjścia</string>

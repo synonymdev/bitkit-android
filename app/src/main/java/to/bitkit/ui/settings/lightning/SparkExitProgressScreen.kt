@@ -220,6 +220,14 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
             modifier = Modifier.testTag("SparkExitSavingsRefused")
         )
     }
+    if (uiState.isSavingsSendLanding) {
+        VerticalSpacer(24.dp)
+        BodyS(
+            text = stringResource(R.string.lightning__spark_exit__savings_unresolved),
+            color = Colors.White64,
+            modifier = Modifier.testTag("SparkExitSavingsUnresolved")
+        )
+    }
     if (funding is SparkExitFundingState.Ask && address != null) {
         VerticalSpacer(24.dp)
         SparkExitFeesRow(

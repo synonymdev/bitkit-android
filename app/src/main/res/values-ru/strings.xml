@@ -350,6 +350,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit не смог прочитать сохранённый прогресс этого перевода, поэтому восстанавливает его по блокчейну.</string>
     <string name="lightning__spark_exit__receive">Вы получите (оценка)</string>
     <string name="lightning__spark_exit__savings_refused">Платёж из сбережений не прошёл. Оплатите снова или пополните с другого кошелька.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Платёж из сбережений ещё не подтверждён. Дождитесь его, прежде чем платить с другого кошелька.</string>
     <string name="lightning__spark_exit__send_to_address">Отправить на адрес</string>
     <string name="lightning__spark_exit__step_funding">Подтверждение экстренных комиссий</string>
     <string name="lightning__spark_exit__step_publish">Публикация транзакции выхода</string>

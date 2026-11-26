@@ -56,6 +56,7 @@ import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doNothing
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
@@ -92,6 +93,7 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PreparedOnchainSend
 import to.bitkit.repositories.PreparedOnchainSendRefused
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
@@ -634,6 +636,21 @@ class LightningServiceTest : BaseUnitTest() {
         assertFailsWith<NodeException.InvalidAddress> {
             sut.callOnchainSend { throw NodeException.InvalidAddress("invalid address") }
         }
+    }
+
+    @Test
+    fun `start publishes the node's electrum only once the node runs`() = test {
+        sut.chainElectrumUrl = "tcp://10.0.2.2:60001"
+        doThrow(NodeException.PersistenceFailed("failed")).doNothing().whenever(node).start()
+
+        assertFailsWith<AppError> { sut.start() }
+        assertNull(Env.activeElectrumServerUrl.value)
+
+        sut.start()
+        assertEquals("tcp://10.0.2.2:60001", Env.activeElectrumServerUrl.value)
+
+        sut.stop()
+        assertNull(Env.activeElectrumServerUrl.value)
     }
 
     @Test

@@ -338,6 +338,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit kon de opgeslagen voortgang van deze overboeking niet lezen en bouwt die daarom opnieuw op vanaf de chain.</string>
     <string name="lightning__spark_exit__receive">Je ontvangt (schatting)</string>
     <string name="lightning__spark_exit__savings_refused">Je betaling uit spaargeld is niet gelukt. Betaal opnieuw of financier vanuit een andere wallet.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Je betaling uit spaargeld is nog niet bevestigd. Wacht erop voordat je vanuit een andere wallet betaalt.</string>
     <string name="lightning__spark_exit__send_to_address">Naar adres sturen</string>
     <string name="lightning__spark_exit__step_funding">Bevestiging van noodkosten</string>
     <string name="lightning__spark_exit__step_publish">Exittransactie publiceren</string>

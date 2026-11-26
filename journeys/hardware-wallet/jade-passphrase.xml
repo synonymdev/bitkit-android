@@ -1,0 +1,24 @@
+<journey name="Jade Passphrase Wallet">
+  <description>
+    Pairs the wallet a BIP39 passphrase typed on the Jade emulator opens, next to the Jade's own wallet.
+    Requires `JADE_MODE=interactive JADE_PASSPHRASE=always ./scripts/jade-emulator start` in
+    `bitkit-docker`, a regtest debug build with the Jade emulator enabled (see the README) and the
+    Jade's own wallet already paired from an earlier start without `JADE_PASSPHRASE` (the seed stays
+    the same across starts). The device asks for a passphrase after every PIN;
+    `./scripts/jade-emulator passphrase` types one on its keyboard and confirms it.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app, open the menu (testTag "HeaderMenu"), tap Settings (testTag "DrawerSettings"), tap "Hardware Wallets" (testTag "HardwareWalletsSettings") and tap "Add Hardware Wallet" (testTag "AddHardwareWallet")
+    </action>
+    <action>
+      Tap "Continue" (testTag "HardwareWalletIntroContinue"), then "Connect" (testTag "HardwareWalletFoundConnect") on the "Found Jade" step
+    </action>
+    <action>
+      Run `./scripts/jade-emulator pin 012345`, then `./scripts/jade-emulator passphrase test` in `bitkit-docker`, and verify the "Device Connected" step (testTag "HardwareWalletPairedScreen") headed "Paired Jade" appears within 30 seconds with a balance of 0
+    </action>
+    <action>
+      Tap "Finish" (testTag "HardwareWalletPairedFinish"), open Settings → "Hardware Wallets" again and verify two Jade wallets are listed: the one paired before, with its balance, and the new one at 0
+    </action>
+  </actions>
+</journey>

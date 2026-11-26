@@ -111,18 +111,29 @@ class PaykitAllowancePayer @Inject constructor(
     ): Result<Unit> =
         paymentProofRepo.associateLightningPayment(request, paymentHash, paymentEndpointIdentifier, paymentAppId)
 
+    /** Pays [bolt11], checking again right before submission that [request]'s contact is not blocked. */
     suspend fun payLightning(
+        request: PaykitPaymentRequest,
         bolt11: String,
         sats: ULong?,
         paymentDeadlineAt: Instant?,
         maxTotalRoutingFeeMsat: ULong,
-    ): Result<String> = lightningRepo.payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) { true }
+    ): Result<String> = lightningRepo.payInvoiceRecheckedAtSubmission(
+        bolt11,
+        sats,
+        paymentDeadlineAt,
+        maxTotalRoutingFeeMsat,
+    ) { paymentRequestRepo.ensureAutomaticPaymentAllowed(request).isSuccess }
 
     /** Clears the proof when [error] proves the payment never left; returns whether it did. */
-    suspend fun failLightningPayment(paymentHash: String, error: Throwable): Boolean =
-        paymentProofRepo.failLightningPayment(paymentHash, error)
+    suspend fun failLightningPayment(
+        paymentHash: String,
+        error: Throwable,
+        requestId: PaykitPaymentRequestId,
+    ): Boolean = paymentProofRepo.failLightningPayment(paymentHash, error, requestId)
 
-    suspend fun discardLightningProof(paymentHash: String) = paymentProofRepo.failLightningPayment(paymentHash)
+    suspend fun discardLightningProof(paymentHash: String, requestId: PaykitPaymentRequestId) =
+        paymentProofRepo.failLightningPayment(paymentHash, requestId)
 
     suspend fun cancelProofPreparation(request: PaykitPaymentRequest) = paymentProofRepo.cancelPreparation(request)
 
@@ -970,7 +981,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         }
 
         runSuspendCatching { setStage(Stage.SENDING, attemptId, identity) }.onFailure {
-            payer.discardLightningProof(paymentHash)
+            payer.discardLightningProof(paymentHash, request.id)
             failUnsent(attemptId, identity)
             throw it
         }
@@ -980,6 +991,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         // Routing fees fall outside the allowance's accounting, so they are capped at 1% of the requested amount.
         val maxRoutingFeeMsat = amountSats.safe() * MAX_ROUTING_FEE_MSAT_PER_SAT.safe()
         payer.payLightning(
+            request,
             payment.endpoint.value,
             sats,
             request.submissionDeadline(null),
@@ -987,7 +999,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         ).onFailure {
             // Only an error that proves the payment never left releases the reservation; anything else stays open,
             // and the node's payment event records its outcome.
-            if (payer.failLightningPayment(paymentHash, it)) {
+            if (payer.failLightningPayment(paymentHash, it, request.id)) {
                 failUnsent(attemptId, identity)
                 throw it
             }

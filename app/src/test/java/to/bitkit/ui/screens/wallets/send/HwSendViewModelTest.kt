@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.wallets.send
 import android.content.Context
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.BroadcastException
+import com.synonym.bitkitcore.JadeException
 import com.synonym.bitkitcore.TrezorException
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CompletableDeferred
@@ -905,6 +906,24 @@ class HwSendViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.signFunding(WALLET_ID, funding)).thenReturn(Result.success(signedTx))
         whenever(hwWalletRepo.broadcastFunding(signedTx)).thenReturn(Result.success(broadcast))
         return PaymentFixture(funding, signedTx, broadcast)
+    }
+
+    @Test
+    fun `a jade logged out on the device unlocks in the connect step before composing and signing again`() = test {
+        val fixture = stubSuccessfulPayment()
+        val locked = AppError(JadeException.DeviceLocked())
+        whenever(hwWalletRepo.composeFundingTransaction(WALLET_ID, ADDRESS, AMOUNT_SATS, SATS_PER_VBYTE))
+            .thenReturn(Result.failure(locked), Result.success(fixture.funding))
+        whenever(hwWalletRepo.signFunding(WALLET_ID, fixture.funding))
+            .thenReturn(Result.failure(locked), Result.success(fixture.signedTx))
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, times(3)).ensureConnected(WALLET_ID)
+        verify(hwWalletRepo, times(2)).composeFundingTransaction(WALLET_ID, ADDRESS, AMOUNT_SATS, SATS_PER_VBYTE)
+        verify(hwWalletRepo, times(2)).signFunding(WALLET_ID, fixture.funding)
+        verify(hwWalletRepo).broadcastFunding(fixture.signedTx)
     }
 
     @Test

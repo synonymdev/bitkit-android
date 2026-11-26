@@ -83,6 +83,7 @@ class WalletRepo @Inject constructor(
     private val sparkRepo: SparkRepo,
     private val sparkExitRepo: SparkExitRepo,
     private val backupRepo: BackupRepo,
+    private val invoiceParser: QuickPayInvoiceParser,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
 
@@ -228,10 +229,14 @@ class WalletRepo @Inject constructor(
                     cacheStore.update { it.invalidateReceiveOnchainAddress() }
                 }
                 committedReceiveBip21 = cacheData.bip21
+                val paymentHash = cacheData.bolt11PaymentHash.ifEmpty {
+                    cacheData.bolt11.takeIf { it.isNotEmpty() }?.let { invoiceParser.parse(it) }.orEmpty()
+                }
                 _walletState.update {
                     it.copy(
                         onchainAddress = cacheData.onchainAddress,
                         bolt11 = cacheData.bolt11,
+                        bolt11PaymentHash = paymentHash,
                         bip21 = cacheData.bip21,
                     )
                 }
@@ -337,8 +342,9 @@ class WalletRepo @Inject constructor(
         }
     }
 
+    /** Creates a fresh invoice and BIP21 for the current request, keeping its amount, description and tags. */
     suspend fun refreshBip21(): Result<Unit> = updateReceiveState(
-        beforeLock = { clearBip21State(clearTags = false) },
+        beforeLock = { _walletState.update { it.copy(hasReceiveInvoiceError = false) } },
     ) {
         runSuspendCatching { refreshBip21Locked().getOrThrow() }.onFailure {
             _walletState.update { state -> state.copy(hasReceiveInvoiceError = true) }
@@ -588,7 +594,8 @@ class WalletRepo @Inject constructor(
         while (true) {
             val state = _walletState.value
             if (state.bolt11 != settledBolt11) return false
-            if (_walletState.compareAndSet(state, state.copy(bolt11 = "", bip21 = ""))) return true
+            val invalidated = state.copy(bolt11 = "", bolt11PaymentHash = "", bip21 = "")
+            if (_walletState.compareAndSet(state, invalidated)) return true
         }
     }
 
@@ -761,7 +768,7 @@ class WalletRepo @Inject constructor(
     suspend fun refreshReceiveAddressAfterTypeChange(): Result<Unit> = updateReceiveState {
         runSuspendCatching {
             cacheStore.update { it.resetBip21() }
-            _walletState.update { it.copy(onchainAddress = "", bolt11 = "", bip21 = "") }
+            _walletState.update { it.copy(onchainAddress = "", bolt11 = "", bolt11PaymentHash = "", bip21 = "") }
             newAddress().getOrThrow()
             updateBip21InvoiceLocked().getOrThrow()
             Unit
@@ -857,7 +864,9 @@ class WalletRepo @Inject constructor(
         }
         cacheStore.update { it.copy(bolt11 = bolt11, bolt11PaymentHash = paymentHash, bip21 = bip21) }
         committedReceiveBip21 = bip21
-        _walletState.update { it.copy(bolt11 = bolt11, bip21 = bip21, hasReceiveInvoiceError = false) }
+        _walletState.update {
+            it.copy(bolt11 = bolt11, bolt11PaymentHash = paymentHash, bip21 = bip21, hasReceiveInvoiceError = false)
+        }
     }
 
     suspend fun setBip21(bip21: String) = updateReceiveState(trackPending = false) { setBip21Locked(bip21) }
@@ -893,6 +902,9 @@ class WalletRepo @Inject constructor(
     }
 
     fun setBip21Description(description: String) = _walletState.update { it.copy(bip21Description = description) }
+
+    /** Ends the receive request of a closed sheet, so that a later [refreshBip21] cannot reuse its amount and note. */
+    fun resetReceiveRequest() = _walletState.update { it.copy(bip21AmountSats = null, bip21Description = "") }
 
     fun clearBip21State(clearTags: Boolean = true) {
         _walletState.update {
@@ -983,12 +995,16 @@ class WalletRepo @Inject constructor(
     suspend fun updateBip21Invoice(
         amountSats: ULong? = walletState.value.bip21AmountSats,
         description: String = walletState.value.bip21Description,
-    ): Result<Unit> = updateReceiveState(
-        beforeLock = {
-            _walletState.update { it.copy(bip21AmountSats = amountSats, bip21Description = description) }
-        },
-    ) {
-        updateBip21InvoiceLocked(amountSats, description)
+    ): Result<Unit> {
+        // An amount cleared to zero is a request for any amount, not an invoice for zero
+        val requestedAmount = amountSats?.takeIf { it > 0uL }
+        return updateReceiveState(
+            beforeLock = {
+                _walletState.update { it.copy(bip21AmountSats = requestedAmount, bip21Description = description) }
+            },
+        ) {
+            updateBip21InvoiceLocked(requestedAmount, description)
+        }
     }
 
     private suspend fun updateBip21InvoiceLocked(
@@ -1071,6 +1087,7 @@ class WalletRepo @Inject constructor(
 data class WalletState(
     val onchainAddress: String = "",
     val bolt11: String = "",
+    val bolt11PaymentHash: String = "",
     val bip21: String = "",
     val hasReceiveInvoiceError: Boolean = false,
     val isReceiveInvoiceUpdating: Boolean = false,

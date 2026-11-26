@@ -1,0 +1,28 @@
+<journey name="Jade Wrong PIN">
+  <description>
+    Enters a wrong PIN on the Jade emulator's own PIN pad and checks the Found step's message.
+    Requires `JADE_MODE=interactive ./scripts/jade-emulator start` in `bitkit-docker`, a regtest
+    debug build with the Jade emulator enabled (see the README) and no Jade paired. The emulator
+    shows its PIN pad and waits for buttons; `./scripts/jade-emulator pin` enters a PIN.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Open the menu (testTag "HeaderMenu"), tap Settings (testTag "DrawerSettings"), tap "Hardware Wallets" (testTag "HardwareWalletsSettings") and tap "Add Hardware Wallet" (testTag "AddHardwareWallet")
+    </action>
+    <action>
+      Tap "Continue" (testTag "HardwareWalletIntroContinue") and verify the "Found Device" step (testTag "HardwareWalletFoundScreen") headed "Found Jade" appears within 15 seconds
+    </action>
+    <action>
+      Tap "Connect" (testTag "HardwareWalletFoundConnect") and verify the hint "Enter your PIN on your Jade to unlock it." (testTag "HwFoundUnlockHint") shows
+    </action>
+    <action>
+      Run `./scripts/jade-emulator pin 999999` in `bitkit-docker` and verify that within 30 seconds the Found step shows "Wrong PIN. Try again on your Jade." (testTag "HwFoundError")
+    </action>
+    <action>
+      Tap "Connect" again, run `./scripts/jade-emulator pin 012345` (it first presses Continue on the device's "Incorrect PIN!" screen), and verify the "Device Connected" step (testTag "HardwareWalletPairedScreen") headed "Paired Jade" appears within 30 seconds
+    </action>
+  </actions>
+</journey>
