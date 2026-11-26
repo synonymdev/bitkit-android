@@ -394,7 +394,7 @@ private fun QrFitColumn(
     actions: @Composable () -> Unit,
 ) {
     Layout(
-        contents = listOf(header, qr, actions)
+        contents = listOf(header, qr, actions),
     ) { (headerMeasurables, qrMeasurables, actionsMeasurables), constraints ->
         val loose = constraints.copy(minWidth = 0, minHeight = 0, maxHeight = Constraints.Infinity)
         val headerPlaceables = headerMeasurables.map { it.measure(loose) }

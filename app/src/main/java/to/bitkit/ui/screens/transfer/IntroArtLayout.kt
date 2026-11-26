@@ -3,7 +3,6 @@ package to.bitkit.ui.screens.transfer
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,8 +11,11 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,10 +31,11 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.TopBarHeight
+import to.bitkit.ui.utils.PHONE_MAX_WIDTH
 import to.bitkit.ui.utils.TABLET_MIN_WIDTH
 
-/** Widest the text and button column grows on a tablet, so the button keeps a button's width */
-private val TABLET_TEXT_MAX_WIDTH = 480.dp
+/** Shortest window that gets the tablet layout; shorter windows keep the phone layout so the button stays on screen */
+private val TABLET_LAYOUT_MIN_HEIGHT = 600.dp
 
 /** Headline size on a tablet, large enough to balance the art beside it */
 private val TABLET_TITLE_SIZE = 64.sp
@@ -55,7 +58,7 @@ fun IntroArtLayout(
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val isTablet = maxWidth >= TABLET_MIN_WIDTH
+        val isTablet = maxWidth >= TABLET_MIN_WIDTH && maxHeight >= TABLET_LAYOUT_MIN_HEIGHT
         if (isTablet && maxWidth > maxHeight) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -70,8 +73,19 @@ fun IntroArtLayout(
                         .weight(1f)
                         .fillMaxHeight()
                 )
-                Box(contentAlignment = Alignment.CenterStart, modifier = Modifier.weight(1f)) {
-                    TabletIntroText(title, text, buttonText, buttonTestTag, onButtonClick)
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .verticalScroll(rememberScrollState())
+                            .heightIn(min = maxHeight)
+                    ) {
+                        TabletIntroText(title, text, buttonText, buttonTestTag, onButtonClick)
+                    }
                 }
             }
         } else if (isTablet) {
@@ -137,7 +151,7 @@ private fun TabletIntroText(
     buttonTestTag: String,
     onButtonClick: () -> Unit,
 ) {
-    Column(modifier = Modifier.widthIn(max = TABLET_TEXT_MAX_WIDTH)) {
+    Column(modifier = Modifier.widthIn(max = PHONE_MAX_WIDTH)) {
         Display(title, fontSize = TABLET_TITLE_SIZE)
         Spacer(modifier = Modifier.height(16.dp))
         BodyM(text, color = Colors.White64, style = TabletBodyStyle)

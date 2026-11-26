@@ -11,8 +11,8 @@ import androidx.compose.ui.unit.dp
 /** Narrowest window laid out as a tablet, the Android large-screen breakpoint. */
 val TABLET_MIN_WIDTH = 600.dp
 
-/** Widest window treated as a phone; illustrations sized as a share of the screen stop growing past it. */
-private val PHONE_MAX_WIDTH = 480.dp
+/** Widest window treated as a phone; illustrations and text columns sized from the screen stop growing past it. */
+val PHONE_MAX_WIDTH = 480.dp
 
 /**
  * The window's width capped at a large phone's, for sizes set as a share of the screen,
