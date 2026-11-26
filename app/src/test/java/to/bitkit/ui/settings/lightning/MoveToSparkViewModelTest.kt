@@ -327,6 +327,35 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `try again after a partial move shows it moved once the rest no longer routes`() = test {
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
+        whenever(moveToSparkRepo.movableSats()).thenReturn(50_000uL)
+        val sut = createViewModel()
+        whenever(moveToSparkRepo.quoteAll()).thenReturn(Result.failure(MoveToSparkError.SparkUnavailable()))
+        sut.move()
+        whenever(moveToSparkRepo.quoteAll()).thenReturn(Result.failure(MoveToSparkError.TooLarge(50_000uL)))
+
+        sut.quote()
+
+        assertEquals(MoveToSparkUiState.Done(moved), sut.uiState.value)
+    }
+
+    @Test
+    fun `a new opening after a move left in flight quotes afresh`() = test {
+        doReturn(50_000uL).whenever(moveToSparkRepo).movableSatsSettled()
+        val sut = createViewModel()
+        sut.move()
+        sut.close()
+        whenever(moveToSparkRepo.quoteAll()).thenReturn(Result.failure(MoveToSparkError.SparkUnavailable()))
+        firstSettled.complete(Result.success(moved))
+        whenever(moveToSparkRepo.quoteAll()).thenReturn(Result.failure(MoveToSparkError.TooLarge(50_000uL)))
+
+        val reopened = createViewModel()
+
+        assertEquals(MoveToSparkUiState.Failed(MoveToSparkFailure.UNKNOWN), reopened.uiState.value)
+    }
+
+    @Test
     fun `a rest that no longer routes keeps the balance updated for the next opening`() = test {
         whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
         whenever(moveToSparkRepo.movableSats()).thenReturn(50_000uL)

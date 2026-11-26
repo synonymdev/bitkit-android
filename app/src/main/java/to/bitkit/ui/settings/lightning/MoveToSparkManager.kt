@@ -68,13 +68,21 @@ class MoveToSparkManager @Inject constructor(
     @Volatile
     private var isMoveInFlight = false
 
+    /** What a move moved before its rest failed to quote, so Try Again still ends on that move's outcome. */
+    @Volatile
+    private var movedBeforeRest: MoveToSparkOutcome.Moved? = null
+
     /**
      * Opens the screen: quotes a new move, unless one is quoting or a move is running or still shows its outcome.
      * Returns the screen's token for [reset].
      */
     fun start(): Int {
         val screen = latestScreen.incrementAndGet()
-        if (!keepsOutcome && quoteJob?.isActive != true) quote()
+        if (!keepsOutcome && quoteJob?.isActive != true) {
+            // A new opening quotes afresh, not as the Try Again of a move shown before.
+            movedBeforeRest = null
+            quote()
+        }
         return screen
     }
 
@@ -87,6 +95,7 @@ class MoveToSparkManager @Inject constructor(
         generation.incrementAndGet()
         quoteJob?.cancel()
         keepsOutcome = false
+        movedBeforeRest = null
         _uiState.update { MoveToSparkUiState.Quoting }
     }
 
@@ -97,13 +106,15 @@ class MoveToSparkManager @Inject constructor(
         moveJob?.cancel()
         keepsOutcome = false
         isMoveInFlight = false
+        movedBeforeRest = null
         _uiState.update { MoveToSparkUiState.Quoting }
     }
 
     /** Quotes moving everything the channels can send, in parts when one payment does not route. */
-    fun quote() = quote(moved = null)
+    fun quote() = quote(movedNow = null)
 
-    private fun quote(moved: MoveToSparkOutcome.Moved?) {
+    private fun quote(movedNow: MoveToSparkOutcome.Moved?) {
+        val moved = movedNow ?: movedBeforeRest
         val quoteGeneration = generation.incrementAndGet()
         keepsOutcome = false
         _uiState.update { MoveToSparkUiState.Quoting }
@@ -123,6 +134,7 @@ class MoveToSparkManager @Inject constructor(
             )
             if (generation.get() != quoteGeneration) return@launch
             keepsOutcome = quoted is MoveToSparkUiState.Done
+            movedBeforeRest = moved.takeIf { quoted is MoveToSparkUiState.Failed }
             _uiState.update { quoted }
         }
     }
