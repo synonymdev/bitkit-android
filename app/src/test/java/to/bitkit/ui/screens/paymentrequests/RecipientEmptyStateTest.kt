@@ -12,7 +12,7 @@ class RecipientEmptyStateTest {
     @Test
     fun `shows no empty state when recipients are listed`() {
         PaykitPaymentRequestTargetsStatus.entries.forEach {
-            assertNull(recipientEmptyState(hasRecipients = true, query = "", status = it))
+            assertNull(recipientEmptyState(hasRecipients = true, hasEligibleTargets = true, query = "", status = it))
         }
     }
 
@@ -29,11 +29,25 @@ class RecipientEmptyStateTest {
     }
 
     @Test
+    fun `shows no match while failed only when the search filtered out known recipients`() {
+        assertEquals(RecipientEmptyState.NoMatch, emptyState(query = "bob", status = Failed, hasEligibleTargets = true))
+        assertEquals(RecipientEmptyState.Failed, emptyState(query = "", status = Failed, hasEligibleTargets = true))
+    }
+
+    @Test
     fun `shows unavailable or no match only after discovery finished`() {
         assertEquals(RecipientEmptyState.Unavailable, emptyState(query = " ", status = Loaded))
         assertEquals(RecipientEmptyState.NoMatch, emptyState(query = "bob", status = Loaded))
     }
 
-    private fun emptyState(query: String, status: PaykitPaymentRequestTargetsStatus) =
-        recipientEmptyState(hasRecipients = false, query = query, status = status)
+    private fun emptyState(
+        query: String,
+        status: PaykitPaymentRequestTargetsStatus,
+        hasEligibleTargets: Boolean = false,
+    ) = recipientEmptyState(
+        hasRecipients = false,
+        hasEligibleTargets = hasEligibleTargets,
+        query = query,
+        status = status,
+    )
 }

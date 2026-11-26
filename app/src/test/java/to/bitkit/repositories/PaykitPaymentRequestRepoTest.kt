@@ -3125,6 +3125,70 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `recipient status is failed when another operation blocks the first discovery`() = test {
+        whenever(
+            paykitSdkService.identityStatus()
+        ).thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        whenever(paykitSdkService.linkedPeers())
+            .doSuspendableAnswer { throw PaykitPaymentRequestError.OperationInProgress }
+
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY))
+
+        assertEquals(PaykitPaymentRequestTargetsStatus.Failed, sut.eligibleTargetsStatus.value)
+    }
+
+    @Test
+    fun `recipient status stays loaded when another operation blocks a later discovery`() = test {
+        whenever(
+            paykitSdkService.identityStatus()
+        ).thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        var isBlocked = false
+        whenever(paykitSdkService.linkedPeers()).doSuspendableAnswer {
+            if (isBlocked) throw PaykitPaymentRequestError.OperationInProgress
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED))
+        }
+        whenever(paykitSdkService.canReceivePaymentRequests(eq(COUNTERPARTY), any())).thenReturn(true)
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+        isBlocked = true
+
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY), force = true)
+
+        assertEquals(PaykitPaymentRequestTargetsStatus.Loaded, sut.eligibleTargetsStatus.value)
+        assertEquals(listOf(PaykitPaymentRequestTarget(COUNTERPARTY)), sut.eligibleTargets.value)
+    }
+
+    @Test
+    fun `recipient status resets to loading when the identity is cleared or changed`() = test {
+        whenever(
+            paykitSdkService.identityStatus()
+        ).thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(emptyList())
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+        assertEquals(PaykitPaymentRequestTargetsStatus.Loaded, sut.eligibleTargetsStatus.value)
+
+        sut.clear()
+        assertEquals(PaykitPaymentRequestTargetsStatus.Loading, sut.eligibleTargetsStatus.value)
+
+        sut.activate(LOCAL_IDENTITY)
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+        assertEquals(PaykitPaymentRequestTargetsStatus.Loaded, sut.eligibleTargetsStatus.value)
+        whenever(presentationStore.load(SECOND_IDENTITY)).thenReturn(emptySet())
+        sut.activate(SECOND_IDENTITY)
+        assertEquals(PaykitPaymentRequestTargetsStatus.Loading, sut.eligibleTargetsStatus.value)
+    }
+
+    @Test
+    fun `recipient status is failed when the identity cannot be activated`() = test {
+        sut.clear()
+        whenever(presentationStore.loadSubscriptionState(any())).doSuspendableAnswer { error("storage unavailable") }
+
+        sut.activate(LOCAL_IDENTITY)
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY))
+
+        assertEquals(PaykitPaymentRequestTargetsStatus.Failed, sut.eligibleTargetsStatus.value)
+    }
+
+    @Test
     fun `recipient discovery bounds public lookups without a slow peer blocking later peers`() = test {
         val keys = "yb".flatMap { first ->
             "ybndrfg8ejkmcpqxot1uwisza345h769".map { second ->

@@ -667,7 +667,13 @@ internal fun PaymentRequestRecipientContent(
         VerticalSpacer(16.dp)
         HorizontalDivider(color = Colors.White10)
         LazyColumn(modifier = Modifier.weight(1f)) {
-            when (val emptyState = recipientEmptyState(recipients.isNotEmpty(), query, targetsStatus)) {
+            val emptyState = recipientEmptyState(
+                hasRecipients = recipients.isNotEmpty(),
+                hasEligibleTargets = targets.isNotEmpty(),
+                query = query,
+                status = targetsStatus,
+            )
+            when (emptyState) {
                 null -> Unit
                 RecipientEmptyState.Loading -> item {
                     Box(
@@ -739,17 +745,25 @@ internal enum class RecipientEmptyState {
     NoMatch,
 }
 
-/** What the picker shows instead of recipients: null when it has some to list. */
+/**
+ * What the picker shows instead of recipients: null when it has some to list.
+ * A failed check with a search that filtered out known recipients is a plain no-match.
+ */
 internal fun recipientEmptyState(
     hasRecipients: Boolean,
+    hasEligibleTargets: Boolean,
     query: String,
     status: PaykitPaymentRequestTargetsStatus,
-): RecipientEmptyState? = when {
-    hasRecipients -> null
-    status == PaykitPaymentRequestTargetsStatus.Loading -> RecipientEmptyState.Loading
-    status == PaykitPaymentRequestTargetsStatus.Failed -> RecipientEmptyState.Failed
-    query.isBlank() -> RecipientEmptyState.Unavailable
-    else -> RecipientEmptyState.NoMatch
+): RecipientEmptyState? {
+    if (hasRecipients) return null
+    val isSearching = query.isNotBlank()
+    return when (status) {
+        PaykitPaymentRequestTargetsStatus.Loading -> RecipientEmptyState.Loading
+        PaykitPaymentRequestTargetsStatus.Failed if isSearching && hasEligibleTargets -> RecipientEmptyState.NoMatch
+        PaykitPaymentRequestTargetsStatus.Failed -> RecipientEmptyState.Failed
+        PaykitPaymentRequestTargetsStatus.Loaded if !isSearching -> RecipientEmptyState.Unavailable
+        PaykitPaymentRequestTargetsStatus.Loaded -> RecipientEmptyState.NoMatch
+    }
 }
 
 @Composable
