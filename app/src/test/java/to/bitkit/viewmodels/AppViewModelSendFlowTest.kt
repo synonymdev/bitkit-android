@@ -12176,7 +12176,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
         whenever(activityRepo.getActivity(paymentHash)).thenReturn(Result.success(null))
         val attempt = SparkSendAttempt(attempt = 0, expiresAt = Long.MAX_VALUE, amountSats = 1_000u)
-        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(sparkSendAttempts = mapOf(paymentHash to attempt))))
+        val cache = AppCacheData(
+            sparkSendAttempts = mapOf(paymentHash to attempt),
+            sparkUncertainSends = mapOf(paymentHash to 0L),
+        )
+        whenever(cacheStore.data).thenReturn(flowOf(cache))
         val state = SendUiState(address = bolt11, payMethod = SendMethod.LIGHTNING, decodedInvoice = invoice)
 
         sut.sendEffect.test {
@@ -12185,6 +12189,57 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
             val pending = assertIs<SendEffect.NavigateToPending>(expectMostRecentItem())
             assertEquals(1_000L, pending.amount)
+        }
+    }
+
+    @Test
+    fun `repaying an amountless invoice after a failed spark attempt without activity shows the new amount`() = test {
+        val bolt11 = "lnbcrt1amountlessdropped"
+        val invoice = lightningInvoice(bolt11, 0u)
+        val paymentHash = invoice.paymentHash.toHex()
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 2_000u))
+            .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
+        whenever(activityRepo.getActivity(paymentHash)).thenReturn(Result.success(null))
+        val attempt = SparkSendAttempt(attempt = 1, expiresAt = Long.MAX_VALUE, amountSats = 6_000u)
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(sparkSendAttempts = mapOf(paymentHash to attempt))))
+        val state = SendUiState(address = bolt11, payMethod = SendMethod.LIGHTNING, decodedInvoice = invoice)
+
+        sut.sendEffect.test {
+            setSendState(state.copy(amount = 2_000u))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            val pending = assertIs<SendEffect.NavigateToPending>(expectMostRecentItem())
+            assertEquals(2_000L, pending.amount)
+        }
+    }
+
+    @Test
+    fun `repaying an amountless invoice held by spark after a failed row shows the held amount`() = test {
+        val bolt11 = "lnbcrt1amountlessheldfailed"
+        val invoice = lightningInvoice(bolt11, 0u)
+        val paymentHash = invoice.paymentHash.toHex()
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 2_000u))
+            .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
+        val failed = mock<LightningActivity> {
+            on { value } doReturn 5_000u
+            on { txType } doReturn PaymentType.SENT
+            on { status } doReturn PaymentState.FAILED
+        }
+        whenever(activityRepo.getActivity(paymentHash)).thenReturn(Result.success(BitkitActivity.Lightning(failed)))
+        val attempt = SparkSendAttempt(attempt = 1, expiresAt = Long.MAX_VALUE, amountSats = 6_000u)
+        val cache = AppCacheData(
+            sparkSendAttempts = mapOf(paymentHash to attempt),
+            sparkUncertainSends = mapOf(paymentHash to 0L),
+        )
+        whenever(cacheStore.data).thenReturn(flowOf(cache))
+        val state = SendUiState(address = bolt11, payMethod = SendMethod.LIGHTNING, decodedInvoice = invoice)
+
+        sut.sendEffect.test {
+            setSendState(state.copy(amount = 2_000u))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            val pending = assertIs<SendEffect.NavigateToPending>(expectMostRecentItem())
+            assertEquals(6_000L, pending.amount)
         }
     }
 

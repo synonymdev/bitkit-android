@@ -8321,9 +8321,11 @@ class AppViewModel @Inject constructor(
 
     private suspend fun earlierLightningSendSats(paymentHash: String): ULong? {
         val sent = (activityRepo.getActivity(paymentHash).getOrNull() as? Activity.Lightning)?.v1
-            ?.takeIf { it.txType == PaymentType.SENT }
-            ?: return cacheStore.data.first().sparkSendAttempts[paymentHash.lowercase()]?.amountSats
-        return sent.value.takeIf { sent.status != PaymentState.FAILED }
+            ?.takeIf { it.txType == PaymentType.SENT && it.status != PaymentState.FAILED }
+        if (sent != null) return sent.value
+        val hash = paymentHash.lowercase()
+        val cache = cacheStore.data.first()
+        return cache.sparkSendAttempts[hash]?.amountSats?.takeIf { hash in cache.sparkUncertainSends }
     }
 
     /**
