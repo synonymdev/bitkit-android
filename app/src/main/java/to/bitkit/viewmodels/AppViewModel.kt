@@ -8319,10 +8319,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun earlierLightningSendSats(paymentHash: String): ULong? =
-        (activityRepo.getActivity(paymentHash).getOrNull() as? Activity.Lightning)?.v1
-            ?.takeIf { it.txType == PaymentType.SENT && it.status != PaymentState.FAILED }
-            ?.value
+    private suspend fun earlierLightningSendSats(paymentHash: String): ULong? {
+        val sent = (activityRepo.getActivity(paymentHash).getOrNull() as? Activity.Lightning)?.v1
+            ?.takeIf { it.txType == PaymentType.SENT }
+            ?: return cacheStore.data.first().sparkSendAttempts[paymentHash.lowercase()]?.amountSats
+        return sent.value.takeIf { sent.status != PaymentState.FAILED }
+    }
 
     /**
      * Before a payment of [bolt11] for [amountSats] that fits only across the channels and Spark, moves the channels'
