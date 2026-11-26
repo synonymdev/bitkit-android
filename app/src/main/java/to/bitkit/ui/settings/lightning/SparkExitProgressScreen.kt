@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +60,7 @@ fun SparkExitProgressScreen(
     }
     val isEnded = uiState.record?.isActive == false
     LaunchedEffect(uiState.record?.savingsRefusal) { viewModel.loadSavingsRetry() }
+    DisposableEffect(Unit) { onDispose { viewModel.stopSavingsRetryPricing() } }
     LaunchedEffect(isEnded) { if (isEnded) viewModel.onResultShown() }
     LifecycleResumeEffect(Unit) {
         viewModel.refreshBackgroundLimits()

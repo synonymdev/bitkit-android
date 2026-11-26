@@ -1011,9 +1011,11 @@ class SparkExitRepo @Inject constructor(
                     runSuspendCatching {
                         payFunding(record.createdAt, address, retry.sats, retry.feeRates, retry.feeSats) { exit ->
                             val current = exit.record ?: return@payFunding false
-                            val held = runSuspendCatching { requireNotNull(chain).utxos(address) }.getOrNull()
-                                ?: return@payFunding false
-                            val now = exit.copy(fundingState = SparkExitMath.fundingState(current, held))
+                            val held = requireNotNull(chain) { "No chain host for this network" }.utxos(address)
+                            val funding = SparkExitMath.fundingState(current, held)
+                            // Progress shows what the read found, so it stops offering savings once funding arrived.
+                            _state.update { it.copy(fundingState = funding) }
+                            val now = exit.copy(fundingState = funding)
                             savingsRefusal(now)?.let { it.sats == retry.sats && it.feeSats <= retry.feeSats } == true
                         }
                     }

@@ -321,13 +321,20 @@ class SparkExitViewModel @Inject constructor(
         if (!hasRefusal) return _uiState.update { it.copy(savingsRetry = null) }
         savingsRetryPricing = viewModelScope.launch {
             // Priced again until it succeeds, while progress can still offer it.
+            // A failed price keeps the last one, which is never offered below a fee refused since.
             while (isActive) {
                 val retry = sparkExitRepo.priceSavingsRefusal().getOrNull()
-                _uiState.update { it.copy(savingsRetry = retry) }
-                if (retry != null || !_uiState.value.isSavingsRetryDue) return@launch
+                if (retry != null) return@launch _uiState.update { it.copy(savingsRetry = retry) }
+                if (!_uiState.value.isSavingsRetryDue) return@launch
                 delay(SAVINGS_RETRY_PRICE_INTERVAL)
             }
         }
+    }
+
+    /** Progress closed: its refused savings payment is no longer priced. */
+    fun stopSavingsRetryPricing() {
+        savingsRetryPricing?.cancel()
+        savingsRetryPricing = null
     }
 
     /**

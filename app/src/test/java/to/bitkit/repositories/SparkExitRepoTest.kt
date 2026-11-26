@@ -753,7 +753,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             addHandler { request ->
                 val url = request.url.toString()
                 when {
-                    url.endsWith("/address/$funding/utxo") && readUtxos() != null -> respond(readUtxos()!!)
+                    url.endsWith("/address/$funding/utxo") && readUtxos() != null -> respond(readUtxos().orEmpty())
                     url.endsWith("/address/$funding") -> respond(addressStats(txCount = 0))
                     url.endsWith("/blocks/tip/height") -> respond("1000")
                     url.endsWith("/fee-estimates") -> respond("""{"1":9,"3":6,"144":1}""")
