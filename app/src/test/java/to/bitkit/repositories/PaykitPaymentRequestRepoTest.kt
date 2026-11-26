@@ -3200,6 +3200,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertEquals(PaykitPaymentRequestTargetsStatus.Loading, sut.eligibleTargetsStatus.value)
         assertTrue(sut.eligibleTargets.value.isEmpty())
+        verify(paykitSdkService, times(1)).linkedPeers()
     }
 
     @Test

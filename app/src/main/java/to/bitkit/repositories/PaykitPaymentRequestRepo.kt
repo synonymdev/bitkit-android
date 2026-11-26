@@ -816,15 +816,17 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         }
                         return@discovery
                     }
-                    val ticket = targetRefreshTicket.incrementAndGet()
-                    operationMutex.withLock {
-                        if (!isCurrentState(generation, expectedIdentity)) return@withLock
+                    val isCurrent = operationMutex.withLock {
+                        if (!isCurrentState(generation, expectedIdentity)) return@withLock false
                         statusBeforeRefresh = _eligibleTargetsStatus.value
                         _eligibleTargetsStatus.update {
                             it.takeIf { it == PaykitPaymentRequestTargetsStatus.Loaded }
                                 ?: PaykitPaymentRequestTargetsStatus.Loading
                         }
+                        true
                     }
+                    if (!isCurrent) return@discovery
+                    val ticket = targetRefreshTicket.incrementAndGet()
                     val context = targetContext(savedPublicKeys, expectedIdentity, Priority.Background)
                     if (!force && context == cachedTargetContext) {
                         operationMutex.withLock {
