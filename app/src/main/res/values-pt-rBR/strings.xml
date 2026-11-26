@@ -1563,6 +1563,7 @@
     <string name="profile__edit_bio_placeholder">Nota curta. Conte um pouco sobre você.</string>
     <string name="profile__edit_changed_error">Seu perfil mudou no pubky.app. O Bitkit carregou a versão mais recente, então faça sua alteração de novo.</string>
     <string name="profile__edit_delete_section">EXCLUIR</string>
+    <string name="profile__edit_link_error">Corrija o link %1$s para salvar seu perfil.</string>
     <string name="profile__edit_name_placeholder">SEU NOME</string>
     <string name="profile__edit_public_note">Este é o seu perfil do pubky.app. Ele é público, e as alterações que você faz aqui também aparecem no pubky.app.</string>
     <string name="profile__edit_save_error">Falha ao salvar perfil</string>
@@ -1573,6 +1574,9 @@
     <string name="profile__empty_state">Não foi possível carregar seu perfil.</string>
     <string name="profile__intro_description">Com seu perfil portátil, seus contatos podem encontrar você e pagar você em qualquer lugar.</string>
     <string name="profile__intro_title">PERFIL\n&lt;accent&gt;PORTÁTIL&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">O rótulo deve ter no máximo 100 caracteres.</string>
+    <string name="profile__link_error_url_invalid">Insira um link da web válido, como example.com.</string>
+    <string name="profile__link_error_url_length">O link deve ter no máximo 300 caracteres.</string>
     <string name="profile__pay_contacts_description">Use a Bitkit com seus contatos para enviar pagamentos diretamente, a qualquer hora, em qualquer lugar.</string>
     <string name="profile__pay_contacts_headline">Deixe seus\ncontatos\n&lt;accent&gt;pagarem você&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pagar Contatos</string>

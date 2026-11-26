@@ -49,7 +49,9 @@ import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
 import to.bitkit.R
 import to.bitkit.models.takeCodePoints
 import to.bitkit.ui.theme.AppTextFieldDefaults
@@ -83,6 +85,7 @@ fun ProfileEditForm(
     isSaving: Boolean = false,
     isDeleting: Boolean = false,
     maxLinks: Int? = null,
+    linkErrors: ImmutableMap<Int, String> = persistentMapOf(),
     avatarContent: @Composable () -> Unit = {},
     publicKeyLabel: String? = null,
     bioPlaceholder: String? = null,
@@ -146,6 +149,7 @@ fun ProfileEditForm(
                 HorizontalDivider()
 
                 links.forEachIndexed { index, link ->
+                    val linkError = linkErrors[index]
                     FieldLabel(text = link.label) {
                         TextInput(
                             enabled = !isBusy,
@@ -153,6 +157,16 @@ fun ProfileEditForm(
                             onValueChange = { onLinkUrlChange(index, it) },
                             placeholder = stringResource(R.string.profile__add_link_url_placeholder),
                             singleLine = true,
+                            isError = linkError != null,
+                            supportingText = linkError?.let { message ->
+                                {
+                                    BodyS(
+                                        text = message,
+                                        color = Colors.Red,
+                                        modifier = Modifier.testTag("ProfileEditLinkError_$index")
+                                    )
+                                }
+                            },
                             trailingIcon = {
                                 IconButton(
                                     onClick = { onRemoveLink(index) },

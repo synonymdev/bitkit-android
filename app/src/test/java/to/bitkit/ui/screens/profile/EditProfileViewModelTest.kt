@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.profile
 import android.content.Context
 import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
+import com.synonym.paykit.PaykitException
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -22,6 +23,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.models.PubkyAppLinkError
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -198,6 +200,71 @@ class EditProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `stored links are not checked while they are unchanged`() = test {
+        val sut = createSut(links = listOf(PubkyProfileLink("x".repeat(101), "https://example.com")))
+        advanceUntilIdle()
+        whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), anyOrNull(), any()))
+            .thenReturn(Result.success(Unit))
+
+        sut.onNameChange("Alice Renamed")
+        sut.save()
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.linkErrors.isEmpty())
+        verify(pubkyRepo).saveProfile(any(), any(), any(), any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a stored link pubky app refuses blocks the save once links change`() = test {
+        val sut = createSut(links = listOf(PubkyProfileLink("x".repeat(101), "https://example.com")))
+        advanceUntilIdle()
+
+        sut.addLink("Blog", "blog.example.com")
+        sut.save()
+        advanceUntilIdle()
+
+        assertEquals(mapOf(0 to PubkyAppLinkError.LABEL_TOO_LONG), sut.uiState.value.linkErrors)
+        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), anyOrNull(), any())
+
+        sut.removeLink(0)
+
+        assertTrue(sut.uiState.value.linkErrors.isEmpty())
+    }
+
+    @Test
+    fun `an added link is held to the publisher limits`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.addLink("Site", "example.com/" + "a".repeat(281))
+
+        assertEquals(mapOf(1 to PubkyAppLinkError.URL_TOO_LONG), sut.uiState.value.linkErrors)
+    }
+
+    @Test
+    fun `a link rejection from pubky app points to the stored non-web link`() = test {
+        val sut = createSut(links = listOf(PubkyProfileLink("Email", "mailto:a@example.com")))
+        advanceUntilIdle()
+        whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), anyOrNull(), any())).thenReturn(
+            Result.failure(
+                PaykitException.Protocol(
+                    "protocol_error",
+                    "Pubky profile link URL must be a canonical http or https URL",
+                )
+            )
+        )
+
+        sut.addLink("Site", "https://example.com")
+        assertTrue(sut.uiState.value.linkErrors.isEmpty())
+        sut.save()
+        advanceUntilIdle()
+
+        assertEquals(0, sut.uiState.value.rejectedLinkIndex)
+        assertEquals(mapOf(0 to PubkyAppLinkError.URL_INVALID), sut.uiState.value.linkErrors)
+        verify(context).getString(R.string.profile__edit_link_error, "Email")
     }
 
     @Test
@@ -410,6 +477,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
     private fun createSut(
         isRingIdentity: Boolean = false,
         ringCheck: CompletableDeferred<Boolean>? = null,
+        links: List<PubkyProfileLink> = listOf(PubkyProfileLink("Website", "https://example.com")),
     ): EditProfileViewModel {
         whenever(context.getString(any<Int>())).thenReturn("")
         if (ringCheck != null) {
@@ -418,8 +486,8 @@ class EditProfileViewModelTest : BaseUnitTest() {
             whenever { pubkyRepo.isRingAdoptedIdentity() }.thenReturn(isRingIdentity)
         }
         whenever { pubkyRepo.forgetUnrestoredIdentity() }.thenReturn(Result.success(false))
-        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile()))
-        whenever(pubkyRepo.profileEditBase()).thenReturn(ProfileEditBase(createProfile(), "revision"))
+        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile(links)))
+        whenever(pubkyRepo.profileEditBase()).thenReturn(ProfileEditBase(createProfile(links), "revision"))
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
             .thenReturn(Result.success(Unit))
@@ -434,12 +502,12 @@ class EditProfileViewModelTest : BaseUnitTest() {
         )
     }
 
-    private fun createProfile() = PubkyProfile(
+    private fun createProfile(links: List<PubkyProfileLink>) = PubkyProfile(
         publicKey = TEST_PUBLIC_KEY,
         name = "Alice",
         bio = "Hello",
         imageUrl = "https://example.com/avatar.jpg",
-        links = listOf(PubkyProfileLink("Website", "https://example.com")),
+        links = links,
         tags = listOf("friend").toImmutableList(),
         status = null,
     )

@@ -29,7 +29,8 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
-import to.bitkit.ext.isWebLink
+import to.bitkit.models.PubkyAppLinkError
+import to.bitkit.models.pubkyAppLinkError
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -45,6 +46,7 @@ private val LINK_SUGGESTIONS = persistentListOf(
 /** Suggestions whose links are not web links, which social v1 profiles reject. */
 private val NON_WEB_SUGGESTIONS = setOf("Email", "Phone")
 
+/** [webLinksOnly] marks a profile link, which pubky.app publishes: it must be a web link that meets its rules. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddLinkSheet(
@@ -55,6 +57,8 @@ fun AddLinkSheet(
     var label by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
     var showSuggestions by remember { mutableStateOf(false) }
+    val linkError = if (webLinksOnly) pubkyAppLinkError(label, url, webOnly = true) else null
+    val linkErrorText = linkError?.let { pubkyAppLinkErrorText(it) }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -97,7 +101,9 @@ fun AddLinkSheet(
                     dismissKeyboard()
                     onSave(label, url)
                 },
-                isSaveEnabled = label.isNotBlank() && url.isNotBlank() && (!webLinksOnly || url.isWebLink()),
+                labelError = linkErrorText.takeIf { linkError == PubkyAppLinkError.LABEL_TOO_LONG },
+                urlError = linkErrorText.takeIf { linkError != PubkyAppLinkError.LABEL_TOO_LONG },
+                isSaveEnabled = label.isNotBlank() && url.isNotBlank() && linkError == null,
             )
         }
     }
@@ -112,6 +118,8 @@ private fun LinkFormContent(
     onShowSuggestions: () -> Unit,
     onSave: () -> Unit,
     isSaveEnabled: Boolean,
+    labelError: String? = null,
+    urlError: String? = null,
 ) {
     Column(
         modifier = Modifier
@@ -130,6 +138,8 @@ private fun LinkFormContent(
             placeholder = stringResource(R.string.profile__add_link_label_placeholder),
             trailingIcon = { SuggestionsButton(onClick = onShowSuggestions) },
             singleLine = true,
+            isError = labelError != null,
+            supportingText = labelError?.let { { FieldError(text = it, testTag = "AddLinkLabelError") } },
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("AddLinkLabel"),
@@ -142,6 +152,8 @@ private fun LinkFormContent(
             onValueChange = onUrlChange,
             placeholder = stringResource(R.string.profile__add_link_url_placeholder),
             singleLine = true,
+            isError = urlError != null,
+            supportingText = urlError?.let { { FieldError(text = it, testTag = "AddLinkUrlError") } },
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("AddLinkUrl"),
@@ -160,6 +172,22 @@ private fun LinkFormContent(
         )
         VerticalSpacer(16.dp)
     }
+}
+
+@Composable
+fun pubkyAppLinkErrorText(error: PubkyAppLinkError): String = when (error) {
+    PubkyAppLinkError.LABEL_TOO_LONG -> stringResource(R.string.profile__link_error_label_length)
+    PubkyAppLinkError.URL_TOO_LONG -> stringResource(R.string.profile__link_error_url_length)
+    PubkyAppLinkError.URL_INVALID -> stringResource(R.string.profile__link_error_url_invalid)
+}
+
+@Composable
+private fun FieldError(text: String, testTag: String) {
+    BodyS(
+        text = text,
+        color = Colors.Red,
+        modifier = Modifier.testTag(testTag)
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -233,6 +261,23 @@ private fun Preview() {
             onShowSuggestions = {},
             onSave = {},
             isSaveEnabled = true,
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewError() {
+    AppThemeSurface {
+        LinkFormContent(
+            label = "Website",
+            url = "not a url",
+            onLabelChange = {},
+            onUrlChange = {},
+            onShowSuggestions = {},
+            onSave = {},
+            isSaveEnabled = false,
+            urlError = pubkyAppLinkErrorText(PubkyAppLinkError.URL_INVALID),
         )
     }
 }

@@ -11,6 +11,9 @@ private const val SIGNUP_CODE_REJECTED_CODE = "signup_code_rejected"
 /** Storage error code Paykit uses for local and shared state failures. */
 private const val STORAGE_ERROR_CODE = "storage_error"
 
+/** Start of the Protocol error contexts Paykit raises when a profile link breaks a pubky.app rule. */
+private const val PROFILE_LINK_CONTEXT = "Pubky profile link"
+
 /** Storage error contexts Paykit raises when the identity's shared state was saved by a newer Paykit. */
 private val NEWER_STATE_CONTEXTS = listOf(
     "SDK state blob contains trailing bytes",
@@ -35,6 +38,9 @@ fun Throwable.isPaykitTemporarilyUnavailable(): Boolean =
 
 fun Throwable.isPaykitMessageTooLarge(): Boolean =
     generateSequence(this) { it.cause }.any { it is PaykitException.Protocol && it.code == MESSAGE_TOO_LARGE_CODE }
+
+fun Throwable.isPaykitProfileLinkRejected(): Boolean =
+    generateSequence(this) { it.cause }.any { it is PaykitException.Protocol && PROFILE_LINK_CONTEXT in it.context }
 
 fun Throwable.isPaykitSignupCodeRejected(): Boolean =
     generateSequence(this) { it.cause }.any { it is PaykitException.Identity && it.code == SIGNUP_CODE_REJECTED_CODE }

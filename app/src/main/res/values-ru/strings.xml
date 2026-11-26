@@ -1576,6 +1576,7 @@
     <string name="profile__edit_bio_placeholder">Короткая заметка. Расскажите немного о себе.</string>
     <string name="profile__edit_changed_error">Ваш профиль изменился в pubky.app. Bitkit загрузил последнюю версию, поэтому внесите изменение снова.</string>
     <string name="profile__edit_delete_section">УДАЛЕНИЕ</string>
+    <string name="profile__edit_link_error">Исправьте ссылку %1$s, чтобы сохранить профиль.</string>
     <string name="profile__edit_name_placeholder">ВАШЕ ИМЯ</string>
     <string name="profile__edit_public_note">Это ваш профиль pubky.app. Он публичный, и изменения, которые вы вносите здесь, также видны в pubky.app.</string>
     <string name="profile__edit_save_error">Не удалось сохранить профиль</string>
@@ -1586,6 +1587,9 @@
     <string name="profile__empty_state">Не удалось загрузить ваш профиль.</string>
     <string name="profile__intro_description">С переносимым профилем ваши контакты смогут связаться с вами и заплатить вам где угодно.</string>
     <string name="profile__intro_title">ПЕРЕНОСИМЫЙ\n&lt;accent&gt;ПРОФИЛЬ&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">Метка должна содержать не более 100 символов.</string>
+    <string name="profile__link_error_url_invalid">Введите корректную веб-ссылку, например example.com.</string>
+    <string name="profile__link_error_url_length">Ссылка должна содержать не более 300 символов.</string>
     <string name="profile__pay_contacts_description">Используйте Bitkit, чтобы отправлять платежи контактам напрямую — когда угодно и где угодно.</string>
     <string name="profile__pay_contacts_headline">Пусть ваши\nконтакты\n&lt;accent&gt;платят вам&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Платежи Контактам</string>
