@@ -932,13 +932,85 @@ class SparkExitRepo @Inject constructor(
                 Logger.info("Spark exit ended before savings paid its funding; nothing is paid", context = TAG)
                 return@withLock
             }
-            val txid = sendFunding(address, sats, feeRates, approvedFeeSats)
+            val txid = try {
+                sendFunding(address, sats, feeRates, approvedFeeSats)
+            } catch (e: OnchainSendNotDispatchedError) {
+                // Refused before it went out for a higher fee: progress offers it again at that fee.
+                (e.cause as? OnchainSendChangedError)?.preparedFeeSats?.let { noteSavingsRefusal(sats, it) }
+                throw e
+            }
             val record = _state.value.record ?: return@withLock
-            val paid = record.copy(fundingPaymentTxid = txid)
+            val paid = record.copy(fundingPaymentTxid = txid, savingsRefusal = null)
             saveRecord(paid)
             _state.update {
                 it.copy(record = paid, fundingState = SparkExitMath.fundingState(paid, utxos = null))
             }
+        }
+    }
+
+    private fun noteSavingsRefusal(sats: ULong, feeSats: ULong) {
+        val record = _state.value.record ?: return
+        val refused = record.copy(savingsRefusal = SparkExitRecord.SavingsRefusal(sats, feeSats))
+        runCatching { saveRecord(refused) }
+            .onFailure { Logger.warn("Failed to save the refused Spark exit savings payment", it, context = TAG) }
+            .onSuccess { _state.update { it.copy(record = refused) } }
+    }
+
+    /**
+     * Prices the start's refused savings payment again at the fast rate, at least at the fee it was refused for. Fails
+     * when nothing is refused or the rates cannot be read; [paySavingsRefusal] sends at the rates it priced.
+     */
+    suspend fun priceSavingsRefusal(): Result<SparkExitSavingsRetry> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val exit = _state.value
+            val record = requireNotNull(exit.record) { "No running Spark exit" }
+            val refusal = requireNotNull(SparkExitMath.savingsRefusal(record, exit.fundingState)) {
+                "No refused savings payment to pay again"
+            }
+            val address = requireNotNull(record.funding.firstOrNull()?.address) { "No Spark exit funding address" }
+            val feeRates = lightningRepo.getFeeRates().getOrThrow()
+            val estimateSats = lightningRepo.calculateTotalFee(
+                amountSats = refusal.sats,
+                address = address,
+                speed = TransactionSpeed.Fast,
+                feeRates = feeRates,
+                allowFallback = false,
+            ).getOrThrow()
+            val feeSats = maxOf(estimateSats, refusal.feeSats)
+            val spendable = lightningRepo.getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
+            SparkExitSavingsRetry(
+                sats = refusal.sats,
+                feeSats = feeSats,
+                feeRates = feeRates,
+                canPay = SparkExitMath.canFundFromSavings(spendable, refusal.sats, feeSats, Env.sparkSharesNodeChain),
+            )
+        }
+    }
+
+    /**
+     * Pays the start's refused savings payment at [retry]'s fee, the one progress showed, which it never exceeds: a
+     * higher one is refused again and noted for the next price.
+     */
+    suspend fun paySavingsRefusal(retry: SparkExitSavingsRetry): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            if (!paymentMutex.tryLock()) throw SparkExitError("A Spark exit payment is already running")
+            try {
+                // Never cut short between the payment and its saved txid.
+                withContext(NonCancellable) {
+                    val exit = _state.value
+                    val record = requireNotNull(exit.record) { "No running Spark exit" }
+                    val refusal = SparkExitMath.savingsRefusal(record, exit.fundingState)
+                    if (refusal?.sats != retry.sats) throw SparkExitError("No refused savings payment to pay again")
+                    val address = requireNotNull(record.funding.firstOrNull()?.address) {
+                        "No Spark exit funding address"
+                    }
+                    payFunding(record.createdAt, address, retry.sats, retry.feeRates, retry.feeSats)
+                }
+            } finally {
+                paymentMutex.unlock()
+            }
+        }.onFailure {
+            Logger.error("Failed to pay the refused Spark exit funding from savings", it, context = TAG)
         }
     }
 
@@ -1252,6 +1324,17 @@ data class SparkExitSavingsFunding(
     val feeSats: ULong,
     val canPay: Boolean,
 )
+
+/** The start's refused savings payment priced again: [sats] at a fee of [feeSats], sent at [feeRates]. */
+data class SparkExitSavingsRetry(
+    val sats: ULong,
+    val feeSats: ULong,
+    val feeRates: FeeRates,
+    val canPay: Boolean,
+) {
+    /** What leaves savings: the funding and the fee of the payment that sends it. */
+    val totalSats: ULong get() = sats.safe() + feeSats.safe()
+}
 
 data class SparkExitState(
     val record: SparkExitRecord? = null,

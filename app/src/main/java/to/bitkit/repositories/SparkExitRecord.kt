@@ -84,6 +84,11 @@ data class SparkExitRecord(
     val spentStepStrikes: Map<String, Int> = emptyMap(),
     /** The payment from savings that funded the exit, kept so progress never asks for it again while it confirms. */
     val fundingPaymentTxid: String? = null,
+    /**
+     * The start's savings payment of the fee funding, refused before it went out because its fee rose above the one
+     * confirmed: progress offers to pay it from savings at the new fee.
+     */
+    val savingsRefusal: SavingsRefusal? = null,
     /** Leaves an older state of this wallet claimed on-chain; builds leave them out. */
     val lostLeaves: List<LostLeaf> = emptyList(),
     /** The user opened the result of an exit that failed or lost leaves, so Emergency exit may start a new one. */
@@ -259,6 +264,9 @@ data class SparkExitRecord(
     )
 
     data class LostLeaf(val leafId: String, val valueSats: ULong)
+
+    /** [sats] the user confirmed savings pays to the funding address, refused at a fee of [feeSats]. */
+    data class SavingsRefusal(val sats: ULong, val feeSats: ULong)
 
     data class SweptLeftover(val txid: String, val valueSats: ULong)
 
@@ -901,6 +909,15 @@ object SparkExitJson {
         }
         r.leftoverSweep?.let { put("leftoverSweep", sweepToJson(it)) }
         r.fundingPaymentTxid?.let { put("fundingPaymentTxid", it) }
+        r.savingsRefusal?.let {
+            put(
+                "savingsRefusal",
+                buildJsonObject {
+                    put("sats", it.sats.toLong())
+                    put("feeSats", it.feeSats.toLong())
+                },
+            )
+        }
         if (r.isResultSeen) put("isResultSeen", true)
         if (r.spentStepStrikes.isNotEmpty()) {
             put(
@@ -1111,6 +1128,9 @@ object SparkExitJson {
         earlierCpfpTxids = o.arrayOrEmpty("earlierCpfpTxids").map { it.jsonPrimitive.content },
         leftoverSweep = o.objectOrNull("leftoverSweep")?.let(::sweepFromJson),
         fundingPaymentTxid = o.stringOrNull("fundingPaymentTxid"),
+        savingsRefusal = o.objectOrNull("savingsRefusal")?.let {
+            SparkExitRecord.SavingsRefusal(it.ulong("sats"), it.ulong("feeSats"))
+        },
         isResultSeen = o.booleanOrNull("isResultSeen") ?: false,
         spentStepStrikes = o.objectOrNull("spentStepStrikes")
             ?.mapValues { it.value.jsonPrimitive.content.toInt() }

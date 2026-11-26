@@ -58,6 +58,7 @@ fun SparkExitProgressScreen(
         viewModel.effects.collect { if (it == SparkExitEffect.Cancelled) onDone() }
     }
     val isEnded = uiState.record?.isActive == false
+    LaunchedEffect(uiState.record?.savingsRefusal) { viewModel.loadSavingsRetry() }
     LaunchedEffect(isEnded) { if (isEnded) viewModel.onResultShown() }
     LifecycleResumeEffect(Unit) {
         viewModel.refreshBackgroundLimits()
@@ -131,7 +132,7 @@ private fun Content(
                 )
                 VerticalSpacer(16.dp)
             }
-            if (uiState.isSavingsPaymentRefused) {
+            if (uiState.offersSavingsRetry) {
                 SecondaryButton(
                     text = stringResource(R.string.lightning__spark_exit__fund_savings),
                     onClick = onRetrySavingsPayment,
@@ -205,7 +206,7 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
     uiState.returned?.let { ReturnedNote(receivedSats = it.spendingSats, feesSats = it.feesSats) }
     val address = record.funding.firstOrNull()?.address
     val funding = uiState.progressFunding
-    if (uiState.isSavingsPaymentRefused) {
+    if (uiState.offersSavingsRetry) {
         VerticalSpacer(24.dp)
         BodyS(
             text = stringResource(R.string.lightning__spark_exit__savings_refused),
@@ -220,6 +221,14 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
             sats = funding.sats,
             modifier = Modifier.testTag("SparkExitProgressFundingAmount")
         )
+        // The new fee to confirm: what leaves savings once Pay from savings is tapped.
+        uiState.savingsRetryOffer?.let {
+            SparkExitAmountRow(
+                label = stringResource(R.string.lightning__spark_exit__fees_savings),
+                sats = it.totalSats,
+                modifier = Modifier.testTag("SparkExitProgressSavingsTotal"),
+            )
+        }
         VerticalSpacer(32.dp)
         SparkExitFundingAddress(
             address = address,

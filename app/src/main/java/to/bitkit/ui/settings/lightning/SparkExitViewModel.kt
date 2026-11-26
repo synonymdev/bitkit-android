@@ -39,6 +39,7 @@ import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
 import to.bitkit.repositories.SparkExitReturned
+import to.bitkit.repositories.SparkExitSavingsRetry
 import to.bitkit.repositories.SparkExitStartCancelled
 import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.SparkRepo
@@ -303,12 +304,44 @@ class SparkExitViewModel @Inject constructor(
         }
     }
 
-    /** Pays the refused savings payment again, over the inputs it already spends. */
+    /**
+     * Prices the start's savings payment that was refused before it went out for a higher fee, which progress offers
+     * at the new fee; none when the start had no such refusal.
+     */
+    fun loadSavingsRetry() {
+        val hasRefusal = _uiState.value.record?.savingsRefusal != null
+        viewModelScope.launch {
+            val retry = if (hasRefusal) sparkExitRepo.priceSavingsRefusal().getOrNull() else null
+            _uiState.update { it.copy(savingsRetry = retry) }
+        }
+    }
+
+    /**
+     * Pays the refused savings payment again: one a node refused over the inputs it already spends, and one refused
+     * before it went out at the new fee progress shows.
+     */
     fun retrySavingsPayment() {
-        if (_uiState.value.isRetryingSavingsPayment) return
+        val state = _uiState.value
+        if (state.isRetryingSavingsPayment) return
         viewModelScope.launch {
             _uiState.update { it.copy(isRetryingSavingsPayment = true) }
-            sparkExitRepo.retrySavingsPayment().onFailure { ToastEventBus.send(it) }
+            val retry = state.savingsRetry
+            if (state.isSavingsPaymentRefused || retry == null) {
+                sparkExitRepo.retrySavingsPayment().onFailure { ToastEventBus.send(it) }
+            } else {
+                sparkExitRepo.paySavingsRefusal(retry).onFailure {
+                    // Savings never pays more than the fee shown: progress shows the higher one to confirm.
+                    if (it.cause is OnchainSendChangedError) {
+                        ToastEventBus.send(
+                            type = Toast.ToastType.INFO,
+                            title = context.getString(R.string.lightning__spending_confirm__fees_changed_title),
+                        )
+                    } else {
+                        ToastEventBus.send(it)
+                    }
+                }
+                loadSavingsRetry()
+            }
             _uiState.update { it.copy(isRetryingSavingsPayment = false) }
         }
     }
@@ -371,6 +404,8 @@ data class SparkExitUiState(
     /** A node refused the savings payment of the fee funding: progress says so and offers to pay again. */
     val isSavingsPaymentRefused: Boolean = false,
     val isRetryingSavingsPayment: Boolean = false,
+    /** The start's savings payment, refused before it went out for a higher fee, priced again for progress. */
+    val savingsRetry: SparkExitSavingsRetry? = null,
     val backgroundLimits: SparkExitBackgroundLimits = SparkExitBackgroundLimits(),
     /** Spark's balance beyond the exit's leaves in any phase: what a stopped exit leaves on Spark. */
     val staysOnSparkSats: ULong? = null,
@@ -413,6 +448,20 @@ data class SparkExitUiState(
      * cover them.
      */
     val paysExternally: Boolean get() = showsFundingAddress || (!isPricingSavings && !canFundFromSavings)
+
+    /**
+     * The start's savings payment progress offers at its new fee, while the exit still waits for it and savings can
+     * cover it.
+     */
+    val savingsRetryOffer: SparkExitSavingsRetry?
+        get() {
+            val record = record ?: return null
+            val refusal = SparkExitMath.savingsRefusal(record, fundingState) ?: return null
+            return savingsRetry?.takeIf { it.canPay && it.sats == refusal.sats }
+        }
+
+    /** Progress says the savings payment didn't go through and offers to pay it again. */
+    val offersSavingsRetry: Boolean get() = isSavingsPaymentRefused || savingsRetryOffer != null
 
     /** Progress offers Pay a higher fee. */
     val canPayHigherFee: Boolean get() = record?.canPayHigherFee(tipHeight, networkFees) == true
