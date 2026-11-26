@@ -119,8 +119,8 @@ class PaykitAllowancePayer @Inject constructor(
     ): Result<String> = lightningRepo.payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) { true }
 
     /** Clears the proof when [error] proves the payment never left; returns whether it did. */
-    suspend fun failLightningPayment(paymentHash: String, error: Throwable): Boolean =
-        paymentProofRepo.failLightningPayment(paymentHash, error)
+    suspend fun failLightningPayment(paymentHash: String, error: Throwable, requestId: PaykitPaymentRequestId): Boolean =
+        paymentProofRepo.failLightningPayment(paymentHash, error, requestId)
 
     suspend fun discardLightningProof(paymentHash: String) = paymentProofRepo.failLightningPayment(paymentHash)
 
@@ -987,7 +987,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         ).onFailure {
             // Only an error that proves the payment never left releases the reservation; anything else stays open,
             // and the node's payment event records its outcome.
-            if (payer.failLightningPayment(paymentHash, it)) {
+            if (payer.failLightningPayment(paymentHash, it, request.id)) {
                 failUnsent(attemptId, identity)
                 throw it
             }

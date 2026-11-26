@@ -934,7 +934,16 @@ class PaykitPaymentProofRepo @Inject constructor(
         it.kind == PaykitPaymentProofKind.Lightning && it.paymentIdentifier.equals(paymentHash, ignoreCase = true)
     }
 
-    suspend fun failLightningPayment(paymentHash: String, submissionError: Throwable): Boolean {
+    /**
+     * Clears the Lightning proofs of [paymentHash] when [submissionError] proves the payment never left, only those of
+     * [requestId] when given, so a refused request leaves another request's proof of the same invoice; returns whether
+     * it did.
+     */
+    suspend fun failLightningPayment(
+        paymentHash: String,
+        submissionError: Throwable,
+        requestId: PaykitPaymentRequestId? = null,
+    ): Boolean {
         val error = generateSequence(submissionError) { it.cause }
             .firstOrNull { it is ServiceError.PaymentDeadlineExpired || it is SparkError.SendRefused }
             ?: submissionError.asNodeException() ?: submissionError
@@ -948,7 +957,11 @@ class PaykitPaymentProofRepo @Inject constructor(
             is NodeException.NotRunning,
             is NodeException.InvalidInvoice,
             is NodeException.InvalidAmount,
-            is NodeException.PaymentSendingFailed -> failLightningPayment(paymentHash)
+            is NodeException.PaymentSendingFailed -> removeProofs {
+                it.kind == PaykitPaymentProofKind.Lightning &&
+                    it.paymentIdentifier.equals(paymentHash, ignoreCase = true) &&
+                    (requestId == null || it.requestId == requestId)
+            }
             else -> return false
         }
         return true

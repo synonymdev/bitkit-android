@@ -8282,7 +8282,7 @@ class AppViewModel @Inject constructor(
             )
             lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
         }.onFailure { error ->
-            if (!clearFailedLightningPayment(paymentHash, error, incomingPaymentRequest != null, updateFailed)) {
+            if (!clearFailedLightningPayment(paymentHash, error, incomingPaymentRequest?.id, updateFailed)) {
                 val pendingHash = (error as? PaymentPendingException)?.paymentHash ?: paymentHash
                 proofRequest = null
                 Logger.info("Lightning payment pending", context = TAG)
@@ -8430,17 +8430,17 @@ class AppViewModel @Inject constructor(
     private suspend fun clearFailedLightningPayment(
         paymentHash: String,
         error: Throwable,
-        isPaymentRequest: Boolean,
+        requestId: PaykitPaymentRequestId?,
         updateFailed: Boolean,
     ): Boolean = when (error) {
         is PaymentPendingException -> false
-        else if !isPaymentRequest -> true
+        else if requestId == null -> true
         // Any failed spending balance update happens before the invoice is paid, so nothing was sent.
         else if updateFailed || error is LightningPaymentFailedError -> {
             paykitPaymentProofRepo.failLightningPayment(paymentHash)
             true
         }
-        else -> paykitPaymentProofRepo.failLightningPayment(paymentHash, error)
+        else -> paykitPaymentProofRepo.failLightningPayment(paymentHash, error, requestId)
     }
 
     private suspend fun prepareContactPayment(

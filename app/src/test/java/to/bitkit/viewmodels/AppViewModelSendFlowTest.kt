@@ -16321,7 +16321,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
             .thenReturn(Result.failure(error))
-        whenever(paykitPaymentProofRepo.failLightningPayment(invoicePaymentHash, error)).thenReturn(true)
+        whenever(paykitPaymentProofRepo.failLightningPayment(eq(invoicePaymentHash), eq(error), anyOrNull())).thenReturn(true)
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
             SendUiState(
@@ -16348,7 +16348,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 "bitkit",
             )
             verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
-            verify(paykitPaymentProofRepo).failLightningPayment(invoicePaymentHash, error)
+            verify(paykitPaymentProofRepo).failLightningPayment(eq(invoicePaymentHash), eq(error), anyOrNull())
             verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
             verify(paykitPaymentProofRepo).cancelPreparation(request)
         }
@@ -16449,7 +16449,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.failure(error))
-        whenever(paykitPaymentProofRepo.failLightningPayment(paymentHash, error)).thenReturn(false)
+        whenever(paykitPaymentProofRepo.failLightningPayment(eq(paymentHash), eq(error), anyOrNull())).thenReturn(false)
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
             SendUiState(
@@ -23209,7 +23209,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val error = NodeException.InsufficientFunds("refused")
         whenever(moveToSparkRepo.updateToSend(any(), any(), eq(request.amount.atomic), any()))
             .thenReturn(Result.failure(error))
-        whenever(paykitPaymentProofRepo.failLightningPayment(paymentHash, error)).thenReturn(false)
+        whenever(paykitPaymentProofRepo.failLightningPayment(eq(paymentHash), eq(error), anyOrNull())).thenReturn(false)
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
             SendUiState(
@@ -23231,7 +23231,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(pendingPaymentRepo, never()).track(any())
         verify(paykitPaymentProofRepo).failLightningPayment(paymentHash)
         verify(paykitPaymentProofRepo).cancelPreparation(request)
-        verify(paykitPaymentProofRepo, never()).failLightningPayment(eq(paymentHash), any())
+        verify(paykitPaymentProofRepo, never()).failLightningPayment(eq(paymentHash), any(), anyOrNull())
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
         verify(paykitAllowanceRepo).finishManualPayment("node-error-attempt", false, null)
