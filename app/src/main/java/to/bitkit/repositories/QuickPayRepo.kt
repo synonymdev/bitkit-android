@@ -438,7 +438,7 @@ class QuickPayRepo @Inject constructor(
             isAuthorizationLapsed = !canDispatch()
             !isAuthorizationLapsed && tryMarkDispatched(invoiceHash)
         }.fold(
-            onSuccess = { onInvoiceAccepted(invoiceHash, it) },
+            onSuccess = { onInvoiceAccepted(invoiceHash, invoice.bolt11, it) },
             onFailure = {
                 when {
                     isAuthorizationLapsed -> fallBackBeforeDispatch(invoiceHash)
@@ -487,8 +487,16 @@ class QuickPayRepo @Inject constructor(
         return null
     }
 
-    private suspend fun onInvoiceAccepted(invoiceHash: String, paymentId: String) {
+    private suspend fun onInvoiceAccepted(invoiceHash: String, paymentRequest: String, paymentId: String) {
         mutex.withLock {
+            val undispatched = opsByKey[invoiceHash]?.takeIf { !it.dispatched }
+            if (undispatched != null) {
+                // Accepted without a dispatch, so an earlier send of the invoice paid it and nothing new went out.
+                spend.release(invoiceHash)
+                emitErrorLocked(undispatched, QuickPayAlreadyPaidError(), paymentRequest)
+                removeOpLocked(undispatched)
+                return@withLock
+            }
             spend.markSubmitted(invoiceHash, paymentId)
             val current = opsByKey[invoiceHash] ?: return@withLock
             current.paymentId = paymentId
