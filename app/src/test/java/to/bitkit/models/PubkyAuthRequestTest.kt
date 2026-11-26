@@ -223,6 +223,12 @@ class PubkyAuthRequestTest {
             "https://relay.example/a/.../b/..c/" to "https://relay.example/a/.../b/..c/",
             "https://relay.example/inbox?next=../x" to "https://relay.example/inbox?next=../x",
             "https://[::1]/link" to "https://[::1]/link",
+            "http://[::1]:443/" to "http://[::1]:443/",
+            "https://relay.example:65535/link" to "https://relay.example:65535/link",
+            "https://[2001:DB8::1]/link" to "https://[2001:db8::1]/link",
+            "https://[::ffff:102:304]/link" to "https://[::ffff:102:304]/link",
+            "https://relay.example/a/..;x" to "https://relay.example/a/..;x",
+            "https://relay.example/a/..%2f" to "https://relay.example/a/..%2f",
             "https://[2001:db8:0:1::]/link" to "https://[2001:db8:0:1::]/link",
             "http://user@10.0.2.2:15412/link?x=1#y" to "http://10.0.2.2:15412/link?x=1",
             "https://trusted.example@relay.example/in%20box/" to "https://relay.example/in%20box/",
@@ -278,6 +284,12 @@ class PubkyAuthRequestTest {
             "https://relay.example/a?b='c'",
             "https://relay.example/a\"b",
             "https://relay.example/a^b",
+            "https://relay.example/a<b",
+            "https://relay.example/a>b",
+            "https://relay.example/a`b",
+            "https://relay.example/inbox/%2e/x",
+            "https://relay.example/inbox/.%2E/other/",
+            "https://[::1]:443/",
             "https://[2001:db8:0:0:0:0:0:1]/link",
             "https://[2001:0db8::1]/link",
             "https://[1:0:0:2:0:0:0:3]/link",
@@ -324,6 +336,12 @@ class PubkyAuthRequestTest {
             PubkyAuthRequest.parseSignup(ringSignupUrl().replace("relay.example", "rel%C3%A4y.example"))
                 .exceptionOrNull(),
         )
+        listOf("inbox%2F..%2F..%2Fother%2F", "inbox%2F%252e%252e%2Fother%2F").forEach {
+            assertIs<PubkyAuthRequestError.InvalidUrl>(
+                PubkyAuthRequest.parseSignup(ringSignupUrl().replace("inbox%2F", it)).exceptionOrNull(),
+                it,
+            )
+        }
     }
 
     @Test
