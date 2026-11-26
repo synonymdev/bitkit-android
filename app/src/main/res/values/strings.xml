@@ -128,7 +128,10 @@
     <string name="contacts__edit_public_note">Please note contact information is stored in public files. Changes you make to a contact in Bitkit will not update their profile.</string>
     <string name="contacts__edit_save_error">Failed to save contact</string>
     <string name="contacts__import_all">Import All</string>
-    <string name="contacts__import_friends_count" tools:ignore="PluralsCandidate">%1$d friends</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d friend</item>
+        <item quantity="other">%1$d friends</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Found\n&lt;accent&gt;profile &amp; contacts&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit found profile and contacts data connected to pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Select</string>

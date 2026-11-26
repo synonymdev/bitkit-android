@@ -1355,7 +1355,11 @@
     <string name="contacts__edit_public_note">Tingues en compte que la informació dels contactes es desa en fitxers públics. Els canvis que facis a un contacte a Bitkit no actualitzaran el seu perfil.</string>
     <string name="contacts__edit_save_error">No s\'ha pogut desar el contacte</string>
     <string name="contacts__import_all">Importar-ho tot</string>
-    <string name="contacts__import_friends_count">%1$d amics</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d amic</item>
+        <item quantity="many">%1$d amics</item>
+        <item quantity="other">%1$d amics</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Perfil i contactes\n&lt;accent&gt;trobats&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit ha trobat dades de perfil i contactes vinculades al pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Seleccionar</string>

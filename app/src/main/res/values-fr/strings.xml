@@ -1358,7 +1358,11 @@
     <string name="contacts__edit_public_note">Veuillez noter que les informations des contacts sont stockées dans des fichiers publics. Les modifications apportées à un contact dans Bitkit ne mettront pas à jour son profil.</string>
     <string name="contacts__edit_save_error">Échec de l\'enregistrement du contact</string>
     <string name="contacts__import_all">Tout importer</string>
-    <string name="contacts__import_friends_count">%1$d amis</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d ami</item>
+        <item quantity="many">%1$d amis</item>
+        <item quantity="other">%1$d amis</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Profil et contacts\n&lt;accent&gt;trouvés&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit a trouvé des données de profil et de contacts liées au pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Sélectionner</string>

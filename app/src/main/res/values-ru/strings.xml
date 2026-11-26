@@ -1378,7 +1378,12 @@
     <string name="contacts__edit_public_note">Обратите внимание: данные контактов хранятся в публичных файлах. Изменения контакта в Bitkit не обновят его профиль.</string>
     <string name="contacts__edit_save_error">Не удалось сохранить контакт</string>
     <string name="contacts__import_all">Импортировать Все</string>
-    <string name="contacts__import_friends_count">Друзей: %1$d</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d друг</item>
+        <item quantity="few">%1$d друга</item>
+        <item quantity="many">%1$d друзей</item>
+        <item quantity="other">%1$d друга</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Найдены\n&lt;accent&gt;профиль и контакты&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit нашёл данные профиля и контактов, связанные с pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Выбрать</string>

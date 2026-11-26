@@ -1362,7 +1362,12 @@
     <string name="contacts__edit_public_note">Upozorňujeme, že informace o kontaktech jsou uloženy ve veřejných souborech. Změny kontaktu provedené v Bitkitu neaktualizují jeho profil.</string>
     <string name="contacts__edit_save_error">Kontakt se nepodařilo uložit</string>
     <string name="contacts__import_all">Importovat vše</string>
-    <string name="contacts__import_friends_count">Počet přátel: %1$d</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d přítel</item>
+        <item quantity="few">%1$d přátelé</item>
+        <item quantity="many">%1$d přítele</item>
+        <item quantity="other">%1$d přátel</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Nalezen\n&lt;accent&gt;profil a kontakty&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit našel data profilu a kontaktů propojená s pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Vybrat</string>

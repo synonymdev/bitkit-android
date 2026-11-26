@@ -1362,7 +1362,12 @@
     <string name="contacts__edit_public_note">Pamiętaj, że dane kontaktów są przechowywane w publicznych plikach. Zmiany wprowadzone w kontakcie w Bitkit nie zaktualizują jego profilu.</string>
     <string name="contacts__edit_save_error">Nie udało się zapisać kontaktu</string>
     <string name="contacts__import_all">Importuj wszystkie</string>
-    <string name="contacts__import_friends_count">Znajomi: %1$d</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d znajomy</item>
+        <item quantity="few">%1$d znajomych</item>
+        <item quantity="many">%1$d znajomych</item>
+        <item quantity="other">%1$d znajomego</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Znaleziono\n&lt;accent&gt;profil i kontakty&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit znalazł dane profilu i kontaktów powiązane z pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Wybierz</string>
