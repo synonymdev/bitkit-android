@@ -70,6 +70,7 @@ class SparkExitViewModel @Inject constructor(
     val effects = _effects.asSharedFlow()
 
     private var fundingWatch: Job? = null
+    private var savingsRetryPricing: Job? = null
 
     /** The savings fee a higher-fee payment was refused for, by rate: the next confirm approves at least that. */
     private val feeBumpFeeFloors = mutableMapOf<ULong, ULong>()
@@ -99,6 +100,7 @@ class SparkExitViewModel @Inject constructor(
                 fundingAddress = exit.fundingAddress,
                 canCancel = sparkExitRepo.canCancel,
                 isSavingsPaymentRefused = exit.isSavingsPaymentRefused,
+                isSavingsSendUnresolved = exit.isSavingsSendUnresolved,
                 staysOnSparkSats = SparkExitMath.staysOnSparkSats(balanceSats, exit.record),
                 isSettling = exit.isSettling,
                 networkFees = exit.networkFees,
@@ -301,6 +303,7 @@ class SparkExitViewModel @Inject constructor(
             sparkExitRepo.load()
             sparkExitRepo.tick()
             _uiState.update { it.copy(isRefreshing = false, canCancel = sparkExitRepo.canCancel) }
+            loadSavingsRetry()
         }
     }
 
@@ -310,8 +313,12 @@ class SparkExitViewModel @Inject constructor(
      */
     fun loadSavingsRetry() {
         val hasRefusal = _uiState.value.record?.savingsRefusal != null
-        viewModelScope.launch {
-            val retry = if (hasRefusal) sparkExitRepo.priceSavingsRefusal().getOrNull() else null
+        // Only the latest price shows: an older one may be at a fee that was refused since.
+        savingsRetryPricing?.cancel()
+        _uiState.update { it.copy(savingsRetry = null) }
+        if (!hasRefusal) return
+        savingsRetryPricing = viewModelScope.launch {
+            val retry = sparkExitRepo.priceSavingsRefusal().getOrNull()
             _uiState.update { it.copy(savingsRetry = retry) }
         }
     }
@@ -325,7 +332,7 @@ class SparkExitViewModel @Inject constructor(
         if (state.isRetryingSavingsPayment) return
         viewModelScope.launch {
             _uiState.update { it.copy(isRetryingSavingsPayment = true) }
-            val retry = state.savingsRetry
+            val retry = state.savingsRetryOffer
             if (state.isSavingsPaymentRefused || retry == null) {
                 sparkExitRepo.retrySavingsPayment().onFailure { ToastEventBus.send(it) }
             } else {
@@ -404,6 +411,8 @@ data class SparkExitUiState(
     /** A node refused the savings payment of the fee funding: progress says so and offers to pay again. */
     val isSavingsPaymentRefused: Boolean = false,
     val isRetryingSavingsPayment: Boolean = false,
+    /** A savings send to the funding address went out and is not known accepted or refused yet. */
+    val isSavingsSendUnresolved: Boolean = false,
     /** The start's savings payment, refused before it went out for a higher fee, priced again for progress. */
     val savingsRetry: SparkExitSavingsRetry? = null,
     val backgroundLimits: SparkExitBackgroundLimits = SparkExitBackgroundLimits(),
@@ -456,8 +465,9 @@ data class SparkExitUiState(
     val savingsRetryOffer: SparkExitSavingsRetry?
         get() {
             val record = record ?: return null
-            val refusal = SparkExitMath.savingsRefusal(record, fundingState) ?: return null
-            return savingsRetry?.takeIf { it.canPay && it.sats == refusal.sats }
+            val hasSavingsSend = isSavingsSendUnresolved || isSavingsPaymentRefused
+            val refusal = SparkExitMath.savingsRefusal(record, fundingState, hasSavingsSend) ?: return null
+            return savingsRetry?.takeIf { it.canPay && it.sats == refusal.sats && it.feeSats >= refusal.feeSats }
         }
 
     /** Progress says the savings payment didn't go through and offers to pay it again. */

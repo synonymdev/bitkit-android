@@ -226,7 +226,7 @@ private fun ProgressDetails(record: SparkExitRecord, uiState: SparkExitUiState, 
             SparkExitAmountRow(
                 label = stringResource(R.string.lightning__spark_exit__fees_savings),
                 sats = it.totalSats,
-                modifier = Modifier.testTag("SparkExitProgressSavingsTotal"),
+                modifier = Modifier.testTag("SparkExitProgressSavingsTotal")
             )
         }
         VerticalSpacer(32.dp)

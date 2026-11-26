@@ -522,6 +522,22 @@ class SparkExitFundingTest {
     }
 
     @Test
+    fun `a start's refused savings payment is offered only while nothing funds the exit`() {
+        val refusal = SparkExitRecord.SavingsRefusal(20_000uL, 650uL)
+        val record = SparkExitFixtures.record().copy(savingsRefusal = refusal)
+        assertEquals(refusal, SparkExitMath.savingsRefusal(record, funding = null, hasSavingsSend = false))
+        assertEquals(refusal, SparkExitMath.savingsRefusal(record, SparkExitFundingState.Ask(20_000uL), false))
+        // Something reached the address, savings paid, or a savings send went out: none is offered.
+        assertNull(SparkExitMath.savingsRefusal(record, SparkExitFundingState.Ask(12_000uL, 8_000uL, 20_000uL), false))
+        assertNull(SparkExitMath.savingsRefusal(record, SparkExitFundingState.Seen, false))
+        assertNull(SparkExitMath.savingsRefusal(record.copy(fundingPaymentTxid = "paid"), null, false))
+        assertNull(SparkExitMath.savingsRefusal(record, funding = null, hasSavingsSend = true))
+        val adopted = record.funding.single().copy(txid = "ext", vout = 0u, valueSats = 20_000uL)
+        val funded = record.copy(funding = listOf(adopted))
+        assertNull(SparkExitMath.savingsRefusal(funded, funding = null, hasSavingsSend = false))
+    }
+
+    @Test
     fun `progress waits for an external payment seen in the mempool`() {
         val record = SparkExitFixtures.record()
         val seen = listOf(SparkExitFixtures.utxo("ext", value = 20_000uL, confirmed = false))
