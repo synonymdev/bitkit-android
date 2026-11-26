@@ -1939,6 +1939,30 @@ class SparkExitRepoTest : BaseUnitTest() {
         sut.onAppBackgrounded()
     }
 
+    @Test
+    fun `paying again from savings is refused once funding from another wallet arrived`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(awaitingRecord())
+        val refused = refusedSavingsPayment()
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(refused)
+        var utxos = "[]"
+        whenever(
+            lightning.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
+        ).doSuspendableAnswer {
+            // Another wallet funded the address while the payment was prepared.
+            utxos = """[{"txid":"${"f0".repeat(32)}","vout":0,"value":9000,"status":{"confirmed":false}}]"""
+            val authorize = it.getArgument<suspend (OnchainSendAttempt) -> Unit>(5)
+            runCatching { authorize(refused) }.map { OnchainSendOutcome.Accepted("again") }
+        }
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain { utxos })
+        sut.load().getOrThrow()
+        sut.tick().getOrThrow()
+
+        assertTrue(sut.retrySavingsPayment().isFailure)
+        assertNull(assertNotNull(store.load()).fundingPaymentTxid)
+        sut.onAppBackgrounded()
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `a cancel while savings pays again waits for the payment and then keeps the exit`() = test {

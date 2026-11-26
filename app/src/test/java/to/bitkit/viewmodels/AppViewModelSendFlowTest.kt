@@ -20002,6 +20002,30 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `send pending never pays a Spark exit's funding again`() = test {
+        val original = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "exit-funding", requestId = null, orderId = null,
+            address = "bcrt1qexitfunding", amountSats = 5_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+            evidence = OnchainSendEvidence.Rejected,
+        )
+        whenever(paykitPaymentProofRepo.isSparkExitFunding(any())).thenReturn(true)
+        var authorized = false
+        whenever(lightningRepo.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any()))
+            .doSuspendableAnswer { invocation ->
+                val authorize = invocation.getArgument<suspend (OnchainSendAttempt) -> Unit>(5)
+                runCatching {
+                    authorize(original)
+                    authorized = true
+                    OnchainSendOutcome.Accepted("ab".repeat(32))
+                }
+            }
+
+        assertTrue(sut.retryOriginalOnchainSend(original, 2uL).isFailure)
+        assertFalse(authorized, "The exit's Progress owns its funding")
+    }
+
+    @Test
     fun `recovery of a Blocktank order shows the sheet and broadcasts nothing`() = test {
         val order = to.bitkit.ext.mockOrder().copy(
             orderExpiresAt = (Clock.System.now() + 60.seconds).toString(),

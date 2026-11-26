@@ -32,15 +32,19 @@ object SparkExitFundingRelease {
         if (!attempt.mayFundSparkExit) return false
         val record = exit.record?.takeIf { it.funding.firstOrNull()?.address == attempt.address }
             ?: return exit.earlier.any { it.address == attempt.address }
-        val landed = record.funding.mapNotNull { it.txid } + record.leftover.map { it.txid } +
-            listOfNotNull(record.fundingPaymentTxid)
+        // A payment the exit still waits for; once other funding filled it, the txid stays behind unwatched.
+        val awaited = record.fundingPaymentTxid?.takeIf { record.isAwaitingOwnPayment || record.isEndedPaymentPending }
+        val landed = record.funding.mapNotNull { it.txid } + record.leftover.map { it.txid } + listOfNotNull(awaited)
         if (landed.any { attempt.hasCandidate(it) }) return false
         return !record.isActive || record.fundingShortfallSats == null
     }
 
-    /** Whether the exit adopted one of [attempt]'s transactions as funding: the payment landed. */
-    fun isAdopted(attempt: OnchainSendAttempt, exit: Exit): Boolean =
-        exit.record?.funding.orEmpty().any { attempt.hasCandidate(it.txid) }
+    /** Whether one of [attempt]'s transactions landed at the exit, as funding or leftover: it reached the network. */
+    fun isAdopted(attempt: OnchainSendAttempt, exit: Exit): Boolean {
+        val record = exit.record ?: return false
+        val landed = record.funding.mapNotNull { it.txid } + record.leftover.map { it.txid }
+        return landed.any { attempt.hasCandidate(it) }
+    }
 
     /**
      * Whether savings may pay [attempt] to the exit again now, over what its funding address holds ([utxos], null
@@ -53,7 +57,8 @@ object SparkExitFundingRelease {
         if (record == null || utxos == null) return false
         return when (val state = SparkExitMath.fundingState(record, utxos)) {
             is SparkExitFundingState.Ask -> state.receivedSats == 0uL
-            SparkExitFundingState.Paid -> attempt.hasCandidate(record.fundingPaymentTxid)
+            SparkExitFundingState.Paid ->
+                attempt.hasCandidate(record.fundingPaymentTxid) && utxos.all { attempt.hasCandidate(it.txid) }
             else -> false
         }
     }

@@ -3630,6 +3630,12 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             ),
             SparkExitFundingRelease.Exit(exitRecord(SparkExitRecord.Phase.Failed("cancelled")), emptyList()),
             SparkExitFundingRelease.Exit(null, listOf(cancelled)),
+            // Funded by another wallet while this send's txid stayed behind as the exit's own payment.
+            SparkExitFundingRelease.Exit(
+                exitRecord(SparkExitRecord.Phase.Running, fundingTxid = "f1".repeat(32))
+                    .copy(fundingPaymentTxid = requireNotNull(attempt.txid)),
+                emptyList(),
+            ),
         )
         stubAbandon(attempt)
         for (exit in exits) {
@@ -3670,6 +3676,14 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         val repo = paymentProofRepo().apply { sparkExit = { adopted } }
         assertFalse(repo.onchainRequestHasEnded(attempt.copy(releaseApproved = true)))
+        val sweptBack = SparkExitFundingRelease.Exit(
+            exitRecord(SparkExitRecord.Phase.Failed("cancelled")).copy(
+                leftover = listOf(SparkExitRecord.Leftover(sent, 0u, 5_000uL)),
+            ),
+            emptyList(),
+        )
+        val leftoverRepo = paymentProofRepo().apply { sparkExit = { sweptBack } }
+        assertFalse(leftoverRepo.onchainRequestHasEnded(attempt.copy(releaseApproved = true)), "It landed as leftover")
     }
 
     @Test
@@ -3704,6 +3718,12 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         assertFalse(SparkExitFundingRelease.mayPayAgain(attempt, funded, emptyList()))
         assertTrue(SparkExitFundingRelease.mayPayAgain(attempt.copy(address = "bcrt1qordinary"), funded, null))
+        val awaiting = SparkExitFundingRelease.Exit(
+            exitRecord(SparkExitRecord.Phase.AwaitingFunding(5_000uL)).copy(fundingPaymentTxid = attempt.txid),
+            emptyList(),
+        )
+        assertTrue(SparkExitFundingRelease.mayPayAgain(attempt, awaiting, emptyList()))
+        assertFalse(SparkExitFundingRelease.mayPayAgain(attempt, awaiting, listOf(arrived)), "Another wallet funded it")
     }
 
     private fun exitFundingAttempt() = unknownShopAttempt("ab".repeat(32))
