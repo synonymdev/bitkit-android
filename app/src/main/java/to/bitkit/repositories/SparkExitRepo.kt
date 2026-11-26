@@ -311,7 +311,7 @@ class SparkExitRepo @Inject constructor(
         _state.update { it.copy(tipHeight = tip ?: it.tipHeight) }
         tip?.let { height -> sparkExitTip.height.update { height } }
         refreshNetworkFees(chain)
-        refreshFundingSeen(chain, current)
+        val seen = refreshFundingSeen(chain, current)
         if (current.isActive) noteSavingsSend(current)
         val store = store
         // A reconnect for the exit that failed left Spark ready but disconnected: the tick connects it again.
@@ -325,8 +325,9 @@ class SparkExitRepo @Inject constructor(
         _state.update { it.copy(record = updated, lastError = null) }
         // A tick that changed the phase, such as a build short of fees, needs the funding state of the new phase.
         // So does one that forgot the exit's own payment, which brings the ask back.
+        // A failed read then keeps the first: a short payment it saw still counts, so only the rest is asked for.
         if (updated.phase != current.phase || updated.fundingPaymentTxid != current.fundingPaymentTxid) {
-            refreshFundingSeen(chain, updated)
+            refreshFundingSeen(chain, updated, earlier = seen)
         }
         // Spark's balance next to the exit's leaves shows value outside the exit.
         if (recovering != null) _state.update { it.copy(sparkBalanceSats = sparkRepo.state.value.balanceSats) }
@@ -421,14 +422,21 @@ class SparkExitRepo @Inject constructor(
         _state.update { it.copy(networkFees = fees ?: it.networkFees) }
     }
 
-    private suspend fun refreshFundingSeen(chain: SparkExitChain, record: SparkExitRecord) {
-        val address = record.funding.firstOrNull()?.address ?: return
+    /** Reads the funding address for [record], or goes by [earlier] when the read fails; returns the UTXOs used. */
+    private suspend fun refreshFundingSeen(
+        chain: SparkExitChain,
+        record: SparkExitRecord,
+        earlier: List<EsploraUtxo>? = null,
+    ): List<EsploraUtxo>? {
+        val address = record.funding.firstOrNull()?.address ?: return null
         _state.update { it.copy(fundingAddress = address) }
         if (record.fundingShortfallSats == null) {
             _state.update { it.copy(fundingState = null) }
-            return
+            return null
         }
-        noteFundingSeen(record, runSuspendCatching { chain.utxos(address) }.getOrNull())
+        val utxos = runSuspendCatching { chain.utxos(address) }.getOrNull() ?: earlier
+        noteFundingSeen(record, utxos)
+        return utxos
     }
 
     /** What [utxos] at the funding address, null when unread, says the exit still needs. */

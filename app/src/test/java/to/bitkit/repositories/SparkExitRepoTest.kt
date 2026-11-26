@@ -2017,6 +2017,28 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertIs<SparkExitFundingState.Ask>(sut.state.value.fundingState)
     }
 
+    @Test
+    fun `a short savings payment keeps its remainder asked when the refresh after it fails`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        val paid = "e1".repeat(32)
+        store.save(awaitingRecord(paidTxid = paid).copy(fundingPaymentSeenAtHeight = 990u))
+        val short = """[{"txid":"$paid","vout":0,"value":8000,"status":{"confirmed":true}}]"""
+        lateinit var sut: SparkExitRepo
+        // The tick's reads see the short payment confirmed; the refresh after the exit forgets it fails.
+        sut = quotedSut(
+            FakeSparkExitRecovering(),
+            fundingChain { short.takeIf { sut.state.value.record?.fundingPaymentTxid != null } },
+        )
+        sut.load().getOrThrow()
+
+        sut.tick().getOrThrow()
+        sut.onAppBackgrounded()
+
+        assertNull(assertNotNull(store.load()).fundingPaymentTxid)
+        val ask = assertIs<SparkExitFundingState.Ask>(sut.state.value.fundingState)
+        assertEquals(8000uL, ask.receivedSats, "the payment the first read found still counts")
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `a cancel while savings pays again waits for the payment and then keeps the exit`() = test {
