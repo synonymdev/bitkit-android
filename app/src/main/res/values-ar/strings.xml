@@ -1331,7 +1331,7 @@
     <string name="contacts__edit_save_error">فشل حفظ جهة الاتصال</string>
     <string name="contacts__import_all">استيراد الكل</string>
     <plurals name="contacts__import_friends_count">
-        <item quantity="zero">%1$d صديق</item>
+        <item quantity="zero">%1$d أصدقاء</item>
         <item quantity="one">%1$d صديق</item>
         <item quantity="two">%1$d صديقان</item>
         <item quantity="few">%1$d أصدقاء</item>
