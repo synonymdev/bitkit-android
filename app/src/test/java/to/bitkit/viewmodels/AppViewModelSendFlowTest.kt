@@ -12142,6 +12142,29 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `repaying an amountless invoice still pending with another amount shows the pending amount`() = test {
+        val bolt11 = "lnbcrt1amountlesspending"
+        val invoice = lightningInvoice(bolt11, 0u)
+        val paymentHash = invoice.paymentHash.toHex()
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 2_000u))
+            .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
+        val earlier = mock<LightningActivity> {
+            on { value } doReturn 1_000u
+            on { txType } doReturn PaymentType.SENT
+        }
+        whenever(activityRepo.getActivity(paymentHash)).thenReturn(Result.success(BitkitActivity.Lightning(earlier)))
+        val state = SendUiState(address = bolt11, payMethod = SendMethod.LIGHTNING, decodedInvoice = invoice)
+
+        sut.sendEffect.test {
+            setSendState(state.copy(amount = 2_000u))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            val pending = assertIs<SendEffect.NavigateToPending>(expectMostRecentItem())
+            assertEquals(1_000L, pending.amount)
+        }
+    }
+
+    @Test
     fun `a payment shown by its event during the swipe shows its success once`() = test {
         val bolt11 = "lnbcrt1eventfirst"
         val invoice = lightningInvoice(bolt11, 1_000u)

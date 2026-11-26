@@ -8289,7 +8289,9 @@ class AppViewModel @Inject constructor(
                 pendingPaymentRepo.track(pendingHash)
                 preserveContactPaymentContext(pendingHash)
                 if (incomingPaymentRequest != null) refreshIncomingPaykitPaymentRequests()
-                setSendEffect(SendEffect.NavigateToPending(pendingHash, displayAmountSats.toLong()))
+                // A repeat of a pending payment shows what that payment sends, also when its amount was typed.
+                val pendingSats = earlierLightningSendSats(pendingHash) ?: displayAmountSats
+                setSendEffect(SendEffect.NavigateToPending(pendingHash, pendingSats.toLong()))
                 lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
                 resolveSettledPendingSend(pendingHash)
                 return@onFailure
