@@ -3218,6 +3218,38 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `recipient refresh queued behind a failed one keeps loading until it finishes`() = test {
+        whenever(
+            paykitSdkService.identityStatus()
+        ).thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        val releaseFirst = CompletableDeferred<Unit>()
+        val releaseSecond = CompletableDeferred<Unit>()
+        var peerReads = 0
+        whenever(paykitSdkService.linkedPeers()).doSuspendableAnswer {
+            if (++peerReads == 1) {
+                releaseFirst.await()
+                throw PaykitException.Transport("transport_error", "Offline")
+            }
+            releaseSecond.await()
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED))
+        }
+        whenever(paykitSdkService.canReceivePaymentRequests(eq(COUNTERPARTY), any())).thenReturn(true)
+        val failing = async { sut.refreshEligibleTargets(listOf(COUNTERPARTY)) }
+        val queued = async { sut.refreshEligibleTargets(listOf(COUNTERPARTY), force = true) }
+        runCurrent()
+
+        releaseFirst.complete(Unit)
+        failing.await()
+        runCurrent()
+        assertEquals(2, peerReads)
+        assertEquals(PaykitPaymentRequestTargetsStatus.Loading, sut.eligibleTargetsStatus.value)
+
+        releaseSecond.complete(Unit)
+        queued.await()
+        assertEquals(PaykitPaymentRequestTargetsStatus.Loaded, sut.eligibleTargetsStatus.value)
+    }
+
+    @Test
     fun `recipient status is failed when the identity cannot be activated`() = test {
         sut.clear()
         whenever(presentationStore.loadSubscriptionState(any())).doSuspendableAnswer { error("storage unavailable") }

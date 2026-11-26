@@ -803,8 +803,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val startTicket = targetRefreshTicket.get()
         var statusBeforeRefresh: PaykitPaymentRequestTargetsStatus? = null
         return withContext(ioDispatcher) {
-            runSuspendCatching {
-                targetDiscoveryMutex.withLock discovery@{
+            // The failure settles inside the lock, so a refresh queued behind this one cannot be overwritten by it.
+            targetDiscoveryMutex.withLock {
+                runSuspendCatching discovery@{
                     if (!isAvailable() || expectedIdentity == null) {
                         operationMutex.withLock operation@{
                             if (stateGeneration.get() != generation || activeIdentity != expectedIdentity) {
@@ -858,26 +859,26 @@ class PaykitPaymentRequestRepo @Inject constructor(
                             }
                         }
                     }
-                }
-            }.onFailure {
-                if (it == PaykitPaymentRequestError.OperationInProgress) {
-                    statusBeforeRefresh?.let { previous ->
-                        operationMutex.withLock {
-                            if (isCurrentState(generation, expectedIdentity)) {
-                                _eligibleTargetsStatus.update { previous.afterBlockedRefresh() }
+                }.onFailure {
+                    if (it == PaykitPaymentRequestError.OperationInProgress) {
+                        statusBeforeRefresh?.let { previous ->
+                            operationMutex.withLock {
+                                if (isCurrentState(generation, expectedIdentity)) {
+                                    _eligibleTargetsStatus.update { previous.afterBlockedRefresh() }
+                                }
                             }
                         }
+                        return@onFailure
                     }
-                    return@onFailure
-                }
-                Logger.warn("Failed to refresh Paykit payment request recipients", it, context = TAG)
-                val savedKeys = savedPublicKeys.mapNotNull(PubkyPublicKeyFormat::normalized).toSet()
-                operationMutex.withLock {
-                    if (!isCurrentState(generation, expectedIdentity)) return@withLock
-                    _eligibleTargetsStatus.update { PaykitPaymentRequestTargetsStatus.Failed }
-                    _eligibleTargets.update { targets ->
-                        targets.filter {
-                            it.publicKey in savedKeys || (targetWriteTickets[it.publicKey] ?: 0L) > startTicket
+                    Logger.warn("Failed to refresh Paykit payment request recipients", it, context = TAG)
+                    val savedKeys = savedPublicKeys.mapNotNull(PubkyPublicKeyFormat::normalized).toSet()
+                    operationMutex.withLock {
+                        if (!isCurrentState(generation, expectedIdentity)) return@withLock
+                        _eligibleTargetsStatus.update { PaykitPaymentRequestTargetsStatus.Failed }
+                        _eligibleTargets.update { targets ->
+                            targets.filter {
+                                it.publicKey in savedKeys || (targetWriteTickets[it.publicKey] ?: 0L) > startTicket
+                            }
                         }
                     }
                 }
