@@ -3178,6 +3178,31 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `recipient refresh in flight across an identity change leaves the new identity loading`() = test {
+        whenever(
+            paykitSdkService.identityStatus()
+        ).thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        val releasePeers = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.linkedPeers()).doSuspendableAnswer {
+            releasePeers.await()
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED))
+        }
+        whenever(paykitSdkService.canReceivePaymentRequests(eq(COUNTERPARTY), any())).thenReturn(true)
+        whenever(presentationStore.load(SECOND_IDENTITY)).thenReturn(emptySet())
+        val staleRefresh = async { sut.refreshEligibleTargets(listOf(COUNTERPARTY)) }
+        val queuedRefresh = async { sut.refreshEligibleTargets(listOf(COUNTERPARTY), force = true) }
+        runCurrent()
+
+        sut.activate(SECOND_IDENTITY)
+        releasePeers.complete(Unit)
+        staleRefresh.await()
+        queuedRefresh.await()
+
+        assertEquals(PaykitPaymentRequestTargetsStatus.Loading, sut.eligibleTargetsStatus.value)
+        assertTrue(sut.eligibleTargets.value.isEmpty())
+    }
+
+    @Test
     fun `recipient status is failed when the identity cannot be activated`() = test {
         sut.clear()
         whenever(presentationStore.loadSubscriptionState(any())).doSuspendableAnswer { error("storage unavailable") }
