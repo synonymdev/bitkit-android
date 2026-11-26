@@ -40,11 +40,27 @@ class CacheStoreTest : BaseUnitTest() {
 
         assertEquals(mapOf("hash" to SparkSendAttempt(1, 3_000)), sut.data.first().sparkSendAttempts)
 
-        sut.restoreSparkSendAttempt("HASH", SparkSendAttempt(0, 3_000))
+        sut.dropSparkUnsentSend("HASH", restoresAttempt = true, previous = SparkSendAttempt(0, 3_000))
         assertEquals(0, sut.data.first().sparkSendAttempts["hash"]?.attempt)
 
-        sut.restoreSparkSendAttempt("hash", null)
+        sut.dropSparkUnsentSend("hash", restoresAttempt = true, previous = null)
         assertFalse("hash" in sut.data.first().sparkSendAttempts)
+    }
+
+    @Test
+    fun `dropping an unsent spark send clears its hold and hash and keeps a reused attempt`() = test {
+        sut.addSparkSendHash("hash", expiresAt = 3_000)
+        sut.setSparkSendAttempt("hash", attempt = 1, expiresAt = 3_000, now = 1_000)
+        sut.addSparkUncertainSend("hash", startedAt = 1_000, attemptId = "id")
+
+        sut.dropSparkUnsentSend("HASH", restoresAttempt = false, previous = null)
+
+        val data = sut.data.first()
+        assertFalse("hash" in data.sparkSendHashes)
+        assertFalse("hash" in data.sparkSendExpiries)
+        assertFalse("hash" in data.sparkUncertainSends)
+        assertFalse("hash" in data.sparkSendAttemptIds)
+        assertEquals(1, data.sparkSendAttempts["hash"]?.attempt)
     }
 
     @Test

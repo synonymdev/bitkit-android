@@ -659,12 +659,13 @@ class SparkRepo @Inject constructor(
                 // A send refused before anything went out is taken as not having used its key, so a retry refuses the
                 // same way. The hold of an earlier attempt under the same key stays, as it may have committed a
                 // transfer. Under a new key every earlier attempt failed, so a hold one of them left ends too.
+                // A failed write keeps the whole send held, and the refusal still reaches the caller.
                 suspend fun dropUnsentSend() {
                     if (isReusedKey && wasHeld) return
-                    uncertainSends.remove(paymentHash.lowercase())
-                    cacheStore.removeSparkUncertainSend(paymentHash)
-                    cacheStore.removeSparkSendHash(paymentHash)
-                    if (!isReusedKey) cacheStore.restoreSparkSendAttempt(paymentHash, previousAttempt)
+                    bestEffort("drop unsent Spark send '$paymentHash'") {
+                        cacheStore.dropSparkUnsentSend(paymentHash, !isReusedKey, previousAttempt)
+                        uncertainSends.remove(paymentHash.lowercase())
+                    }
                 }
                 val sent = run {
                     sendRecordedAt[paymentHash.lowercase()] = sendRecords.incrementAndGet()
