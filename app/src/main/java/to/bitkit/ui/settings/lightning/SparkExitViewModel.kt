@@ -507,6 +507,13 @@ data class SparkExitUiState(
     /** Progress says the savings payment didn't go through and offers to pay it again. */
     val offersSavingsRetry: Boolean get() = isSavingsPaymentRefused || savingsRetryOffer != null
 
+    /**
+     * The exit waits for its own savings payment, which the send journal has not seen accepted yet: it may still land,
+     * so progress says to wait for it before paying from another wallet.
+     */
+    val isSavingsSendLanding: Boolean
+        get() = record?.isAwaitingOwnPayment == true && isSavingsSendUnresolved && !isSavingsPaymentRefused
+
     /** Progress offers Pay a higher fee. */
     val canPayHigherFee: Boolean get() = record?.canPayHigherFee(tipHeight, networkFees) == true
 

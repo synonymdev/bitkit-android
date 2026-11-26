@@ -1687,6 +1687,9 @@ class SparkExitRepoTest : BaseUnitTest() {
         outcome = Result.failure(OnchainSendPendingError(IOException("no answer"), "pending"))
         assertTrue(sut.paySavingsRefusal(retry).isFailure)
         assertNull(assertNotNull(store.load()).savingsRefusal)
+        // Kept as the exit's payment, so progress holds the ask until it lands or the own-payment wait forgets it.
+        assertEquals("pending", store.load()?.fundingPaymentTxid)
+        assertEquals(SparkExitFundingState.Paid, sut.state.value.fundingState)
         sut.onAppBackgrounded()
 
         verify(lightning, times(2)).sendOnChain(
