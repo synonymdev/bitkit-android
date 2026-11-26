@@ -138,6 +138,9 @@ fun ContactDetailScreen(
     }
 }
 
+/** Smallest height the Request or Pay illustration is shown at; below it the illustration is hidden. */
+private val MIN_ILLUSTRATION_HEIGHT = 72.dp
+
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun RequestOrPaySheet(
@@ -158,8 +161,6 @@ private fun RequestOrPaySheet(
                 .testTag("RequestOrPaySheet")
         ) {
             SheetTopBar(titleText = stringResource(R.string.wallet__payment_request_or_pay))
-            // The illustration shrinks on small screens and the copy scrolls when it still does not fit,
-            // so the actions below stay on screen.
             BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
@@ -171,20 +172,22 @@ private fun RequestOrPaySheet(
                         .verticalScroll(rememberScrollState())
                         .heightIn(min = maxHeight)
                 ) {
-                    Box(
+                    BoxWithConstraints(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
                     ) {
-                        Image(
-                            painter = painterResource(R.drawable.coin_stack),
-                            contentDescription = null,
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .sizeIn(maxWidth = 256.dp, maxHeight = 256.dp)
-                                .aspectRatio(1f)
-                        )
+                        if (maxHeight >= MIN_ILLUSTRATION_HEIGHT) {
+                            Image(
+                                painter = painterResource(R.drawable.coin_stack),
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .sizeIn(maxWidth = 256.dp, maxHeight = 256.dp)
+                                    .aspectRatio(1f)
+                            )
+                        }
                     }
                     Display(
                         text = stringResource(R.string.wallet__payment_request_or_pay_headline)
