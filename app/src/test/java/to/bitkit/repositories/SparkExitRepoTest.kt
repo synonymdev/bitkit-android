@@ -1837,15 +1837,19 @@ class SparkExitRepoTest : BaseUnitTest() {
         sut.load().getOrThrow()
         val retry = SparkExitSavingsRetry(20_000uL, 650uL, FeeRates(fast = 7u, mid = 4u, slow = 1u), canPay = true)
 
-        val paid = sut.paySavingsRefusal(retry)
-        // Cancel keeps the payment on the record first, before a later send can take its place in the journal.
-        val cancelled = sut.cancel()
+        // Paying again keeps the payment on the record instead, before a later send can take its place in the journal.
+        sut.paySavingsRefusal(retry).getOrThrow()
 
-        assertTrue(paid.isFailure)
-        assertTrue(cancelled.isFailure)
         val kept = assertNotNull(store.load())
         assertEquals("accepted", kept.fundingPaymentTxid)
         assertNull(kept.savingsRefusal)
+        assertTrue(sut.state.value.fundingState is SparkExitFundingState.Paid, "progress still asks for the funding")
+        // Cancel, on a record that lost the payment again, keeps it first and refuses.
+        store.save(awaitingRecord().copy(savingsRefusal = refusal))
+        val later = quotedSut(FakeSparkExitRecovering(), fundingChain())
+        later.load().getOrThrow()
+        assertTrue(later.cancel().isFailure)
+        assertEquals("accepted", assertNotNull(store.load()).fundingPaymentTxid)
         verify(lightning, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
             any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),

@@ -1015,10 +1015,14 @@ class SparkExitRepo @Inject constructor(
                     }
                     // Checked again under the tick lock, over the address read now: funding may have reached it since
                     // the last tick, or a tick adopted it.
+                    var isKept = false
                     runSuspendCatching {
                         payFunding(record.createdAt, address, retry.sats, retry.feeRates, retry.feeSats) { exit ->
-                            // A lost accepted payment is kept, and then nothing is due.
-                            val current = keepAcceptedSavingsSend(exit.record ?: return@payFunding false)
+                            val loaded = exit.record ?: return@payFunding false
+                            // A lost accepted payment is kept: it was paid, so nothing is due.
+                            val current = keepAcceptedSavingsSend(loaded)
+                            isKept = current.fundingPaymentTxid != loaded.fundingPaymentTxid
+                            if (isKept) return@payFunding false
                             val held = requireNotNull(chain) { "No chain host for this network" }.utxos(address)
                             // Progress shows what the read found, so it stops offering savings once funding arrived.
                             noteFundingSeen(current, held)
@@ -1029,6 +1033,7 @@ class SparkExitRepo @Inject constructor(
                     }
                         // A payment that went out and failed shows as such, with its own retry.
                         .onFailure { _state.value.record?.let { current -> noteSavingsSend(current) } }
+                        .recover { if (isKept) Unit else throw it }
                         .getOrThrow()
                 }
             } finally {
@@ -1062,11 +1067,14 @@ class SparkExitRepo @Inject constructor(
      * record, so a payment the exit forgot since (dropped, or short) is never kept again.
      */
     private suspend fun keepAcceptedSavingsSend(record: SparkExitRecord): SparkExitRecord =
-        keepAcceptedSavingsSend(record, savingsSend(record))
+        if (canKeepAcceptedSavingsSend(record)) keepAcceptedSavingsSend(record, savingsSend(record)) else record
+
+    private fun canKeepAcceptedSavingsSend(record: SparkExitRecord): Boolean =
+        record.isActive && record.phase is SparkExitRecord.Phase.AwaitingFunding &&
+            record.fundingPaymentTxid == null && record.savingsRefusal != null
 
     private fun keepAcceptedSavingsSend(record: SparkExitRecord, attempt: OnchainSendAttempt?): SparkExitRecord {
-        if (!record.isActive || record.phase !is SparkExitRecord.Phase.AwaitingFunding) return record
-        if (record.fundingPaymentTxid != null || record.savingsRefusal == null) return record
+        if (!canKeepAcceptedSavingsSend(record)) return record
         val address = record.funding.firstOrNull()?.address ?: return record
         val txid = attempt?.takeIf { it.address == address && it.hasPositiveEvidence }?.txid ?: return record
         Logger.warn("Keeping the accepted Spark exit funding '$txid' the record lost", context = TAG)
