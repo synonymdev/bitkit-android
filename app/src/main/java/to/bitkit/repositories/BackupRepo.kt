@@ -1325,6 +1325,8 @@ class BackupRepo @Inject constructor(
                 sparkHistoryUnseededSince = restoredAt,
                 ldkHistoryUnseededSince = restoredAt,
                 sparkRestoredAt = restoredAt,
+                // A deposit's claim is followed by the install that sent it, never started again from a backup.
+                sparkSentDeposits = it.sparkSentDeposits,
                 // The higher index of each wallet, so an exit never funds from an address an earlier one used.
                 sparkExitNextFundingIndexes = SparkExitMath.mergeFundingIndexes(
                     it.sparkExitNextFundingIndexes,
@@ -1744,6 +1746,7 @@ internal fun AppCacheData.withoutPaymentDetails() = copy(
     pendingLightningMessages = emptyMap(),
     pendingSparkWithdrawal = null,
     sentSparkWithdrawals = emptyList(),
+    sparkSentDeposits = emptyMap(),
     unfinishedPubkySwaps = emptyList(),
     pubkySwapHoldHashes = emptyMap(),
     sparkSendHashes = emptyList(),

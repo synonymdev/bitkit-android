@@ -521,7 +521,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
 
         assertTrue(toasts.isEmpty())
         assertEquals(SideEffect.FundingPending(retained), effects.last())
-        verify(sparkRepo, never()).onDepositBroadcast(any(), any())
+        verify(sparkRepo, never()).onDepositBroadcast(any(), any(), anyOrNull())
     }
 
     @Test
@@ -770,6 +770,24 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             reviewHigherFee = anyOrNull(),
         )
         assertEquals(SideEffect.Sent, effects.lastOrNull())
+    }
+
+    @Test
+    fun `a hardware wallet funding is kept with its wallet so a fee bump replacing it is seen`() = test {
+        whenever { hwWalletRepo.maxSpendableFunding("trezor", "bcrt1qspark", 5uL) }.thenReturn(Result.success(80_000uL))
+        whenever { hwWalletRepo.estimateFundingMiningFee("trezor", "bcrt1qspark", 50_000uL, 5uL) }
+            .thenReturn(Result.success(700uL))
+        val sut = createSut()
+        sut.useHardwareWallet("trezor")
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+
+        sut.onHwBroadcast("txid", 50_000uL)
+        advanceUntilIdle()
+
+        verify(sparkRepo).onDepositBroadcast("txid", 50_000uL, walletId = "trezor")
     }
 
     @Test

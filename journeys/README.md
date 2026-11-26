@@ -209,6 +209,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `transfer/spark-emergency-exit.xml` | same file, ported in synonymdev/bitkit-ios#1217 — same steps and identifiers; only the description differs, naming the iOS unit tests and the Background App Refresh, Low Power Mode and notification notes in place of Android's battery notes |
 | `transfer/savings-select-funds.xml` | same file and steps — iOS runs it as J8 on synonymdev/bitkit-ios#1128 |
 | `transfer/spark-transfer-status.xml` | same file and steps — the Wait and Approve identifiers differ (Android `SettingUpWait` and `SettingUpPay`, iOS `SparkDepositWait` and `SparkDepositPay`), and each names its own unit tests |
+| `transfer/fast-transfer-relaunch.xml` | same file and steps — the Wait and Approve identifiers differ as in `spark-transfer-status.xml`, and each names its own unit tests |
 | `settings/quickpay-payment-pin.xml` | same file and steps, paired with synonymdev/bitkit-ios#1326 — on iOS the PIN pad is a sheet whose back control is `NavigationBack`, and a failed biometric check counts as not approved instead of falling back to the PIN pad |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 

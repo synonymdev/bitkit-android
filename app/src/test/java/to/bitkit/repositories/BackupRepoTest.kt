@@ -3933,6 +3933,7 @@ class BackupRepoTest : BaseUnitTest() {
             moveToSparkRetriedBefore = mapOf(id to listOf(id)),
             ldkSendHashes = listOf(id),
             ldkSendExpiries = mapOf(id to 1),
+            sparkSentDeposits = mapOf(id to SparkSentDeposit(amountSats = 1uL, sentAt = 1)),
         )
 
         assertFalse(id in jsonLogOf(cache.withoutPaymentDetails()))
