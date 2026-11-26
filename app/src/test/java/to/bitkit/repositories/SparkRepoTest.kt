@@ -2106,6 +2106,35 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a withdrawal spark refuses for its balance stays refused when closing its journal fails`() = test {
+        val sut = journaledSpark()
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer {
+            whenever { cacheStore.update(any()) }.thenAnswer { throw IOException("disk full") }
+            throw SdkException.InsufficientFunds(null)
+        }
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact")
+
+        assertIs<SparkError.SendRefused>(result.exceptionOrNull())
+    }
+
+    @Test
+    fun `a withdrawal spark refuses for a fee rise stays refused when closing its journal fails`() = test {
+        val sut = journaledSpark()
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer {
+            whenever { cacheStore.update(any()) }.thenAnswer { throw IOException("disk full") }
+            throw SdkException.InvalidInput(
+                "The onchain fee rose to 900 sats at the slowest speed, above the 500 sats quoted for this payment. " +
+                    "Please re-prepare the payment.",
+            )
+        }
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact")
+
+        assertIs<SparkError.SendRefused>(result.exceptionOrNull())
+    }
+
+    @Test
     fun `a withdrawal spark refuses for a fee that rose past its quote closes its journal at once`() = test {
         val sut = journaledSpark()
         whenever { sparkService.send(any(), anyOrNull()) }.thenAnswer {

@@ -1449,7 +1449,7 @@ class SparkRepo @Inject constructor(
                             ensurePaymentDeadline(paymentDeadlineAt)
                             ensureNotExiting()
                         }.onFailure {
-                            clearJournal(opened)
+                            bestEffort("close Spark withdrawal journal") { clearJournal(opened) }
                             throw it
                         }
                         runSuspendCatching { sparkService.send(prepared, opened.paymentId) }
@@ -1464,13 +1464,13 @@ class SparkRepo @Inject constructor(
                     // Spark selects the leaves to spend before anything goes to the operators, so a short balance left
                     // nothing and the journal closes at once, as on the Lightning rail.
                     if (it is SdkException.InsufficientFunds) {
-                        clearJournal(journal)
+                        bestEffort("close Spark withdrawal journal") { clearJournal(journal) }
                         throw SparkError.SendRefused("Spark balance can't cover the withdrawal", it)
                     }
                     // Spark refreshes an expiring quote and checks its fee against the prepared one before it
                     // withdraws, so a fee rise left nothing too.
                     if (it.isWithdrawalFeeRise()) {
-                        clearJournal(journal)
+                        bestEffort("close Spark withdrawal journal") { clearJournal(journal) }
                         throw SparkError.SendRefused("Spark's withdrawal fee rose past its quote", it)
                     }
                     // Spark's synced list settles the journal: a listed withdrawal records, an unlisted one drops. A
