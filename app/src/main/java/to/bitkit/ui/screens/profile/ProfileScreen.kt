@@ -149,7 +149,8 @@ internal fun ProfileContent(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
                     .testTag("ProfileRecoveryContent")
             ) {
                 VerticalSpacer(32.dp)
