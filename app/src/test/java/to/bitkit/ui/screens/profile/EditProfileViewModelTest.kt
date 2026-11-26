@@ -235,6 +235,16 @@ class EditProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a url edit that normalizes to the stored link leaves stored links unchecked`() = test {
+        val sut = createSut(links = listOf(PubkyProfileLink("x".repeat(101), "https://example.com")))
+        advanceUntilIdle()
+
+        sut.updateLinkUrl(0, "example.com")
+
+        assertTrue(sut.uiState.value.linkErrors.isEmpty())
+    }
+
+    @Test
     fun `an added link is held to the publisher limits`() = test {
         val sut = createSut()
         advanceUntilIdle()

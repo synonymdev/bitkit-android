@@ -35,6 +35,7 @@ import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
 import to.bitkit.models.isSocialV1WebUri
 import to.bitkit.models.pubkyAppLinkError
+import to.bitkit.models.singleLine
 import to.bitkit.models.takeCodePoints
 import to.bitkit.models.toPubkyAppLinkUrl
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -362,13 +363,14 @@ data class EditProfileUiState(
     val isBusy: Boolean get() = isSaving || isDeleting
 
     /**
-     * The links pubky.app would refuse, by index. A save sends the links only once they change, and then pubky.app
-     * checks every one, so a stored link is held to its rules too. Links added or edited here must also be web
-     * links, which social v1 requires; stored ones keep their scheme.
+     * The links pubky.app would refuse, by index. A save sends the links only once they differ from the stored ones
+     * after its normalization, and then pubky.app checks every one, so a stored link is held to its rules too. Links
+     * added or edited here must also be web links, which social v1 requires; stored ones keep their scheme.
      */
     val linkErrors: ImmutableMap<Int, PubkyAppLinkError>
         get() {
-            if (links == storedLinks) return persistentMapOf()
+            val sentLinks = links.map { ProfileEditLink(it.label.singleLine(), it.url.toPubkyAppLinkUrl() ?: it.url) }
+            if (sentLinks == storedLinks) return persistentMapOf()
             return links.withIndex().mapNotNull { (index, link) ->
                 val error = when {
                     index == rejectedLinkIndex -> PubkyAppLinkError.URL_INVALID
