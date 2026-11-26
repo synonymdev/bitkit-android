@@ -1200,20 +1200,11 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
-    /**
-     * Allows an allowance's automatic payment of [request] made as [identity] while that identity is still active, the
-     * request is unexpired and its contact is not blocked.
-     */
-    suspend fun ensureAutomaticPaymentAllowed(
-        request: PaykitPaymentRequest,
-        identity: String,
-    ): Result<Unit> = withContext(ioDispatcher) {
+    /** Allows an allowance's automatic payment of [request] while it is unexpired and its contact is not blocked. */
+    suspend fun ensureAutomaticPaymentAllowed(request: PaykitPaymentRequest): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val generation = stateGeneration.get()
-            if (!isCurrentState(generation, identity)) throw PaykitPaymentRequestError.RequestUnavailable
             if (request.isPaymentDeadlineExpired(clock.now())) throw PaykitPaymentRequestError.RequestExpired
             if (isBlocked(request)) throw PaykitPaymentRequestError.RequestUnavailable
-            if (!isCurrentState(generation, identity)) throw PaykitPaymentRequestError.RequestUnavailable
         }
     }
 
