@@ -897,6 +897,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.isPending(any())).thenReturn(true)
         whenever { paykitPaymentRequestRepo.ensurePaymentAllowed(any()) }.thenReturn(Result.success(Unit))
         whenever { paykitPaymentRequestRepo.claimForPayment(any()) }.thenReturn(Result.success(Unit))
+        whenever { lightningRepo.payInvoiceRecheckedAtSubmission(any(), anyOrNull(), anyOrNull(), any()) }
+            .doSuspendableAnswer {
+                val check = it.getArgument<suspend () -> Boolean>(3)
+                when {
+                    !check() -> Result.failure(PaymentAbortedBeforeSend())
+                    !check() -> Result.failure(ServiceError.PaymentStoppedAtSubmission())
+                    else -> lightningRepo.payInvoice(it.getArgument(0), it.getArgument<ULong?>(1))
+                }
+            }
         whenever { lightningRepo.payInvoice(any(), anyOrNull(), anyOrNull(), any()) }.doSuspendableAnswer {
             if (it.getArgument<suspend () -> Boolean>(3)()) {
                 lightningRepo.payInvoice(it.getArgument(0), it.getArgument<ULong?>(1))
@@ -16214,6 +16223,112 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a payment request blocked right before submission sends nothing and clears the proof`() = test {
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1paymentrequest"
+        val paymentHash = "010203"
+        val privateContext = privatePaymentContext(7uL)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(
+            paykitPaymentProofRepo.prepare(
+                request,
+                MethodId.Bolt11.rawValue,
+                "bitkit",
+                PaykitPaymentProofKind.Lightning
+            ),
+        ).doSuspendableAnswer {
+            setSendState(sut.sendUiState.value.copy(decodedInvoice = lightningInvoice(bolt11, request.amount.atomic)))
+            Result.success(Unit)
+        }
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(
+            paykitPaymentProofRepo.associateLightningPayment(request, paymentHash, MethodId.Bolt11.rawValue, "bitkit")
+        ).doSuspendableAnswer {
+            // Allowed at the check before the send, blocked by the time it is submitted.
+            whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request))
+                .thenReturn(Result.success(Unit), Result.failure(PaykitPaymentRequestError.RequestUnavailable))
+            Result.success(Unit)
+        }
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = request.amount.atomic,
+                payMethod = SendMethod.LIGHTNING,
+                isPaymentRequest = true,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
+        verify(paykitPaymentProofRepo).failLightningPayment(paymentHash)
+        verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
+        verify(pendingPaymentRepo, never()).track(any())
+    }
+
+    @Test
+    fun `a payment request blocked before a spark resend stays pending and keeps its proof`() = test {
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1paymentrequest"
+        val paymentHash = "010203"
+        val privateContext = privatePaymentContext(7uL)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(
+            paykitPaymentProofRepo.prepare(
+                request,
+                MethodId.Bolt11.rawValue,
+                "bitkit",
+                PaykitPaymentProofKind.Lightning
+            ),
+        ).doSuspendableAnswer {
+            setSendState(sut.sendUiState.value.copy(decodedInvoice = lightningInvoice(bolt11, request.amount.atomic)))
+            Result.success(Unit)
+        }
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(
+            paykitPaymentProofRepo.associateLightningPayment(request, paymentHash, MethodId.Bolt11.rawValue, "bitkit")
+        ).doSuspendableAnswer {
+            // Allowed before the send and at submission, blocked before Spark resends after a leaf failure.
+            whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request)).thenReturn(
+                Result.success(Unit),
+                Result.success(Unit),
+                Result.failure(PaykitPaymentRequestError.RequestUnavailable),
+            )
+            Result.success(Unit)
+        }
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = request.amount.atomic,
+                payMethod = SendMethod.LIGHTNING,
+                isPaymentRequest = true,
+            ),
+        )
+
+        whenever(lightningRepo.payInvoiceRecheckedAtSubmission(any(), anyOrNull(), anyOrNull(), any()))
+            .doSuspendableAnswer {
+                val check = it.getArgument<suspend () -> Boolean>(3)
+                // The first try may have committed a transfer, so the refused resend leaves the send uncertain.
+                repeat(3) { check() }
+                Result.failure(PaymentPendingException(paymentHash))
+            }
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(paykitPaymentProofRepo, never()).failLightningPayment(paymentHash)
+        verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
+        verify(pendingPaymentRepo).track(paymentHash)
+    }
+
+    @Test
     fun `pending incoming lightning payment keeps its proof association`() = test {
         val request = paymentRequest()
         val bolt11 = "lnbcrt1pendingrequest"
@@ -18696,7 +18811,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(paykitPaymentProofRepo).cancelPreparation(request)
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
-        verify(lightningRepo).payInvoice(any(), anyOrNull(), eq(Instant.parse(quote.expiresAt)), any())
+        verify(
+            lightningRepo
+        ).payInvoiceRecheckedAtSubmission(any(), anyOrNull(), eq(Instant.parse(quote.expiresAt)), any())
     }
 
     @Test

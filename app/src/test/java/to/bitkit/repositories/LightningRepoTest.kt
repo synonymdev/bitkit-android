@@ -1297,6 +1297,40 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a payment request's spark send checks its authorization again right before sending`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        val checks = mutableListOf<Boolean>()
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorize = it.getArgument<suspend () -> Boolean>(4)
+            repeat(2) { checks += authorize() }
+            Result.failure(ServiceError.PaymentStoppedAtSubmission())
+        }
+        var isAllowed = true
+
+        sut.payInvoiceRecheckedAtSubmission("invoice", 1_000uL, null) { isAllowed.also { isAllowed = false } }
+
+        assertEquals(listOf(true, false), checks)
+    }
+
+    @Test
+    fun `a payment request's node send stops at submission when its authorization lapses`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("hash")
+        var isAllowed = true
+
+        val result = sut.payInvoiceRecheckedAtSubmission(
+            "bolt11",
+            1_000uL,
+            null
+        ) { isAllowed.also { isAllowed = false } }
+
+        assertIs<ServiceError.PaymentStoppedAtSubmission>(result.exceptionOrNull())
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
     fun `a node-only payment fails instead of falling back to spark`() = test {
         startNodeForTesting()
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
