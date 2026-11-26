@@ -1678,6 +1678,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         ),
         acceptedEventId = null,
         acceptedOutboundStatus = null,
+        acceptanceRecordedAt = null,
         rejectedEventId = null,
         rejectedOutboundStatus = null,
         canceledEventId = null,
@@ -1690,10 +1691,9 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         lastEventAt = clock.now().toString(),
         invalidReason = null,
         proposalAppId = "bitkit",
+        proposalRecordedAt = null,
         payerAppId = null,
         executionClaimAppId = null,
-        proposalRecordedAt = null,
-        acceptanceRecordedAt = null,
     )
     private fun linkedPeer(
         publicKey: String,

@@ -87,6 +87,7 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PreparedOnchainSend
 import to.bitkit.repositories.PreparedOnchainSendRefused
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import to.bitkit.utils.LoggerLdk
 import to.bitkit.utils.ServiceError
 import java.io.File
@@ -947,6 +948,22 @@ class LightningServiceTest : BaseUnitTest() {
 
         destroyGate.countDown()
         setupDone.await() // proceeds once released (build then fails on the mocked deps, which is fine)
+    }
+
+    @Test
+    fun `wipeStorage reports a refused local delete and succeeds after access is restored`() = runGateTest {
+        gated.node = null
+        val directory = File(Env.ldkStoragePath(0)).apply { mkdirs() }
+        val sentinel = File(directory, "retained-node-state").apply { writeText("test-data") }
+        assertTrue(directory.setWritable(false, false))
+        try {
+            assertFailsWith<AppError> { gated.wipeStorage(0) }
+            assertTrue(sentinel.exists())
+        } finally {
+            assertTrue(directory.setWritable(true, true))
+        }
+        gated.wipeStorage(0)
+        assertFalse(directory.exists())
     }
 
     // Regression (c): with no pending release the gate must add no latency.

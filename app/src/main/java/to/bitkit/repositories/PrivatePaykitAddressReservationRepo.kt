@@ -308,6 +308,36 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         }?.first
     }
 
+    internal suspend fun receiptAssignments(): ReceiptAssignments = locked { ledger ->
+        check(ledger.receiptSourceReadable) { "Receipt reservation source is unavailable" }
+        check(ledger.version == 1) { "Receipt reservation format is unsupported" }
+        val assignments = (
+            ledger.contactAssignments.map { it.key to it.value } +
+                ledger.contactAssignmentHistory.flatMap { (publicKey, assignments) ->
+                    assignments.map { publicKey to it }
+                }
+            ).distinct()
+        ReceiptAssignments(assignments, attributionVersion)
+    }
+
+    internal data class ReceiptAssignments(
+        val assignments: List<Pair<String, PrivatePaykitStoredAssignmentData>>,
+        val revision: Long,
+    )
+
+    internal suspend fun contactsForReceipt(
+        address: String,
+        assignments: List<Pair<String, PrivatePaykitStoredAssignmentData>>,
+    ): List<String> {
+        val addressType = address.addressTypeFromAddress() ?: return emptyList()
+        return assignments.mapNotNull { (publicKey, assignment) ->
+            publicKey.takeIf {
+                assignment.addressType == addressType &&
+                    (assignment.address == address || resolvedAddress(assignment).getOrThrow() == address)
+            }
+        }
+    }
+
     suspend fun currentContactPublicKeyForReservedAddress(address: String): String? = withContext(ioDispatcher) {
         if (address.isBlank()) return@withContext null
         val addressType = address.addressTypeFromAddress() ?: return@withContext null
@@ -397,8 +427,9 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
 
     suspend fun clear() = withContext(ioDispatcher) {
         locked {
-            ledger = PrivatePaykitReservationData()
+            ledger = null
             reservationStore.reset()
+            ledger = PrivatePaykitReservationData()
             notifyBackupStateChanged()
         }
     }
@@ -441,10 +472,15 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
                         current.contactAssignmentHistory + (assignmentKey to history)
                     },
                 )
-                persist(next)
-                ledger = next
+                // A cancelled return can follow a committed write. Reload durable state on uncertainty.
+                ledger = null
+                try {
+                    persist(next)
+                    ledger = next
+                } finally {
+                    notifyBackupStateChanged()
+                }
             }
-            notifyBackupStateChanged()
             addressInfo.address
         }
     }

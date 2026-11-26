@@ -22,6 +22,8 @@ import to.bitkit.utils.AppError
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 
 /** Local connection choices made while recovering a wallet, never included in a remote backup. */
@@ -89,9 +91,29 @@ class WalletConnectionRecovery @Inject constructor(
     suspend fun <T> withStartup(owner: Owner, block: suspend (Session) -> T): T =
         withAdmission(owner, startupMutex, block)
 
+    /** Historical receipt work drains with its wallet without serializing behind restoration. */
+    internal suspend fun <T> withReceiptOperation(block: suspend (Session) -> T): T {
+        check(currentCoroutineContext()[ReceiptOperation] == null) { "Receipt operation is already admitted" }
+        val owner = captureRuntimeOwner()
+        return withAdmission(owner, mutex = null) { session ->
+            // Identity changes drain this admission before changing credentials. Validate the indexed
+            // namespace once; individual receipts only need the captured generation and caller's Job.
+            storeIdProvider.getBackupWalletBinding(owner.walletIndex)
+            // ServiceQueue replaces the caller's Job. Keep admission until its actual worker returns.
+            withContext(NonCancellable + ReceiptOperation()) {
+                session.requireCurrent()
+                block(session)
+            }
+        }
+    }
+
+    private class ReceiptOperation : AbstractCoroutineContextElement(Key) {
+        companion object Key : CoroutineContext.Key<ReceiptOperation>
+    }
+
     private suspend fun <T> withAdmission(
         owner: Owner,
-        mutex: Mutex,
+        mutex: Mutex?,
         block: suspend (Session) -> T,
     ): T = coroutineScope {
         val job = checkNotNull(currentCoroutineContext()[Job])
@@ -101,7 +123,7 @@ class WalletConnectionRecovery @Inject constructor(
             jobs.add(job)
         }
         try {
-            mutex.withLock {
+            val admitted: suspend () -> T = {
                 checkOwner(owner)
                 val session = Session(owner, job)
                 try {
@@ -110,6 +132,7 @@ class WalletConnectionRecovery @Inject constructor(
                     session.active = false
                 }
             }
+            if (mutex == null) admitted() else mutex.withLock { admitted() }
         } finally {
             synchronized(stateLock) { jobs.remove(job) }
         }
@@ -124,6 +147,7 @@ class WalletConnectionRecovery @Inject constructor(
         isStillNeeded: suspend () -> Boolean = { true },
         block: suspend () -> T,
     ): T {
+        check(currentCoroutineContext()[ReceiptOperation] == null) { "Wallet replacement cannot drain itself" }
         val capturedGeneration = admittedGeneration()
         return lifecycleMutex.withLock {
             checkGeneration(capturedGeneration)
@@ -165,6 +189,23 @@ class WalletConnectionRecovery @Inject constructor(
             if (checkCancellation) job.ensureActive()
             check(active) { "Connection recovery operation ended" }
             checkOwner(owner)
+        }
+
+        internal fun requireCurrent() {
+            job.ensureActive()
+            check(active) { "Receipt operation ended" }
+            checkGeneration(owner.generation)
+        }
+
+        internal val receiptGeneration: Long get() = owner.generation
+
+        /** Final receipt writes run on Core after all suspending lookups have completed. */
+        internal fun <T> commitReceiptState(block: () -> T): T = synchronized(stateLock) {
+            job.ensureActive()
+            check(active) { "Receipt operation ended" }
+            checkAdmission()
+            if (owner.generation != generation) throw CancellationException("Receipt wallet changed")
+            block()
         }
 
         /** Publish local UI state only while this original owner still holds admission. */

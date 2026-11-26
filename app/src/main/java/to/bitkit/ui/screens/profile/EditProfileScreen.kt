@@ -34,10 +34,13 @@ import to.bitkit.models.PROFILE_LINKS_MAX_COUNT
 import to.bitkit.models.isValidProfileName
 import to.bitkit.ui.components.AddLinkSheet
 import to.bitkit.ui.components.AddTagSheet
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.ProfileEditForm
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.components.PubkyImage
+import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -57,14 +60,12 @@ fun EditProfileScreen(
         viewModel.effects.collect {
             when (it) {
                 EditProfileEffect.SaveSuccess -> onBackClick()
-                EditProfileEffect.DeleteSuccess,
-                EditProfileEffect.DisconnectSuccess,
-                -> onExitProfile()
+                is EditProfileEffect.RemovalCompleted -> if (viewModel.isRemovalCurrent(it)) onExitProfile()
             }
         }
     }
 
-    Content(
+    EditProfileContent(
         uiState = uiState,
         onBackClick = onBackClick,
         onNameChange = viewModel::onNameChange,
@@ -82,6 +83,7 @@ fun EditProfileScreen(
         onRetryDelete = viewModel::retryDeleteProfile,
         onDismissDeleteFailureDialog = viewModel::dismissDeleteFailureDialog,
         onDisconnectProfile = viewModel::disconnectProfile,
+        onLocalDisconnect = viewModel::showLocalDisconnectConfirmation,
         onDismissAddLinkSheet = viewModel::dismissAddLinkSheet,
         onSaveLink = viewModel::addLink,
         onDismissAddTagSheet = viewModel::dismissAddTagSheet,
@@ -90,7 +92,7 @@ fun EditProfileScreen(
 }
 
 @Composable
-private fun Content(
+internal fun EditProfileContent(
     uiState: EditProfileUiState,
     onBackClick: () -> Unit,
     onNameChange: (String) -> Unit,
@@ -108,6 +110,7 @@ private fun Content(
     onRetryDelete: () -> Unit,
     onDismissDeleteFailureDialog: () -> Unit,
     onDisconnectProfile: () -> Unit,
+    onLocalDisconnect: () -> Unit,
     onDismissAddLinkSheet: () -> Unit,
     onSaveLink: (String, String) -> Unit,
     onDismissAddTagSheet: () -> Unit,
@@ -185,28 +188,65 @@ private fun Content(
                 deleteLabel = stringResource(removal.label),
                 deleteSectionLabel = stringResource(removal.sectionLabel),
                 deleteIcon = removal.icon,
+                additionalActions = {
+                    if (uiState.canDisconnectLocally) {
+                        VerticalSpacer(16.dp)
+                        BodyS(
+                            text = stringResource(R.string.profile__disconnect_local_description),
+                            color = Colors.White64,
+                        )
+                        VerticalSpacer(12.dp)
+                        SecondaryButton(
+                            text = stringResource(R.string.profile__sign_out),
+                            enabled = !uiState.isBusy,
+                            onClick = onLocalDisconnect,
+                            modifier = Modifier.testTag("ProfileLocalDisconnect")
+                        )
+                    }
+                },
             )
         }
     }
 
     if (uiState.showDeleteDialog) {
         AppAlertDialog(
-            title = stringResource(removal.confirmTitle),
-            text = stringResource(removal.confirmDescription),
-            confirmText = stringResource(removal.confirmText),
+            title = stringResource(
+                if (uiState.isLocalDisconnect) R.string.profile__sign_out_title else removal.confirmTitle
+            ),
+            text = stringResource(
+                if (uiState.isLocalDisconnect) {
+                    R.string.profile__disconnect_local_description
+                } else {
+                    removal.confirmDescription
+                }
+            ),
+            confirmText = stringResource(
+                if (uiState.isLocalDisconnect) R.string.profile__sign_out else removal.confirmText
+            ),
             onConfirm = onConfirmDelete,
             onDismiss = onDismissDeleteDialog,
+            confirmTestTag = if (uiState.isLocalDisconnect) "ProfileLocalDisconnectConfirm" else "DialogConfirm",
         )
     }
 
     if (uiState.showDeleteFailureDialog) {
         AppAlertDialog(
             title = stringResource(removal.errorTitle),
-            text = stringResource(removal.errorDescription),
-            confirmText = stringResource(R.string.common__retry),
-            dismissText = stringResource(R.string.profile__sign_out),
-            onConfirm = onRetryDelete,
-            onDismiss = onDisconnectProfile,
+            text = stringResource(
+                if (uiState.canReviewRemoval) {
+                    R.string.profile__delete_review_description
+                } else {
+                    R.string.profile__cleanup_pending
+                }
+            ),
+            confirmText = stringResource(
+                if (uiState.canReviewRemoval) R.string.profile__review_removal else R.string.profile__sign_out
+            ),
+            dismissText = stringResource(
+                if (uiState.canReviewRemoval) R.string.profile__sign_out else R.string.common__close
+            ),
+            onConfirm = if (uiState.canReviewRemoval) onRetryDelete else onDisconnectProfile,
+            onDismiss = if (uiState.canReviewRemoval) onDisconnectProfile else onDismissDeleteFailureDialog,
             onDismissRequest = onDismissDeleteFailureDialog,
             properties = DialogProperties(
                 dismissOnClickOutside = true,
@@ -268,7 +308,7 @@ private fun AvatarSection(
 @Composable
 private fun Preview() {
     AppThemeSurface {
-        Content(
+        EditProfileContent(
             uiState = EditProfileUiState(
                 name = "Satoshi",
                 bio = "Authored the Bitcoin white paper",
@@ -291,6 +331,7 @@ private fun Preview() {
             onRetryDelete = {},
             onDismissDeleteFailureDialog = {},
             onDisconnectProfile = {},
+            onLocalDisconnect = {},
             onDismissAddLinkSheet = {},
             onSaveLink = { _, _ -> },
             onDismissAddTagSheet = {},

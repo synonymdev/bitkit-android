@@ -1,6 +1,7 @@
 package to.bitkit.appwidget
 
 import android.app.AlarmManager
+import android.app.Application
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -20,7 +21,7 @@ import to.bitkit.appwidget.model.AppWidgetType
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
 
-@Config(sdk = [34])
+@Config(application = Application::class, sdk = [34])
 @RunWith(RobolectricTestRunner::class)
 class AppWidgetRefreshSchedulerTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
