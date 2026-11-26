@@ -247,7 +247,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         whenever(payer.prepareProof(any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
         whenever(payer.associateLightningPayment(any(), any(), any(), any())).thenReturn(Result.success(Unit))
         whenever(payer.payLightning(any(), anyOrNull(), anyOrNull(), any())).thenReturn(Result.success(PAYMENT_HASH))
-        whenever(payer.failLightningPayment(any(), any())).thenReturn(true)
+        whenever(payer.failLightningPayment(any(), any(), any())).thenReturn(true)
         whenever(payer.lightningPaymentStatus(any())).thenAnswer { nodeStatuses[it.getArgument<String>(0)] }
         whenever(payer.canListLightningPayments()).thenAnswer { nodeListsPayments }
     }
@@ -1056,12 +1056,13 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     @Test
     fun `unsaved sending stage releases the payment list and never sends`() = test {
         failSave = { "SENDING" in it }
+        val request = fixtures.paymentRequest()
 
-        val result = sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+        val result = sut.autoPay(request, listOf(fixtures.allowance()), identity)
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, result)
         assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED)), recordedOutcomes)
-        verify(payer).discardLightningProof(PAYMENT_HASH)
+        verify(payer).discardLightningProof(PAYMENT_HASH, request.id)
         verify(payer).releasePaymentList(any(), any(), any())
         verify(payer, never()).payLightning(any(), anyOrNull(), anyOrNull(), any())
     }
@@ -1071,10 +1072,12 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         whenever(
             payer.payLightning(any(), anyOrNull(), anyOrNull(), any())
         ).thenReturn(Result.failure(TestAllowanceError("send")))
-        whenever(payer.failLightningPayment(any(), any())).thenReturn(true, false)
+        whenever(payer.failLightningPayment(any(), any(), any())).thenReturn(true, false)
 
-        val first = sut.autoPay(fixtures.paymentRequest(id = "request-1"), listOf(fixtures.allowance()), identity)
-        val second = sut.autoPay(fixtures.paymentRequest(id = "request-2"), listOf(fixtures.allowance()), identity)
+        val firstRequest = fixtures.paymentRequest(id = "request-1")
+        val secondRequest = fixtures.paymentRequest(id = "request-2")
+        val first = sut.autoPay(firstRequest, listOf(fixtures.allowance()), identity)
+        val second = sut.autoPay(secondRequest, listOf(fixtures.allowance()), identity)
 
         assertEquals(PaykitAllowanceAutoPayResult.MANUAL, first)
         // An uncertain send stays with the node, whose payment event records the outcome.
@@ -1084,6 +1087,8 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             recordedOutcomes.map { it.outcome },
         )
         assertEquals(Stage.UNKNOWN, sut.localState(identity).journal.single().stage)
+        verify(payer).failLightningPayment(eq(PAYMENT_HASH), any(), eq(firstRequest.id))
+        verify(payer).failLightningPayment(eq(PAYMENT_HASH), any(), eq(secondRequest.id))
     }
 
     @Test
@@ -1092,7 +1097,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
         whenever(
             payer.payLightning(any(), anyOrNull(), anyOrNull(), any())
         ).thenReturn(Result.failure(TestAllowanceError("send")))
-        whenever(payer.failLightningPayment(any(), any())).thenReturn(true)
+        whenever(payer.failLightningPayment(any(), any(), any())).thenReturn(true)
 
         // The node's failure event lands during the failed send's release; a repeated release is owner-checked.
         var isSettling = false
@@ -1247,7 +1252,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             sut.lightningPaymentSettled(PAYMENT_HASH, succeeded = false)
             Result.failure(TestAllowanceError("send"))
         }
-        whenever(payer.failLightningPayment(any(), any())).thenReturn(true)
+        whenever(payer.failLightningPayment(any(), any(), any())).thenReturn(true)
 
         sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
 

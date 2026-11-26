@@ -1502,6 +1502,20 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `refused submission for one request keeps another request's proof of the same invoice`() = test {
+        val first = paymentRequest(MethodId.Bolt11.rawValue)
+        val second = paymentRequest(MethodId.Bolt11.rawValue, paymentRequestId = "second-request")
+        val repo = paymentProofRepo()
+        for (request in listOf(first, second)) {
+            repo.prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning).getOrThrow()
+            repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue, "bitkit").getOrThrow()
+        }
+
+        assertTrue(repo.failLightningPayment(PAYMENT_HASH, SparkError.SendRefused("refused"), second.id))
+        assertEquals(listOf(first.id), storedProofs.map { it.requestId })
+    }
+
+    @Test
     fun `onchain proof uses selected endpoint and transaction id`() = test {
         val txid = "ab".repeat(32)
         val request = paymentRequest(MethodId.P2wpkh.rawValue)

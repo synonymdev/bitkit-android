@@ -121,6 +121,7 @@ import to.bitkit.data.PrivatePaykitReservationData
 import to.bitkit.data.PrivatePaykitReservationStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.SparkSendAttempt
 import to.bitkit.data.UsdtPreference
 import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.dto.PlatformDetails
@@ -12176,7 +12177,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertEquals("Already paid", error.failure.message)
         }
         verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), anyOrNull(), any())
-        verify(paykitPaymentProofRepo, never()).failLightningPayment(any())
+        verify(paykitPaymentProofRepo, never()).failLightningPayment(any(), anyOrNull<PaykitPaymentRequestId>())
     }
 
     @Test
@@ -12376,6 +12377,133 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             on { invoice } doReturn bolt11
         }
         whenever(activityRepo.getActivity(paymentHash)).thenReturn(Result.success(BitkitActivity.Lightning(earlier)))
+    }
+
+    @Test
+    fun `repaying an amountless invoice still pending with another amount shows the pending amount`() = test {
+        val bolt11 = "lnbcrt1amountlesspending"
+        val invoice = lightningInvoice(bolt11, 0u)
+        val paymentHash = invoice.paymentHash.toHex()
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 2_000u))
+            .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
+        val earlier = mock<LightningActivity> {
+            on { value } doReturn 1_000u
+            on { txType } doReturn PaymentType.SENT
+            on { status } doReturn PaymentState.PENDING
+        }
+        whenever(activityRepo.getActivity(paymentHash)).thenReturn(Result.success(BitkitActivity.Lightning(earlier)))
+        val state = SendUiState(address = bolt11, payMethod = SendMethod.LIGHTNING, decodedInvoice = invoice)
+
+        sut.sendEffect.test {
+            setSendState(state.copy(amount = 2_000u))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            val pending = assertIs<SendEffect.NavigateToPending>(expectMostRecentItem())
+            assertEquals(1_000L, pending.amount)
+        }
+    }
+
+    @Test
+    fun `repaying an amountless invoice held by spark without activity shows the held amount`() = test {
+        val bolt11 = "lnbcrt1amountlessheld"
+        val invoice = lightningInvoice(bolt11, 0u)
+        val paymentHash = invoice.paymentHash.toHex()
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 2_000u))
+            .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
+        whenever(activityRepo.getActivity(paymentHash)).thenReturn(Result.success(null))
+        val attempt = SparkSendAttempt(attempt = 0, expiresAt = Long.MAX_VALUE, amountSats = 1_000u)
+        val cache = AppCacheData(
+            sparkSendAttempts = mapOf(paymentHash to attempt),
+            sparkUncertainSends = mapOf(paymentHash to 0L),
+        )
+        whenever(cacheStore.data).thenReturn(flowOf(cache))
+        val state = SendUiState(address = bolt11, payMethod = SendMethod.LIGHTNING, decodedInvoice = invoice)
+
+        sut.sendEffect.test {
+            setSendState(state.copy(amount = 2_000u))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            val pending = assertIs<SendEffect.NavigateToPending>(expectMostRecentItem())
+            assertEquals(1_000L, pending.amount)
+        }
+    }
+
+    @Test
+    fun `repaying an amountless invoice after a failed spark attempt without activity shows the new amount`() = test {
+        val bolt11 = "lnbcrt1amountlessdropped"
+        val invoice = lightningInvoice(bolt11, 0u)
+        val paymentHash = invoice.paymentHash.toHex()
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 2_000u))
+            .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
+        whenever(activityRepo.getActivity(paymentHash)).thenReturn(Result.success(null))
+        val attempt = SparkSendAttempt(attempt = 1, expiresAt = Long.MAX_VALUE, amountSats = 6_000u)
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(sparkSendAttempts = mapOf(paymentHash to attempt))))
+        val state = SendUiState(address = bolt11, payMethod = SendMethod.LIGHTNING, decodedInvoice = invoice)
+
+        sut.sendEffect.test {
+            setSendState(state.copy(amount = 2_000u))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            val pending = assertIs<SendEffect.NavigateToPending>(expectMostRecentItem())
+            assertEquals(2_000L, pending.amount)
+        }
+    }
+
+    @Test
+    fun `repaying an amountless invoice held by spark after a failed row shows the held amount`() = test {
+        val bolt11 = "lnbcrt1amountlessheldfailed"
+        val invoice = lightningInvoice(bolt11, 0u)
+        val paymentHash = invoice.paymentHash.toHex()
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 2_000u))
+            .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
+        val failed = mock<LightningActivity> {
+            on { value } doReturn 5_000u
+            on { txType } doReturn PaymentType.SENT
+            on { status } doReturn PaymentState.FAILED
+        }
+        whenever(activityRepo.getActivity(paymentHash)).thenReturn(Result.success(BitkitActivity.Lightning(failed)))
+        val attempt = SparkSendAttempt(attempt = 1, expiresAt = Long.MAX_VALUE, amountSats = 6_000u)
+        val cache = AppCacheData(
+            sparkSendAttempts = mapOf(paymentHash to attempt),
+            sparkUncertainSends = mapOf(paymentHash to 0L),
+        )
+        whenever(cacheStore.data).thenReturn(flowOf(cache))
+        val state = SendUiState(address = bolt11, payMethod = SendMethod.LIGHTNING, decodedInvoice = invoice)
+
+        sut.sendEffect.test {
+            setSendState(state.copy(amount = 2_000u))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            val pending = assertIs<SendEffect.NavigateToPending>(expectMostRecentItem())
+            assertEquals(6_000L, pending.amount)
+        }
+    }
+
+    @Test
+    fun `repaying an amountless invoice whose earlier payment failed shows the new amount as pending`() = test {
+        val bolt11 = "lnbcrt1amountlessfailed"
+        val invoice = lightningInvoice(bolt11, 0u)
+        val paymentHash = invoice.paymentHash.toHex()
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 2_000u))
+            .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
+        val earlier = mock<LightningActivity> {
+            on { value } doReturn 1_000u
+            on { txType } doReturn PaymentType.SENT
+            on { status } doReturn PaymentState.FAILED
+        }
+        whenever(activityRepo.getActivity(paymentHash)).thenReturn(Result.success(BitkitActivity.Lightning(earlier)))
+        val failedAttempt = SparkSendAttempt(attempt = 0, expiresAt = Long.MAX_VALUE, amountSats = 1_000u)
+        val cache = AppCacheData(sparkSendAttempts = mapOf(paymentHash to failedAttempt))
+        whenever(cacheStore.data).thenReturn(flowOf(cache))
+        val state = SendUiState(address = bolt11, payMethod = SendMethod.LIGHTNING, decodedInvoice = invoice)
+
+        sut.sendEffect.test {
+            setSendState(state.copy(amount = 2_000u))
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            advanceUntilIdle()
+            val pending = assertIs<SendEffect.NavigateToPending>(expectMostRecentItem())
+            assertEquals(2_000L, pending.amount)
+        }
     }
 
     @Test
@@ -16438,13 +16566,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
             if (preparationSucceeds) {
                 verify(paykitPaymentRequestRepo).accept(request)
-                verify(paykitPaymentProofRepo).failLightningPayment(paymentHash)
+                verify(paykitPaymentProofRepo).failLightningPayment(paymentHash, request.id)
                 verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
             } else {
                 verify(paykitPaymentRequestRepo, never()).accept(request)
                 verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
                 verify(paykitPaymentProofRepo, never()).associateLightningPayment(any(), any(), any(), eq("bitkit"))
-                verify(paykitPaymentProofRepo, never()).failLightningPayment(any())
+                verify(paykitPaymentProofRepo, never()).failLightningPayment(any(), anyOrNull<PaykitPaymentRequestId>())
             }
             clearInvocations(lightningRepo, paykitPaymentProofRepo, paykitPaymentRequestRepo, privatePaykitRepo)
         }
@@ -16503,7 +16631,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
             verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
         }
-        verify(paykitPaymentProofRepo, never()).failLightningPayment(any())
+        verify(paykitPaymentProofRepo, never()).failLightningPayment(any(), anyOrNull<PaykitPaymentRequestId>())
         verify(paykitPaymentProofRepo, never()).cancelPreparation(any())
         verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
     }
@@ -16535,7 +16663,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
             .thenReturn(Result.failure(error))
-        whenever(paykitPaymentProofRepo.failLightningPayment(invoicePaymentHash, error)).thenReturn(true)
+        whenever(paykitPaymentProofRepo.failLightningPayment(eq(invoicePaymentHash), eq(error), eq(request.id)))
+            .thenReturn(true)
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
             SendUiState(
@@ -16562,7 +16691,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 "bitkit",
             )
             verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
-            verify(paykitPaymentProofRepo).failLightningPayment(invoicePaymentHash, error)
+            verify(paykitPaymentProofRepo).failLightningPayment(invoicePaymentHash, error, request.id)
             verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
             verify(paykitPaymentProofRepo).cancelPreparation(request)
         }
@@ -16663,7 +16792,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.failure(error))
-        whenever(paykitPaymentProofRepo.failLightningPayment(paymentHash, error)).thenReturn(false)
+        whenever(paykitPaymentProofRepo.failLightningPayment(eq(paymentHash), eq(error), anyOrNull())).thenReturn(false)
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
             SendUiState(
@@ -16681,7 +16810,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertEquals(SendEffect.NavigateToPending(paymentHash, request.amount.atomic.toLong()), awaitItem())
         }
         verify(pendingPaymentRepo).track(paymentHash)
-        verify(paykitPaymentProofRepo, never()).failLightningPayment(any())
+        verify(paykitPaymentProofRepo, never()).failLightningPayment(any(), anyOrNull<PaykitPaymentRequestId>())
         verify(paykitPaymentProofRepo, never()).cancelPreparation(any())
         verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
     }
@@ -18929,7 +19058,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setSendEvent(SendEvent.PayConfirmed)
         advanceUntilIdle()
 
-        verify(paykitPaymentProofRepo).failLightningPayment("010203")
+        verify(paykitPaymentProofRepo).failLightningPayment("010203", request.id)
         verify(paykitPaymentProofRepo).cancelPreparation(request)
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
@@ -20066,7 +20195,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
             .thenReturn(Result.failure(NodeException.PaymentSendingFailed("no route")))
-        whenever(paykitPaymentProofRepo.failLightningPayment(any())).doSuspendableAnswer {
+        whenever(
+            paykitPaymentProofRepo.failLightningPayment(any(), anyOrNull<PaykitPaymentRequestId>())
+        ).doSuspendableAnswer {
             cleanup.await()
             Result.success(Unit)
         }
@@ -20083,7 +20214,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 sut.setSendEvent(SendEvent.PayConfirmed)
                 advanceUntilIdle()
                 assertTrue(awaitItem() is SendEffect.NavigateToError)
-                verify(paykitPaymentProofRepo, never()).failLightningPayment(any())
+                verify(paykitPaymentProofRepo, never()).failLightningPayment(any(), anyOrNull<PaykitPaymentRequestId>())
                 verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
             }
         } finally {
@@ -23321,7 +23452,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertTrue(awaitItem() is SendEffect.NavigateToError)
         }
         verify(pendingPaymentRepo, never()).track(any())
-        verify(paykitPaymentProofRepo).failLightningPayment(paymentHash)
+        verify(paykitPaymentProofRepo).failLightningPayment(paymentHash, request.id)
         verify(paykitPaymentProofRepo).cancelPreparation(request)
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
@@ -23423,7 +23554,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val error = NodeException.InsufficientFunds("refused")
         whenever(moveToSparkRepo.updateToSend(any(), any(), eq(request.amount.atomic), any()))
             .thenReturn(Result.failure(error))
-        whenever(paykitPaymentProofRepo.failLightningPayment(paymentHash, error)).thenReturn(false)
+        whenever(paykitPaymentProofRepo.failLightningPayment(eq(paymentHash), eq(error), anyOrNull())).thenReturn(false)
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
             SendUiState(
@@ -23443,9 +23574,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertTrue(awaitItem() is SendEffect.NavigateToError)
         }
         verify(pendingPaymentRepo, never()).track(any())
-        verify(paykitPaymentProofRepo).failLightningPayment(paymentHash)
+        verify(paykitPaymentProofRepo).failLightningPayment(paymentHash, request.id)
         verify(paykitPaymentProofRepo).cancelPreparation(request)
-        verify(paykitPaymentProofRepo, never()).failLightningPayment(eq(paymentHash), any())
+        verify(paykitPaymentProofRepo, never()).failLightningPayment(eq(paymentHash), any(), anyOrNull())
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
         verify(paykitAllowanceRepo).finishManualPayment("node-error-attempt", false, null)
@@ -23588,7 +23719,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(moveToSparkRepo, never()).updateToSend(any(), any(), any(), any())
         verify(closeChannelUseCase, never()).closeEmptiedByMove(any(), anyOrNull())
         verify(pendingPaymentRepo, never()).track(any())
-        verify(paykitPaymentProofRepo).failLightningPayment(paymentHash)
+        verify(paykitPaymentProofRepo).failLightningPayment(paymentHash, request.id)
         verify(paykitPaymentProofRepo).cancelPreparation(request)
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
