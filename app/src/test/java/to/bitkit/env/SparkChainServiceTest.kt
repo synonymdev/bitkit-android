@@ -44,12 +44,32 @@ class SparkChainServiceTest {
 
     @Test
     fun `on-chain spark funding needs the spark regtest chain on regtest`() {
-        assertFalse(Env.sparkSharesNodeChain(Network.REGTEST, regtestEsploraUrl = null, localSpark = null))
-        assertTrue(Env.sparkSharesNodeChain(Network.REGTEST, "http://10.0.2.2:3999", localSpark = null))
-        assertTrue(Env.sparkSharesNodeChain(Network.BITCOIN, regtestEsploraUrl = null, localSpark = null))
-        assertFalse(Env.sparkSharesNodeChain(Network.REGTEST, regtestEsploraUrl = null, localSpark = local))
-        assertFalse(Env.sparkSharesNodeChain(Network.REGTEST, local.chainUrl, local))
-        assertFalse(Env.sparkSharesNodeChain(Network.REGTEST, "http://10.0.2.2:3999", local))
-        assertFalse(Env.sparkSharesNodeChain(Network.REGTEST, null, local.copy(configBase64 = "")))
+        assertFalse(Env.sparkSharesNodeChain(Network.REGTEST, regtestEsploraUrl = null, null, nodeElectrumUrl = null))
+        assertTrue(Env.sparkSharesNodeChain(Network.REGTEST, "http://10.0.2.2:3999", null, nodeElectrumUrl = null))
+        assertTrue(Env.sparkSharesNodeChain(Network.BITCOIN, regtestEsploraUrl = null, null, nodeElectrumUrl = null))
+    }
+
+    @Test
+    fun `a local fixture shares the node chain only while the node runs on the fixture electrum`() {
+        fun shares(
+            spark: LocalSparkSettings? = local,
+            node: String? = "tcp://10.0.2.2:60001",
+            esplora: String? = null,
+        ) = Env.sparkSharesNodeChain(Network.REGTEST, esplora, spark, node, localHost = "10.0.2.2")
+
+        assertTrue(shares())
+        assertTrue(shares(spark = local.copy(chainUrl = "http://10.0.2.2:23090/api")))
+        assertTrue(
+            Env.sparkSharesNodeChain(Network.REGTEST, null, local, "tcp://127.0.0.1:60001", localHost = "127.0.0.1")
+        )
+        assertFalse(shares(node = null))
+        assertFalse(shares(node = "tcp://regtest.example:60001"))
+        assertFalse(shares(node = "ssl://electrs.bitkit.stag0.blocktank.to:9999"))
+        assertFalse(shares(node = "tcp://10.0.2.2:60002"))
+        assertFalse(shares(esplora = "http://10.0.2.2:3999"))
+        assertFalse(shares(esplora = local.chainUrl))
+        assertFalse(shares(spark = local.copy(configBase64 = "")))
+        assertFalse(shares(spark = local.copy(chainUrl = "http://127.0.0.1:23091/api")))
+        assertFalse(shares(spark = local.copy(chainUrl = "http://regtest.example:23090/api")))
     }
 }
