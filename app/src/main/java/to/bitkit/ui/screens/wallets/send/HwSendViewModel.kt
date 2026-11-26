@@ -31,6 +31,7 @@ import to.bitkit.ext.isHwDeviceBusy
 import to.bitkit.ext.isHwFirmwareError
 import to.bitkit.ext.isHwSessionFailure
 import to.bitkit.ext.isHwUserCancellation
+import to.bitkit.ext.isJadeDeviceLocked
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
@@ -640,8 +641,7 @@ class HwSendViewModel @Inject constructor(
         amountSats: ULong,
         satsPerVByte: ULong,
     ): HwFundingSignedTx {
-        ensureConnected(walletId)
-        val funding = withTimeout(COMPOSE_TIMEOUT) {
+        suspend fun compose() = withTimeout(COMPOSE_TIMEOUT) {
             hwWalletRepo.composeFundingTransaction(
                 walletId = walletId,
                 address = address,
@@ -649,13 +649,25 @@ class HwSendViewModel @Inject constructor(
                 satsPerVByte = satsPerVByte,
             ).getOrThrow()
         }
+
+        ensureConnected(walletId)
+        val firstAttempt = runSuspendCatching { compose() }
+        val error = firstAttempt.exceptionOrNull()
+        val funding = if (error == null) {
+            firstAttempt.getOrThrow()
+        } else {
+            // A Jade logged out on the device asks for its PIN here, where the sheet can still be left.
+            if (!error.isJadeDeviceLocked()) throw error
+            ensureConnected(walletId)
+            compose()
+        }
         return sign(walletId, funding)
     }
 
     private suspend fun sign(walletId: String, funding: HwFundingTransaction): HwFundingSignedTx {
         val firstAttempt = runSuspendCatching { signWithTimeoutCleanup(walletId, funding) }
         val error = firstAttempt.exceptionOrNull() ?: return firstAttempt.getOrThrow()
-        if (!error.isHwSessionFailure()) throw error
+        if (!error.isHwSessionFailure() && !error.isJadeDeviceLocked()) throw error
 
         ensureConnected(walletId)
         return signWithTimeoutCleanup(walletId, funding)

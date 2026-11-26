@@ -353,15 +353,14 @@ class JadeRepo @Inject constructor(
         expectedAddress: String,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
-            retryingOnceIfLocked {
-                jadeService.verifyAddress(
-                    network = Env.network.toJadeNetwork(),
-                    variant = addressType.jadeVariant,
-                    derivationPath = derivationPath,
-                    expectedAddress = expectedAddress,
-                )
-            }
+            jadeService.verifyAddress(
+                network = Env.network.toJadeNetwork(),
+                variant = addressType.jadeVariant,
+                derivationPath = derivationPath,
+                expectedAddress = expectedAddress,
+            )
         }.onFailure {
+            markLockedIfLoggedOut(it)
             Logger.error("Jade verifyAddress failed", it, context = TAG)
             _state.update { s -> s.copy(error = errorMessage(it)) }
         }
@@ -370,11 +369,10 @@ class JadeRepo @Inject constructor(
     /** Signs on the device and completes the PSBT into a broadcastable transaction. */
     suspend fun signPsbt(psbtBase64: String): Result<CompletedTransaction> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val signed = retryingOnceIfLocked {
-                jadeService.signPsbt(network = Env.network.toJadeNetwork(), psbtBase64 = psbtBase64)
-            }
+            val signed = jadeService.signPsbt(network = Env.network.toJadeNetwork(), psbtBase64 = psbtBase64)
             jadeService.finalizePsbt(originalPsbt = psbtBase64, signedPsbt = signed)
         }.onFailure {
+            markLockedIfLoggedOut(it)
             Logger.error("Jade signPsbt failed", it, context = TAG)
             _state.update { s -> s.copy(error = errorMessage(it)) }
         }
@@ -382,7 +380,10 @@ class JadeRepo @Inject constructor(
 
     suspend fun getMasterFingerprint(): Result<String> = withContext(ioDispatcher) {
         runSuspendCatching { jadeService.getMasterFingerprint(Env.network.toJadeNetwork()) }
-            .onFailure { Logger.error("Jade getMasterFingerprint failed", it, context = TAG) }
+            .onFailure {
+                markLockedIfLoggedOut(it)
+                Logger.error("Jade getMasterFingerprint failed", it, context = TAG)
+            }
     }
 
     suspend fun disconnect(): Result<Unit> = withContext(ioDispatcher) {
@@ -728,26 +729,12 @@ class JadeRepo @Inject constructor(
         }
     }
 
-    /**
-     * A Jade logged out or timed out on the device since it connected answers with [JadeException.DeviceLocked]:
-     * it asks for its PIN, must open the same wallet, and the request runs once more.
-     */
-    private suspend fun <T> retryingOnceIfLocked(operation: suspend () -> T): T {
-        try {
-            return operation()
-        } catch (e: Throwable) {
-            if (!e.isJadeDeviceLocked()) throw e
-            val current = _state.value.connected ?: throw e
-            Logger.info("The Jade locked since it connected; unlocking and retrying", context = TAG)
-            val locked = current.copy(versionInfo = current.versionInfo.copy(jadeState = JadeState.LOCKED))
-            _state.update { it.copy(connected = locked) }
-            val unlocked = ensureConnected(current.id, current.walletId).getOrThrow()
-            if (current.walletId != null && unlocked.walletId != current.walletId) {
-                Logger.warn("The Jade unlocked into another wallet than '${current.walletId}'", context = TAG)
-                throw HwWalletMismatchError()
-            }
-            return operation()
-        }
+    private fun markLockedIfLoggedOut(error: Throwable) {
+        if (!error.isJadeDeviceLocked()) return
+        val current = _state.value.connected ?: return
+        Logger.info("Marked Jade '${current.id}' locked after it logged out on the device", context = TAG)
+        val locked = current.copy(versionInfo = current.versionInfo.copy(jadeState = JadeState.LOCKED))
+        _state.update { it.copy(connected = locked) }
     }
 
     private suspend fun unlockConnected(): JadeVersionInfo {

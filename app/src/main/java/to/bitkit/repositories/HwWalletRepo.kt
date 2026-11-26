@@ -46,6 +46,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.isHwSessionFailure
+import to.bitkit.ext.isJadeDeviceLocked
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.scopedId
 import to.bitkit.ext.timestamp
@@ -705,6 +706,12 @@ class HwWalletRepo @Inject constructor(
 
         ensureConnected(walletId).getOrThrow()
         runSuspendCatching { verifyOnDevice() }
+            .recoverCatching { error ->
+                // A Jade logged out on the device asks for its PIN on reconnect, which also checks its wallet.
+                if (!error.isJadeDeviceLocked()) throw error
+                ensureConnected(walletId).getOrThrow()
+                verifyOnDevice()
+            }
             .recoverCatching { error ->
                 if (!error.isHwSessionFailure()) throw error
                 disconnectStaleSession(walletId).getOrThrow()

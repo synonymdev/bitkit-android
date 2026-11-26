@@ -730,38 +730,23 @@ class JadeRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `verifyAddress unlocks a jade logged out on the device and retries once`() = test {
-        val sut = connectedReadyRepo(listOf(knownUsb))
-        var calls = 0
-        whenever { jadeService.verifyAddress(any(), any(), any(), any()) }.doSuspendableAnswer {
-            if (calls++ == 0) throw AppError(JadeException.DeviceLocked())
-        }
-
-        val result = sut.verifyAddress(HwFundingAddressType.NATIVE_SEGWIT, "m/84'/1'/0'/0/0", "bcrt1q")
-
-        assertTrue(result.isSuccess)
-        assertEquals(2, calls)
-        verify(jadeService).unlock(JadeNetwork.REGTEST)
-        assertEquals(WALLET_ID, sut.state.value.connectedWalletId())
-    }
-
-    @Test
-    fun `signPsbt refuses a jade logged out on the device that unlocks into another wallet`() = test {
-        val sut = connectedReadyRepo(listOf(knownUsb, passphraseUsb))
-        whenever { jadeService.signPsbt(any(), any()) }
+    fun `a jade logged out on the device marks the session locked so ensureConnected unlocks it`() = test {
+        val sut = connectedReadyRepo()
+        whenever(jadeService.verifyAddress(any(), any(), any(), any()))
             .doSuspendableAnswer { throw AppError(JadeException.DeviceLocked()) }
-        whenever { jadeService.getAccountExport(any(), any(), any()) }.thenReturn(accountExport(xpub = "zpubPass"))
 
-        val result = sut.signPsbt("psbt")
+        val verified = sut.verifyAddress(HwFundingAddressType.NATIVE_SEGWIT, "m/84'/1'/0'/0/0", "bcrt1q")
 
-        assertIs<HwWalletMismatchError>(result.exceptionOrNull())
+        assertTrue(verified.isFailure)
+        assertTrue(sut.state.value.connected?.isLocked == true)
+        val unlocked = sut.ensureConnected(knownUsb.id, WALLET_ID).getOrThrow()
+        assertFalse(unlocked.isLocked)
+        assertEquals(WALLET_ID, unlocked.walletId)
         verify(jadeService).unlock(JadeNetwork.REGTEST)
-        verify(jadeService, times(1)).signPsbt(any(), any())
     }
 
-    /** A paired Jade connected and unlocked into [WALLET_ID]. */
-    private suspend fun connectedReadyRepo(known: List<KnownDevice>): JadeRepo {
-        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(known)
+    private suspend fun connectedReadyRepo(): JadeRepo {
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
         whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
         whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.READY))
         val sut = createRepo()
