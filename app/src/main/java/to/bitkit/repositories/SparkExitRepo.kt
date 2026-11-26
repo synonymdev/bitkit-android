@@ -660,9 +660,8 @@ class SparkExitRepo @Inject constructor(
         // On a chain Spark does not read, the exit would never see the payment.
         require(option.extraSats == 0uL || sharesNodeChain()) { "Spark does not read the node's chain" }
         val txid = if (option.extraSats > 0uL) {
-            runSuspendCatching {
-                sendFunding(address, option.extraSats, option.feeRates, option.totalSats.safe() - option.extraSats.safe())
-            }.getOrElse {
+            val approvedFeeSats = option.totalSats.safe() - option.extraSats.safe()
+            runSuspendCatching { sendFunding(address, option.extraSats, option.feeRates, approvedFeeSats) }.getOrElse {
                 // With no answer it may still go out: kept like a payment of unknown result.
                 pendingFundingTxid(it, address) ?: throw it
             }

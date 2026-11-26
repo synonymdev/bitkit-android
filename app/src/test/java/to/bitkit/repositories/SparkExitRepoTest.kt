@@ -2166,11 +2166,18 @@ class SparkExitRepoTest : BaseUnitTest() {
     fun `a higher fee paid from savings with no answer is kept as the exit's payment`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
         store.save(runningRecord())
-        stubFunding { Result.failure(OnchainSendPendingError(IOException("no answer"), "bump")) }
+        stubFunding {
+            // The error carries no txid: the send journal holds it, unresolved, for the funding address.
+            whenever(lightning.currentOnchainSendAttempt())
+                .thenReturn(refusedSavingsPayment().copy(evidence = OnchainSendEvidence.Unknown, txid = "bump"))
+            Result.failure(OnchainSendPendingError(IOException("no answer")))
+        }
         val sut = quotedSut(FakeSparkExitRecovering())
         sut.load().getOrThrow()
 
         sut.payHigherFee(SparkExitFeeBumpOption(FeeRate.FAST, 9uL, 6_000uL, 6_400uL)).getOrThrow()
+        // Progress says at once that it may still land, before any tick.
+        assertTrue(sut.state.value.isSavingsSendUnresolved)
         sut.onAppBackgrounded()
 
         // It may still go out, so the exit keeps it and its higher fee, and watches for it.
