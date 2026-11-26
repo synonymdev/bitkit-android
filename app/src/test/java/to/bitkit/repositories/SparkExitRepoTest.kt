@@ -1686,11 +1686,12 @@ class SparkExitRepoTest : BaseUnitTest() {
         // A payment with no answer may have gone out: it is never offered again.
         outcome = Result.failure(OnchainSendPendingError(IOException("no answer"), "pending"))
         assertTrue(sut.paySavingsRefusal(retry).isFailure)
+        // Stops the foreground loop before the checks, or runTest drives it forever when one fails.
+        sut.onAppBackgrounded()
         assertNull(assertNotNull(store.load()).savingsRefusal)
         // Kept as the exit's payment, so progress holds the ask until it lands or the own-payment wait forgets it.
         assertEquals("pending", store.load()?.fundingPaymentTxid)
         assertEquals(SparkExitFundingState.Paid, sut.state.value.fundingState)
-        sut.onAppBackgrounded()
 
         verify(lightning, times(2)).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
