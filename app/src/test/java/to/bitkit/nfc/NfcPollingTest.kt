@@ -1,6 +1,8 @@
 package to.bitkit.nfc
 
 import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -19,6 +21,16 @@ class NfcPollingTest {
         assertFalse(cameraStopsNfcPolling("0"))
         // CameraServiceProxy reads the property with SystemProperties.getInt, which falls back to 0 for "true".
         assertFalse(cameraStopsNfcPolling("true"))
+    }
+
+    @Test
+    fun `command exiting non-zero fails the read instead of returning its output`() {
+        assertFailsWith<IllegalStateException> { readCommandOutput("sh", "-c", "echo error; exit 1") }
+    }
+
+    @Test
+    fun `command exiting zero returns its output`() {
+        assertEquals("1\n", readCommandOutput("sh", "-c", "echo 1"))
     }
 }
 

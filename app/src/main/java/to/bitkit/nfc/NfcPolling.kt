@@ -36,7 +36,7 @@ internal fun peekCameraStopsNfcPolling(): Boolean? = cachedCameraStopsNfcPolling
  */
 internal fun deviceCameraStopsNfcPolling(): Boolean {
     cachedCameraStopsNfcPolling.get()?.let { return it }
-    return runCatching { readSystemProperty(NOTIFY_NFC_PROPERTY) }
+    return runCatching { readCommandOutput("getprop", NOTIFY_NFC_PROPERTY) }
         .onFailure { Logger.warn("Failed to read '$NOTIFY_NFC_PROPERTY'", it, context = TAG) }
         .map(::cameraStopsNfcPolling)
         .onSuccess {
@@ -46,11 +46,13 @@ internal fun deviceCameraStopsNfcPolling(): Boolean {
         .getOrDefault(false)
 }
 
-private fun readSystemProperty(name: String): String {
-    val process = ProcessBuilder("getprop", name).redirectErrorStream(true).start()
+/** Runs [command] and returns its output; throws when it times out or exits non-zero, so the read is not cached. */
+internal fun readCommandOutput(vararg command: String): String {
+    val process = ProcessBuilder(*command).redirectErrorStream(true).start()
     return runCatching {
         val exited = process.waitFor(GETPROP_TIMEOUT.inWholeMilliseconds, TimeUnit.MILLISECONDS)
-        check(exited) { "getprop timed out" }
+        check(exited) { "${command.first()} timed out" }
+        check(process.exitValue() == 0) { "${command.first()} failed with exit code ${process.exitValue()}" }
         process.inputStream.bufferedReader().use { it.readText() }
     }.also { process.destroy() }.getOrThrow()
 }
