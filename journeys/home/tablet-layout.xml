@@ -1,7 +1,7 @@
 <journey name="tablet layout">
   <description>
     On a tablet in landscape, the profile QR code, the home suggestion cards and the transfer intro art keep
-    phone-like sizes and leave their buttons on screen. Precondition: the Pixel_Tablet AVD (2560x1600 px, 320 dpi)
+    phone-like sizes (the intros put the art beside the text) and leave their buttons on screen. Precondition: the Pixel_Tablet AVD (2560x1600 px, 320 dpi)
     in landscape, an onboarded dev wallet with a Pubky profile, the home suggestion cards not dismissed, and dev
     mode on so `bitkit://screen/` deep links open. Android 16+ ignores the portrait lock on screens 600 dp and wider
     for apps targeting SDK 36, so Bitkit runs in landscape there. The intro art carries no tag; check it in a
@@ -17,8 +17,8 @@
     <action>Swipe up on the home screen to the widgets page</action>
     <action>Verify every suggestion card (tags starting with "Suggestion-") is fully visible in a single row above the Send and Receive bar</action>
     <action>Run `adb shell am start -W -a android.intent.action.VIEW -d "bitkit://screen/transfer-intro" to.bitkit.dev`</action>
-    <action>Take a screenshot and verify the lightning art ends above the "Spending balance" headline and the "TransferIntro-button" button is visible</action>
+    <action>Take a screenshot and verify the lightning art sits left of the "Spending balance" headline without overlapping it, and the "TransferIntro-button" button is visible and no wider than the text column</action>
     <action>Run `adb shell am start -W -a android.intent.action.VIEW -d "bitkit://screen/spending-intro" to.bitkit.dev`</action>
-    <action>Take a screenshot and verify the coin art ends above the "Transfer to spending" headline and the "SpendingIntro-button" button is visible</action>
+    <action>Take a screenshot and verify the coin art sits left of the "Transfer to spending" headline without overlapping it, and the "SpendingIntro-button" button is visible and no wider than the text column</action>
   </actions>
 </journey>

@@ -79,6 +79,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.TopBarGradient
 import to.bitkit.ui.theme.TopBarHeight
+import to.bitkit.ui.utils.TABLET_MIN_WIDTH
 
 @Composable
 fun ProfileScreen(
@@ -233,7 +234,11 @@ private fun ProfileBody(
     needsUpdate: Boolean,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val qrBlockMaxHeight = maxHeight - TopBarHeight - QR_BLOCK_TOP_GAP - QR_BLOCK_BOTTOM_GAP
+        val qrBlockMaxHeight = if (maxWidth >= TABLET_MIN_WIDTH) {
+            maxHeight - TopBarHeight - QR_BLOCK_TOP_GAP - QR_BLOCK_BOTTOM_GAP
+        } else {
+            Dp.Infinity
+        }
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -387,11 +392,9 @@ private fun QrFitColumn(
     header: @Composable () -> Unit,
     qr: @Composable () -> Unit,
     actions: @Composable () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     Layout(
-        contents = listOf(header, qr, actions),
-        modifier = modifier,
+        contents = listOf(header, qr, actions)
     ) { (headerMeasurables, qrMeasurables, actionsMeasurables), constraints ->
         val loose = constraints.copy(minWidth = 0, minHeight = 0, maxHeight = Constraints.Infinity)
         val headerPlaceables = headerMeasurables.map { it.measure(loose) }

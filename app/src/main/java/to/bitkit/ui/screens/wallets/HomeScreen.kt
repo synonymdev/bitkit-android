@@ -1143,8 +1143,8 @@ private fun SuggestionsSection(
         val gridHeight = (cardSize * rows) + (SUGGESTION_GRID_SPACING * (rows - 1))
         LazyVerticalGrid(
             columns = GridCells.Fixed(columns),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(SUGGESTION_GRID_SPACING),
+            verticalArrangement = Arrangement.spacedBy(SUGGESTION_GRID_SPACING),
             userScrollEnabled = false,
             modifier = Modifier
                 .fillMaxWidth()
