@@ -518,17 +518,16 @@ private fun ColumnScope.ApprovalDetails(
                     BodyM(text = stringResource(R.string.profile__auth_approval_usdt_disabled), color = Colors.White64)
                     VerticalSpacer(24.dp)
                 }
-                uiState.relayUrl?.let {
-                    RelaySection(relayUrl = it)
-                    VerticalSpacer(32.dp)
-                }
+                val showsPaykitAccess = uiState.bitkitClaim?.includesPaykitAccess == true
                 if (uiState.permissions.isNotEmpty()) {
                     PermissionsSection(permissions = uiState.permissions)
+                    if (uiState.relayUrl != null || showsPaykitAccess) SectionDivider()
                 }
-                if (uiState.bitkitClaim?.includesPaykitAccess == true) {
-                    VerticalSpacer(32.dp)
-                    PaykitAccessSection()
+                uiState.relayUrl?.let {
+                    RelaySection(relayUrl = it)
+                    if (showsPaykitAccess) SectionDivider()
                 }
+                if (showsPaykitAccess) PaykitAccessSection()
             }
 
             Column {
@@ -694,8 +693,12 @@ private fun RelaySection(relayUrl: String) {
                 BodySSB(text = relayUrl.asLiteralRequestText(), modifier = Modifier.testTag("PubkyAuthRelayOrigin"))
             }
         }
-        HorizontalDivider(color = Colors.White10)
     }
+}
+
+@Composable
+private fun SectionDivider() {
+    HorizontalDivider(color = Colors.White10, modifier = Modifier.padding(vertical = 12.dp))
 }
 
 @Composable

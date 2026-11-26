@@ -141,20 +141,46 @@ data class PubkyAuthRequest(
 
     /**
      * The relay URL that receives the authorization, without user info or fragment so the host cannot be disguised.
-     * This is a delivery destination, not a service identity.
+     * This is a delivery destination, not a service identity. Null only when the request has no relay.
      */
-    val relayDisplayUrl: String?
-        get() {
-            val uri = runCatching { URI(relay) }.getOrNull() ?: return null
-            val scheme = uri.scheme?.lowercase()?.takeIf { it in RELAY_SCHEMES } ?: return null
-            val host = uri.host?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
-            val port = if (uri.port >= 0) ":${uri.port}" else ""
-            val query = uri.rawQuery?.let { "?$it" }.orEmpty()
-            return "$scheme://$host$port${uri.rawPath.orEmpty()}$query"
-        }
+    val relayDisplayUrl: String? get() = displayRelay(relay)
 
     companion object {
         private val RELAY_SCHEMES = setOf("http", "https")
+
+        /** A relay host as the Pubky SDK's URL parser would keep it, with an optional port. */
+        private val RELAY_HOST_PORT = Regex("""(\[[0-9a-f:.]+]|[a-z0-9._~-]+)(:[0-9]{1,5})?""")
+
+        /** A host label the SDK's URL parser reads as a number, which makes the whole host an IPv4 address. */
+        private val NUMERIC_HOST_LABEL = Regex("[0-9]+|0x[0-9a-f]*")
+
+        /** An IPv4 address in the only form the SDK's URL parser leaves unchanged. */
+        private val CANONICAL_IPV4 = "(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])".let { Regex("""($it\.){3}$it""") }
+
+        /**
+         * The relay as shown on the approval sheet: scheme, host, port, path and query. Null when the destination the
+         * Pubky SDK would send to cannot be read from [relay] with certainty: a backslash, a space, control or
+         * non-ASCII characters, a missing or percent-encoded host, or a numeric host that is not a plain IPv4 address.
+         */
+        fun displayRelay(relay: String): String? {
+            if (relay.any { it.code <= ' '.code || it.code >= DEL || it == '\\' }) return null
+            val schemeEnd = relay.indexOf("://")
+            if (schemeEnd <= 0) return null
+            val scheme = relay.substring(0, schemeEnd).lowercase().takeIf { it in RELAY_SCHEMES } ?: return null
+            val rest = relay.substring(schemeEnd + "://".length)
+            val authorityEnd = rest.indexOfAny(charArrayOf('/', '?', '#')).takeIf { it >= 0 } ?: rest.length
+            val hostPort = rest.substring(0, authorityEnd).substringAfterLast('@').lowercase()
+            if (!RELAY_HOST_PORT.matches(hostPort)) return null
+            if (!hostPort.startsWith("[")) {
+                val host = hostPort.substringBefore(':')
+                val readsAsNumber = NUMERIC_HOST_LABEL.matches(host.removeSuffix(".").substringAfterLast('.'))
+                if (readsAsNumber && !CANONICAL_IPV4.matches(host)) return null
+            }
+            return "$scheme://$hostPort${rest.substring(authorityEnd).substringBefore('#')}"
+        }
+
+        /** First code point past printable ASCII. */
+        private const val DEL = 0x7F
 
         fun parse(
             rawUrl: String,
@@ -164,7 +190,10 @@ data class PubkyAuthRequest(
             homeserverPublicKey: String? = null,
             signupToken: String? = null,
             authorizationUrl: String? = rawUrl,
-        ): Result<PubkyAuthRequest> = parseBitkitClaim(rawUrl, capabilities).map { bitkitClaim ->
+        ): Result<PubkyAuthRequest> = parseBitkitClaim(rawUrl, capabilities).mapCatching { bitkitClaim ->
+            if (relay.isNotEmpty() && displayRelay(relay) == null) {
+                throw PubkyAuthRequestError.InvalidUrl(IllegalArgumentException("Unreadable Pubky auth relay"))
+            }
             val permissions = parseCapabilities(capabilities)
             PubkyAuthRequest(
                 rawUrl = rawUrl,

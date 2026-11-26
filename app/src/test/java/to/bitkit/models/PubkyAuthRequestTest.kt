@@ -215,14 +215,18 @@ class PubkyAuthRequestTest {
             "https://httprelay.pubky.app" to "https://httprelay.pubky.app",
             "http://user@10.0.2.2:15412/link?x=1#y" to "http://10.0.2.2:15412/link?x=1",
             "https://trusted.example@relay.example/in%20box/" to "https://relay.example/in%20box/",
-            "ftp://relay.example/inbox/" to null,
-            "relay.example/inbox/" to null,
-            "https:///inbox/" to null,
-            "not a url" to null,
-            "" to null,
+            "https://relay.example/a|b?c=^{d}`[e]" to "https://relay.example/a|b?c=^{d}`[e]",
+            "https://relay.example?x=1" to "https://relay.example?x=1",
+            "https://relay.example./link" to "https://relay.example./link",
+            "https://-re_lay~.1abc/link" to "https://-re_lay~.1abc/link",
+            "https://xn--e1aybc.example/link" to "https://xn--e1aybc.example/link",
+            "https://[2001:DB8::1]:8443/link" to "https://[2001:db8::1]:8443/link",
+            "https://127.0.0.1/link" to "https://127.0.0.1/link",
+            "https://evil.example/@httprelay.pubky.app/link" to "https://evil.example/@httprelay.pubky.app/link",
         )
 
         origins.forEach { (relay, origin) ->
+            assertEquals(origin, PubkyAuthRequest.displayRelay(relay), relay)
             val request = PubkyAuthRequest.parse(
                 rawUrl = authUrl("/pub/example.app/:rw"),
                 clientId = "example.app",
@@ -232,6 +236,61 @@ class PubkyAuthRequestTest {
 
             assertEquals(origin, request.relayDisplayUrl, relay)
         }
+    }
+
+    @Test
+    fun `relay whose destination cannot be read with certainty makes the request invalid`() {
+        val unreadable = listOf(
+            "https://evil.example\\@httprelay.pubky.app/link",
+            "https://httprelay.pubky.app\\.evil.example/link",
+            "https://реле.example/link",
+            "https://%65vil.example/link",
+            "https://0x7f.1/link",
+            "https://2130706433/link",
+            "https://1.2.3/link",
+            "https://127.0.0.1./link",
+            "https://relay.example /link",
+            "https://relay\t.example/link",
+            "https://relay.example:/link",
+            "https:///inbox/",
+            "https:/relay.example/inbox/",
+            "https:relay.example/inbox/",
+            "ftp://relay.example/inbox/",
+            "relay.example/inbox/",
+            "not a url",
+        )
+
+        unreadable.forEach { relay ->
+            assertNull(PubkyAuthRequest.displayRelay(relay), relay)
+            assertIs<PubkyAuthRequestError.InvalidUrl>(
+                PubkyAuthRequest.parse(
+                    rawUrl = authUrl("/pub/example.app/:rw"),
+                    clientId = "example.app",
+                    relay = relay,
+                    capabilities = "/pub/example.app/:rw",
+                ).exceptionOrNull(),
+                relay,
+            )
+        }
+    }
+
+    @Test
+    fun `relay is shown whenever a request has one`() {
+        val withoutRelay = PubkyAuthRequest.parseSignup(directSignupUrl("direct_signup")).getOrThrow()
+        val ringSignup = PubkyAuthRequest.parseSignup(ringSignupUrl()).getOrThrow()
+
+        assertEquals("", withoutRelay.relay)
+        assertNull(withoutRelay.relayDisplayUrl)
+        assertEquals("https://relay.example/inbox/", ringSignup.relayDisplayUrl)
+        assertIs<PubkyAuthRequestError.InvalidUrl>(
+            PubkyAuthRequest.parseSignup(
+                ringSignupUrl().replace("relay.example", "evil.example%5C%40relay.example"),
+            ).exceptionOrNull(),
+        )
+        assertIs<PubkyAuthRequestError.InvalidUrl>(
+            PubkyAuthRequest.parseSignup(ringSignupUrl().replace("relay.example", "rel%C3%A4y.example"))
+                .exceptionOrNull(),
+        )
     }
 
     @Test

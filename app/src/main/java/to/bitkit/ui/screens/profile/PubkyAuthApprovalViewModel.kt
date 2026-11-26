@@ -242,7 +242,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         val approvalState = _uiState.value
         if (approvalState.authUrl != authUrl) return
         if (request.bitkitClaim != approvalState.bitkitClaim || request.clientId != approvalState.clientId ||
-            request.permissions != approvalState.permissions
+            request.permissions != approvalState.permissions || request.relayDisplayUrl != approvalState.relayUrl
         ) {
             handleApprovalFailure(PubkyAuthRequestError.RequesterChanged, authUrl)
             return
