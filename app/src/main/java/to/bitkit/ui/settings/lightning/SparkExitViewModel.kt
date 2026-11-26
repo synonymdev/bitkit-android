@@ -75,8 +75,8 @@ class SparkExitViewModel @Inject constructor(
     private var fundingWatch: Job? = null
     private var savingsRetryPricing: Job? = null
 
-    /** Progress is open, so its refused savings payment is priced. */
-    private var isPricingSavingsRetry = false
+    /** Progress screens open, counted so a closing one never stops the pricing of one opened since. */
+    private var savingsRetryScreens = 0
 
     /** The savings fee a higher-fee payment was refused for, by rate: the next confirm approves at least that. */
     private val feeBumpFeeFloors = mutableMapOf<ULong, ULong>()
@@ -318,7 +318,7 @@ class SparkExitViewModel @Inject constructor(
      * at the new fee; none when the start had no such refusal.
      */
     fun loadSavingsRetry() {
-        if (!isPricingSavingsRetry) return
+        if (savingsRetryScreens == 0) return
         val hasRefusal = _uiState.value.record?.savingsRefusal != null
         // Only the latest price shows; one below a fee refused since is never offered (savingsRetryOffer).
         savingsRetryPricing?.cancel()
@@ -337,12 +337,13 @@ class SparkExitViewModel @Inject constructor(
 
     /** Progress opened: its refused savings payment is priced from here on. */
     fun startSavingsRetryPricing() {
-        isPricingSavingsRetry = true
+        savingsRetryScreens++
     }
 
     /** Progress closed: its refused savings payment is no longer priced, also by a refresh still running. */
     fun stopSavingsRetryPricing() {
-        isPricingSavingsRetry = false
+        savingsRetryScreens = (savingsRetryScreens - 1).coerceAtLeast(0)
+        if (savingsRetryScreens > 0) return
         savingsRetryPricing?.cancel()
         savingsRetryPricing = null
     }

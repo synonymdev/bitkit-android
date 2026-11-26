@@ -335,6 +335,29 @@ class SparkExitViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a refused savings payment is priced only while progress is open`() = test {
+        val refusal = SparkExitRecord.SavingsRefusal(20_000uL, 650uL)
+        exitState.value = SparkExitState(record = SparkExitFixtures.record().copy(savingsRefusal = refusal))
+        val retry = SparkExitSavingsRetry(20_000uL, 650uL, FeeRates(fast = 7u, mid = 4u, slow = 1u), canPay = true)
+        whenever(repo.priceSavingsRefusal()).thenReturn(Result.success(retry))
+        val sut = SparkExitViewModel(mock(), repo, sparkRepo)
+
+        sut.loadSavingsRetry()
+        verify(repo, never()).priceSavingsRefusal()
+
+        // A closing screen leaves a screen opened before its close finished priced.
+        sut.startSavingsRetryPricing()
+        sut.startSavingsRetryPricing()
+        sut.stopSavingsRetryPricing()
+        sut.loadSavingsRetry()
+        verify(repo, times(1)).priceSavingsRefusal()
+
+        sut.stopSavingsRetryPricing()
+        sut.loadSavingsRetry()
+        verify(repo, times(1)).priceSavingsRefusal()
+    }
+
+    @Test
     fun `a paid higher fee no longer shows the fee as too low`() {
         val running = SparkExitFixtures.record(SparkExitRecord.Phase.Running)
             .adopt(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1"))), 0L)
