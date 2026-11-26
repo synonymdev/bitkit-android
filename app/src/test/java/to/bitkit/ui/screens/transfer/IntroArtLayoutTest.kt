@@ -3,11 +3,13 @@ package to.bitkit.ui.screens.transfer
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.width
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -15,6 +17,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.R
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.utils.PHONE_MAX_WIDTH
+import kotlin.test.assertTrue
 
 @Config(sdk = [34])
 @RunWith(RobolectricTestRunner::class)
@@ -44,6 +48,15 @@ class IntroArtLayoutTest {
         setContent(fontScale = 2f)
 
         composeRule.onNodeWithTag(BUTTON_TAG).performScrollTo().assertIsDisplayed()
+    }
+
+    @Config(sdk = [34], qualifiers = "w962dp-h540dp-land")
+    @Test
+    fun `short landscape tablet keeps the button at text column width`() {
+        setContent(fontScale = 1f)
+
+        val button = composeRule.onNodeWithTag(BUTTON_TAG).assertIsDisplayed().getUnclippedBoundsInRoot()
+        assertTrue(button.width <= PHONE_MAX_WIDTH)
     }
 
     private fun setContent(fontScale: Float) {

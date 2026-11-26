@@ -34,9 +34,6 @@ import to.bitkit.ui.theme.TopBarHeight
 import to.bitkit.ui.utils.PHONE_MAX_WIDTH
 import to.bitkit.ui.utils.TABLET_MIN_WIDTH
 
-/** Shortest window that gets the tablet layout; shorter windows keep the phone layout so the button stays on screen */
-private val TABLET_LAYOUT_MIN_HEIGHT = 600.dp
-
 /** Headline size on a tablet, large enough to balance the art beside it */
 private val TABLET_TITLE_SIZE = 64.sp
 
@@ -58,7 +55,7 @@ fun IntroArtLayout(
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val isTablet = maxWidth >= TABLET_MIN_WIDTH && maxHeight >= TABLET_LAYOUT_MIN_HEIGHT
+        val isTablet = maxWidth >= TABLET_MIN_WIDTH
         if (isTablet && maxWidth > maxHeight) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
