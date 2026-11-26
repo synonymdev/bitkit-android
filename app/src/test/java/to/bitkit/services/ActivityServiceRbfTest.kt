@@ -39,6 +39,7 @@ import to.bitkit.repositories.PaykitReceivedPaymentContacts
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitContactResolver
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.RbfOriginalConfirmed
 import to.bitkit.test.connectionRecoveryFixture
 import javax.inject.Provider
 import kotlin.test.assertEquals
@@ -199,6 +200,30 @@ class ActivityServiceRbfTest : BaseUnitTest() {
             assertTrue(replaced)
             assertEquals(original, saved.getValue("a"))
             assertEquals(replacement, saved.getValue("b"))
+        }
+    }
+
+    @Test
+    fun `publication cannot retire an original that confirms during the wait`() = test {
+        val entered = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        whenever(cache.data).thenReturn(
+            flow {
+                entered.complete(Unit)
+                resume.await()
+                emit(AppCacheData())
+            }
+        )
+        withActivities { saved, _ ->
+            val publishing = async { runCatching { sut.publishRbfBoost("a", "b") } }
+            entered.await()
+            val original = saved.getValue("a").copy(confirmed = true)
+            saved["a"] = original
+            resume.complete(Unit)
+            val error = publishing.await().exceptionOrNull()
+            assertTrue(error is RbfOriginalConfirmed || error?.cause is RbfOriginalConfirmed)
+            assertEquals(original, saved.getValue("a"))
+            assertFalse(saved.getValue("b").isBoosted)
         }
     }
 

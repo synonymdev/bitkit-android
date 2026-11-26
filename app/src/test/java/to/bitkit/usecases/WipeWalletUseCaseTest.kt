@@ -69,6 +69,7 @@ import to.bitkit.repositories.PaykitUsdtPaymentRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PubkySwapsRouteRepo
 import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.AddressDerivationInfo
@@ -113,6 +114,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val hwWalletRepo = mock<HwWalletRepo>()
     private val lightningRepo = mock<LightningRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
+    private val pubkySwapsRouteRepo = mock<PubkySwapsRouteRepo>()
     private val profileRemovalStore = ProfileRemovalStore.inMemoryForTesting()
     private val contactPaymentSettingsRepo = mock<ContactPaymentSettingsRepo>()
     private val profilePause = PrivatePaykitRepo.ProfileDeletionPause()
@@ -187,6 +189,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         hwWalletRepo = hwWalletRepo,
         lightningRepo = lightningRepo,
         pubkyRepo = pubkyRepo,
+        pubkySwapsRouteRepo = pubkySwapsRouteRepo,
         privatePaykitRepo = privatePaykitRepoProvider,
         privatePaykitAddressReservationRepo = reservations,
         firebaseMessaging = firebaseMessaging,
@@ -525,6 +528,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             hwWalletRepo,
             lightningRepo,
             pubkyRepo,
+            pubkySwapsRouteRepo,
             privatePaykitRepo,
             privatePaykitAddressReservationRepo,
             migrationService,
@@ -536,6 +540,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
         inOrder.verify(pubkyRepo).removeBitkitPaymentEndpoints()
         inOrder.verify(lightningRepo).wipeStorage(0)
+        inOrder.verify(pubkySwapsRouteRepo).resetForWipe()
         inOrder.verify(migrationService).setNeedsPostMigrationSync(false)
         inOrder.verify(migrationService).cleanupAfterMigration()
         inOrder.verify(usdtRepo).wipe(any())

@@ -59,6 +59,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.commentAllowed
+import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.formatInvoiceExpiryRelative
 import to.bitkit.models.FeeRate
 import to.bitkit.models.PaykitAsset
@@ -108,6 +109,9 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 private val EXPIRY_REFRESH_INTERVAL = 60.seconds
+
+/** Characters of a swap provider's pubky shown on the confirm screen. */
+private const val PROVIDER_KEY_LENGTH = 12
 const val SEND_CONFIRM_RESET_RESULT_KEY = "SEND_CONFIRM_RESET_RESULT_KEY"
 
 @Composable
@@ -521,9 +525,8 @@ private fun ContentRunning(
                 }
             ),
             color = accentColor,
-            enabled = !isPreparing && uiState.isAmountInputValid &&
-                !uiState.isFundingSourceLoading &&
-                uiState.isHardwareFeeReady,
+            // an onchain refresh can lower a max amount, so the amount is not final until it settles
+            enabled = !isPreparing && uiState.canSwipeToPay(),
             loading = isPreparing || isLoading,
             confirmed = !isPreparing && isLoading,
             progress = swipeProgress,
@@ -537,6 +540,11 @@ private fun ContentRunning(
         VerticalSpacer(16.dp)
     }
 }
+
+private fun SendUiState.canSwipeToPay() = isAmountInputValid &&
+    !isFundingSourceLoading &&
+    isHardwareFeeReady &&
+    !(payMethod == SendMethod.ONCHAIN && onchainFeeUi.isLoading)
 
 @Composable
 private fun LnurlCommentSection(
@@ -870,7 +878,19 @@ private fun LightningDetails(
             }
         }
 
-        if (uiState.routedPaykitRoute?.serviceLeg != null) {
+        val swapRoute = uiState.paykitSwapRoute
+        val swapQuote = swapRoute?.quote
+        if (swapQuote != null) {
+            val provider = swapRoute.providerName?.takeIf { it.isNotBlank() }
+                ?: swapQuote.providerPubky.ellipsisMiddle(PROVIDER_KEY_LENGTH)
+            SendCell(caption = stringResource(R.string.wallet__send_swap_route)) {
+                BodySSB(
+                    text = stringResource(R.string.wallet__send_swap_route_provider, provider),
+                    maxLines = 1,
+                    modifier = Modifier.testTag("ReviewSwapRoute")
+                )
+            }
+        } else if (uiState.routedPaykitRoute?.serviceLeg != null) {
             SendCell(caption = stringResource(R.string.wallet__send_swap_route)) {
                 BodySSB(
                     text = stringResource(R.string.wallet__send_swap_route_spark),
@@ -923,9 +943,10 @@ private fun ContactRecipient(
     }
 }
 
-/** An on-chain pick or a Spark leg keeps the contact's LNURL in state without paying it. */
+/** An on-chain pick, a Spark leg or a swap route keeps the contact's LNURL in state without paying it. */
 private val SendUiState.paysLnurl: Boolean
-    get() = lnurl is LnurlParams.LnurlPay && payMethod == SendMethod.LIGHTNING && routedPaykitRoute?.serviceLeg == null
+    get() = lnurl is LnurlParams.LnurlPay && payMethod == SendMethod.LIGHTNING &&
+        routedPaykitRoute?.serviceLeg == null && activePaykitSwapRoute == null
 
 private val SendUiState.confirmationRequestNote: String?
     get() = paymentRequestNote?.trim()?.takeIf { isPaymentRequest && it.isNotEmpty() }
