@@ -61,10 +61,6 @@ fun ActionButton(
     }
 }
 
-/**
- * Draws Figma's 1px top-only inside stroke: the crescent between the circle and the same circle
- * shifted down by the stroke width, so the edge is 1dp at the top and fades out towards the sides.
- */
 private fun Modifier.topInnerHighlight(): Modifier = drawWithCache {
     val strokeWidth = 1.dp.toPx()
     val outer = Path().apply { addOval(Rect(Offset.Zero, size)) }
