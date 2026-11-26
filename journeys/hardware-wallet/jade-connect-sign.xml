@@ -36,7 +36,7 @@
       Close the receive sheet. Tap Send (testTag "Send"), enter a regtest address of the bitkit-docker node manually, and on the amount screen select the Jade as the funding source (testTag "AssetButton-switch")
     </action>
     <action>
-      Enter an amount below the Jade's available balance, tap Continue (testTag "ContinueAmount"), verify the FROM field (testTag "SendConfirmAssetButton") shows the Jade, and swipe to confirm
+      Enter an amount below the Jade's available balance, tap Continue (testTag "ContinueAmount"), tap Show details (testTag "SendConfirmToggleDetails"), verify the FROM field (testTag "SendConfirmAssetButton") shows the Jade, and swipe to confirm
     </action>
     <action>
       Verify the hardware sign screen shows the amount (testTag "HardwareSendAmount"), the destination address (testTag "HardwareSendAddress") and a "Sign With Jade" button (testTag "HardwareSendOpenTrezorConnect"), then tap it

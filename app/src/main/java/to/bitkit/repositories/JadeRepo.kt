@@ -694,7 +694,7 @@ class JadeRepo @Inject constructor(
     }
 
     private fun rejectUnusableDevice(version: JadeVersionInfo, expected: KnownDevice?) {
-        if (version.jadeState == JadeState.UNINIT) rejectDevice(HwDeviceUninitializedError())
+        if (version.jadeState == JadeState.UNINIT) rejectDevice(JadeException.DeviceUninitialized())
         // A device that reports no efuse MAC cannot prove it is the paired one, so it fails closed.
         val expectedHardwareId = expected?.jadeDeviceId?.takeIf { it.isNotBlank() }
         if (expectedHardwareId != null && expectedHardwareId != version.efuseMac) {

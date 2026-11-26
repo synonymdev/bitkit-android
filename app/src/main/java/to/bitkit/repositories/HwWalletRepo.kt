@@ -1545,9 +1545,6 @@ class HwReceiveAddressMismatchError(message: String) : AppError(message)
 /** The connected device holds another wallet than the one being signed from. */
 class HwWalletMismatchError : AppError("A different hardware wallet is connected")
 
-/** The device has no wallet yet; it has to be created or restored on the device itself. */
-class HwDeviceUninitializedError : AppError("Hardware device is not set up")
-
 /**
  * A removal asked to keep the wallet's backup data, but its tags could not be read. Raised before
  * anything is deleted, so the wallet is untouched and the removal can be retried or repeated without
