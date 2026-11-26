@@ -22,12 +22,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.PROFILE_NAME_MAX_LENGTH
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
 import to.bitkit.models.takeCodePoints
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.ProfileEditBase
+import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyProfileChangedError
 import to.bitkit.repositories.PubkyProfileTagsNotSavedError
 import to.bitkit.repositories.PubkyRepo
@@ -264,7 +266,7 @@ class EditProfileViewModel @Inject constructor(
                             privatePaykitRepo.removePublishedEndpointsForCleanup(TAG).getOrThrow()
                             pubkyRepo.signOut().getOrThrow()
                         }
-                        privatePaykitRepo.closeAndClear()
+                        privatePaykitRepo.closeAndClear().getOrThrow()
                     }
                 }
                 if (result.isSuccess) {
@@ -291,12 +293,25 @@ class EditProfileViewModel @Inject constructor(
                 isDeleting = true,
             )
         }
+        var privatePauseStarted = false
         try {
-            privatePaykitRepo.beginProfileDeletion()
-            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG, deferAppSync = true)
-            val result = pubkyRepo.deleteProfile()
+            val result = runSuspendCatching {
+                pubkyRepo.checkProfileDeletionAllowed().getOrThrow()
+                privatePauseStarted = true
+                privatePaykitRepo.beginProfileDeletion()
+                privatePaykitRepo.removePublishedEndpointsForCleanup(TAG, deferAppSync = true).getOrThrow()
+                pubkyRepo.deleteProfile().getOrThrow()
+            }
             if (result.isSuccess) {
-                privatePaykitRepo.closeAndClear()
+                privatePaykitRepo.closeAndClear().onFailure {
+                    Logger.error("Failed to clear local state after profile deletion", it, context = TAG)
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.common__error),
+                        description = it.message,
+                    )
+                    return
+                }
                 ToastEventBus.send(
                     type = Toast.ToastType.SUCCESS,
                     title = context.getString(_uiState.value.removal.successToast),
@@ -304,11 +319,25 @@ class EditProfileViewModel @Inject constructor(
                 _effects.emit(EditProfileEffect.DeleteSuccess)
             } else {
                 val error = requireNotNull(result.exceptionOrNull()) { "Profile delete failed without an error" }
-                Logger.error("Failed to delete profile", error, context = TAG)
-                _uiState.update { it.copy(showDeleteFailureDialog = true) }
+                if (error is PubkyContactError.ActiveProfileSubscriptions ||
+                    error == PubkyContactError.ActiveSubscription
+                ) {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.profile__delete_active_subscription),
+                        description = (error as? PubkyContactError.ActiveProfileSubscriptions)?.endsAtMillis?.let {
+                            context.getString(R.string.subscriptions__expires_date, it.toLocalizedTimestamp())
+                        },
+                    )
+                } else {
+                    Logger.error("Failed to delete profile", error, context = TAG)
+                    _uiState.update { it.copy(showDeleteFailureDialog = true) }
+                }
             }
         } finally {
-            withContext(NonCancellable) { privatePaykitRepo.endProfileDeletion() }
+            if (privatePauseStarted) {
+                withContext(NonCancellable) { privatePaykitRepo.endProfileDeletion() }
+            }
             _uiState.update { it.copy(isDeleting = false) }
         }
     }
