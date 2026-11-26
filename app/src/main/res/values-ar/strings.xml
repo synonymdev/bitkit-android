@@ -334,6 +334,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">تعذّر على Bitkit قراءة التقدم المحفوظ لهذا التحويل، لذا يعيد بناءه من السلسلة.</string>
     <string name="lightning__spark_exit__receive">ستستلم (تقديريًا)</string>
     <string name="lightning__spark_exit__savings_refused">لم يكتمل دفعك من المدخرات. ادفع مرة أخرى، أو موّل من محفظة أخرى.</string>
+    <string name="lightning__spark_exit__savings_unresolved">لم يتأكد دفعك من المدخرات بعد. انتظره قبل أن تدفع من محفظة أخرى.</string>
     <string name="lightning__spark_exit__send_to_address">إرسال إلى العنوان</string>
     <string name="lightning__spark_exit__step_funding">تأكيد رسوم الطوارئ</string>
     <string name="lightning__spark_exit__step_publish">نشر معاملة الخروج</string>

@@ -339,6 +339,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit non è riuscito a leggere l\'avanzamento salvato di questo trasferimento, quindi lo ricostruisce dalla blockchain.</string>
     <string name="lightning__spark_exit__receive">Riceverai (stima)</string>
     <string name="lightning__spark_exit__savings_refused">Il tuo pagamento dai risparmi non è andato a buon fine. Paga di nuovo o finanzia da un altro portafoglio.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Il tuo pagamento dai risparmi non è ancora confermato. Attendilo prima di pagare da un altro portafoglio.</string>
     <string name="lightning__spark_exit__send_to_address">Invia all\'indirizzo</string>
     <string name="lightning__spark_exit__step_funding">Conferma delle commissioni di emergenza</string>
     <string name="lightning__spark_exit__step_publish">Pubblicazione della transazione di uscita</string>

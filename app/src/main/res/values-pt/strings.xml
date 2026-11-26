@@ -219,6 +219,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">A Bitkit não conseguiu ler o progresso guardado desta transferência, por isso reconstrói-o a partir da blockchain.</string>
     <string name="lightning__spark_exit__receive">Recebe (estimativa)</string>
     <string name="lightning__spark_exit__savings_refused">O seu pagamento da poupança não foi concluído. Pague novamente ou financie a partir de outra carteira.</string>
+    <string name="lightning__spark_exit__savings_unresolved">O seu pagamento da poupança ainda não foi confirmado. Aguarde antes de pagar a partir de outra carteira.</string>
     <string name="lightning__spark_exit__send_to_address">Enviar para o endereço</string>
     <string name="lightning__spark_exit__step_funding">Confirmação das taxas de emergência</string>
     <string name="lightning__spark_exit__step_publish">Publicação da transação de saída</string>

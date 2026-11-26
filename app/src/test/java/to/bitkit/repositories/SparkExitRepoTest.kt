@@ -1692,8 +1692,12 @@ class SparkExitRepoTest : BaseUnitTest() {
         // A payment with no answer may have gone out: it is never offered again.
         outcome = Result.failure(OnchainSendPendingError(IOException("no answer"), "pending"))
         assertTrue(sut.paySavingsRefusal(retry).isFailure)
-        assertNull(assertNotNull(store.load()).savingsRefusal)
+        // Stops the foreground loop before the checks, or runTest drives it forever when one fails.
         sut.onAppBackgrounded()
+        assertNull(assertNotNull(store.load()).savingsRefusal)
+        // Kept as the exit's payment, so progress holds the ask until it lands or the own-payment wait forgets it.
+        assertEquals("pending", store.load()?.fundingPaymentTxid)
+        assertEquals(SparkExitFundingState.Paid, sut.state.value.fundingState)
 
         verify(lightning, times(2)).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
@@ -1759,7 +1763,11 @@ class SparkExitRepoTest : BaseUnitTest() {
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `a savings payment with an unknown result counts as paid and keeps the exit`() = test {
-        stubFunding { Result.success(OnchainSendOutcome.Unknown("maybe")) }
+        stubFunding {
+            whenever(lightning.currentOnchainSendAttempt())
+                .thenReturn(refusedSavingsPayment().copy(evidence = OnchainSendEvidence.Unknown, txid = "maybe"))
+            Result.success(OnchainSendOutcome.Unknown("maybe"))
+        }
         val sut = quotedSut(FakeSparkExitRecovering())
         sut.loadQuote().getOrThrow()
 
@@ -1769,6 +1777,7 @@ class SparkExitRepoTest : BaseUnitTest() {
         val record = assertNotNull(sut.state.value.record)
         assertEquals("maybe", record.fundingPaymentTxid)
         assertTrue(record.isAwaitingOwnPayment)
+        assertTrue(sut.state.value.isSavingsSendUnresolved, "progress says at once that it may still land")
         assertFalse(sut.canCancel)
         assertTrue(sut.cancel().isFailure)
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
@@ -1924,13 +1933,19 @@ class SparkExitRepoTest : BaseUnitTest() {
         whenever(lightning.currentOnchainSendAttempt()).thenReturn(refused)
         whenever(
             lightning.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
-        ).thenReturn(Result.success(OnchainSendOutcome.Accepted("again")))
+        ).doSuspendableAnswer {
+            whenever(lightning.currentOnchainSendAttempt())
+                .thenReturn(refused.copy(evidence = OnchainSendEvidence.Accepted, txid = "again"))
+            Result.success(OnchainSendOutcome.Accepted("again"))
+        }
         whenever(lightning.completeAcceptedOrdinaryFollowup(any())).thenReturn(Unit)
         val sut = quotedSut(FakeSparkExitRecovering())
         sut.load().getOrThrow()
         sut.tick().getOrThrow()
+        assertTrue(sut.state.value.isSavingsSendUnresolved)
 
         sut.retrySavingsPayment().getOrThrow()
+        sut.onAppBackgrounded()
 
         // The same attempt at the rate the user approved: it spends the refused payment's inputs, so at most one of
         // the two can ever confirm. No new payment picks other coins.
@@ -1946,7 +1961,92 @@ class SparkExitRepoTest : BaseUnitTest() {
         )
         assertEquals("again", assertNotNull(store.load()).fundingPaymentTxid)
         assertFalse(sut.state.value.isSavingsPaymentRefused)
+        assertFalse(sut.state.value.isSavingsSendUnresolved, "an accepted payment says nothing about landing")
+    }
+
+    @Test
+    fun `paying again from savings with no answer keeps the payment as the exit's own`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(awaitingRecord())
+        val refused = refusedSavingsPayment()
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(refused)
+        whenever(
+            lightning.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
+        ).doSuspendableAnswer {
+            // The error carries no txid: the send journal holds it, unresolved, for the funding address.
+            whenever(lightning.currentOnchainSendAttempt())
+                .thenReturn(refused.copy(evidence = OnchainSendEvidence.Unknown, txid = "maybe"))
+            Result.failure(OnchainSendPendingError(IOException("no answer")))
+        }
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+        sut.tick().getOrThrow()
+
+        assertTrue(sut.retrySavingsPayment().isFailure)
         sut.onAppBackgrounded()
+
+        assertEquals("maybe", assertNotNull(store.load()).fundingPaymentTxid)
+        assertEquals(SparkExitFundingState.Paid, sut.state.value.fundingState)
+        assertFalse(sut.state.value.isSavingsPaymentRefused, "it may still land, so it is not offered again")
+        assertTrue(sut.state.value.isSavingsSendUnresolved)
+        assertFalse(sut.canCancel, "savings may have paid this exit")
+    }
+
+    @Test
+    fun `paying again from savings keeps no payment the send journal rolled back to refused`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(awaitingRecord())
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(refusedSavingsPayment())
+        // It failed before it went out: the journal stays refused, though the error names the unsent candidate.
+        whenever(
+            lightning.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
+        ).thenReturn(Result.failure(OnchainSendPendingError(IOException("not sent"), "candidate")))
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+        sut.tick().getOrThrow()
+
+        assertTrue(sut.retrySavingsPayment().isFailure)
+        sut.onAppBackgrounded()
+
+        assertNull(assertNotNull(store.load()).fundingPaymentTxid)
+        assertTrue(sut.state.value.isSavingsPaymentRefused, "the retry is offered again")
+    }
+
+    @Test
+    fun `a tick that forgets the exit's own payment brings the ask back at once`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        // Seen at height 800, and the tip is 1000: the own-payment wait is over.
+        store.save(awaitingRecord(paidTxid = "lost").copy(fundingPaymentSeenAtHeight = 800u))
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain())
+        sut.load().getOrThrow()
+
+        sut.tick().getOrThrow()
+        sut.onAppBackgrounded()
+
+        assertNull(assertNotNull(store.load()).fundingPaymentTxid)
+        assertIs<SparkExitFundingState.Ask>(sut.state.value.fundingState)
+    }
+
+    @Test
+    fun `a short savings payment keeps its remainder asked when the refresh after it fails`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        val paid = "e1".repeat(32)
+        store.save(awaitingRecord(paidTxid = paid).copy(fundingPaymentSeenAtHeight = 990u))
+        val short = """[{"txid":"$paid","vout":0,"value":8000,"status":{"confirmed":true}}]"""
+        lateinit var sut: SparkExitRepo
+        // The tick's reads see the short payment confirmed; the refresh after the exit forgets it fails.
+        sut = quotedSut(
+            FakeSparkExitRecovering(),
+            fundingChain { short.takeIf { sut.state.value.record?.fundingPaymentTxid != null } },
+        )
+        sut.load().getOrThrow()
+
+        sut.tick().getOrThrow()
+        sut.onAppBackgrounded()
+
+        assertNull(assertNotNull(store.load()).fundingPaymentTxid)
+        val ask = assertIs<SparkExitFundingState.Ask>(sut.state.value.fundingState)
+        assertEquals(8000uL, ask.receivedSats, "the payment the first read found still counts")
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -2071,6 +2171,30 @@ class SparkExitRepoTest : BaseUnitTest() {
         val ended = quotedSut(FakeSparkExitRecovering())
         ended.load().getOrThrow()
         assertTrue(ended.payHigherFee(option).isFailure)
+    }
+
+    @Test
+    fun `a higher fee paid from savings with no answer is kept as the exit's payment`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(runningRecord())
+        stubFunding {
+            // The error carries no txid: the send journal holds it, unresolved, for the funding address.
+            whenever(lightning.currentOnchainSendAttempt())
+                .thenReturn(refusedSavingsPayment().copy(evidence = OnchainSendEvidence.Unknown, txid = "bump"))
+            Result.failure(OnchainSendPendingError(IOException("no answer")))
+        }
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+
+        sut.payHigherFee(SparkExitFeeBumpOption(FeeRate.FAST, 9uL, 6_000uL, 6_400uL)).getOrThrow()
+        // Progress says at once that it may still land, before any tick.
+        assertTrue(sut.state.value.isSavingsSendUnresolved)
+        sut.onAppBackgrounded()
+
+        // It may still go out, so the exit keeps it and its higher fee, and watches for it.
+        val record = assertNotNull(store.load())
+        assertEquals("bump", record.fundingPaymentTxid)
+        assertEquals(9uL, record.feeRateSatPerVbyte)
     }
 
     @Test

@@ -341,6 +341,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit no pudo leer el progreso guardado de esta transferencia, así que lo reconstruye a partir de la cadena.</string>
     <string name="lightning__spark_exit__receive">Recibes (estimado)</string>
     <string name="lightning__spark_exit__savings_refused">Tu pago desde ahorros no se completó. Paga de nuevo o financia desde otra billetera.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Tu pago desde ahorros aún no se confirmó. Espéralo antes de pagar desde otra billetera.</string>
     <string name="lightning__spark_exit__send_to_address">Enviar a dirección</string>
     <string name="lightning__spark_exit__step_funding">Confirmación de las comisiones de emergencia</string>
     <string name="lightning__spark_exit__step_publish">Publicación de la transacción de salida</string>

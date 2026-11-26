@@ -502,6 +502,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit couldn\'t read this transfer\'s saved progress, so it rebuilds it from the chain.</string>
     <string name="lightning__spark_exit__receive">You receive (estimate)</string>
     <string name="lightning__spark_exit__savings_refused">Your savings payment didn\'t go through. Pay again, or fund from another wallet.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Your savings payment hasn\'t confirmed yet. Wait for it before you pay from another wallet.</string>
     <string name="lightning__spark_exit__send_to_address">Send to address</string>
     <string name="lightning__spark_exit__step_funding">Confirmation of emergency fees</string>
     <string name="lightning__spark_exit__step_publish">Publishing of exit transaction</string>
