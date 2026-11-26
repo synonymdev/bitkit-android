@@ -231,6 +231,16 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a move leaves the cached channels when the node is not running`() = test {
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
+        val sut = createViewModel()
+
+        sut.move()
+
+        verify(lightningRepo, never()).syncState()
+    }
+
+    @Test
     fun `a move that leaves a balance worth moving shows the fee for the rest`() = test {
         whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(moved))
         whenever(moveToSparkRepo.movableSats()).thenReturn(50_000uL)

@@ -406,6 +406,17 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a split move still reports what moved when dropping its failed parts from Activity fails`() = test {
+        channelsRouting(50_000uL, maxPaySats = 30_000uL)
+        whenever(activityRepo.handlePaymentEvent(any())).thenThrow(IllegalStateException("core down"))
+        val plan = MoveToSparkPlan(sut.quoteAll().getOrThrow().firstPart, feeSats = 100uL)
+
+        val outcome = sut.moveAll(plan).getOrThrow()
+
+        assertEquals(MoveToSparkOutcome.Moved(24_994uL + 24_984uL, feeSats = 20uL), outcome)
+    }
+
+    @Test
     fun `a move that moves nothing keeps its failed parts in Activity`() = test {
         channelsRouting(1_800uL, maxPaySats = 1_000uL)
 
@@ -936,6 +947,26 @@ class MoveToSparkRepoTest : BaseUnitTest() {
             assertIs<MoveToSparkError.UpdateFallsShort>(result.exceptionOrNull())
             verify(lightningRepo, never()).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
         }
+
+    @Test
+    fun `update to send waits for Spark without holding back another move`() = test {
+        sendable(0uL)
+        sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
+        whenever(sparkRepo.estimateFeeSats(INVOICE, 60_000uL)).thenReturn(Result.success(SPARK_FEE))
+        whenever(sparkRepo.refreshState()).thenReturn(Result.success(Unit))
+        whenever(
+            lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+        ).thenReturn(Result.success("id"))
+        val updating = async { sut.updateToSend(quote, INVOICE, 60_000uL) }
+        val moving = async { sut.move(quote) }
+
+        nodeEvents.emit(Event.PaymentSuccessful("id", "hash", null, 9_000uL))
+
+        assertIs<MoveToSparkOutcome.Moved>(moving.await().getOrThrow())
+        assertFalse(updating.isCompleted)
+        sparkState.value = SparkState(isReady = true, balanceSats = 70_000uL)
+        assertEquals(MoveToSparkOutcome.Moved(0uL, feeSats = 0uL), updating.await().getOrThrow())
+    }
 
     @Test
     fun `update to send fails as unsettled while the move is in flight`() = test {

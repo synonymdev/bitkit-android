@@ -2225,7 +2225,7 @@ class BackupRepoTest : BaseUnitTest() {
                 createdAt = 123,
                 tagMetadata = emptyList(),
                 cache = AppCacheData(),
-                moveToSparkPaymentHashes = listOf("aa", "bb"),
+                moveToSparkPaymentHashes = listOf("aa"),
                 moveToSparkDroppedPaymentHashes = listOf("BB"),
             )
         )
@@ -2235,6 +2235,7 @@ class BackupRepoTest : BaseUnitTest() {
 
         assertTrue(cacheData.value.isActivityDeleted("bb", WalletScope.default))
         assertFalse(cacheData.value.isActivityDeleted("aa", WalletScope.default))
+        assertEquals(setOf("aa", "bb"), cacheData.value.moveToSparkHashes.toSet())
     }
 
     @Test

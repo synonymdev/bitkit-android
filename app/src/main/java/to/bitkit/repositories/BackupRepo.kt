@@ -1335,7 +1335,8 @@ class BackupRepo @Inject constructor(
                 sparkExitFundingRecoveryPending = it.sparkExitFundingRecoveryPending + restoredIndexKeys,
                 // Both apps back the moves up beside the cache; the device's own stay.
                 moveToSparkHashes = (
-                    it.moveToSparkHashes + cleanCache.moveToSparkHashes + parsed.moveToSparkPaymentHashes.orEmpty()
+                    it.moveToSparkHashes + cleanCache.moveToSparkHashes + parsed.moveToSparkPaymentHashes.orEmpty() +
+                        parsed.moveToSparkDroppedPaymentHashes.orEmpty()
                     ).map { hash -> hash.lowercase() }.distinct(),
                 // The other app backs up the move parts its Activity leaves out beside the moves.
                 deletedActivities = (
