@@ -806,8 +806,9 @@ class SparkRepo @Inject constructor(
             if (result.exceptionOrNull()?.isLeafSelectionFailure() != true || !canRetry()) return result
             Logger.info("Retrying Spark send '$attemptId' as Spark could not select its leaves", context = TAG)
             delay(LEAF_SELECTION_RETRY_DELAY)
-            // A cancel, block or identity change can land during the delay, so each resend is checked again.
-            if (!canRetry() || !onBeforeSend()) return result
+            // A cancel, block or identity change can land during the delay, so each resend is checked again. The
+            // authorization check can suspend, so the deadline and an exit hold are read after it.
+            if (!onBeforeSend() || !canRetry()) return result
             val retried = runSuspendCatching { sparkService.send(prepared, attemptId) }
             // A failed try can have committed a transfer before Spark selected leaves again, so a short balance or an
             // expiry on a retry, which would read as nothing sent, ends with the earlier leaf failure instead.
@@ -1419,6 +1420,7 @@ class SparkRepo @Inject constructor(
         maxDebitSats: ULong? = null,
         tags: List<String> = emptyList(),
         paymentDeadlineAt: Instant? = null,
+        recheckBeforeSend: suspend () -> Boolean = { true },
         onBeforeSend: suspend () -> Boolean = { true },
     ): Result<String> =
         withContext(bgDispatcher) {
@@ -1455,6 +1457,20 @@ class SparkRepo @Inject constructor(
                     )
                     journal = opened
                     cacheStore.update { it.copy(pendingSparkWithdrawal = opened) }
+                    // The proof and journal writes suspend, so the authorization is checked again after them.
+                    var isAllowed = false
+                    try {
+                        isAllowed = runSuspendCatching { recheckBeforeSend() }.getOrDefault(false)
+                    } finally {
+                        // Nothing was sent, so a refusal or a cancel closes the journal at once, and the refusal
+                        // reaches the caller even when that write fails.
+                        if (!isAllowed) {
+                            withContext(NonCancellable) {
+                                bestEffort("close the refused Spark withdrawal's journal") { clearJournal(opened) }
+                            }
+                        }
+                    }
+                    if (!isAllowed) throw ServiceError.PaymentStoppedAtSubmission()
                     spending {
                         // Saving the journal suspends, so the deadline and an exit that started meanwhile are checked
                         // last, before the send.

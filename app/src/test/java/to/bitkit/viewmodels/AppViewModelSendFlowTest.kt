@@ -900,6 +900,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.isPending(any())).thenReturn(true)
         whenever { paykitPaymentRequestRepo.ensurePaymentAllowed(any()) }.thenReturn(Result.success(Unit))
         whenever { paykitPaymentRequestRepo.claimForPayment(any()) }.thenReturn(Result.success(Unit))
+        whenever { lightningRepo.payInvoiceRecheckedAtSubmission(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()) }
+            .doSuspendableAnswer {
+                val check = it.getArgument<suspend () -> Boolean>(4)
+                when {
+                    !check() -> Result.failure(PaymentAbortedBeforeSend())
+                    !check() -> Result.failure(ServiceError.PaymentStoppedAtSubmission())
+                    else -> lightningRepo.payInvoice(it.getArgument(0), it.getArgument<ULong?>(1))
+                }
+            }
         whenever { lightningRepo.payInvoice(any(), anyOrNull(), anyOrNull(), any()) }.doSuspendableAnswer {
             if (it.getArgument<suspend () -> Boolean>(3)()) {
                 lightningRepo.payInvoice(it.getArgument(0), it.getArgument<ULong?>(1))
@@ -8626,7 +8635,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(),
-            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
         )
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
     }
@@ -14459,6 +14468,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                     contactPublicKey = anyOrNull(),
                     approvedMiningFeeSats = anyOrNull(),
                     reviewHigherFee = anyOrNull(),
+                    recheckBeforeSubmission = any(),
                 ),
             ).doSuspendableAnswer {
                 entered.complete(Unit)
@@ -14581,6 +14591,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
         verify(
             paykitPaymentProofRepo
@@ -15042,7 +15053,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `spark route pays the contact while spending is the source`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact")
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any()))
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any(), any()))
             .thenReturn(Result.success("txid"))
         setActiveContactPaymentContext("pubkycontact", privatePaymentContext(7uL))
         setSendState(
@@ -15056,7 +15067,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         confirmCurrentPayment()
 
-        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any())
+        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -15077,7 +15088,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         confirmCurrentPayment()
 
-        verify(paykitRouteRepo, never()).payServiceLeg(any(), anyOrNull(), any(), anyOrNull(), any())
+        verify(paykitRouteRepo, never()).payServiceLeg(any(), anyOrNull(), any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -15392,6 +15403,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -15717,9 +15729,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentProofRepo.verifyOriginalOnchainPayer(request, testPublicKey))
             .thenReturn(Result.success(Unit))
         whenever(
-            paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any()),
+            paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any(), any()),
         ).doSuspendableAnswer {
-            val onBeforeSend = it.getArgument<suspend () -> Boolean>(4)
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(5)
             if (onBeforeSend()) Result.success(txid) else Result.failure(AppError("refused"))
         }
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
@@ -15749,7 +15761,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(paykitPaymentProofRepo).completeSparkOnchainPayment(request, txid)
         }
         // Spark checks the request's deadline right before it sends.
-        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq(testPublicKey), any(), eq(deadline), any())
+        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq(testPublicKey), any(), eq(deadline), any(), any())
     }
 
     @Test
@@ -15777,9 +15789,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentProofRepo.verifyOriginalOnchainPayer(request, testPublicKey))
             .thenReturn(Result.success(Unit))
         whenever(
-            paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any()),
+            paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any(), any()),
         ).doSuspendableAnswer {
-            val onBeforeSend = it.getArgument<suspend () -> Boolean>(4)
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(5)
             onBeforeSend()
             Result.failure(AppError("send outcome lost"))
         }
@@ -15964,9 +15976,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 outcome
             }
         whenever(
-            paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any()),
+            paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any(), any()),
         ).doSuspendableAnswer {
-            val onBeforeSend = it.getArgument<suspend () -> Boolean>(4)
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(5)
             onBeforeSend()
             Result.failure(AppError("send outcome lost"))
         }
@@ -16001,7 +16013,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendLightningSats = 10_000u)
         whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
             .thenReturn(Result.success(PaykitRoute.Service(leg)))
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any()))
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any(), any()))
             .thenReturn(Result.success("txid"))
         setActiveContactPaymentContext("pubkycontact", privatePaymentContext(7uL))
         setSendState(
@@ -16020,7 +16032,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         confirmCurrentPayment()
 
         verify(lightningRepo, never()).fetchLnurlInvoice(any(), any(), anyOrNull())
-        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any())
+        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -16058,9 +16070,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             false
         }
         whenever(
-            paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any()),
+            paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any(), any()),
         ).doSuspendableAnswer {
-            val onBeforeSend = it.getArgument<suspend () -> Boolean>(4)
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(5)
             onBeforeSend()
             Result.failure(AppError("send outcome lost"))
         }
@@ -16092,7 +16104,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `spark route saves the tags picked on confirmation`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact")
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), eq(listOf("rent")), anyOrNull(), any()))
+        whenever(
+            paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), eq(listOf("rent")), anyOrNull(), any(), any())
+        )
             .thenReturn(Result.success("txid"))
         setActiveContactPaymentContext("pubkycontact", privatePaymentContext(7uL))
         setSendState(
@@ -16107,7 +16121,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         confirmCurrentPayment()
 
-        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq("pubkycontact"), eq(listOf("rent")), anyOrNull(), any())
+        verify(
+            paykitRouteRepo
+        ).payServiceLeg(eq(leg), eq("pubkycontact"), eq(listOf("rent")), anyOrNull(), any(), any())
     }
 
     @Test
@@ -16120,7 +16136,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         refuseSparkLeg(SparkError.SendRefused("Spark balance can't cover the withdrawal"))
     }
 
-    private suspend fun TestScope.refuseSparkLeg(error: Throwable) {
+    @Test
+    fun `a spark leg refused at its last authorization check releases the request proof without a spark sync`() = test {
+        refuseSparkLeg(ServiceError.PaymentStoppedAtSubmission(), isBlockedBeforeSend = true)
+    }
+
+    private suspend fun TestScope.refuseSparkLeg(error: Throwable, isBlockedBeforeSend: Boolean = false) {
         val leg = sparkRouteLeg("bcrt1qroutedrequest")
         val request = paymentRequest().copy(
             amount = PaykitAmount(PaykitAsset.BTC, leg.deliveredSat),
@@ -16143,10 +16164,16 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(lightningRepo.sparkWithdrawalOutcome(any(), any(), any())).thenReturn(SparkWithdrawalOutcome.Unknown)
         whenever(paykitPaymentProofRepo.releaseRefusedSparkOnchainProof(request)).thenReturn(true)
         whenever(
-            paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any()),
+            paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any(), any()),
         ).doSuspendableAnswer {
-            val onBeforeSend = it.getArgument<suspend () -> Boolean>(4)
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(5)
             onBeforeSend()
+            if (isBlockedBeforeSend) {
+                // The contact is blocked once the proof is started, so the last check refuses it.
+                whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request))
+                    .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
+                check(!it.getArgument<suspend () -> Boolean>(4)())
+            }
             Result.failure(error)
         }
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
@@ -16178,7 +16205,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any()))
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any(), any()))
             .thenReturn(Result.failure(AppError("send failed")))
         whenever(paykitPaymentProofRepo.releaseUnsentSparkOnchainProof(request)).thenReturn(true)
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
@@ -16317,6 +16344,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -16324,7 +16352,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `spending retried after a refused reroute and a switch back routes through spark again`() = test {
         val leg = sparkRouteLeg("bcrt1qroutedcontact")
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 10_000u)
-        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any()))
+        whenever(paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any(), any()))
             .thenReturn(Result.success("txid"))
         whenever(paykitRouteRepo.route(any(), any(), any(), any(), any()))
             .thenReturn(Result.success(PaykitRoute.Direct(leg.endpoint)))
@@ -16360,7 +16388,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             "the quote recovered, so Spark carries it",
         )
         confirmCurrentPayment()
-        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any())
+        verify(paykitRouteRepo).payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -16404,9 +16432,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
         whenever(paykitPaymentProofRepo.releaseUnsentSparkOnchainProof(request)).thenReturn(true)
         whenever(
-            paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any()),
+            paykitRouteRepo.payServiceLeg(eq(leg), eq(testPublicKey), any(), anyOrNull(), any(), any()),
         ).doSuspendableAnswer {
-            val onBeforeSend = it.getArgument<suspend () -> Boolean>(4)
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(5)
             runSuspendCatching { onBeforeSend() }.map { "never" }
         }
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
@@ -16435,9 +16463,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(lightningRepo.sparkWithdrawalOutcome(leg.endpoint.value, leg.deliveredSat, emptySet()))
             .thenReturn(SparkWithdrawalOutcome.Unknown)
         whenever(
-            paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any()),
+            paykitRouteRepo.payServiceLeg(eq(leg), eq("pubkycontact"), any(), anyOrNull(), any(), any()),
         ).doSuspendableAnswer {
-            val onBeforeSend = it.getArgument<suspend () -> Boolean>(4)
+            val onBeforeSend = it.getArgument<suspend () -> Boolean>(5)
             onBeforeSend()
             Result.failure(AppError("send outcome lost"))
         }
@@ -16595,6 +16623,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -16647,6 +16676,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
         verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(
             any(),
@@ -16841,6 +16871,113 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             }
             clearInvocations(lightningRepo, paykitPaymentProofRepo, paykitPaymentRequestRepo, privatePaykitRepo)
         }
+    }
+
+    @Test
+    fun `a payment request blocked right before submission sends nothing and clears the proof`() = test {
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1paymentrequest"
+        val paymentHash = "010203"
+        val privateContext = privatePaymentContext(7uL)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(
+            paykitPaymentProofRepo.prepare(
+                request,
+                MethodId.Bolt11.rawValue,
+                "bitkit",
+                PaykitPaymentProofKind.Lightning
+            ),
+        ).doSuspendableAnswer {
+            setSendState(sut.sendUiState.value.copy(decodedInvoice = lightningInvoice(bolt11, request.amount.atomic)))
+            Result.success(Unit)
+        }
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(
+            paykitPaymentProofRepo.associateLightningPayment(request, paymentHash, MethodId.Bolt11.rawValue, "bitkit")
+        ).doSuspendableAnswer {
+            // Allowed at the check before the send, blocked by the time it is submitted.
+            whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request))
+                .thenReturn(Result.success(Unit), Result.failure(PaykitPaymentRequestError.RequestUnavailable))
+            Result.success(Unit)
+        }
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = request.amount.atomic,
+                payMethod = SendMethod.LIGHTNING,
+                isPaymentRequest = true,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
+        verify(paykitPaymentProofRepo).failLightningPayment(paymentHash, request.id)
+        verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
+        verify(pendingPaymentRepo, never()).track(any())
+    }
+
+    @Test
+    fun `a payment request blocked before a spark resend stays pending and keeps its proof`() = test {
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1paymentrequest"
+        val paymentHash = "010203"
+        val privateContext = privatePaymentContext(7uL)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(
+            paykitPaymentProofRepo.prepare(
+                request,
+                MethodId.Bolt11.rawValue,
+                "bitkit",
+                PaykitPaymentProofKind.Lightning
+            ),
+        ).doSuspendableAnswer {
+            setSendState(sut.sendUiState.value.copy(decodedInvoice = lightningInvoice(bolt11, request.amount.atomic)))
+            Result.success(Unit)
+        }
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(
+            paykitPaymentProofRepo.associateLightningPayment(request, paymentHash, MethodId.Bolt11.rawValue, "bitkit")
+        ).doSuspendableAnswer {
+            // Allowed before the send and at submission, blocked before Spark resends after a leaf failure.
+            whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request)).thenReturn(
+                Result.success(Unit),
+                Result.success(Unit),
+                Result.failure(PaykitPaymentRequestError.RequestUnavailable),
+            )
+            Result.success(Unit)
+        }
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = request.amount.atomic,
+                payMethod = SendMethod.LIGHTNING,
+                isPaymentRequest = true,
+            ),
+        )
+
+        whenever(lightningRepo.payInvoiceRecheckedAtSubmission(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .doSuspendableAnswer {
+                val check = it.getArgument<suspend () -> Boolean>(4)
+                // The first try may have committed a transfer, so the refused resend leaves the send uncertain.
+                repeat(3) { check() }
+                Result.failure(PaymentPendingException(paymentHash))
+            }
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(paykitPaymentProofRepo, never())
+            .failLightningPayment(eq(paymentHash), anyOrNull<PaykitPaymentRequestId>())
+        verify(privatePaykitRepo, never()).releasePrivatePaymentList(any(), any())
+        verify(pendingPaymentRepo).track(paymentHash)
     }
 
     @Test
@@ -17604,6 +17741,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -17751,6 +17889,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -17845,6 +17984,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -18899,6 +19039,51 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an onchain request blocked while its send is prepared sends nothing and releases it`() = test {
+        val request = paymentRequest()
+        val privateContext = privatePaymentContext(7uL)
+        var isBlocked = false
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.ensurePaymentAllowed(request)).doSuspendableAnswer {
+            if (isBlocked) Result.failure(PaykitPaymentRequestError.RequestUnavailable) else Result.success(Unit)
+        }
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        stubOnchainSend(
+            address = "bcrt1qblockedwhileprepared",
+            sats = request.amount.atomic,
+            result = Result.success(OnchainSendOutcome.Accepted("txid")),
+            beforeRecheck = { isBlocked = true },
+        )
+        setActiveContactPaymentContext(
+            testPublicKey,
+            privateContext,
+            incomingPaymentRequest = request,
+            isInitialSubscriptionPayment = true,
+        )
+        setSendState(
+            SendUiState(
+                address = "bcrt1qblockedwhileprepared",
+                amount = request.amount.atomic,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+                isInitialSubscriptionPayment = true,
+            )
+        )
+
+        sut.sendEffect.test {
+            confirmCurrentPayment()
+
+            assertTrue(awaitItem() is SendEffect.NavigateToError)
+        }
+        assertTrue(isBlocked)
+        verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
+        verify(paykitPaymentProofRepo).failOnchainPayment(request)
+    }
+
+    @Test
     fun `uncertain onchain failure resolves the matching pending payment`() = test {
         val request = paymentRequest()
         val privateContext = privatePaymentContext(7uL)
@@ -19125,6 +19310,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -19173,6 +19359,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -19241,6 +19428,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -19327,7 +19515,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(paykitPaymentProofRepo).cancelPreparation(request)
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
-        verify(lightningRepo).payInvoice(any(), anyOrNull(), eq(Instant.parse(quote.expiresAt)), any())
+        verify(
+            lightningRepo
+        ).payInvoiceRecheckedAtSubmission(any(), anyOrNull(), eq(Instant.parse(quote.expiresAt)), anyOrNull(), any())
     }
 
     @Test
@@ -19371,6 +19561,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -20111,6 +20302,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -22040,6 +22232,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
                 reviewHigherFee = anyOrNull(),
+                recheckBeforeSubmission = any(),
             )
         }.doSuspendableAnswer { invocation ->
             runSuspendCatching {
@@ -22085,6 +22278,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -22119,6 +22313,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -22128,6 +22323,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         result: Result<OnchainSendOutcome>,
         invokeBeforeSendAttempt: Boolean = true,
         broadcastTxId: String? = null,
+        beforeRecheck: (() -> Unit)? = null,
     ) {
         whenever {
             lightningRepo.sendOnChain(
@@ -22150,12 +22346,18 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
                 reviewHigherFee = anyOrNull(),
+                recheckBeforeSubmission = any(),
             )
         }.doSuspendableAnswer { invocation ->
             kotlin.check(invocation.getArgument<String>(0) == address)
             kotlin.check(invocation.getArgument<Long>(1).toULong() == sats)
             runSuspendCatching {
                 if (invokeBeforeSendAttempt) invocation.getArgument<suspend () -> Unit>(9)()
+                beforeRecheck?.let {
+                    it()
+                    runSuspendCatching { invocation.getArgument<suspend () -> Unit>(19)() }
+                        .getOrElse { error -> throw OnchainSendNotDispatchedError(error) }
+                }
                 if (broadcastTxId != null) invocation.getArgument<suspend (String) -> Unit>(10)(broadcastTxId)
                 result.getOrThrow()
             }
@@ -25697,7 +25899,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(lightningRepo, never()).sendOnChain(
             any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             anyOrNull(), any(), any(), any(), any(), anyOrNull(),
-            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
         )
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
         verify(paykitPaymentProofRepo, never()).prepare(any(), any(), any(), any(), anyOrNull(), anyOrNull())

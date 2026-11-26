@@ -2021,6 +2021,39 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a withdrawal refused once its journal is written never leaves`() = test {
+        val sut = journaledSpark()
+        var isBlocked = false
+        whenever(cacheStore.update(any())).doSuspendableAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+            // The contact is blocked while the journal is written.
+            if (cacheData.value.pendingSparkWithdrawal != null) isBlocked = true
+        }
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(contactWithdrawal())
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, null, recheckBeforeSend = { !isBlocked })
+
+        assertIs<ServiceError.PaymentStoppedAtSubmission>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any(), anyOrNull())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `a withdrawal refused once its journal is written stays refused when closing the journal fails`() = test {
+        val sut = journaledSpark()
+        whenever(cacheStore.update(any())).doSuspendableAnswer {
+            // The journal opens, then closing it fails.
+            if (cacheData.value.pendingSparkWithdrawal != null) throw IOException("disk full")
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, null, recheckBeforeSend = { false })
+
+        assertIs<ServiceError.PaymentStoppedAtSubmission>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any(), anyOrNull())
+    }
+
+    @Test
     fun `a withdrawal whose proof is starting reads as in flight before its journal is written`() = test {
         val sut = journaledSpark()
         var outcomeWhileStarting: SparkWithdrawalOutcome? = null
@@ -5628,6 +5661,28 @@ class SparkRepoTest : BaseUnitTest() {
         assertIs<PaymentPendingException>(result.exceptionOrNull())
         verify(sparkService, times(1)).send(any(), anyOrNull())
         assertEquals(3, checks)
+    }
+
+    @Test
+    fun `a spark resend checks its deadline after its authorization check returns`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw leafSelectionFailure() }
+        val sut = createSut(CacheStore(InMemoryDataStore(AppCacheData()), clock))
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+        val deadline = now + 1.minutes
+        var checks = 0
+
+        // The retry's check returns allowed only after the deadline has passed.
+        val result = sut.payInvoice("lnbc1", 100uL, paymentDeadlineAt = deadline, onBeforeSend = {
+            if (++checks == 3) now = deadline + 1.minutes
+            true
+        })
+
+        assertIs<PaymentPendingException>(result.exceptionOrNull())
+        verify(sparkService, times(1)).send(any(), anyOrNull())
     }
 
     @Test

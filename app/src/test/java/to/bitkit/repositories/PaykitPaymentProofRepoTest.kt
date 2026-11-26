@@ -1489,6 +1489,9 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             LdkError(NodeException.PaymentSendingFailed("no route")),
             SparkError.SendRefused("Spark fee over the limit"),
             to.bitkit.utils.AppError(SparkError.SendRefused("Spark could not prepare the payment")),
+            ServiceError.PaymentStoppedAtSubmission(),
+            AppError(ServiceError.PaymentStoppedAtSubmission()),
+            PaymentAbortedBeforeSend(),
         )
         for (error in errors) {
             val request = paymentRequest(MethodId.Bolt11.rawValue)

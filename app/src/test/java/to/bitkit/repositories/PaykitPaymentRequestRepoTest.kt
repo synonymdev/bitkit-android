@@ -1687,6 +1687,24 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `an automatic payment is refused once its contact is blocked`() = test {
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        sut.ensureAutomaticPaymentAllowed(request).getOrThrow()
+
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.BLOCKED)),
+        )
+
+        assertEquals(
+            PaykitPaymentRequestError.RequestUnavailable,
+            sut.ensureAutomaticPaymentAllowed(request).exceptionOrNull(),
+        )
+    }
+
+    @Test
     fun `accept rejects a replacement proposal even when its terms match`() = test {
         val original = paymentRequestRecord().copy(proposalStreamItemId = 41uL)
         whenever(paykitSdkService.allPaymentRequests(anyOrNull())).thenReturn(listOf(original))
@@ -2160,6 +2178,10 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertFalse(sut.isPending(request))
         assertTrue(sut.pendingRequests.value.isEmpty())
         assertEquals(PaykitPaymentRequestError.RequestExpired, sut.ensurePaymentAllowed(request).exceptionOrNull())
+        assertEquals(
+            PaykitPaymentRequestError.RequestExpired,
+            sut.ensureAutomaticPaymentAllowed(request).exceptionOrNull(),
+        )
         assertEquals(PaymentRequestLifecycleState.ACCEPTED, sut.paymentRequestHistory.value.single().lifecycleState)
         assertEquals(deadline, sut.paymentRequestHistory.value.single().paymentDeadlineAt)
         verify(presentationStore, never()).removeAcceptedOneTimeIds(any(), any())
