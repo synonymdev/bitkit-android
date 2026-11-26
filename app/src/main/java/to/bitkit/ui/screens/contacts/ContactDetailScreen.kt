@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +34,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -201,41 +203,57 @@ private fun RequestOrPaySheet(
                 }
             }
             VerticalSpacer(24.dp)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                maxItemsInEachRow = if (LocalDensity.current.fontScale > 1.3f) 1 else 2,
-            ) {
-                SecondaryButton(
-                    text = stringResource(R.string.wallet__payment_request_pay),
-                    onClick = onPay,
-                    isLoading = isPayLoading,
-                    icon = {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_sent),
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("RequestOrPayPay")
+            val payLabel = stringResource(R.string.wallet__payment_request_pay)
+            val requestLabel = stringResource(R.string.wallet__payment_request_request)
+            val textMeasurer = rememberTextMeasurer()
+            val buttonStyle = MaterialTheme.typography.labelLarge
+            val iconWidth = 16.dp + ButtonSize.Large.primaryGap
+            val minimumButtonWidth = with(LocalDensity.current) {
+                maxOf(
+                    textMeasurer.measure(payLabel, buttonStyle, softWrap = false).size.width.toDp() +
+                        iconWidth + ButtonSize.Large.secondaryHorizontalPadding * 2,
+                    textMeasurer.measure(requestLabel, buttonStyle, softWrap = false).size.width.toDp() +
+                        iconWidth + ButtonSize.Large.primaryHorizontalPadding * 2,
                 )
-                PrimaryButton(
-                    text = stringResource(R.string.wallet__payment_request_request),
-                    onClick = onRequest,
-                    enabled = canRequest && !isPayLoading,
-                    icon = {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_received),
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("RequestOrPayRequest")
-                )
+            }
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    maxItemsInEachRow = if (maxWidth >= minimumButtonWidth * 2 + 16.dp) 2 else 1,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    SecondaryButton(
+                        text = payLabel,
+                        onClick = onPay,
+                        isLoading = isPayLoading,
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_sent),
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("RequestOrPayPay")
+                    )
+                    PrimaryButton(
+                        text = requestLabel,
+                        onClick = onRequest,
+                        enabled = canRequest && !isPayLoading,
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_received),
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("RequestOrPayRequest")
+                    )
+                }
             }
             VerticalSpacer(16.dp)
         }

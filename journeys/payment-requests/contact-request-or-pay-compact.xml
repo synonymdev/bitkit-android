@@ -5,7 +5,7 @@
   <actions>
     <action>Run `adb shell wm size 960x1920` and `adb shell wm density 480`</action>
     <action>Open bitkit://contact?pubky=&lt;requester-public-key&gt; on the payer and tap Pay (testTag "ContactPay")</action>
-    <action>Verify the Request or Pay sheet (testTag "RequestOrPaySheet") shows the Pay (testTag "RequestOrPayPay") and Request (testTag "RequestOrPayRequest") buttons side by side, both fully inside the screen bounds</action>
+    <action>Verify the Request or Pay sheet (testTag "RequestOrPaySheet") shows the Pay (testTag "RequestOrPayPay") and Request (testTag "RequestOrPayRequest") buttons with each label on one line and both buttons the same height, both fully inside the screen bounds; they stack when the labels do not fit side by side</action>
     <action>Close the sheet and run `adb shell settings put system font_scale 2.0`</action>
     <action>Tap Pay (testTag "ContactPay") again</action>
     <action>Verify Pay (testTag "RequestOrPayPay") and Request (testTag "RequestOrPayRequest") are stacked, both fully inside the screen bounds, and the headline and description can be scrolled to their last line without moving the buttons</action>
