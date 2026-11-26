@@ -1,13 +1,15 @@
 <journey name="import preview friend count">
   <description>
     Precondition: the import preview is open for a disposable Ring identity that follows exactly one
-    other profile. Repeat with an identity that follows two or more profiles. The count uses the
-    language's plural rules, so also repeat in Russian (Settings > General > Language).
+    other profile. Repeat with an identity that follows exactly two profiles, and optionally ones that
+    follow five or 21. The count uses the language's plural rules, so also repeat in Russian
+    (Settings > General > Language).
   </description>
   <actions>
     <action>Verify the friend count in the import preview reads "1 friend"</action>
-    <action>Open the import preview for an identity that follows several profiles and verify the count reads "N friends"</action>
+    <action>Open the import preview for the identity with 2 follows and verify the count reads "2 friends"</action>
     <action>Switch the app language to Russian, open the import preview for one follow and verify the count reads "1 друг"</action>
-    <action>Verify the count for 2 to 4 follows ends in "друга" and for 5 or more ends in "друзей"</action>
+    <action>Open the import preview for the identity with 2 follows and verify the count reads "2 друга"</action>
+    <action>If an identity with 5 follows is available, verify its count reads "5 друзей"; with 21 follows, "21 друг"</action>
   </actions>
 </journey>
