@@ -74,12 +74,14 @@ class ProfileViewModel @Inject constructor(
         _isSigningOut,
         _showAddTagSheet,
         _copiedPublicKey,
-    ) { showSignOutDialog, isSigningOut, showAddTagSheet, copiedPublicKey ->
+        pubkyRepo.restorationNeedsUpdate,
+    ) { showSignOutDialog, isSigningOut, showAddTagSheet, copiedPublicKey, needsUpdate ->
         ProfileControls(
             showSignOutDialog = showSignOutDialog,
             isSigningOut = isSigningOut,
             showAddTagSheet = showAddTagSheet,
-            copiedPublicKey = copiedPublicKey
+            copiedPublicKey = copiedPublicKey,
+            needsUpdate = needsUpdate,
         )
     }
 
@@ -121,6 +123,7 @@ class ProfileViewModel @Inject constructor(
             controls = ProfileControls(
                 recoveryPending = pubkyRepo.profileRecoveryPending.value,
                 recoveryCanDisconnect = pubkyRepo.profileRecoveryCanDisconnect.value,
+                needsUpdate = pubkyRepo.restorationNeedsUpdate.value,
             ),
         ),
     )
@@ -300,6 +303,7 @@ class ProfileViewModel @Inject constructor(
             isSigningOut = controls.isSigningOut,
             showAddTagSheet = controls.showAddTagSheet,
             copiedPublicKey = controls.copiedPublicKey,
+            needsUpdate = controls.needsUpdate,
         )
     }
 
@@ -360,6 +364,7 @@ data class ProfileUiState(
     val isSigningOut: Boolean = false,
     val showAddTagSheet: Boolean = false,
     val copiedPublicKey: String? = null,
+    val needsUpdate: Boolean = false,
 )
 
 private data class ProfileControls(
@@ -371,6 +376,7 @@ private data class ProfileControls(
     val isSigningOut: Boolean = false,
     val showAddTagSheet: Boolean = false,
     val copiedPublicKey: String? = null,
+    val needsUpdate: Boolean = false,
 )
 
 sealed interface ProfileEffect {

@@ -8,6 +8,10 @@ data class Toast(
     val visibilityTime: Long = VISIBILITY_TIME_DEFAULT,
     val testTag: String? = null,
     val isLoading: Boolean = false,
+    /** False for a one-time warning that later toasts wait behind instead of replacing. */
+    val interruptible: Boolean = true,
+    /** A queued toast is replaced by a newer one with the same key, so only the latest status shows. */
+    val replaceKey: String? = null,
 ) {
     enum class ToastType { SUCCESS, INFO, LIGHTNING, WARNING, ERROR }
 

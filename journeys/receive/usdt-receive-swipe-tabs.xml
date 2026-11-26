@@ -14,14 +14,15 @@
     screenshot taken right after the swipe. Swipe with `adb shell input swipe` across the middle of
     the QR, about 60% of its width, in 300 ms. Back from Spending to USDT goes through the tab
     pager, which snaps back from a 300 ms synthetic swipe on the emulator; a 600 ms swipe moves it.
-    On a wallet without a Lightning channel, Spending shows its setup view instead of a QR.
+    The Spending tab shows only while the wallet can receive over Lightning (a usable Spark wallet or channel), so
+    this journey needs one; without it the tab before USDT is Savings.
   </description>
   <actions>
     <action>Tap Receive (testTag "Receive")</action>
     <action>Tap the USDT tab (testTag "Tab-usdt") and wait until the USDT QR is visible</action>
     <action>Swipe right across the QR and take a screenshot right away</action>
-    <action>Verify the Spending tab (testTag "Tab-spending") is selected, the Lightning receive content or the Spending setup is shown, and the screenshot shows no "copied" tooltip</action>
-    <action>Swipe left across the middle of the Spending content, whether it shows a Lightning QR or the Spending setup, in 600 ms (`adb shell input swipe 900 1200 150 1200 600`); verify the USDT tab is selected and wait until its QR is visible</action>
+    <action>Verify the Spending tab (testTag "Tab-spending") is selected, the Lightning receive QR is shown, and the screenshot shows no "copied" tooltip</action>
+    <action>Swipe left across the middle of the Spending QR in 600 ms (`adb shell input swipe 900 1200 150 1200 600`); verify the USDT tab is selected and wait until its QR is visible</action>
     <action>Tap the USDT QR once and verify the "copied" tooltip appears</action>
     <action>Wait until the tooltip is gone, swipe left across the USDT QR and take a screenshot right away; verify the Savings tab (testTag "Tab-savings") is selected and the screenshot shows no "copied" tooltip</action>
   </actions>

@@ -156,6 +156,14 @@ internal fun NavController.navigateToCoinSelection() {
     navigateTo(SendRoute.CoinSelection)
 }
 
+/** Shows [route] after a failed swipe, resetting the confirmation it covers so Back finds it ready to swipe. */
+internal fun NavController.navigateToSendError(route: SendRoute.Error) {
+    currentBackStackEntry?.takeIf { it.destination.hasRoute<SendRoute.Confirm>() }
+        ?.savedStateHandle
+        ?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
+    navigateTo(route)
+}
+
 internal fun NavController.navigateToSendAmount(startDestination: SendRoute) {
     if (popBackStack(SendRoute.Amount, inclusive = false)) return
     navigateTo(SendRoute.Amount) {
@@ -179,6 +187,7 @@ fun SendSheet(
     startDestination: SendRoute = SendRoute.Recipient,
     hardwareWalletId: String? = null,
     preparingRequest: PaykitPaymentRequest? = null,
+    onConfirmLockChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     val navController = rememberNavController()
@@ -244,6 +253,11 @@ fun SendSheet(
             LaunchedEffect(reviewing, lifecycle, appViewModel) {
                 if (!reviewing) return@LaunchedEffect
                 lifecycle.withPaymentReview(appViewModel::beginPaymentReview)
+            }
+            // The entry is null until navigation settles, also after the activity is recreated
+            val hasEntry = entry != null
+            LaunchedEffect(hasEntry, reviewing, appViewModel) {
+                if (hasEntry) appViewModel.onSendReviewVisible(reviewing)
             }
             fun showHardwareSuccess(txId: String, amountSats: ULong, walletId: String, isShopPayment: Boolean) {
                 appViewModel.onSendSuccess(
@@ -333,6 +347,10 @@ fun SendSheet(
                         is SendEffect.NavigateToScan -> navController.navigateTo(SendRoute.QrScanner)
                         is SendEffect.NavigateToCoinSelection -> navController.navigateToCoinSelection()
                         is SendEffect.NavigateToConfirm -> navController.navigateTo(SendRoute.Confirm)
+                        is SendEffect.ResetConfirm ->
+                            navController.currentBackStackEntry
+                                ?.savedStateHandle
+                                ?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
                         is SendEffect.NavigateToUsdtReview -> navController.navigateTo(SendRoute.UsdtReview)
                         is SendEffect.ShowPaykitConfirmation -> {
                             // Replace the other asset's confirmation, so Back never returns to its stale terms.
@@ -342,7 +360,15 @@ fun SendSheet(
                             }
                             navController.navigateTo(it.route) { popUpTo(replaced) { inclusive = true } }
                         }
-                        is SendEffect.NavigateToHardwareSign -> navController.navigateTo(SendRoute.HardwareSign)
+                        is SendEffect.NavigateToHardwareSign -> {
+                            // The last step before signing: every warning and PIN check has passed by now.
+                            val state = appViewModel.sendUiState.value
+                            state.retainedSendToReplace?.let { walletId ->
+                                hwSendViewModel.consentToNewSignature(walletId, state.address, state.amount)
+                            }
+                            appViewModel.consumeRetainedSendConsent()
+                            navController.navigateTo(SendRoute.HardwareSign)
+                        }
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)
                         is SendEffect.PaymentSuccess -> {
                             val details = appViewModel.successSendUiState.value
@@ -375,7 +401,7 @@ fun SendSheet(
                                 retryRoute = it.retryRoute,
                             )
                         )
-                        is SendEffect.NavigateToError -> navController.navigateTo(
+                        is SendEffect.NavigateToError -> navController.navigateToSendError(
                             SendRoute.errorFromFailure(
                                 failure = it.failure,
                                 retryRoute = it.retryRoute,
@@ -468,11 +494,17 @@ fun SendSheet(
                 }
                 composableWithDefaultTransitions<SendRoute.QrScanner> {
                     QrScanningScreen(
+                        readsNearby = true,
                         onBack = { navController.popBackStack() },
                         onScanSuccess = { payload ->
                             payload.text?.let {
                                 navController.popBackStack()
-                                appViewModel.onScanResult(data = it, routePubkyKeys = true)
+                                appViewModel.onScanResult(
+                                    data = it,
+                                    routePubkyKeys = true,
+                                    suppressQuickPay = payload.isNearby,
+                                    fromSendScanner = true,
+                                )
                             }
                         },
                     )
@@ -530,13 +562,31 @@ fun SendSheet(
                     }
                     val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
+                    val isSwipeRunning by appViewModel.isSendSwipeRunning.collectAsStateWithLifecycle()
                     val initialSubscriptionId = uiState.incomingPaymentRequestId
                         ?.takeIf { uiState.isInitialSubscriptionPayment }
                         ?.let { id -> PaykitSubscriptionId(id.paymentRequestId, id.counterparty) }
                     val initialSubscription = remember(initialSubscriptionId) {
                         initialSubscriptionId?.let(appViewModel::subscription)
                     }
+                    LaunchedEffect(
+                        uiState.hardwareWalletId,
+                        uiState.address,
+                        uiState.amount,
+                        uiState.incomingPaymentRequestId,
+                    ) {
+                        val walletId = uiState.hardwareWalletId ?: return@LaunchedEffect
+                        val status = hwSendViewModel.retainedSendStatus(
+                            uiState.address,
+                            uiState.amount,
+                            walletId,
+                            hasIncomingRequest = uiState.incomingPaymentRequestId != null,
+                        )
+                        appViewModel.applyRetainedSendStatus(walletId, uiState.address, uiState.amount, status)
+                    }
 
+                    // Leaving the review of a prepared fee cancels that send instead of editing it
+                    BackHandler(enabled = uiState.isPreparedFeeReview) { appViewModel.hideSheet() }
                     SendConfirmScreen(
                         savedStateHandle = it.savedStateHandle,
                         uiState = uiState,
@@ -549,15 +599,21 @@ fun SendSheet(
                         syncNodeVariant = syncNodeVariant,
                         canGoBack = navController.previousBackStackEntry != null,
                         onBack = {
-                            val didPopToAmount = navController.popBackStack(SendRoute.Amount, inclusive = false)
-                            if (!didPopToAmount && !navController.popBackStack()) {
-                                appViewModel.hideSheet()
-                            }
+                            val didPop = !uiState.isPreparedFeeReview && (
+                                navController.popBackStack(SendRoute.Amount, inclusive = false) ||
+                                    navController.popBackStack()
+                                )
+                            if (!didPop) appViewModel.hideSheet()
                         },
                         onEvent = { e -> appViewModel.setSendEvent(e) },
-                        onClickAddTag = { navController.navigateTo(SendRoute.AddTag) },
+                        onClickAddTag = {
+                            // The prepared send under review already saved its tags
+                            if (!uiState.isPreparedFeeReview) navController.navigateTo(SendRoute.AddTag)
+                        },
                         onClickTag = { tag -> appViewModel.removeTag(tag) },
                         onNavigateToPin = { navController.navigateTo(SendRoute.PinCheck) },
+                        isSwipeRunning = isSwipeRunning,
+                        onLockChange = onConfirmLockChange,
                         autoPayContent = initialSubscription?.let { subscription ->
                             {
                                 SubscriptionFirstPaymentProgress(
@@ -618,6 +674,8 @@ fun SendSheet(
                                 ?.savedStateHandle
                                 ?.set(SEND_CONFIRM_RESET_RESULT_KEY, true)
                             appViewModel.onHardwareSignCancelled()
+                            // The review reads the record as soon as it recomposes, before this screen is disposed.
+                            hwSendViewModel.cancel()
                             if (!navController.popBackStack()) appViewModel.hideSheet()
                         },
                     )
@@ -723,6 +781,7 @@ fun SendSheet(
                             quickPayData = request.data,
                             isRequestActive = quickPayRequest?.id == request.id,
                             canPayWithoutNode = sparkCanPayQuickPay(request.data, sparkState),
+                            canStart = { appViewModel.canStartQuickPay(request) },
                             onPaymentComplete = { paymentHash, amountWithFee ->
                                 appViewModel.onSendSuccess(
                                     NewTransactionSheetDetails(
@@ -746,7 +805,7 @@ fun SendSheet(
                                 )
                             },
                             onFallBackToConfirm = {
-                                appViewModel.resetQuickPay()
+                                appViewModel.fallBackFromQuickPay()
                                 navController.navigateTo(SendRoute.Confirm) {
                                     popUpTo<SendRoute.QuickPay> { inclusive = true }
                                 }
@@ -792,6 +851,7 @@ fun SendSheet(
                             )
                         },
                         onPaymentSuccess = { paymentHash, amountWithFee ->
+                            // A success shown before the send went pending is the same payment, so it shows again.
                             appViewModel.onSendSuccess(
                                 NewTransactionSheetDetails(
                                     type = NewTransactionSheetType.LIGHTNING,
@@ -799,6 +859,7 @@ fun SendSheet(
                                     paymentHashOrTxId = paymentHash,
                                     sats = amountWithFee,
                                 ),
+                                allowDuplicateHash = true,
                             )
                         },
                         onPaymentError = { failure ->

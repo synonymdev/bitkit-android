@@ -28,7 +28,6 @@ import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PubkyRepo
-import to.bitkit.repositories.PublicPaykitError
 import to.bitkit.repositories.UsdtDisableError
 import to.bitkit.repositories.UsdtPreferencesRepo
 import to.bitkit.repositories.WidgetsRepo
@@ -279,52 +278,10 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    val contactPaymentsEnabled = contactPaymentSettingsRepo.isEnabled
-        .asStateFlow(initialValue = false)
-    val publicPaymentsEnabled = contactPaymentSettingsRepo.isPublicEnabled
-        .asStateFlow(initialValue = false)
-
-    private val _isUpdatingContactPayments = MutableStateFlow(false)
-    val isUpdatingContactPayments = _isUpdatingContactPayments.asStateFlow()
-
-    fun setPublicPaymentsEnabled(value: Boolean) = updatePaymentSharing {
-        contactPaymentSettingsRepo.setPublicEnabled(value)
-    }
-
-    fun setContactPaymentsEnabled(value: Boolean) = updatePaymentSharing {
-        contactPaymentSettingsRepo.setEnabled(value)
-    }
-
-    private fun updatePaymentSharing(update: suspend () -> Result<Unit>) {
-        if (_isUpdatingContactPayments.value) return
-        viewModelScope.launch {
-            _isUpdatingContactPayments.update { true }
-            try {
-                update().onFailure {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.common__error),
-                        description = contactPaymentSyncErrorMessage(it),
-                    )
-                }
-            } finally {
-                _isUpdatingContactPayments.update { false }
-            }
-        }
-    }
-
     fun setIsPaykitEnabled(value: Boolean) {
         viewModelScope.launch {
             updatePaykitEnabled(value)
         }
-    }
-
-    private fun contactPaymentSyncErrorMessage(error: Throwable): String = when (error) {
-        PublicPaykitError.InvalidPayload -> context.getString(R.string.profile__pay_contacts_error_invalid_payload)
-        PublicPaykitError.NoSupportedEndpoint -> context.getString(R.string.profile__pay_contacts_error_no_endpoint)
-        PublicPaykitError.SessionNotActive -> context.getString(R.string.profile__pay_contacts_error_session)
-        PublicPaykitError.WalletNotReady -> context.getString(R.string.profile__pay_contacts_error_wallet)
-        else -> context.getString(R.string.common__error_body)
     }
 
     private suspend fun updatePaykitEnabled(value: Boolean) {
@@ -386,27 +343,13 @@ class SettingsViewModel @Inject constructor(
     val isQuickpayEnabled = settingsStore.data.map { it.isQuickPayEnabled }
         .asStateFlow(initialValue = false)
 
-    fun setIsQuickPayEnabled(value: Boolean) {
+    // Off until the saved value loads, so Receive never advertises for a wallet that opted out.
+    val isNearbyPaymentsEnabled = settingsStore.data.map { it.isNearbyPaymentsEnabled }
+        .asStateFlow(initialValue = false)
+
+    fun setNearbyPaymentsEnabled(value: Boolean) {
         viewModelScope.launch {
-            settingsStore.update { it.copy(isQuickPayEnabled = value) }
-        }
-    }
-
-    val quickPayAmount = settingsStore.data.map { it.quickPayAmount }
-        .asStateFlow(initialValue = 5)
-
-    fun setQuickPayAmount(value: Int) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(quickPayAmount = value) }
-        }
-    }
-
-    val quickPayDailyLimitMultiplier = settingsStore.data.map { it.quickPayDailyLimitMultiplier }
-        .asStateFlow(initialValue = 5)
-
-    fun setQuickPayDailyLimitMultiplier(value: Int) {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(quickPayDailyLimitMultiplier = value) }
+            settingsStore.update { it.copy(isNearbyPaymentsEnabled = value) }
         }
     }
 

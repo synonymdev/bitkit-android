@@ -26,13 +26,18 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BalanceState
+import to.bitkit.models.ConvertedAmount
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.WalletScope
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
+import to.bitkit.repositories.HwRetainedSend
+import to.bitkit.repositories.HwRetainedSendRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
@@ -53,8 +58,10 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.transfer.SparkFundingContract.SideEffect
 import to.bitkit.ui.shared.toast.ToastEventBus
+import java.math.BigDecimal
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -65,13 +72,22 @@ class SparkFundingViewModelTest : BaseUnitTest() {
     private val sparkRepo = mock<SparkRepo>()
     private val currencyRepo = mock<CurrencyRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
+    private val hwRetainedSendRepo = mock<HwRetainedSendRepo>()
     private val feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u)
     private val attemptUpdates = MutableStateFlow(0L)
     private val sparkState = MutableStateFlow(SparkState())
     private val claimChoices = MutableStateFlow<Map<String, SparkClaimChoice>>(emptyMap())
 
     private fun createSut() =
-        SparkFundingViewModel(context, walletRepo, lightningRepo, sparkRepo, currencyRepo, hwWalletRepo)
+        SparkFundingViewModel(
+            context,
+            walletRepo,
+            lightningRepo,
+            sparkRepo,
+            currencyRepo,
+            hwWalletRepo,
+            hwRetainedSendRepo,
+        )
 
     @Before
     fun setUp() {
@@ -94,6 +110,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         whenever { lightningRepo.estimateSendAllFee(any(), any(), any()) }.thenReturn(Result.success(500uL))
         whenever { lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), any(), any()) }
             .thenReturn(Result.success(500uL))
+        whenever { hwRetainedSendRepo.record(any()) }.thenReturn(Result.success(null))
     }
 
     @Test
@@ -195,7 +212,38 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
+    }
+
+    @Test
+    fun `a fee rise reads in bitcoin while fiat has no usable rate`() = test {
+        whenever(context.getString(R.string.lightning__spending_confirm__fees_changed_network))
+            .thenReturn("rose {amount}")
+        whenever(
+            currencyRepo.currencyState
+        ).thenReturn(MutableStateFlow(CurrencyState(primaryDisplay = PrimaryDisplay.FIAT)))
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
+            .thenReturn(Result.success(ConvertedAmount(BigDecimal.ZERO, "0.00", "$", "USD", "", 200L)))
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
+            )
+        }.thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 700uL))))
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+
+        val toasts = collectToasts { sut.onConfirm() }
+
+        assertEquals("rose $BITCOIN_SYMBOL 200", toasts.single().description)
     }
 
     @Test
@@ -209,6 +257,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 700uL))))
         val sut = createSut()
@@ -225,6 +274,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = eq(500uL),
+            reviewHigherFee = anyOrNull(),
         )
         assertEquals("Changed", toasts.single().title)
         assertTrue(toasts.single().description.orEmpty().startsWith("rose "), "${toasts.single().description}")
@@ -240,6 +290,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = eq(700uL),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -278,6 +329,33 @@ class SparkFundingViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `swipe on a max transfer approves no higher instant claim fee than the one shown`() = test {
+        whenever {
+            lightningRepo.sendOnChain(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+                any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                paymentDeadlineAt = anyOrNull(),
+                contactPublicKey = anyOrNull(),
+                approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
+            )
+        }.thenReturn(Result.success(OnchainSendOutcome.Accepted("txid", 99_700uL)))
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onAmountChange(sut.uiState.value.maxSats)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        // The network fee fell more than the claim fee rose, so more reaches spending and the swipe sends.
+        whenever { lightningRepo.estimateSendAllFee(any(), any(), any()) }.thenReturn(Result.success(300uL))
+        whenever { sparkRepo.estimateDepositClaimFeeSats(any()) }.thenReturn(Result.success(1_400uL))
+
+        sut.onConfirm()
+        advanceUntilIdle()
+
+        verify(sparkRepo).followDepositClaim("txid", SparkClaimSpeed.Instant, 1_350uL)
+    }
+
+    @Test
     fun `swipe refuses with real copy when savings no longer cover the transfer`() = test {
         val sut = createSut()
         advanceUntilIdle()
@@ -301,6 +379,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Accepted("txid", 50_000uL)))
         whenever(sparkRepo.depositClaims).thenReturn(MutableStateFlow(mapOf("txid" to SparkDepositClaim.Later)))
@@ -321,6 +400,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
         verify(sparkRepo).onDepositBroadcast("txid", 50_000uL)
         verify(sparkRepo).followDepositClaim("txid", SparkClaimSpeed.Later, 1_350uL)
@@ -374,6 +454,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Accepted("TXID", 50_000uL)))
         val sut = createSut()
@@ -418,6 +499,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(
@@ -451,6 +533,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(
@@ -498,6 +581,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.failure(OnchainSendBlockedError(older)))
         whenever { lightningRepo.currentOnchainSendAttempt() }.thenReturn(older)
@@ -526,6 +610,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(
@@ -566,6 +651,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.failure(OnchainSendPendingError(IllegalStateException("timeout"), "txid")))
         val retained = OnchainSendAttempt(
@@ -598,6 +684,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(
@@ -633,6 +720,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
     }
 
@@ -645,6 +733,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
                 paymentDeadlineAt = anyOrNull(),
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
+                reviewHigherFee = anyOrNull(),
             )
         }.thenReturn(Result.success(OnchainSendOutcome.Unknown("txid")))
         val retained = OnchainSendAttempt(
@@ -678,6 +767,7 @@ class SparkFundingViewModelTest : BaseUnitTest() {
             paymentDeadlineAt = anyOrNull(),
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
         )
         assertEquals(SideEffect.Sent, effects.lastOrNull())
     }
@@ -709,6 +799,163 @@ class SparkFundingViewModelTest : BaseUnitTest() {
         assertTrue(request.isTransfer)
         assertEquals(700L, sut.uiState.value.quote?.networkFeeSats)
     }
+
+    @Test
+    fun `a retained hardware transfer above today's maximum stays accepted`() = test {
+        val sut = hardwareTransferWithRetained(retained())
+
+        val state = sut.uiState.value
+        assertEquals(80_000L, state.maxSats)
+        assertEquals(95_000L, state.retainedRetrySats)
+        assertEquals(95_000L, state.inputCapSats)
+        assertTrue(state.acceptsAmount(95_000))
+        // Only the retained amount is exempt: another amount above today's maximum is refused.
+        assertFalse(state.acceptsAmount(90_000))
+        assertTrue(state.acceptsAmount(80_000))
+    }
+
+    @Test
+    fun `a refused retry or an observed transfer keeps today's maximum`() = test {
+        for (record in listOf(retained(retryWasRefused = true), retained(observed = true))) {
+            val sut = hardwareTransferWithRetained(record)
+
+            val state = sut.uiState.value
+            assertNull(state.retainedRetrySats)
+            assertEquals(80_000L, state.inputCapSats)
+            assertFalse(state.acceptsAmount(95_000))
+        }
+    }
+
+    @Test
+    fun `a retained hardware transfer to another address keeps today's maximum`() = test {
+        val sut = hardwareTransferWithRetained(retained(address = "bcrt1qother"))
+
+        assertNull(sut.uiState.value.retainedRetrySats)
+        assertEquals(80_000L, sut.uiState.value.inputCapSats)
+    }
+
+    @Test
+    fun `a retained retry is priced at its original fee and asks the device to send it again`() = test {
+        // Today's fee can no longer fund the amount, so pricing it anew fails.
+        whenever { hwWalletRepo.estimateFundingMiningFee("trezor", "bcrt1qspark", 95_000uL, 5uL) }
+            .thenReturn(Result.failure(IllegalStateException("insufficient funds")))
+        val sut = hardwareTransferWithRetained(retained())
+        sut.onAmountChange(95_000)
+        val effects = mutableListOf<SideEffect>()
+        val job = launch { sut.effects.collect { effects.add(it) } }
+
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        sut.onConfirm()
+        advanceUntilIdle()
+        job.cancel()
+
+        assertEquals(SideEffect.AmountReady, effects.first())
+        val quote = requireNotNull(sut.uiState.value.quote)
+        assertTrue(quote.isRetainedRetry)
+        assertEquals(141L, quote.networkFeeSats)
+        assertEquals(1_350L, quote.instantFeeSats)
+        assertTrue(quote.isCovered)
+        val request = (effects.last() as SideEffect.SignHw).request
+        assertEquals(95_000uL, request.amountSats)
+        assertEquals(2uL, request.satsPerVByte)
+        assertTrue(request.isTransfer)
+        verify(hwWalletRepo, never()).estimateFundingMiningFee(any(), any(), eq(95_000uL), any())
+    }
+
+    @Test
+    fun `a retained retry below today's claim fee is not held up by it`() = test {
+        val sut = hardwareTransferWithRetained(retained(amountSats = 1_000uL))
+        sut.onAmountChange(1_000)
+        val effects = mutableListOf<SideEffect>()
+        val job = launch { sut.effects.collect { effects.add(it) } }
+
+        val toasts = collectToasts { sut.onAmountContinue() }
+        sut.onConfirm()
+        advanceUntilIdle()
+        job.cancel()
+
+        assertTrue(toasts.isEmpty())
+        assertEquals(SideEffect.AmountReady, effects.first())
+        assertEquals(1_000uL, (effects.last() as SideEffect.SignHw).request.amountSats)
+    }
+
+    @Test
+    fun `a fresh transfer stays below the claim fee while only a retry is exempt`() {
+        val fresh = SparkFundingContract.Quote(
+            address = "bcrt1qspark",
+            amountSats = 1_000,
+            networkFeeSats = 141,
+            instantFeeSats = 1_350,
+            laterFeeSats = 198,
+            spendableSats = 80_000,
+        )
+
+        assertTrue(fresh.isBelowClaimFee)
+        assertFalse(fresh.isRetainedRetry)
+        assertFalse(fresh.copy(amountSats = 2_000).isBelowClaimFee)
+        assertFalse(fresh.copy(retainedFeeRate = 2uL).isBelowClaimFee)
+    }
+
+    @Test
+    fun `a hardware transfer of another amount than the retained one is priced anew at today's fee`() = test {
+        whenever { hwWalletRepo.estimateFundingMiningFee("trezor", "bcrt1qspark", 50_000uL, 5uL) }
+            .thenReturn(Result.success(700uL))
+        val sut = hardwareTransferWithRetained(retained())
+        sut.onAmountChange(50_000)
+        sut.onAmountContinue()
+        advanceUntilIdle()
+        val effects = mutableListOf<SideEffect>()
+        val job = launch { sut.effects.collect { effects.add(it) } }
+
+        sut.onConfirm()
+        advanceUntilIdle()
+        job.cancel()
+
+        val quote = requireNotNull(sut.uiState.value.quote)
+        assertFalse(quote.isRetainedRetry)
+        assertEquals(700L, quote.networkFeeSats)
+        assertEquals(5uL, (effects.single() as SideEffect.SignHw).request.satsPerVByte)
+    }
+
+    @Test
+    fun `an observed transfer of the same amount is priced anew and keeps today's claim fee gate`() = test {
+        whenever { hwWalletRepo.estimateFundingMiningFee("trezor", "bcrt1qspark", 1_000uL, 5uL) }
+            .thenReturn(Result.success(700uL))
+        val sut = hardwareTransferWithRetained(retained(amountSats = 1_000uL, observed = true))
+        sut.onAmountChange(1_000)
+
+        val toasts = collectToasts { sut.onAmountContinue() }
+
+        assertEquals("Too small", toasts.single().title)
+        assertNull(sut.uiState.value.quote)
+    }
+
+    private suspend fun TestScope.hardwareTransferWithRetained(record: HwRetainedSend): SparkFundingViewModel {
+        whenever { hwWalletRepo.maxSpendableFunding("trezor", "bcrt1qspark", 5uL) }.thenReturn(Result.success(80_000uL))
+        whenever { hwRetainedSendRepo.record("trezor") }.thenReturn(Result.success(record))
+        val sut = createSut()
+        sut.useHardwareWallet("trezor")
+        advanceUntilIdle()
+        return sut
+    }
+
+    private fun retained(
+        amountSats: ULong = 95_000uL,
+        address: String = "bcrt1qspark",
+        retryWasRefused: Boolean = false,
+        observed: Boolean = false,
+    ) = HwRetainedSend(
+        walletId = "trezor",
+        address = address,
+        amountSats = amountSats,
+        serializedTx = "aabb",
+        miningFeeSats = 141uL,
+        feeRate = 2uL,
+        totalSpent = amountSats + 141uL,
+        retryWasRefused = retryWasRefused,
+        observed = observed,
+    )
 
     private suspend fun TestScope.collectToasts(action: () -> Unit): List<Toast> {
         val toasts = mutableListOf<Toast>()

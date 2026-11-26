@@ -47,6 +47,7 @@ fun SendQuickPayScreen(
     onPaymentPending: (String, Long, String) -> Unit,
     onFallBackToConfirm: () -> Unit,
     onShowError: (SendFailureDetails) -> Unit,
+    canStart: () -> Boolean = { true },
     viewModel: QuickPayViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -66,7 +67,9 @@ fun SendQuickPayScreen(
     )
     LaunchedEffect(quickPayData, canPay, isRequestActive) {
         if (isRequestActive && canPay) {
-            viewModel.pay(session, quickPayData)
+            // Checked where the payment starts and again at its first submission: navigation, waiting for funds and
+            // preparing the invoice can all outlast a wallet lock.
+            if (canStart()) viewModel.pay(session, quickPayData, canDispatch = canStart) else onFallBackToConfirm()
         }
     }
 

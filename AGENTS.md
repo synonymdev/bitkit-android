@@ -169,6 +169,10 @@ Use `Not used` when a phase had no AI involvement and `Unknown` when the model w
 never infer a model from a tool name. If no review occurred, write `Review: Not performed`.
 `Not used` and `Not performed` need no reasoning value. See `.agents/commands/pr.md` for formatting.
 
+### Release topics
+
+A planned release's topic (for example `Spark`) is its GitHub milestone's description; read it before triaging, planning or cutting a release.
+
 ### Review Findings
 
 When addressing review feedback on any PR, release PRs included, PR babysitters and the author's agent keep the PR in scope:
@@ -578,6 +582,6 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - Use `LightningNodeService` to manage background notifications while the node is running
 - Use `LightningService` to wrap node's RUST APIs and manage the inner lifecycle of the node
 - Use `LightningRepo` to defining the business logic for the node operations, usually delegating to `LightningService`
-- Use `WakeNodeWorker` to manage the handling of remote notifications received via cloud messages
+- Use `WakeRepo` to register with the wake gateway, and `WakeWorker` with `WakeInbox` to handle the wakes received via cloud messages; add a topic's handler to `WakeHandlers`
 - Use `*Services` to wrap rust library code exposed via bindings
 - Use CQRS pattern of Command + Handler like it's done in the `NotifyPaymentReceived` + `NotifyPaymentReceivedHandler` setup

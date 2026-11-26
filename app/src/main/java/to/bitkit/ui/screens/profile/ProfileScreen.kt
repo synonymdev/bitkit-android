@@ -189,6 +189,7 @@ internal fun ProfileContent(
                 onRemoveTag = onRemoveTag,
                 onClickSignOut = onClickSignOut,
                 onClickRetry = onClickRetry,
+                needsUpdate = uiState.needsUpdate,
             )
             topBar(Modifier.background(TopBarGradient))
             CopiedPopup(
@@ -208,7 +209,11 @@ internal fun ProfileContent(
             if (uiState.isLoading) {
                 LoadingState()
             } else {
-                EmptyState(onClickRetry = onClickRetry, onClickSignOut = onClickSignOut)
+                EmptyState(
+                    needsUpdate = uiState.needsUpdate,
+                    onClickRetry = onClickRetry,
+                    onClickSignOut = onClickSignOut,
+                )
             }
         }
     }
@@ -249,6 +254,7 @@ private fun ProfileBody(
     onRemoveTag: (String) -> Unit,
     onClickSignOut: () -> Unit,
     onClickRetry: () -> Unit,
+    needsUpdate: Boolean,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -376,6 +382,7 @@ private fun ProfileBody(
 
         VerticalSpacer(16.dp)
         if (!canEdit) {
+            if (needsUpdate) UpdateRequiredHint()
             SecondaryButton(
                 text = stringResource(R.string.profile__retry_load),
                 onClick = onClickRetry,
@@ -473,7 +480,19 @@ private fun LoadingState() {
 }
 
 @Composable
+private fun UpdateRequiredHint() {
+    BodyM(
+        text = stringResource(R.string.profile__update_required),
+        color = Colors.White64,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.testTag("ProfileUpdateRequired")
+    )
+    VerticalSpacer(16.dp)
+}
+
+@Composable
 private fun EmptyState(
+    needsUpdate: Boolean,
     onClickRetry: () -> Unit,
     onClickSignOut: () -> Unit,
 ) {
@@ -486,6 +505,7 @@ private fun EmptyState(
     ) {
         BodyM(text = stringResource(R.string.profile__empty_state), color = Colors.White64)
         VerticalSpacer(16.dp)
+        if (needsUpdate) UpdateRequiredHint()
         SecondaryButton(
             text = stringResource(R.string.profile__retry_load),
             onClick = onClickRetry,

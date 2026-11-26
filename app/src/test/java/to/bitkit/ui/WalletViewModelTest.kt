@@ -26,6 +26,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
@@ -64,6 +65,7 @@ import to.bitkit.services.PendingChannelMigration
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.test.idleSparkRepo
+import to.bitkit.ui.settings.lightning.MoveToSparkManager
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.RestoreState
@@ -95,6 +97,9 @@ class WalletViewModelTest : BaseUnitTest() {
     private val boltzService = mock<BoltzService>()
     private val pubkySwapsRouteRepo = mock<PubkySwapsRouteRepo>()
     private val sparkRepo = idleSparkRepo()
+    private val moveToSparkManager = mock<MoveToSparkManager> {
+        on { hasRetainedMove } doReturn MutableStateFlow(false)
+    }
 
     private val lightningState = MutableStateFlow(LightningState())
     private val walletState = MutableStateFlow(WalletState())
@@ -143,6 +148,7 @@ class WalletViewModelTest : BaseUnitTest() {
         connectionRecovery = connectionRecovery,
         pubkySwapsRouteRepo = pubkySwapsRouteRepo,
         sparkRepo = sparkRepo,
+        moveToSparkManager = moveToSparkManager,
     )
 
     @Test
@@ -608,10 +614,15 @@ class WalletViewModelTest : BaseUnitTest() {
         )
         lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
 
-        sut.restoreWallet("mnemonic", "passphrase")
-        walletState.value = walletState.value.copy(walletExists = true)
-        advanceUntilIdle()
+        ToastEventBus.events.test {
+            sut.restoreWallet("mnemonic", "passphrase")
+            walletState.value = walletState.value.copy(walletExists = true)
+            advanceUntilIdle()
 
+            val toast = awaitItem()
+            assertFalse(toast.autoHide)
+            assertFalse(toast.interruptible)
+        }
         assertEquals(RestoreState.Completed(emptySet()), sut.restoreState.value)
         verify(pubkySwapsRouteRepo).restoredSwaps()
         verify(pubkySwapsRouteRepo).awaitClaim(eq("swap"), any(), anyOrNull())
@@ -1526,6 +1537,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectionRecovery = connectionRecovery,
             pubkySwapsRouteRepo = pubkySwapsRouteRepo,
             sparkRepo = sparkRepo,
+            moveToSparkManager = moveToSparkManager,
         )
 
         assertEquals(RestoreState.Initial, testSut.restoreState.value)
@@ -1595,6 +1607,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectionRecovery = connectionRecovery,
             pubkySwapsRouteRepo = pubkySwapsRouteRepo,
             sparkRepo = sparkRepo,
+            moveToSparkManager = moveToSparkManager,
         )
 
         testSut.start()
@@ -1653,6 +1666,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectionRecovery = connectionRecovery,
             pubkySwapsRouteRepo = pubkySwapsRouteRepo,
             sparkRepo = sparkRepo,
+            moveToSparkManager = moveToSparkManager,
         )
 
         // Trigger restore to put state in non-idle
@@ -1695,6 +1709,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectionRecovery = connectionRecovery,
             pubkySwapsRouteRepo = pubkySwapsRouteRepo,
             sparkRepo = sparkRepo,
+            moveToSparkManager = moveToSparkManager,
         )
 
         testSut.restoreWallet("mnemonic", null)
@@ -1788,6 +1803,7 @@ class WalletViewModelTest : BaseUnitTest() {
             connectionRecovery = connectionRecovery,
             pubkySwapsRouteRepo = pubkySwapsRouteRepo,
             sparkRepo = sparkRepo,
+            moveToSparkManager = moveToSparkManager,
         )
         advanceUntilIdle()
 

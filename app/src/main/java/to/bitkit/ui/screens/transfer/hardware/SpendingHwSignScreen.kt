@@ -7,36 +7,53 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.HwWalletVendor
 import to.bitkit.repositories.SparkClaimSpeed
+import to.bitkit.repositories.canSwitchUnit
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.illustrationRes
+import to.bitkit.ui.currencyViewModel
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -51,13 +68,14 @@ import to.bitkit.ui.screens.wallets.send.HwSendViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.SanityWarning
+import kotlin.math.roundToInt
 
 @Composable
 fun SpendingHwSignScreen(
     walletId: String,
     viewModel: SparkFundingViewModel,
     onBackClick: () -> Unit,
-    onLearnMoreClick: () -> Unit,
     onSent: () -> Unit,
     hwSendViewModel: HwSendViewModel = hiltViewModel(),
 ) {
@@ -68,7 +86,10 @@ fun SpendingHwSignScreen(
         wallets.firstOrNull { it.id == walletId }?.vendor ?: HwWalletVendor.TREZOR
     }
     var request by remember { mutableStateOf<HwSendRequest?>(null) }
+    var retainedSendWarning by remember { mutableStateOf<HwSendRequest?>(null) }
     val isBusy = state.isSending || hwState.isSigning
+    val currency = currencyViewModel
+    val currencies = LocalCurrencies.current
 
     BackHandler(enabled = !hwState.canLeave || state.isSending) {}
 
@@ -82,7 +103,7 @@ fun SpendingHwSignScreen(
             when (it) {
                 is SideEffect.SignHw -> {
                     request = it.request
-                    hwSendViewModel.signAndBroadcast(it.request)
+                    if (!hwSendViewModel.signUnlessRetainedSendWarns(it.request)) retainedSendWarning = it.request
                 }
 
                 SideEffect.Sent -> onSent()
@@ -109,14 +130,34 @@ fun SpendingHwSignScreen(
         isSigning = isBusy,
         hasPendingBroadcast = hwState.hasPendingBroadcast,
         onBackClick = { if (hwState.canLeave && !state.isSending) onBackClick() },
-        onLearnMoreClick = { if (!isBusy) onLearnMoreClick() },
         onSpeedChange = { if (!isBusy) viewModel.onSpeedChange(it) },
+        // Without a rate the fees stay in bitcoin.
+        onFeesClick = { if (currencies.canSwitchUnit) currency?.switchUnit() },
         onOpenConnect = {
             // A pending broadcast resumes only for the exact request it was signed for.
             val pending = request?.takeIf { hwState.hasPendingBroadcast }
             if (pending != null) hwSendViewModel.signAndBroadcast(pending) else viewModel.onConfirm()
         },
     )
+
+    retainedSendWarning?.let { warned ->
+        val warning = SanityWarning.RETAINED_HARDWARE_SEND
+        AppAlertDialog(
+            title = stringResource(warning.title),
+            text = stringResource(warning.message),
+            confirmText = stringResource(R.string.wallet__send_yes),
+            dismissText = stringResource(R.string.common__cancel),
+            onConfirm = {
+                retainedSendWarning = null
+                hwSendViewModel.consentToNewSignature(warned.walletId, warned.address, warned.amountSats)
+                hwSendViewModel.signAndBroadcast(warned)
+            },
+            onDismiss = { retainedSendWarning = null },
+            modifier = Modifier
+                .semantics { testTagsAsResourceId = true }
+                .testTag(warning.testTag),
+        )
+    }
 
     if (hwState.isPassphraseRequired) {
         HwPassphrasePromptSheet(
@@ -140,97 +181,145 @@ private fun Content(
     isSigning: Boolean = false,
     hasPendingBroadcast: Boolean = false,
     onBackClick: () -> Unit = {},
-    onLearnMoreClick: () -> Unit = {},
     onSpeedChange: (SparkClaimSpeed) -> Unit = {},
+    onFeesClick: () -> Unit = {},
     onOpenConnect: () -> Unit = {},
 ) {
     val quote = state.quote
+    val background = MaterialTheme.colorScheme.background
+    var viewportBottom by remember { mutableFloatStateOf(0f) }
+    var contentBottom by remember { mutableFloatStateOf(0f) }
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.lightning__transfer__nav_title),
             onBackClick = onBackClick,
             actions = { if (!isSigning) DrawerNavIcon() },
         )
-        Column(
-            modifier = Modifier
-                .padding(horizontal = 16.dp)
-                .fillMaxSize()
-                .testTag("HardwareTransferSign")
-        ) {
-            BoxWithConstraints(
+        Box(modifier = Modifier.fillMaxSize()) {
+            Image(
+                painter = painterResource(id = vendor.signIllustrationRes()),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .weight(1f)
+                    .align(Alignment.BottomCenter)
+                    .offset(y = ILLUSTRATION_OVERFLOW)
+                    .offset { IntOffset(0, (contentBottom - viewportBottom).coerceAtLeast(0f).roundToInt()) }
+                    .requiredSize(ILLUSTRATION_SIZE)
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .offset(y = ILLUSTRATION_OVERFLOW)
                     .fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .heightIn(min = maxHeight)
-                ) {
-                    VerticalSpacer(32.dp)
-                    Display(
-                        text = stringResource(
-                            if (hasPendingBroadcast) {
-                                R.string.lightning__transfer_hw__signed_title
-                            } else {
-                                R.string.lightning__transfer_hw__sign_title
-                            }
-                        ).withAccent(accentColor = Colors.Purple),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    VerticalSpacer(8.dp)
-
-                    SpendingFeeGrid(quote = quote, speed = state.speed)
-
-                    VerticalSpacer(16.dp)
-
-                    SpendingSpeedRows(quote = quote, speed = state.speed, onSpeedChange = onSpeedChange)
-
-                    VerticalSpacer(16.dp)
-
-                    PrimaryButton(
-                        text = stringResource(R.string.common__learn_more),
-                        size = ButtonSize.Small,
-                        fullWidth = false,
-                        enabled = !isSigning && !hasPendingBroadcast,
-                        onClick = onLearnMoreClick,
-                        modifier = Modifier.testTag("HardwareTransferSignLearnMore")
-                    )
-
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    ) {
-                        Image(
-                            painter = painterResource(id = vendor.illustrationRes()),
-                            contentDescription = null,
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.padding(vertical = 8.dp)
+                    .height(FOOTER_HEIGHT + ILLUSTRATION_OVERFLOW)
+                    .drawBehind {
+                        drawRect(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, background),
+                                endY = FOOTER_FADE.toPx(),
+                            )
                         )
                     }
-                }
-            }
-
-            val canSign = quote != null && quote.toSpendingSats(state.speed) > 0 && !state.isQuoting
-            PrimaryButton(
-                text = stringResource(
-                    if (hasPendingBroadcast) R.string.common__retry else R.string.lightning__transfer_hw__open_connect
-                ),
-                onClick = onOpenConnect,
-                enabled = canSign && !isSigning,
-                isLoading = isSigning || state.isQuoting,
-                modifier = Modifier.testTag("HardwareTransferOpenTrezorConnect")
             )
-            VerticalSpacer(16.dp)
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .fillMaxSize()
+                    .testTag("HardwareTransferSign")
+            ) {
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .onGloballyPositioned { viewportBottom = it.positionInRoot().y + it.size.height }
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .heightIn(min = maxHeight)
+                            .onGloballyPositioned { contentBottom = it.positionInRoot().y + it.size.height }
+                    ) {
+                        VerticalSpacer(32.dp)
+                        Display(
+                            text = stringResource(
+                                if (hasPendingBroadcast) {
+                                    R.string.lightning__transfer_hw__signed_title
+                                } else {
+                                    R.string.lightning__transfer_hw__sign_title
+                                }
+                            ).withAccent(accentColor = Colors.Purple),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        VerticalSpacer(16.dp)
+
+                        SpendingFeeGrid(
+                            quote = quote,
+                            speed = state.speed,
+                            address = quote?.address,
+                            onClick = onFeesClick,
+                            rowGap = 10.dp,
+                        )
+
+                        VerticalSpacer(10.dp)
+
+                        SpendingSpeedRows(quote = quote, speed = state.speed, onSpeedChange = onSpeedChange)
+
+                        VerticalSpacer(ILLUSTRATION_GAP + ILLUSTRATION_PEEK)
+                    }
+                }
+
+                // A Retry sends bytes that already passed the claim minimum, so today's claim fee doesn't disable it.
+                val isRetry = hasPendingBroadcast || quote?.isRetainedRetry == true
+                val canSign = quote != null && (quote.isRetainedRetry || quote.toSpendingSats(state.speed) > 0) &&
+                    !state.isQuoting
+                PrimaryButton(
+                    text = stringResource(
+                        if (isRetry) {
+                            R.string.common__retry
+                        } else {
+                            R.string.lightning__transfer_hw__open_connect
+                        }
+                    ),
+                    onClick = onOpenConnect,
+                    enabled = canSign && !isSigning,
+                    isLoading = isSigning || state.isQuoting,
+                    modifier = Modifier.testTag("HardwareTransferOpenTrezorConnect")
+                )
+                VerticalSpacer(FOOTER_BOTTOM)
+            }
         }
     }
 }
 
+/** Side of the angled device render: the 266dp image fill of the frame's 254dp illustration box. */
+private val ILLUSTRATION_SIZE = 266.dp
+
+/** How far the render's top sits above the button's top (the box 100dp above it, the fill 3dp above the box). */
+private val ILLUSTRATION_PEEK = 103.dp
+
+/** Gap the frame keeps between the speed rows and the illustration box. */
+private val ILLUSTRATION_GAP = 29.dp
+
+/** Space under the sign button. */
+private val FOOTER_BOTTOM = 16.dp
+
+/** Height from the sign button's top to the content bottom. */
+private val FOOTER_HEIGHT = ButtonSize.Large.height + FOOTER_BOTTOM
+
+/** How far the render runs below the content bottom, behind the button and the system bar. */
+private val ILLUSTRATION_OVERFLOW = ILLUSTRATION_SIZE - ILLUSTRATION_PEEK - FOOTER_HEIGHT
+
+/** Height over which the frame's footer fades from transparent to the background, from the button's top. */
+private val FOOTER_FADE = 87.dp
+
+private fun HwWalletVendor.signIllustrationRes(): Int = when (this) {
+    HwWalletVendor.TREZOR -> R.drawable.trezor_angled
+    HwWalletVendor.BLOCKSTREAM -> illustrationRes()
+}
+
 private val previewQuote = Quote(
-    address = "bcrt1q",
+    address = "bcrt1q5pz8luhp0c7khjr27m2ct55qyr5s985fey9xh3c4kq0p7rnvzd3s2fz2tq",
     amountSats = 50_000,
     networkFeeSats = 1_141,
     instantFeeSats = 1_350,

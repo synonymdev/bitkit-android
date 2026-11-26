@@ -29,6 +29,7 @@ import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.services.LightningService
 import to.bitkit.services.WatchOnlyAccountLifecycleCoordinator
+import to.bitkit.services.WatchOnlyAccountXpubDeriver
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.LoggerLdk
 import java.util.concurrent.CountDownLatch
@@ -175,6 +176,7 @@ class WatchOnlyAccountLifecycleCoordinatorTest : BaseUnitTest() {
         lightningService,
         coordinator,
         mock<WatchOnlyAccountXpubSerializer>(),
+        mock<WatchOnlyAccountXpubDeriver>(),
     )
 
     private fun account() = WatchOnlyAccountRecord(

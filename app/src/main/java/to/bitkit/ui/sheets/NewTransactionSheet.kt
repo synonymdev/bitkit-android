@@ -41,15 +41,18 @@ import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.repositories.PaykitReceiptStatus
 import to.bitkit.ui.LocalBottomSheetOverlayState
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheet
 import to.bitkit.ui.components.BottomSheetOverlayState
 import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.PaykitReceiptStatusView
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SHEET_INTRO_IMAGE_WIDTH_FRACTION
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.UsdtAmountHeader
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.usdtOverviewAmount
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -69,6 +72,10 @@ fun NewTransactionSheet(
     modifier: Modifier = Modifier,
 ) {
     val details by appViewModel.transactionSheet.collectAsStateWithLifecycle()
+    val receiptStatuses by appViewModel.paykitReceiptStatuses.collectAsStateWithLifecycle()
+    val receiptKey = (details.usdtTransferId ?: details.paymentHashOrTxId)
+        ?.takeIf { details.direction == NewTransactionSheetDirection.RECEIVED }
+        ?.lowercase()
 
     CompositionLocalProvider(LocalBottomSheetOverlayState provides bottomSheetOverlayState) {
         BottomSheet(
@@ -83,6 +90,8 @@ fun NewTransactionSheet(
                 onDetailClick = {
                     appViewModel.onClickActivityDetail()
                 },
+                receiptStatus = receiptKey?.let(receiptStatuses::get),
+                onRetryReceiptClick = { receiptKey?.let(appViewModel::retryPaykitReceipt) },
                 modifier = modifier
                     .sheetHeight(isModal = true)
                     .then(
@@ -106,6 +115,8 @@ fun NewTransactionSheetView(
     onDetailClick: () -> Unit,
     modifier: Modifier = Modifier,
     hideBalance: Boolean = false,
+    receiptStatus: PaykitReceiptStatus? = null,
+    onRetryReceiptClick: () -> Unit = {},
 ) {
     Box(modifier = modifier) {
         TransactionConfetti(details)
@@ -165,6 +176,11 @@ fun NewTransactionSheetView(
                     sats = details.sats,
                     modifier = Modifier.fillMaxWidth().testTag("ReceivedTransaction")
                 )
+            }
+
+            receiptStatus?.let {
+                VerticalSpacer(16.dp)
+                PaykitReceiptStatusView(status = it, onRetryClick = onRetryReceiptClick)
             }
 
             Spacer(modifier = Modifier.weight(1f))

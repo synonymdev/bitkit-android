@@ -162,6 +162,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `usdt-receive-amount-and-units.xml` | same file and journey name; the Edit slide step (Amount slides in from the right, Back slides it out over the QR) waits on synonymdev/bitkit-ios#1018, since iOS still swaps the USDT receive pages without a transition. Port the step with that fix. |
 | `usdt-payment-restoration.xml` | same file, journey name and actions; Android restores an unpaid amount draft after process death, while iOS may return to the wallet. A submitted payment must return to the wallet without reopening the paid draft on either platform. |
 | `payment-requests/success-dismissal.xml` | same file, journey name and actions; both platforms dismiss successful and unpaid requests without a send error or duplicate payment. |
+| `payment-requests/paid-request-receipt.xml` | same file, journey name and actions; both platforms show the receipt line (`PaykitReceiptStatus`, `PaykitReceiptRetry`) on the received sheet and the activity row. |
 | `payment-requests/minimum-onchain-amount.xml` | shared — minimum amount feedback, preparation cleanup, and manual retry use the same journey and `PaymentRequestAmountTooLowToast` identifier on both platforms. |
 | No matching intermediate return route | `amount-limits/custom-fee-wallet-switch.xml` is iOS-only: Custom returns through the fee picker before confirmation. Android's `setTransactionSpeed` returns directly to confirmation. |
 | `amount-limits/send-spending-after-receive.xml` | Android-only regression for stale outbound channel capacity immediately after a receipt. The shared Send2 E2E case already checks over-limit rejection on iOS. |
@@ -171,6 +172,8 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `send/own-invoice-guard.xml` | not ported — iOS has no own-invoice guard |
 | `send/recovery-pin-system-back.xml` | not ported — iOS has no system Back button, and `SendPinScreen` already answers cancel in `onDisappear` |
 | `send/retry-original-dialog-style.xml` | not ported — iOS shows the two Retry original payment steps as native alerts |
+| `send/update-spending-balance-payment.xml` | same file and journey name; the lock step presses system back and drags the sheet here, while iOS opens Confirm from a link as the sheet's root and only drags it |
+| `transfer/move-to-spark.xml` | port pending — port it with the iOS Update Spending Balance modal, after synonymdev/bitkit-ios#1355 |
 | `send/onchain-connecting-view.xml` | ported with another route — on iOS the LDK Debug Restart keeps the node in the running state and a launch shows home only once the node runs, so the iOS journey opens Send while the node is still starting |
 | `send/prepared-fee-recovery.md` | Same four manual fault cases and file on both platforms; the recipe records original-send versus replacement fee retention and iOS Max/identity-flow adaptations. These faults are not journey capabilities. |
 | `settings/electrum-server-error-toasts.xml` | not ported — iOS still shows one generic message for every manual Electrum connect failure |
@@ -186,6 +189,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `pubky-profile/ring-choice-rows.xml` | same file, journey name and steps — Android names the rows and their lookup spinners differently (see [Identifiers](#identifiers)), checks that rows are disabled by tapping another row instead of reading the snapshot's Targets, needs no second tap on the profile button, and names the import overview by its "Import" title |
 | `pubky-profile/contact-import-after-leaving.xml` | same file, journey name and steps — Android names the Ring rows differently and has no identifiers on the import overview's profile and friend count, so those steps name the screen text here; see [Identifiers](#identifiers). synonymdev/bitkit-android#1399 adds `ContactImportOverviewImportAll`, the only contact import testTag the journeys use, under its iOS name |
 | `pubky-profile/contacts-list-loading.xml` | same file, journey name and steps — only the relaunch commands differ |
+| `pubky-marketplace/approval-while-node-restarts.xml` | `pubky-marketplace/approval-before-node-starts.xml`, adapted (synonymdev/bitkit-ios#1402) — iOS keeps the node running in the background, so it never restarts on a browser round trip; its journey approves on a cold start before the node has started instead |
 | `deeplinks/screen-deeplink.xml`, `deeplinks/sheet-deeplink.xml` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
 | `shop/gift-card-category-titles.xml` | not ported — iOS still hardcodes the category names, and its route in has no screen deeplink |
@@ -206,6 +210,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `transfer/spark-emergency-exit.xml` | same file, ported in synonymdev/bitkit-ios#1217 — same steps and identifiers; only the description differs, naming the iOS unit tests and the Background App Refresh, Low Power Mode and notification notes in place of Android's battery notes |
 | `transfer/savings-select-funds.xml` | same file and steps — iOS runs it as J8 on synonymdev/bitkit-ios#1128 |
 | `transfer/spark-transfer-status.xml` | same file and steps — the Wait and Approve identifiers differ (Android `SettingUpWait` and `SettingUpPay`, iOS `SparkDepositWait` and `SparkDepositPay`), and each names its own unit tests |
+| `settings/quickpay-payment-pin.xml` | same file and steps, paired with synonymdev/bitkit-ios#1326 — on iOS the PIN pad is a sheet whose back control is `NavigationBack`, and a failed biometric check counts as not approved instead of falling back to the PIN pad |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS

@@ -383,6 +383,7 @@ private fun UsdtRecipientContent(
                 QrScanningScreen(
                     showsGradientBackground = false,
                     isEmbedded = true,
+                    readsNearby = true,
                     permissionDescription = stringResource(R.string.usdt__camera_permission_description),
                     permissionAccentColor = Colors.Usdt,
                     onScanSuccess = { it.text?.trim()?.let(onRecipientContinue) },

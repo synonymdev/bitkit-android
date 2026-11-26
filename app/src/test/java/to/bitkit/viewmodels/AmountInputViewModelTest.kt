@@ -32,6 +32,7 @@ import to.bitkit.ui.components.KEY_000
 import to.bitkit.ui.components.KEY_DECIMAL
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPadType
+import java.util.Locale
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
@@ -88,6 +89,48 @@ class AmountInputViewModelTest : BaseUnitTest() {
         primaryDisplay = primaryDisplay,
         displayUnit = displayUnit
     )
+
+    @Test
+    fun `fiat typed before a switch elsewhere is redrawn in bitcoin, never read as bitcoin digits`() = test {
+        val fiat = mockCurrency(PrimaryDisplay.FIAT)
+        val bitcoin = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+        "12".forEach { viewModel.handleNumberPadInput(it.toString(), fiat) }
+        val sats = viewModel.uiState.value.sats
+        assertTrue(sats > 0L)
+
+        viewModel.syncUnit(bitcoin)
+        assertEquals(sats, viewModel.uiState.value.sats)
+
+        viewModel.handleNumberPadInput("0", bitcoin)
+        assertEquals("the typed fiat digits were read as sats", sats * 10, viewModel.uiState.value.sats)
+    }
+
+    @Test
+    fun `a redrawn amount stays editable with arabic digits`() = test {
+        val default = Locale.getDefault()
+        Locale.setDefault(Locale.forLanguageTag("ar-EG-u-nu-arab"))
+        try {
+            "20000".forEach { viewModel.handleNumberPadInput(it.toString(), mockCurrency(PrimaryDisplay.BITCOIN)) }
+            val fiat = mockCurrency(PrimaryDisplay.FIAT)
+            viewModel.syncUnit(fiat)
+
+            viewModel.handleNumberPadInput(KEY_DELETE, fiat)
+
+            assertTrue("the redrawn fiat read as zero", viewModel.uiState.value.sats > 0L)
+        } finally {
+            Locale.setDefault(default)
+        }
+    }
+
+    @Test
+    fun `a key typed after a switch elsewhere reads the amount in the unit shown`() = test {
+        "12".forEach { viewModel.handleNumberPadInput(it.toString(), mockCurrency(PrimaryDisplay.FIAT)) }
+        val sats = viewModel.uiState.value.sats
+
+        viewModel.handleNumberPadInput("0", mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN))
+
+        assertEquals(sats * 10, viewModel.uiState.value.sats)
+    }
 
     // MARK: - Modern Bitcoin Tests
 

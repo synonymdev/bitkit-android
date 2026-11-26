@@ -58,6 +58,7 @@ import to.bitkit.data.sharedpubky.SharedPubkyContract
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.isPaykitIdentityError
+import to.bitkit.ext.isPaykitStateFromNewerVersion
 import to.bitkit.ext.isPaykitTemporarilyUnavailable
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
@@ -136,6 +137,8 @@ private fun Throwable.isPaykitReadTimeout(): Boolean =
     generateSequence(this) { it.cause }.any { it is PaykitReadTimeoutError }
 
 data object PubkyAlreadySignedInError : AppError("Already signed in")
+
+data object PubkyIdentityUnavailableError : AppError("Pubky identity is not available yet")
 
 /**
  * The profile an edit starts from and the pubky.app revision it was read at; null when none exists yet. [tagsUnread] is
@@ -296,6 +299,9 @@ class PubkyRepo @Inject constructor(
     private var restoreBase: RestoreBase? = null
     private val signInGeneration = AtomicLong(0L)
     private val storedIdentityRevision = AtomicLong(0L)
+
+    @Volatile
+    private var updatePromptIdentityRevision: Long? = null
     private val readOnlyProfileGeneration = AtomicLong(0L)
     private val readOnlyProfileLock = Any()
     private var isServiceInitialized = false
@@ -331,6 +337,14 @@ class PubkyRepo @Inject constructor(
 
     private val _sessionRestorationFailed = MutableStateFlow(false)
     val sessionRestorationFailed: StateFlow<Boolean> = _sessionRestorationFailed.asStateFlow()
+
+    private val _sessionRestorationNeedsUpdate = MutableStateFlow(false)
+    val sessionRestorationNeedsUpdate: StateFlow<Boolean> = _sessionRestorationNeedsUpdate.asStateFlow()
+
+    private val _restorationNeedsUpdate = MutableStateFlow(false)
+
+    /** Stays set after the one-time prompt, so Profile can show why retrying does not help. */
+    val restorationNeedsUpdate: StateFlow<Boolean> = _restorationNeedsUpdate.asStateFlow()
 
     private val _adoptedSourceLost = MutableStateFlow(false)
     val adoptedSourceLost: StateFlow<Boolean> = _adoptedSourceLost.asStateFlow()
@@ -398,6 +412,7 @@ class PubkyRepo @Inject constructor(
         data class Restored(val publicKey: String) : InitResult
         data object RestorationFailed : InitResult
         data object RestorationDeferred : InitResult
+        data object RestorationNeedsUpdate : InitResult
     }
 
     private data class SavedContact(
@@ -716,6 +731,7 @@ class PubkyRepo @Inject constructor(
                 if (notifyFailure && it.isPaykitIdentityError() && hasSavedSession()) {
                     _sessionRestorationFailed.update { true }
                 }
+                if (it.isPaykitStateFromNewerVersion()) askForUpdateOnce()
             }.getOrElse { return false }
 
             if (notifyFailure) _sessionRestorationFailed.update { false }
@@ -730,13 +746,7 @@ class PubkyRepo @Inject constructor(
                 )
             }.onFailure {
                 Logger.error("Failed to initialize paykit", it, context = TAG)
-            }.getOrElse {
-                if (it.isPaykitTemporarilyUnavailable()) {
-                    InitResult.RestorationDeferred
-                } else {
-                    InitResult.RestorationFailed
-                }
-            }
+            }.getOrElse { it.toFailedInitResult() }
 
             when (result) {
                 is InitResult.NoSession -> {
@@ -745,16 +755,20 @@ class PubkyRepo @Inject constructor(
                 }
                 is InitResult.Restored -> {
                     _sessionRestorationFailed.update { false }
+                    _sessionRestorationNeedsUpdate.update { false }
+                    _restorationNeedsUpdate.update { false }
+                    updatePromptIdentityRevision = null
                     continueSignIn(result.publicKey)
                     Logger.info("Restored paykit session for '${redacted(result.publicKey)}'", context = TAG)
                 }
-                InitResult.RestorationFailed, InitResult.RestorationDeferred -> {
+                InitResult.RestorationFailed, InitResult.RestorationDeferred, InitResult.RestorationNeedsUpdate -> {
                     clearAuthenticatedState(
                         clearCachedProfile = false,
                         clearRestorationFailure = notifyFailure,
                         preserveStoredIdentity = true,
                     )
                     if (notifyFailure) _sessionRestorationFailed.update { result == InitResult.RestorationFailed }
+                    if (result == InitResult.RestorationNeedsUpdate) askForUpdateOnce()
                 }
             }
             deferredRestoreGeneration = signInGeneration.get().takeIf { result == InitResult.RestorationDeferred }
@@ -802,6 +816,10 @@ class PubkyRepo @Inject constructor(
                     Logger.warn("Deferred session restoration, keeping saved session", it, context = TAG)
                     return@getOrElse InitResult.RestorationDeferred
                 }
+                if (it.isPaykitStateFromNewerVersion()) {
+                    Logger.warn("Kept saved session, paykit state needs an app update", it, context = TAG)
+                    return@getOrElse InitResult.RestorationNeedsUpdate
+                }
                 Logger.warn("Failed to restore paykit session, attempting re-sign-in", it, context = TAG)
                 resolveSignedInSession(savedSessionSecret, storedSecretKeyHex ?: adoptedSecretKeyHex())
             }
@@ -830,17 +848,31 @@ class PubkyRepo @Inject constructor(
                 InitResult.Restored(publicKey)
             }.getOrElse {
                 Logger.error("Failed re-sign-in recovery", it, context = TAG)
-                if (it.isPaykitTemporarilyUnavailable()) {
-                    InitResult.RestorationDeferred
-                } else {
-                    InitResult.RestorationFailed
-                }
+                it.toFailedInitResult()
             }
         }
     }
 
+    private fun Throwable.toFailedInitResult(): InitResult = when {
+        isPaykitTemporarilyUnavailable() -> InitResult.RestorationDeferred
+        isPaykitStateFromNewerVersion() -> InitResult.RestorationNeedsUpdate
+        else -> InitResult.RestorationFailed
+    }
+
     fun clearSessionRestorationFailed() {
         _sessionRestorationFailed.update { false }
+    }
+
+    private fun askForUpdateOnce() {
+        _restorationNeedsUpdate.update { true }
+        val revision = storedIdentityRevision.get()
+        if (updatePromptIdentityRevision == revision) return
+        updatePromptIdentityRevision = revision
+        _sessionRestorationNeedsUpdate.update { true }
+    }
+
+    fun clearSessionRestorationNeedsUpdate() {
+        _sessionRestorationNeedsUpdate.update { false }
     }
 
     // endregion
@@ -1730,14 +1762,14 @@ class PubkyRepo @Inject constructor(
         return StoredCopy(tags = data?.tags.orEmpty(), image = data?.image)
     }
 
-    /** [name], [bio] and [links] fitted to pubky.app's limits: one line, cut to length, at most five valid links. */
+    /** [name], [bio] and [links] fitted to pubky.app's limits: one line, cut to length, at most five web links. */
     private fun fitted(name: String, bio: String, links: List<PubkyProfileLink>) = FittedProfile(
         name = name.singleLine().takeCodePoints(PUBKY_APP_NAME_MAX_LENGTH),
         bio = bio.singleLine().takeCodePoints(PUBKY_APP_BIO_MAX_LENGTH),
         links = links
             .mapNotNull { link ->
                 val title = link.label.singleLine().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                val url = link.url.toPubkyAppLinkUrl() ?: return@mapNotNull null
+                val url = link.url.toPubkyAppLinkUrl()?.takeIf { it.isSocialV1WebUrl() } ?: return@mapNotNull null
                 PubkyProfileLink(label = title.takeCodePoints(PUBKY_APP_LINK_TITLE_MAX_LENGTH), url = url)
             }
             .take(PUBKY_APP_LINKS_MAX_COUNT),
@@ -1869,8 +1901,9 @@ class PubkyRepo @Inject constructor(
         val value = trim().takeIf { it.isNotEmpty() } ?: return null
         val isPhone = value.isPhoneNumber()
         if (!isPhone && value.any { it.isWhitespace() }) return null
+        val scheme = if (isPhone) null else runCatching { URI(value).scheme }.getOrNull()
         val url = when {
-            !isPhone && runCatching { URI(value).scheme }.getOrNull() != null -> value
+            scheme != null -> scheme.lowercase() + value.substring(scheme.length)
             value.isEmailAddress() -> "mailto:$value"
             isPhone -> "tel:" + value.filterNot { it in " -()." }
             '.' in value && !value.startsWith('.') -> "https://$value"
@@ -1908,10 +1941,14 @@ class PubkyRepo @Inject constructor(
             !ISO_DATE.matches(this) && !IPV4.matches(this)
     }
 
+    /** Social v1's own link rule: a lowercase `http://` or `https://` prefix; it drops other links on migration too. */
+    private fun String.isSocialV1WebUrl() = startsWith("http://") || startsWith("https://")
+
     private fun String.isPaykitStorage() = "/pub/paykit/" in this
 
     private fun String.isPubkyAppFile() =
-        "/pub/pubky.app/files/" in this && codePointCount(0, length) <= PUBKY_APP_LINK_URL_MAX_LENGTH
+        ("/pub/pubky.app/files/" in this || "/pub/social/v1/files/" in this) &&
+            codePointCount(0, length) <= PUBKY_APP_LINK_URL_MAX_LENGTH
 
     private suspend fun publishPaykitProfileCopy(
         signIn: PubkySignIn,
@@ -2549,6 +2586,61 @@ class PubkyRepo @Inject constructor(
 
     // endregion
 
+    // region Wake
+
+    /**
+     * The `pk:` identity a wake registration proves besides `ln:`, or null when it proves `ln:` alone: without a
+     * profile, or with a session whose key this device does not hold. Fails while a saved identity cannot be read yet,
+     * so the caller skips the registration rather than dropping `pk:` and the grants tied to it.
+     */
+    suspend fun wakeIdentity(): Result<String?> = runSuspendCatching {
+        withContext(ioDispatcher) {
+            when (awaitIdentityReady()) {
+                PubkyIdentityReadiness.Missing -> null
+                PubkyIdentityReadiness.Unavailable,
+                PubkyIdentityReadiness.RecoveryRequired,
+                -> throw PubkyIdentityUnavailableError
+                PubkyIdentityReadiness.Ready -> {
+                    val publicKey = _publicKey.value ?: throw PubkyIdentityUnavailableError
+                    publicKey.takeIf { hasWakeKeyFor(it) }?.let(::pubkyWakeIdentity)
+                }
+            }
+        }
+    }
+
+    /** Signs a wake registration [message] for the `pk:` proof of [identity], with its key read just in time. */
+    suspend fun signWakeRegistration(identity: String, message: String): Result<String> = runSuspendCatching {
+        withContext(ioDispatcher) {
+            val publicKey = checkNotNull(_publicKey.value) { "No active Pubky session" }
+            check(pubkyWakeIdentity(publicKey) == identity) { "Pubky identity changed since the registration" }
+            val secretKeyHex = checkNotNull(wakeSecretKeyFor(publicKey)) { "No key for the Pubky identity" }
+            pubkyService.signWakeRegistration(secretKeyHex, message)
+        }
+    }
+
+    /** Whether this device holds the key of [publicKey], decided without reading a Ring-adopted key from Ring. */
+    private suspend fun hasWakeKeyFor(publicKey: String): Boolean {
+        val localKey = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+        if (!localKey.isNullOrEmpty()) {
+            return pubkyService.publicKeyFromSecret(localKey).ensurePubkyPrefix() == publicKey
+        }
+        val source = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name)
+        return source == "${SharedPubkyContract.RING_SOURCE_PREFIX}${publicKey.removePrefix(PUBKY_PREFIX)}"
+    }
+
+    private suspend fun wakeSecretKeyFor(publicKey: String): String? {
+        val localKey = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+        if (!localKey.isNullOrEmpty()) {
+            return localKey.takeIf { pubkyService.publicKeyFromSecret(it).ensurePubkyPrefix() == publicKey }
+        }
+        val bareKey = publicKey.removePrefix(PUBKY_PREFIX)
+        val source = keychain.loadString(Keychain.Key.SHARED_PUBKY_SOURCE.name)
+        if (source != "${SharedPubkyContract.RING_SOURCE_PREFIX}$bareKey") return null
+        return sharedPubkyClient.ringCredential(bareKey).getOrThrow()
+    }
+
+    // endregion
+
     // region Backup state
 
     suspend fun snapshotSessionBackupState(): Result<PubkySessionBackupV1?> = runSuspendCatching {
@@ -3068,7 +3160,10 @@ class PubkyRepo @Inject constructor(
         pubkyService.revokeProfileLogout()
         // First, so work of the ending sign-in stops before the store reset below, and cannot write after it.
         signInGeneration.incrementAndGet()
-        if (!preserveStoredIdentity) storedIdentityRevision.incrementAndGet()
+        if (!preserveStoredIdentity) {
+            storedIdentityRevision.incrementAndGet()
+            _restorationNeedsUpdate.update { false }
+        }
         if (clearCachedProfile) {
             invalidateReadOnlyProfile()
             evictPubkyImages()
@@ -3086,7 +3181,10 @@ class PubkyRepo @Inject constructor(
         _contactsLoadVersion.update { 0L }
         _contactsLoadCompletionVersion.update { 0L }
         clearPendingImport()
-        if (clearRestorationFailure) _sessionRestorationFailed.update { false }
+        if (clearRestorationFailure) {
+            _sessionRestorationFailed.update { false }
+            _sessionRestorationNeedsUpdate.update { false }
+        }
     }
 
     private fun updateContacts(transform: (List<PubkyProfile>) -> List<PubkyProfile>) {

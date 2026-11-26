@@ -131,6 +131,8 @@ val bcp47Locales = listOf(
 )
 val e2eEnv = envFlag("E2E", default = false)
 val e2eBackendEnv = providers.environmentVariable("E2E_BACKEND").orElse("local")
+val sparkLocalConfigEnv = providers.environmentVariable("SPARK_LOCAL_CONFIG_B64").orElse("")
+val sparkLocalChainUrlEnv = providers.environmentVariable("SPARK_LOCAL_CHAIN_URL").orElse("")
 val e2eLocalHostEnv = providers.environmentVariable("E2E_LOCAL_HOST").orElse("10.0.2.2")
 val e2eHomegateUrlEnv = providers.environmentVariable("E2E_HOMEGATE_URL")
     .orElse(e2eLocalHostEnv.map { "http://$it:6288" })
@@ -417,13 +419,23 @@ androidComponents {
         buildConfigFields.put("ESPLORA_URL", localProp("ESPLORA_URL").orElse("").stringField())
         buildConfigFields.put("E2E", e2eEnv.booleanField())
         buildConfigFields.put("E2E_BACKEND", e2eBackendEnv.stringField())
+        buildConfigFields.put("SPARK_LOCAL_CONFIG_B64", sparkLocalConfigEnv.stringField())
+        buildConfigFields.put("SPARK_LOCAL_CHAIN_URL", sparkLocalChainUrlEnv.stringField())
         buildConfigFields.put("E2E_LOCAL_HOST", e2eLocalHostEnv.stringField())
         buildConfigFields.put("E2E_HOMEGATE_URL", e2eHomegateUrlEnv.stringField())
         buildConfigFields.put("E2E_HOMESERVER_PUBKY", e2eHomeserverPubkyEnv.stringField())
         buildConfigFields.put("E2E_HOMEGATE_OVERRIDE", e2eHomegateOverrideEnv.stringField())
         buildConfigFields.put("PUBKY_SWAPS_ROUTES", pubkySwapsRoutesEnv.booleanField())
         buildConfigFields.put("PUBKY_SWAPS_PROVIDERS", pubkySwapsProvidersEnv.stringField())
-        for (key in listOf("E2E_VSS_SERVER_URL", "E2E_LNURL_AUTH_SERVER_URL", "E2E_BLOCKTANK_API_URL", "BLOCKTANK_REGTEST_AUTH")) {
+        val debugOnlyFields = listOf(
+            "E2E_VSS_SERVER_URL",
+            "E2E_LNURL_AUTH_SERVER_URL",
+            "E2E_BLOCKTANK_API_URL",
+            "BLOCKTANK_REGTEST_AUTH",
+            // A local wake gateway to test wakes against; see Env.wakeGatewayUrl.
+            "WAKE_GATEWAY_URL",
+        )
+        for (key in debugOnlyFields) {
             val value = if (variant.buildType == "debug") localProp(key).orElse("") else provider { "" }
             buildConfigFields.put(key, value.stringField())
         }

@@ -261,6 +261,21 @@ class WalletConnectionRecoveryTest : BaseUnitTest() {
     }
 
     @Test
+    fun `record holding a retired default server replays and completes as the current default`() = test {
+        val retired = "ssl://fulcrum.bitkit.blocktank.to:8900"
+        sut.withOperation(sut.captureOwner()) { it.save(electrum = retired) }
+        assertTrue(record.orEmpty().contains(retired))
+
+        val restarted = instance()
+        restarted.withOperation(restarted.captureOwner()) { session ->
+            val revision = session.replay()
+            assertEquals(Env.electrumServerUrl, settings.data.first().electrumServer)
+            session.complete(revision)
+        }
+        assertNull(record)
+    }
+
+    @Test
     fun `separate saves preserve both choices and an absent default RGS remains explicit`() = test {
         sut.withOperation(sut.captureOwner()) { session ->
             session.save(electrum = "tcp://chosen.example:50001")

@@ -22,8 +22,10 @@ import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.utils.profileErrorDescription
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -33,6 +35,7 @@ private const val TAG = "PubkyChoiceViewModel"
 class PubkyChoiceViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(PubkyChoiceUiState())
     val uiState = _uiState.asStateFlow()
@@ -63,7 +66,7 @@ class PubkyChoiceViewModel @Inject constructor(
                             ToastEventBus.send(
                                 type = Toast.ToastType.ERROR,
                                 title = context.getString(R.string.common__error),
-                                description = it.message,
+                                description = it.profileErrorDescription(context),
                             )
                         }
                     }
@@ -73,6 +76,9 @@ class PubkyChoiceViewModel @Inject constructor(
                         pubkyRepo.pendingImportContacts.value.isEmpty() -> PubkyChoiceEffect.NavigateToPayContacts
                         else -> PubkyChoiceEffect.NavigateToContactImportOverview
                     }
+                    if (effect == PubkyChoiceEffect.NavigateToPayContacts) {
+                        contactPaymentSettingsRepo.enableForNewProfile()
+                    }
                     _effects.emit(effect)
                 }
                 .onFailure {
@@ -81,7 +87,7 @@ class PubkyChoiceViewModel @Inject constructor(
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.profile__auth_error_title),
-                        description = it.message,
+                        description = it.profileErrorDescription(context),
                     )
                 }
         }

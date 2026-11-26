@@ -4,6 +4,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.synonym.paykit.AllowanceFilter
+import com.synonym.paykit.AllowanceRecord
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.EndpointSyncReport
@@ -20,6 +22,7 @@ import com.synonym.paykit.PaykitAppRegistry
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitIdentitySecretKey
 import com.synonym.paykit.PaykitNoiseKeyAuthorization
+import com.synonym.paykit.PaykitProfile
 import com.synonym.paykit.PaykitProfileRecord
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitStateObservation
@@ -46,6 +49,8 @@ import com.synonym.paykit.PubkyGrantLogoutAttempt
 import com.synonym.paykit.PubkyGrantLogoutReceipt
 import com.synonym.paykit.PubkyIdentityCapability
 import com.synonym.paykit.PubkyLocalSecretKey
+import com.synonym.paykit.PubkyProfileSnapshot
+import com.synonym.paykit.PubkyProfileUpdate
 import com.synonym.paykit.PubkySessionAccess
 import com.synonym.paykit.PubkySessionBootstrap
 import com.synonym.paykit.PubkySessionBootstrapResult
@@ -84,6 +89,7 @@ import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.inOrder
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -1847,7 +1853,7 @@ class PaykitSdkServiceTest {
         assertFailsWith<CancellationException> { withdrawal.await() }
         assertEquals(emptyList(), next.await())
         assertEquals(listOf("registry completed", "registry acknowledged", "next admitted"), events)
-        verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
+        verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, true, true))
     }
 
     @Test
@@ -1894,7 +1900,7 @@ class PaykitSdkServiceTest {
                     listOf("messages", "publication")
                 }
                 assertEquals(listOf("active completed") + queued, events)
-                verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
+                verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, true, true))
             }
         }
     }
@@ -2804,7 +2810,7 @@ class PaykitSdkServiceTest {
                 verify(keychain).upsertString(Keychain.Key.PAYKIT_SESSION.name, "new-session")
                 verify(sdk).initialize()
                 verify(sdk).publishPaykitNoiseKeyAuthorization()
-                verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
+                verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, true, true))
                 verify(sdk).resolveProfile(RING_PUBKY, true)
             }
             verify(sdk, times(1)).initialize()
@@ -2901,7 +2907,7 @@ class PaykitSdkServiceTest {
                 assertSame(result, service.importSession("new-session"))
                 verify(sdk, times(2)).initialize()
                 verify(sdk, times(if (failAuthorization) 2 else 1)).publishPaykitNoiseKeyAuthorization()
-                verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
+                verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, true, true))
             }
         }
     }
@@ -3236,7 +3242,7 @@ class PaykitSdkServiceTest {
                     verify(keychain).upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, bytes.toHex())
                     verify(sdk).initialize()
                     verify(sdk).publishPaykitNoiseKeyAuthorization()
-                    verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, false, true))
+                    verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(false, true, true, true))
                 }
                 verify(sdk, never()).identityStatus()
                 verify(blocking, never()).delete(any())
@@ -4564,7 +4570,7 @@ class PaykitSdkServiceTest {
 
             service.initialize()
 
-            verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(enabled, true, false, true))
+            verify(sdk).publishPaykitApp("Bitkit", PaykitAppCapabilities(enabled, true, true, true))
             verify(sdk, never()).identityStatus()
         }
     }
@@ -4730,6 +4736,108 @@ class PaykitSdkServiceTest {
 
         assertTrue(!provider.canDeferStaleSession("restore Pubky grant session from platform provider"))
         assertTrue(!provider.canDeferStaleSession("local Pubky secret key does not match session public key"))
+    }
+
+    @Test
+    fun `a current endpoint publication is reusable while another write has not started`() = runTest {
+        mockConstruction(PaymentPayload::class.java).use {
+            val sdk = mock<PaykitSdk>()
+            val report = EndpointSyncReport(emptyList(), emptyList(), emptyList())
+            whenever(sdk.syncPublicEndpointsWithReceivingDetails(any())).thenReturn(report)
+            val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+            val endpoints = listOf(Endpoint(MethodId.P2tr, "bc1ptest", rawPayload = "bc1ptest"))
+            val published = checkNotNull(service.syncPublicEndpointsWithEpoch(endpoints, { true }, null))
+
+            assertNull(service.syncPublicEndpointsWithEpoch(endpoints, { false }, published))
+            assertSame(published, service.syncPublicEndpointsWithEpoch(endpoints, { true }, published))
+            verify(sdk).syncPublicEndpointsWithReceivingDetails(any())
+        }
+    }
+
+    @Test
+    fun `a direct public withdrawal invalidates overlapping refresh reuse even if it fails`() = runTest {
+        mockConstruction(PaymentPayload::class.java).use {
+            for (withdrawalFails in listOf(false, true)) {
+                val sdk = mock<PaykitSdk>()
+                val report = EndpointSyncReport(emptyList(), emptyList(), emptyList())
+                whenever(sdk.syncPublicEndpointsWithReceivingDetails(any())).doSuspendableAnswer {
+                    if (withdrawalFails && it.getArgument<List<Any>>(0).isEmpty()) {
+                        error("offline")
+                    }
+                    report
+                }
+                val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+                val endpoints = listOf(Endpoint(MethodId.P2tr, "bc1ptest", rawPayload = "bc1ptest"))
+                val published = checkNotNull(service.syncPublicEndpointsWithEpoch(endpoints, { true }, null))
+
+                if (withdrawalFails) {
+                    assertFailsWith<IllegalStateException> { service.syncPublicEndpoints(emptyList()) }
+                } else {
+                    service.syncPublicEndpoints(emptyList())
+                }
+                assertTrue(service.publicEndpointSyncEpoch() > published.epoch)
+                val repeated = checkNotNull(service.syncPublicEndpointsWithEpoch(endpoints, { true }, published))
+
+                assertTrue(repeated.epoch > published.epoch)
+                verify(sdk).syncPublicEndpointsWithReceivingDetails(emptyList())
+                verify(sdk, times(3)).syncPublicEndpointsWithReceivingDetails(any())
+            }
+        }
+    }
+
+    @Test
+    fun `profile and tag writes overtake queued registration and allowance reads`() = runTest {
+        val sdk = mock<PaykitSdk>()
+        val release = CompletableDeferred<Unit>()
+        val finishRegistration = CompletableDeferred<Unit>()
+        val events = mutableListOf<String>()
+        whenever(sdk.contactRecords()).doSuspendableAnswer {
+            release.await()
+            events += "active completed"
+            emptyList()
+        }
+        whenever(sdk.identityStatus())
+            .thenReturn(IdentityStatus(RING_PUBKY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        whenever(sdk.publishPaykitApp(any(), any())).doSuspendableAnswer {
+            events += "registration"
+            finishRegistration.await()
+            mock<PaykitAppRegistry>()
+        }
+        whenever(sdk.listAllowances(any())).thenAnswer {
+            events += "allowances"
+            emptyList<AllowanceRecord>()
+        }
+        whenever(sdk.publishPubkyProfile(any(), any())).thenAnswer {
+            events += "profile"
+            mock<PubkyProfileSnapshot>()
+        }
+        whenever(sdk.publishPaykitProfile(any(), isNull())).thenAnswer {
+            events += "tags"
+            mock<PaykitProfileRecord>()
+        }
+
+        val service = PaykitSdkService(mock(), mock(), mock(), settingsStore = mock()) { sdk }
+        val active = async { service.contactRecords() }
+        runCurrent()
+        val registration = async { service.syncPaykitApp(true, Priority.Background) }
+        val allowances = async { service.listAllowances(AllowanceFilter(null, null, emptyList())) }
+        service.setPaymentSubmissionActive(true)
+        val setup = async { service.hasPrivatePaymentAccess() }
+        val save = async {
+            service.publishPubkyProfile(mock<PubkyProfileUpdate>(), "revision", RING_PUBKY)
+            service.publishPaykitProfile(mock<PaykitProfile>(), RING_PUBKY)
+        }
+        runCurrent()
+        val beforeRelease = events.toList()
+        release.complete(Unit)
+        runCurrent()
+        val duringRegistration = events.toList()
+        finishRegistration.complete(Unit)
+        awaitAll(active, registration, allowances, setup, save)
+        assertTrue(beforeRelease.isEmpty())
+        assertEquals(listOf("active completed", "profile", "registration"), duringRegistration)
+        assertTrue(setup.await())
+        assertEquals(listOf("active completed", "profile", "registration", "tags", "allowances"), events)
     }
 
     @Test

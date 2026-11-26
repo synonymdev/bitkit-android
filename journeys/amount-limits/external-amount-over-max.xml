@@ -13,8 +13,8 @@
   </description>
   <actions>
     <action>Open Settings, then the "Advanced" tab, then "Lightning Connections"</action>
-    <action>Tap "Get Started" to open the funding options screen</action>
-    <action>Tap "Manual Setup" (testTag "FundManual")</action>
+    <action>Tap "Get Started", or "Add Connection" (testTag "add_connection_button") when Spark is connected, to open the funding options screen</action>
+    <action>Tap "Manual setup" (testTag "FundManual")</action>
     <action>Type the node id into the node id field (testTag "NodeIdInput")</action>
     <action>Type the host into the host field (testTag "HostInput")</action>
     <action>Type the port into the port field (testTag "PortInput")</action>

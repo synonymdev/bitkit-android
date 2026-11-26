@@ -13,9 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -40,7 +38,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -77,13 +74,12 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TertiaryButton
+import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.Tooltip
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.rememberQrBitmap
@@ -91,6 +87,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.usdt.UsdtDepositReceiveScreen
 import to.bitkit.ui.shared.effects.SetMaxBrightness
+import to.bitkit.ui.shared.effects.offerPaymentNearby
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.shareQrCode
@@ -98,30 +95,9 @@ import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.screenHeight
-import to.bitkit.ui.utils.screenWidth
-import to.bitkit.ui.utils.withAccent
 
-/** The Spending onboarding card's height against the screen's, as Figma draws it 343 pt tall on an 812 pt screen. */
-private const val CJIT_CARD_SCREEN_SHARE = 343f / 812f
-
-/** The gap from the onboarding card's bottom to the button's top, as Figma's 122 pt on an 812 pt screen. */
-private const val CJIT_CARD_BOTTOM_GAP_SHARE = 122f / 812f
-
-/** The spacing the screen already keeps above its bottom button. */
+/** The spacing the screen keeps above its bottom button. */
 private val BUTTON_TOP_SPACING = 24.dp
-
-/** The arrow under the onboarding card, as iOS draws it: 210 pt tall on an 874 pt screen. */
-private const val CJIT_ARROW_HEIGHT_SHARE = 210f / 874f
-
-/** The arrow's offset from the card's bottom left, as iOS's 70 pt on a 402 pt wide screen. */
-private const val CJIT_ARROW_X_SHARE = 70f / 402f
-
-/** The arrow's drop below the card's bottom, as iOS's 110 pt on an 874 pt screen. */
-private const val CJIT_ARROW_Y_SHARE = 110f / 874f
-
-/** Screens shorter than this leave out the arrow, as iOS does on its small screens. */
-private val CJIT_ARROW_MIN_SCREEN_HEIGHT = 800.dp
 
 @OptIn(FlowPreview::class)
 @Composable
@@ -130,7 +106,6 @@ fun ReceiveQrScreen(
     walletState: WalletState,
     lightningState: LightningState,
     onClickEditInvoice: (ReceiveTab) -> Unit,
-    onClickReceiveCjit: () -> Unit,
     modifier: Modifier = Modifier,
     onClickHardwareEditInvoice: () -> Unit = { onClickEditInvoice(ReceiveTab.HARDWARE) },
     initialTab: ReceiveTab? = null,
@@ -179,10 +154,11 @@ fun ReceiveQrScreen(
                 add(ReceiveTab.HARDWARE)
             }
             add(ReceiveTab.SAVINGS)
+            // Without a usable Spark wallet or channel there is no Lightning invoice, so Auto and Spending hide.
             if (canCreateLightningInvoice) {
                 add(ReceiveTab.AUTO)
+                add(ReceiveTab.SPENDING)
             }
-            add(ReceiveTab.SPENDING)
             if (usdtEnabled) add(ReceiveTab.USDT)
         }.toImmutableList()
     }
@@ -321,9 +297,6 @@ fun ReceiveQrScreen(
         }
     }
 
-    // Shown while the node starts too, with its button disabled until the node runs.
-    val showingCjitOnboarding = !canCreateLightningInvoice
-
     fun selectReceiveTab(tab: ReceiveTab) {
         val wrapsToFirst = selectedTab == visibleTabs.last() && tab == visibleTabs.first()
         selectedTab = tab
@@ -343,6 +316,15 @@ fun ReceiveQrScreen(
     val tabLabels = remember(hardwareTabLabel) {
         hardwareTabLabel?.let { persistentMapOf(ReceiveTab.HARDWARE to it) } ?: persistentMapOf()
     }
+
+    val canTapToPay = offerPaymentNearby(
+        nearbyReceiveRequest(
+            tab = selectedTab,
+            request = invoicesByTab[selectedTab],
+            hasInvoiceError = walletState.hasReceiveInvoiceError,
+            isUpdating = walletState.isReceiveInvoiceUpdating,
+        )
+    )
 
     if (selectedTab == ReceiveTab.USDT) {
         Column(
@@ -447,22 +429,6 @@ fun ReceiveQrScreen(
                             .fillParentMaxHeight()
                     ) {
                         when {
-                            showingCjitOnboarding && tab == ReceiveTab.SPENDING -> {
-                                Box(
-                                    contentAlignment = Alignment.BottomCenter,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f)
-                                ) {
-                                    CjitOnBoardingView(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(screenHeight() * CJIT_CARD_SCREEN_SHARE)
-                                    )
-                                }
-                                VerticalSpacer(screenHeight() * CJIT_CARD_BOTTOM_GAP_SHARE - BUTTON_TOP_SPACING)
-                            }
-
                             tab == ReceiveTab.HARDWARE && hardwareReceiveState.address == null -> {
                                 HardwareAddressLoadingView(
                                     isLoading = hardwareReceiveState.isLoadingAddress,
@@ -518,6 +484,7 @@ fun ReceiveQrScreen(
                                             { onClickEditInvoice(tab) }
                                         },
                                         accentColor = tab.accentColor,
+                                        showsTapToPay = canTapToPay,
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 }
@@ -529,9 +496,7 @@ fun ReceiveQrScreen(
 
             VerticalSpacer(BUTTON_TOP_SPACING)
 
-            val showCjitButton = showingCjitOnboarding && selectedTab == ReceiveTab.SPENDING
             val buttonVariant = when {
-                showCjitButton -> BottomButtonVariant.CJIT
                 showDetails -> BottomButtonVariant.SHOW_QR
                 else -> BottomButtonVariant.SHOW_DETAILS
             }
@@ -540,26 +505,6 @@ fun ReceiveQrScreen(
                 label = "ReceiveBottomButtonCrossfade",
             ) { variant ->
                 when (variant) {
-                    BottomButtonVariant.CJIT -> PrimaryButton(
-                        text = stringResource(R.string.wallet__receive__cjit),
-                        icon = {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_lightning_alt),
-                                tint = Colors.Purple,
-                                contentDescription = null,
-                            )
-                        },
-                        onClick = {
-                            onClickReceiveCjit()
-                            showDetails = false
-                        },
-                        enabled = lightningState.nodeLifecycleState.isRunning(),
-                        fullWidth = true,
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .testTag("ShowDetails")
-                    )
-
                     BottomButtonVariant.SHOW_QR -> Column(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.padding(horizontal = 16.dp)
@@ -639,6 +584,7 @@ fun ReceiveQrView(
     onClickEditInvoice: (() -> Unit)?,
     accentColor: Color,
     modifier: Modifier = Modifier,
+    showsTapToPay: Boolean = false,
     shareContent: String = copyText,
     copyMessage: String = stringResource(R.string.wallet__receive_copied),
 ) {
@@ -734,48 +680,30 @@ fun ReceiveQrView(
             )
         }
         VerticalSpacer(16.dp)
+        if (showsTapToPay) {
+            TapToPayLabel()
+            VerticalSpacer(16.dp)
+        }
     }
 }
 
 @Composable
-fun CjitOnBoardingView(modifier: Modifier = Modifier) {
-    val screenHeight = screenHeight()
-    Box(modifier = modifier) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag("ReceiveSpendingCard")
-                .clip(AppShapes.small)
-                .background(color = Colors.Black)
-                .padding(32.dp)
-        ) {
-            Display(stringResource(R.string.wallet__receive_onboarding_title).withAccent(accentColor = Colors.Purple))
-            VerticalSpacer(8.dp)
-            BodyM(
-                stringResource(R.string.wallet__receive_onboarding_description),
-                color = Colors.White64,
-                modifier = Modifier.fillMaxWidth()
-            )
-            FillHeight()
-            Icon(
-                painter = painterResource(R.drawable.ic_lightning_alt),
-                tint = Colors.Purple,
-                contentDescription = null,
-                modifier = Modifier.size(64.dp)
-            )
-        }
-        if (screenHeight >= CJIT_ARROW_MIN_SCREEN_HEIGHT) {
-            Icon(
-                painter = painterResource(R.drawable.arrow),
-                tint = Colors.Purple,
-                contentDescription = null,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .offset(x = screenWidth() * CJIT_ARROW_X_SHARE, y = screenHeight * CJIT_ARROW_Y_SHARE)
-                    .height(screenHeight * CJIT_ARROW_HEIGHT_SHARE)
-            )
-        }
+private fun TapToPayLabel(modifier: Modifier = Modifier) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.testTag("ReceiveTapToPay")
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_broadcast),
+            contentDescription = null,
+            tint = Colors.White64,
+            modifier = Modifier.size(16.dp)
+        )
+        Text13Up(
+            text = stringResource(R.string.wallet__receive_scan_or_tap),
+            color = Colors.White64,
+        )
     }
 }
 
@@ -939,7 +867,7 @@ private fun ReceiveInvoiceErrorView(
     }
 }
 
-private enum class BottomButtonVariant { CJIT, SHOW_QR, SHOW_DETAILS }
+private enum class BottomButtonVariant { SHOW_QR, SHOW_DETAILS }
 
 enum class CopyAddressType { ONCHAIN, LIGHTNING }
 
@@ -1067,7 +995,6 @@ private fun PreviewSavingsMode() {
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
                 initialTab = ReceiveTab.SAVINGS,
-                onClickReceiveCjit = {},
             )
         }
     }
@@ -1138,7 +1065,6 @@ private fun PreviewAutoMode() {
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
                 initialTab = ReceiveTab.AUTO,
-                onClickReceiveCjit = {},
             )
         }
     }
@@ -1204,7 +1130,6 @@ private fun PreviewSpendingMode() {
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
                 initialTab = ReceiveTab.SPENDING,
-                onClickReceiveCjit = {},
             )
         }
     }
@@ -1220,7 +1145,6 @@ private fun PreviewNodeNotReady() {
                 lightningState = LightningState(
                     nodeLifecycleState = NodeLifecycleState.Starting,
                 ),
-                onClickReceiveCjit = {},
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
             )
@@ -1240,7 +1164,6 @@ private fun PreviewSmall() {
                 ),
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
-                onClickReceiveCjit = {},
             )
         }
     }

@@ -171,7 +171,7 @@ internal fun EditProfileContent(
                 onAddTag = onAddTag,
                 onSave = onSave,
                 onCancel = onBackClick,
-                isSaveEnabled = isValidProfileName(uiState.name) && !uiState.isBusy,
+                isSaveEnabled = isValidProfileName(uiState.name) && uiState.hasOnlyWebLinks && !uiState.isBusy,
                 topBar = topBar,
                 isSaving = uiState.isSaving,
                 isDeleting = uiState.isDeleting,
@@ -259,6 +259,7 @@ internal fun EditProfileContent(
         AddLinkSheet(
             onDismiss = onDismissAddLinkSheet,
             onSave = onSaveLink,
+            webLinksOnly = true,
         )
     }
 

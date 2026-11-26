@@ -17,16 +17,19 @@ import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PaykitReceiptRepo
 import to.bitkit.repositories.PaykitUsdtPaymentRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PubkySwapsRouteRepo
 import to.bitkit.repositories.UsdtRepo
+import to.bitkit.repositories.WakeRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.PaykitSdkService
+import to.bitkit.ui.settings.lightning.MoveToSparkManager
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.util.UUID
@@ -59,7 +62,10 @@ class WipeWalletUseCase @Inject constructor(
     private val paykitUsdtPaymentRepo: PaykitUsdtPaymentRepo,
     private val profileRemovalStore: ProfileRemovalStore,
     private val contactPaymentSettingsRepo: Provider<ContactPaymentSettingsRepo>,
+    private val paykitReceiptRepo: PaykitReceiptRepo,
     private val connectionRecovery: WalletConnectionRecovery,
+    private val wakeRepo: WakeRepo,
+    private val moveToSparkManager: Provider<MoveToSparkManager>,
 ) {
     private val wipeMutex = Mutex()
 
@@ -126,6 +132,7 @@ class WipeWalletUseCase @Inject constructor(
     private suspend fun cleanupRemote() {
         step("remove Paykit published endpoints") { privatePaykitRepo.get().removePublishedEndpointsForCleanup(TAG) }
         step("remove Bitkit payment endpoints") { pubkyRepo.removeBitkitPaymentEndpoints() }
+        step("unregister wake device") { wakeRepo.unregister() }
     }
 
     private suspend fun wipeLocal(
@@ -140,6 +147,7 @@ class WipeWalletUseCase @Inject constructor(
         onCredentialWipe()
         usdtRepo.wipe { keychain.wipe() }.getOrThrow()
         paykitUsdtPaymentRepo.resetForWipe()
+        step("reset Paykit receipts") { paykitReceiptRepo.resetForWipe() }
         // Consumption watermarks survive until the keychain wipe is acknowledged. Pending remains on any failure.
         privatePaykitAddressReservationRepo.clear()
         privatePaykitRepo.get().finishProfileRemoval(pause).getOrElse { return Result.failure(it) }
@@ -154,6 +162,7 @@ class WipeWalletUseCase @Inject constructor(
         blocktankRepo.resetState()
         activityRepo.resetState()
         hwWalletRepo.resetState()
+        moveToSparkManager.get().resetForWipe()
         migrationService.markMigrationChecked()
         return Result.success(Unit)
     }

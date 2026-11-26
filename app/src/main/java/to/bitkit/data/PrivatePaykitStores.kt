@@ -6,9 +6,15 @@ import androidx.datastore.core.Serializer
 import androidx.datastore.dataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import to.bitkit.di.json
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.utils.Logger
 import java.io.InputStream
 import java.io.OutputStream
@@ -23,6 +29,75 @@ private val Context.privatePaykitCacheDataStore: DataStore<PrivatePaykitCacheDat
 private val Context.privatePaykitReservationDataStore: DataStore<PrivatePaykitReservationData> by dataStore(
     fileName = "private_paykit_reservations.json",
     serializer = PrivatePaykitReservationSerializer,
+)
+
+private val Context.paykitOutboundDeliveryDataStore: DataStore<PaykitOutboundDeliveryData> by dataStore(
+    fileName = "paykit_outbound_delivery.json",
+    serializer = PaykitOutboundDeliverySerializer,
+)
+
+/**
+ * Receipt ids seen sent, per identity. The SDK reports Receipt Access delivery on each issuance, but a restored SDK
+ * does not send a delivered message again, so the wallet backup carries these ids to keep such receipts sent.
+ */
+@Singleton
+class PaykitOutboundDeliveryStore @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
+    private val store by lazy { context.paykitOutboundDeliveryDataStore }
+    private val _backupStateVersion = MutableStateFlow(0L)
+
+    /** Moves when a receipt is first seen sent. */
+    val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
+
+    suspend fun isSent(identity: String, receiptId: String): Boolean =
+        store.data.first().identities[key(identity)]?.sentReceiptIds?.contains(receiptId) == true
+
+    suspend fun markSent(identity: String, receiptId: String) {
+        updateRecords(identity) { it.copy(sentReceiptIds = it.sentReceiptIds + receiptId) }
+    }
+
+    suspend fun reset() {
+        store.updateData { PaykitOutboundDeliveryData() }
+    }
+
+    /** Receipt ids seen sent, by identity, for the wallet backup. */
+    suspend fun backupSnapshot(): Map<String, Set<String>> =
+        store.data.first().identities.mapValues { it.value.sentReceiptIds }.filterValues { it.isNotEmpty() }
+
+    /** Adds the restored sent receipt ids to what this device already recorded. */
+    suspend fun restoreBackup(sentReceiptIds: Map<String, Set<String>>) {
+        sentReceiptIds.forEach { (identity, ids) ->
+            updateRecords(identity) { it.copy(sentReceiptIds = it.sentReceiptIds + ids) }
+        }
+    }
+
+    private suspend fun updateRecords(
+        identity: String,
+        transform: (PaykitOutboundDeliveryRecords) -> PaykitOutboundDeliveryRecords,
+    ) {
+        val key = key(identity)
+        var sentChanged = false
+        store.updateData { data ->
+            val current = data.identities[key] ?: PaykitOutboundDeliveryRecords()
+            val records = transform(current)
+            sentChanged = records.sentReceiptIds != current.sentReceiptIds
+            if (records == current) data else data.copy(identities = data.identities + (key to records))
+        }
+        if (sentChanged) _backupStateVersion.update { it + 1 }
+    }
+
+    private fun key(identity: String) = PubkyPublicKeyFormat.normalized(identity) ?: identity
+}
+
+@Serializable
+data class PaykitOutboundDeliveryData(
+    val identities: Map<String, PaykitOutboundDeliveryRecords> = emptyMap(),
+)
+
+@Serializable
+data class PaykitOutboundDeliveryRecords(
+    val sentReceiptIds: Set<String> = emptySet(),
 )
 
 @Singleton
@@ -143,6 +218,24 @@ internal object PrivatePaykitReservationSerializer : Serializer<PrivatePaykitRes
 
     override suspend fun writeTo(t: PrivatePaykitReservationData, output: OutputStream) {
         check(t.receiptSourceReadable) { "Cannot persist an incomplete reservation ledger" }
+        output.write(json.encodeToString(t).encodeToByteArray())
+    }
+}
+
+private object PaykitOutboundDeliverySerializer : Serializer<PaykitOutboundDeliveryData> {
+    private const val TAG = "PaykitOutboundDeliverySerializer"
+
+    override val defaultValue: PaykitOutboundDeliveryData = PaykitOutboundDeliveryData()
+
+    override suspend fun readFrom(input: InputStream): PaykitOutboundDeliveryData =
+        runCatching {
+            json.decodeFromString<PaykitOutboundDeliveryData>(input.readBytes().decodeToString())
+        }.getOrElse {
+            Logger.error("Failed to deserialize PaykitOutboundDeliveryData", it, context = TAG)
+            defaultValue
+        }
+
+    override suspend fun writeTo(t: PaykitOutboundDeliveryData, output: OutputStream) {
         output.write(json.encodeToString(t).encodeToByteArray())
     }
 }

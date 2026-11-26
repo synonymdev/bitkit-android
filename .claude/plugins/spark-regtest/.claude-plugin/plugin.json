@@ -1,0 +1,4 @@
+{
+  "name": "spark-regtest",
+  "description": "Run a Bitkit dev build on Spark's regtest: Lightspark's hosted network or bitkit-docker's local ./spark stack."
+}

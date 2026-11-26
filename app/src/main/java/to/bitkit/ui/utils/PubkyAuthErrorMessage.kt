@@ -4,6 +4,7 @@ import android.content.Context
 import com.synonym.paykit.PaykitException
 import to.bitkit.R
 import to.bitkit.ext.isPaykitSignupCodeRejected
+import to.bitkit.ext.isPaykitStateFromNewerVersion
 import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.repositories.WatchOnlyAccountError
 import to.bitkit.services.PubkyRingAuthTimeoutError
@@ -20,6 +21,10 @@ fun Throwable.localizedPubkyAuthMessage(context: Context): String? {
     return context.getString(R.string.common__error_body)
 }
 
+/** Shared Paykit state saved by a newer Bitkit is unreadable until an update, so it replaces the raw storage error. */
+fun Throwable.profileErrorDescription(context: Context): String? =
+    if (isPaykitStateFromNewerVersion()) context.getString(R.string.profile__update_required) else message
+
 private fun Throwable.pubkyAuthMessageResource() = when (this) {
     is PubkyRingAuthTimeoutError -> R.string.profile__auth_error_timeout
     is PubkyAuthRequestError.InvalidUrl -> R.string.profile__auth_error_invalid_url
@@ -34,6 +39,5 @@ private fun Throwable.pubkyAuthMessageResource() = when (this) {
     is WatchOnlyAccountError.AuthorizationAccountMissing -> R.string.watch_only_accounts__setup_not_finished
     is WatchOnlyAccountError.InvalidAccountName -> R.string.watch_only_accounts__error_invalid_name
     is WatchOnlyAccountError.InvalidExtendedPublicKey -> R.string.watch_only_accounts__error_invalid_xpub
-    is WatchOnlyAccountError.NodeUnavailable -> R.string.watch_only_accounts__error_node_unavailable
     else -> null
 }

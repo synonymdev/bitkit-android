@@ -8,7 +8,12 @@
     {
       "name": "blocktank-api",
       "source": "./blocktank-api",
-      "description": "Interact with the Blocktank LSP API for Lightning testing during bitkit development."
+      "description": "Blocktank staging API: regtest mining, deposits, invoice payments and lookups of existing orders."
+    },
+    {
+      "name": "spark-regtest",
+      "source": "./spark-regtest",
+      "description": "Run a Bitkit dev build on Spark's regtest: Lightspark's hosted network or bitkit-docker's local ./spark stack."
     }
   ]
 }

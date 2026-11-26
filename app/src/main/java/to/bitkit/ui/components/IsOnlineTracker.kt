@@ -12,6 +12,9 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.viewmodels.AppViewModel
 
+/** A connection status waiting behind another toast is replaced by the newer status. */
+private const val CONNECTIVITY_TOAST_KEY = "Connectivity"
+
 @Composable
 fun IsOnlineTracker(
     app: AppViewModel,
@@ -34,6 +37,7 @@ fun IsOnlineTracker(
                     type = Toast.ToastType.SUCCESS,
                     title = resources.getString(R.string.other__connection_back_title),
                     description = resources.getString(R.string.other__connection_back_msg),
+                    replaceKey = CONNECTIVITY_TOAST_KEY,
                 )
             }
 
@@ -42,6 +46,7 @@ fun IsOnlineTracker(
                     type = Toast.ToastType.WARNING,
                     title = resources.getString(R.string.other__connection_issue),
                     description = resources.getString(R.string.other__connection_issue_explain),
+                    replaceKey = CONNECTIVITY_TOAST_KEY,
                 )
             }
 

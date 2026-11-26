@@ -16,6 +16,7 @@ The companion journey is shared with iOS; only platform build instructions diffe
 
 - `paykit-only-approval.xml` checks Paykit-only consent and cancellation without account creation.
 - `paykit-reconnect.xml` checks Paykit-only reconnect consent and cancellation without changing the existing service account.
+- `approval-while-node-restarts.xml` checks that a Bitcoin watch-only setup approved while the node is stopped or rebuilding completes on the first Authorize and is tracked once the node starts.
 
 These visible consent and cancel checks require valid auth URL fixtures but do not authorize a
 network session. The reconnect journey additionally needs a known active, tracked account in the
@@ -105,7 +106,6 @@ Keep these artifacts at each boundary:
 | --- | --- | --- |
 | Combined claim | `PubkyAuthWatchOnlyConsent`, `PubkyAuthPaykitAccess`, `PubkyAuthAuthorize`, and `PubkyAuthOK` snapshots | Setup completion for the seller identity, with no spending key |
 | Marketplace grant | Authorization screen with the single `/pub/app.locks` row from `locks.app`, `PubkyAuthAuthorize`, and `PubkyAuthOK` snapshots | `bitkit_seller.marketplace_grant` and a non-null `bitkit_seller.setup_completed_at` |
-| Private contact payments | `PrivateContactPaymentsToggle` snapshots from both wallets | Public App Registry entries for both wallet identities |
 | Linked buyer | `Contact_<seller-public-key>` snapshot | Seller and buyer peer-link state |
 | Incoming request | `PaymentRequestsSheet` and `PaymentRequestRow-<payment-request-id>` snapshots showing seller, amount, and note when present | Delivery record and exact Payment Request id |
 | Payment approval | `PaymentRequestPay-<payment-request-id>`, `ReviewAmount`, and `ReviewContactRecipient` snapshots | Derived regtest address and expected amount |

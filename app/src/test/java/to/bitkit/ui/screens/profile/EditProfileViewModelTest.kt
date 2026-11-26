@@ -554,6 +554,21 @@ class EditProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `save does not send an existing link edited to a non-web value`() = test {
+        val sut = createSut()
+        advanceUntilIdle()
+        whenever(pubkyRepo.saveProfile(any(), any(), any(), any(), anyOrNull(), any()))
+            .thenReturn(Result.success(Unit))
+
+        sut.onNameChange("Alice Renamed")
+        sut.updateLinkUrl(0, "me@example.com")
+        sut.save()
+        advanceUntilIdle()
+
+        verify(pubkyRepo, never()).saveProfile(any(), any(), any(), any(), anyOrNull(), any())
+    }
+
+    @Test
     fun `cancelled local completion retains its owner through a later admission failure`() = test {
         val sut = createSut()
         org.mockito.kotlin.doAnswer {

@@ -55,12 +55,14 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val settingsFlow = MutableStateFlow(SettingsData())
+    private val paykitEnabled = MutableStateFlow(true)
     private val contacts = MutableStateFlow(listOf(createContact()))
 
     @Before
     fun setUp() {
         settingsFlow.value = SettingsData()
         whenever(settingsStore.data).thenReturn(settingsFlow)
+        whenever(settingsStore.isPaykitEnabled).thenReturn(paykitEnabled)
         whenever(pubkyRepo.contacts).thenReturn(contacts)
         whenever(pubkyRepo.currentSignIn()).thenReturn(PubkySignIn("identity", 0L))
         whenever(pubkyRepo.isCurrent(any())).thenReturn(true)
@@ -384,7 +386,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertFalse(settingsFlow.value.publicPaykitOnchainEnabled)
         verify(publicPaykitRepo, never()).syncPublishedEndpoints(any())
         verify(publicPaykitRepo, never()).syncPublishedEndpoints(any(), any(), anyOrNull())
-        verify(publicPaykitRepo).syncPaykitApp(isNull(), canSync = any())
+        verify(publicPaykitRepo).syncPaykitApp(isNull(), eq(Priority.Background), any())
         verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(
             argThat { invoke().toSet() == setOf(CONTACT_KEY) },
             any(),
@@ -394,14 +396,14 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
     @Test
     fun `enabling prepares contacts saved during app registration`() = test {
         val publication = CompletableDeferred<Unit>()
-        whenever(publicPaykitRepo.syncPaykitApp(isNull(), canSync = any())).doSuspendableAnswer {
+        whenever(publicPaykitRepo.syncPaykitApp(isNull(), eq(Priority.Background), any())).doSuspendableAnswer {
             publication.await()
             Result.success(Unit)
         }
         contacts.update { emptyList() }
         val enable = async { createSut().setEnabled(true) }
         runCurrent()
-        verify(publicPaykitRepo).syncPaykitApp(isNull(), canSync = any())
+        verify(publicPaykitRepo).syncPaykitApp(isNull(), eq(Priority.Background), any())
 
         contacts.update { listOf(createContact()) }
         publication.complete(Unit)
@@ -433,13 +435,13 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
     @Test
     fun `enabling skips private preparation after its sign in ends`() = test {
         val publication = CompletableDeferred<Unit>()
-        whenever(publicPaykitRepo.syncPaykitApp(isNull(), canSync = any())).doSuspendableAnswer {
+        whenever(publicPaykitRepo.syncPaykitApp(isNull(), eq(Priority.Background), any())).doSuspendableAnswer {
             publication.await()
             Result.success(Unit)
         }
         val enable = async { createSut().setEnabled(true) }
         runCurrent()
-        verify(publicPaykitRepo).syncPaykitApp(isNull(), canSync = any())
+        verify(publicPaykitRepo).syncPaykitApp(isNull(), eq(Priority.Background), any())
 
         whenever(pubkyRepo.isCurrent(any())).thenReturn(false)
         publication.complete(Unit)
@@ -503,7 +505,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
 
         assertTrue(sut.setEnabled(true).isSuccess)
         assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
-        verify(publicPaykitRepo).syncPaykitApp(isNull(), canSync = any())
+        verify(publicPaykitRepo).syncPaykitApp(isNull(), eq(Priority.Background), any())
         verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(
             argThat { invoke().toSet() == setOf(CONTACT_KEY) },
             any(),
@@ -537,7 +539,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
 
     @Test
     fun `failed app registration restores disabled private settings`() = test {
-        whenever { publicPaykitRepo.syncPaykitApp(isNull(), canSync = any()) }
+        whenever { publicPaykitRepo.syncPaykitApp(isNull(), eq(Priority.Background), any()) }
             .thenReturn(Result.failure(ContactPaymentSettingsTestError("publish failed")))
 
         val result = createSut().setEnabled(true)
@@ -677,7 +679,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
                     anyOrNull(),
                 )
                 verify(publicPaykitRepo).syncPublishedEndpoints(eq(false), eq(Priority.Interactive), any())
-                verify(publicPaykitRepo).syncPaykitApp(isNull(), canSync = any())
+                verify(publicPaykitRepo).syncPaykitApp(isNull(), eq(Priority.Background), any())
                 verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(
                     argThat { invoke().toSet() == setOf(CONTACT_KEY) },
                     any(),
@@ -836,7 +838,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
     @Test
     fun `failed public enable restores public consent without changing private sharing`() = test {
         val publicationError = ContactPaymentSettingsTestError("publication failed")
-        whenever(publicPaykitRepo.syncPublishedEndpoints(eq(true), eq(Priority.Ordered), any()))
+        whenever(publicPaykitRepo.syncPublishedEndpoints(eq(true), eq(Priority.Background), any()))
             .thenReturn(Result.failure(publicationError))
         for (privateEnabled in listOf(false, true)) {
             settingsFlow.value = SettingsData(sharesPrivatePaykitEndpoints = privateEnabled)
@@ -861,7 +863,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
     fun `failed rollback removal leaves public disabled and cleanup pending`() = test {
         val publicationError = ContactPaymentSettingsTestError("publication failed")
         val cleanupError = ContactPaymentSettingsTestError("removal failed")
-        whenever(publicPaykitRepo.syncPublishedEndpoints(eq(true), eq(Priority.Ordered), any()))
+        whenever(publicPaykitRepo.syncPublishedEndpoints(eq(true), eq(Priority.Background), any()))
             .thenReturn(Result.failure(publicationError))
         whenever(publicPaykitRepo.syncPublishedEndpoints(eq(false), eq(Priority.Interactive), any()))
             .thenReturn(Result.failure(cleanupError))
@@ -877,7 +879,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
 
     @Test
     fun `public rollback preserves publisher acknowledgement and newer pending invoice`() = test {
-        whenever(publicPaykitRepo.syncPublishedEndpoints(eq(true), eq(Priority.Ordered), any()))
+        whenever(publicPaykitRepo.syncPublishedEndpoints(eq(true), eq(Priority.Background), any()))
             .thenReturn(Result.failure(ContactPaymentSettingsTestError("publication failed")))
         for (newerInvoicePending in listOf(false, true)) {
             settingsFlow.value = SettingsData(
@@ -921,7 +923,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
                     deleting.value = true
                 }
                 Result.failure<Unit>(ContactPaymentSettingsTestError("publication interrupted"))
-            }.whenever(publicPaykitRepo).syncPublishedEndpoints(eq(true), eq(Priority.Ordered), any())
+            }.whenever(publicPaykitRepo).syncPublishedEndpoints(eq(true), eq(Priority.Background), any())
 
             assertTrue(createSut().setPublicEnabled(true).isFailure)
 
@@ -939,7 +941,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
                 sharesPublicPaykitEndpoints = wasPublic,
                 sharesPrivatePaykitEndpoints = true,
             )
-            whenever(publicPaykitRepo.syncPublishedEndpoints(eq(true), eq(Priority.Ordered), any()))
+            whenever(publicPaykitRepo.syncPublishedEndpoints(eq(true), eq(Priority.Background), any()))
                 .doSuspendableAnswer { awaitCancellation() }
             val sut = createSut()
             val enable = async { sut.setPublicEnabled(true) }
@@ -1008,11 +1010,150 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `enableForNewProfile turns private and public payments on`() = test {
+        createSut().enableForNewProfile()
+        runCurrent()
+
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+        verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(any<() -> Collection<String>>(), any())
+        verify(publicPaykitRepo).syncPublishedEndpoints(eq(true), eq(Priority.Background), any())
+    }
+
+    @Test
+    fun `enableForNewProfile still enables public payments when private payments are unavailable`() = test {
+        whenever { privatePaykitRepo.hasPrivatePaymentAccess() }.thenReturn(false)
+
+        createSut().enableForNewProfile()
+        runCurrent()
+
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+    }
+
+    @Test
+    fun `enableForNewProfile rolls back public payments when publishing fails`() = test {
+        whenever { publicPaykitRepo.syncPublishedEndpoints(eq(true), eq(Priority.Background), any()) }
+            .thenReturn(Result.failure(AppError("publish failed")))
+
+        createSut().enableForNewProfile()
+        runCurrent()
+
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+    }
+
+    @Test
+    fun `enableForNewProfile turns both settings on before either sync completes`() = test {
+        val appSync = CompletableDeferred<Unit>()
+        whenever(publicPaykitRepo.syncPaykitApp(isNull(), eq(Priority.Background), any())).doSuspendableAnswer {
+            appSync.await()
+            Result.success(Unit)
+        }
+
+        createSut().enableForNewProfile()
+        runCurrent()
+
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(any(), any(), any())
+
+        appSync.complete(Unit)
+        runCurrent()
+
+        verify(publicPaykitRepo).syncPublishedEndpoints(eq(true), eq(Priority.Background), any())
+    }
+
+    @Test
+    fun `enableForNewProfile rolls back only private payments when private setup fails`() = test {
+        whenever { publicPaykitRepo.syncPaykitApp(isNull(), eq(Priority.Background), any()) }
+            .thenReturn(Result.failure(AppError("registry failed")))
+
+        createSut().enableForNewProfile()
+        runCurrent()
+
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        verify(publicPaykitRepo).syncPublishedEndpoints(eq(true), eq(Priority.Background), any())
+    }
+
+    @Test
+    fun `enableForNewProfile writes nothing after its sign in ends`() = test {
+        whenever(pubkyRepo.isCurrent(any())).thenReturn(false)
+
+        createSut().enableForNewProfile()
+        runCurrent()
+
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(any(), any(), any())
+    }
+
+    @Test
+    fun `enableForNewProfile ignores a call while one is running`() = test {
+        val publication = CompletableDeferred<Unit>()
+        whenever(publicPaykitRepo.syncPaykitApp(isNull(), eq(Priority.Background), any())).doSuspendableAnswer {
+            publication.await()
+            Result.success(Unit)
+        }
+        val sut = createSut()
+
+        sut.enableForNewProfile()
+        runCurrent()
+        sut.enableForNewProfile()
+        publication.complete(Unit)
+        runCurrent()
+
+        verify(publicPaykitRepo).syncPaykitApp(isNull(), eq(Priority.Background), any())
+        verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(any<() -> Collection<String>>(), any())
+    }
+
+    @Test
+    fun `enabling payments is refused while Paykit is disabled`() = test {
+        paykitEnabled.value = false
+        val sut = createSut()
+
+        assertSame(PublicPaykitError.PaykitDisabled, sut.setEnabled(true).exceptionOrNull())
+        assertSame(PublicPaykitError.PaykitDisabled, sut.setPublicEnabled(true).exceptionOrNull())
+
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(eq(true), any(), any())
+    }
+
+    @Test
+    fun `a Paykit disable queued during private setup keeps public sharing off`() = test {
+        val publication = CompletableDeferred<Unit>()
+        whenever(publicPaykitRepo.syncPaykitApp(isNull(), eq(Priority.Background), any())).doSuspendableAnswer {
+            publication.await()
+            Result.success(Unit)
+        }
+        val sut = createSut()
+        val enablePrivate = async { sut.setEnabled(true) }
+        runCurrent()
+
+        paykitEnabled.value = false
+        val disable = async { sut.disablePaykit() }
+        val enablePublic = async { sut.setPublicEnabled(true) }
+        runCurrent()
+        publication.complete(Unit)
+        enablePrivate.await()
+        disable.await()
+
+        assertSame(PublicPaykitError.PaykitDisabled, enablePublic.await().exceptionOrNull())
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(eq(true), any(), any())
+    }
+
+    @Test
     fun `public enable admission belongs to its original sign in and excludes profile deletion`() = test {
         val deleting = MutableStateFlow(false)
         whenever(privatePaykitRepo.isProfileDeletionInProgress).thenReturn(deleting)
         lateinit var admission: () -> Boolean
-        whenever(publicPaykitRepo.syncPublishedEndpoints(eq(true), eq(Priority.Ordered), any())).thenAnswer {
+        whenever(publicPaykitRepo.syncPublishedEndpoints(eq(true), eq(Priority.Background), any())).thenAnswer {
             admission = it.getArgument(2)
             Result.success(Unit)
         }

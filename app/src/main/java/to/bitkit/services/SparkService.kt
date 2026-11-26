@@ -43,6 +43,8 @@ import breez_sdk_spark.SendPaymentOptions
 import breez_sdk_spark.SendPaymentRequest
 import breez_sdk_spark.SyncWalletRequest
 import breez_sdk_spark.defaultConfig
+import breez_sdk_spark.parseSparkConfig
+import com.synonym.bitkitcore.mnemonicToSeed
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -52,6 +54,7 @@ import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
+import to.bitkit.env.LocalSparkSettings
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.safe
 import to.bitkit.repositories.SparkExitRecovering
@@ -60,6 +63,7 @@ import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import java.io.File
 import java.math.BigInteger
+import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 import breez_sdk_spark.Network as SparkNetwork
@@ -95,6 +99,16 @@ class SparkService @Inject constructor(
                 proportionalPpm = null,
             )
             leafOptimizationConfig = leafOptimizationConfig.copy(autoEnabled = !isExiting)
+        }
+
+        /** Applies the pinned operator settings and selects the fixture's mempool.space REST API. */
+        internal fun configureLocalSpark(config: Config, settings: LocalSparkSettings?): ChainApiType {
+            if (settings == null) return ChainApiType.ESPLORA
+            require(settings.isComplete) { "Local Spark requires SPARK_LOCAL_CONFIG_B64 and SPARK_LOCAL_CHAIN_URL" }
+            config.sparkConfig = parseSparkConfig(Base64.getDecoder().decode(settings.configBase64).decodeToString())
+            // The pinned regtest operators require anchored refunds.
+            config.watchtowerFeeLadderEnabled = false
+            return ChainApiType.MEMPOOL_SPACE
         }
 
         /** Leeway in sat/vB over the recommended fee that an automatic deposit claim may pay. */
@@ -140,8 +154,14 @@ class SparkService @Inject constructor(
     }
 
     private val mutex = Mutex()
+
+    @Volatile
     private var sdk: BreezSdk? = null
     private var listenerId: String? = null
+
+    /** The connected wallet's [SparkSendKey.secret], derived once at connect. */
+    @Volatile
+    private var sendKeySecret: ByteArray? = null
 
     private val _events = MutableSharedFlow<SdkEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<SdkEvent> = _events.asSharedFlow()
@@ -177,12 +197,16 @@ class SparkService @Inject constructor(
         val network = sparkNetwork() ?: throw SparkError.Unsupported()
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+        val secret = SparkSendKey.secret(mnemonicToSeed(mnemonic, passphrase))
         val config = configure(defaultConfig(network), Env.breezApiKey, isExiting)
         val storageDir = File(Env.sparkStoragePath(walletIndex)).apply { mkdirs() }.path
+        val apiType = configureLocalSpark(config, Env.localSparkSettings)
         val chainServiceUrl = Env.sparkChainServiceUrl(Env.network)
         val connected = SdkBuilder(config, Seed.Mnemonic(mnemonic, passphrase)).use { builder ->
             builder.withDefaultStorage(storageDir)
-            chainServiceUrl?.let { builder.withRestChainService(it, ChainApiType.ESPLORA, null) }
+            chainServiceUrl?.let {
+                builder.withRestChainService(it, apiType, null)
+            }
             builder.build()
         }
         listenerId = connected.addEventListener(
@@ -192,6 +216,8 @@ class SparkService @Inject constructor(
                 }
             },
         )
+        // The secret comes first, so a send that sees the wallet connected can derive its key.
+        sendKeySecret = secret
         sdk = connected
         val chain = chainServiceUrl ?: "default"
         Logger.info("Connected Spark wallet on '$network' with chain '$chain' and exit '$isExiting'", context = TAG)
@@ -207,6 +233,7 @@ class SparkService @Inject constructor(
         } finally {
             sdk = null
             listenerId = null
+            sendKeySecret = null
         }
     }
 
@@ -261,6 +288,12 @@ class SparkService @Inject constructor(
                 feePolicy = feePolicy,
             ),
         )
+
+    /** The idempotency key of attempt [attempt] at paying the invoice with [paymentHash], see [SparkSendKey]. */
+    fun sendKey(paymentHash: String, attempt: Int): String {
+        val secret = checkNotNull(sendKeySecret) { "Spark is not connected" }
+        return SparkSendKey.key(secret, paymentHash, attempt)
+    }
 
     /** Sends [prepared]; Spark makes one payment per [idempotencyKey], a UUID that becomes the payment's id. */
     suspend fun send(prepared: PrepareSendPaymentResponse, idempotencyKey: String? = null): Payment {
@@ -359,6 +392,9 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
     class NotConnected : SparkError("Spark wallet is not connected")
     class WipeInProgress : SparkError("Spark wallet cannot connect while the wallet is wiped")
     class WipeFailed(path: String) : SparkError("Failed to delete Spark storage at '$path'")
+
+    /** Stored exit data Spark can never import: an exit state version it doesn't support, or one it can't read. */
+    class ExitStateUnimportable(cause: Throwable? = null) : SparkError("Spark can't import the exit data", cause)
 
     /** What the withdrawal leaves after its fee is below the on-chain dust limit. */
     class WithdrawalTooSmall : SparkError("Spark balance is too small to withdraw after its fee")

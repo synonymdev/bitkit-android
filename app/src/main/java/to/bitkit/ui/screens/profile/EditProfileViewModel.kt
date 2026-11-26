@@ -10,8 +10,11 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -19,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.ext.isWebLink
 import to.bitkit.ext.toLocalizedTimestamp
 import to.bitkit.models.PROFILE_NAME_MAX_LENGTH
 import to.bitkit.models.PubkyProfileLink
@@ -87,6 +91,7 @@ class EditProfileViewModel @Inject constructor(
                         links = profile.links.map { link ->
                             ProfileEditLink(label = link.label, url = link.url)
                         }.toImmutableList(),
+                        storedLinkUrls = profile.links.map { it.url }.toImmutableSet(),
                         tags = profile.tags.toImmutableList(),
                         imageUrl = profile.imageUrl,
                     )
@@ -240,7 +245,7 @@ class EditProfileViewModel @Inject constructor(
 
     fun save() {
         viewModelScope.launch {
-            if (_uiState.value.isBusy) return@launch
+            if (_uiState.value.isBusy || !_uiState.value.hasOnlyWebLinks) return@launch
             _uiState.update { it.copy(isSaving = true) }
             val state = _uiState.value
 
@@ -419,6 +424,7 @@ data class EditProfileUiState(
     val name: String = "",
     val bio: String = "",
     val links: ImmutableList<ProfileEditLink> = persistentListOf(),
+    val storedLinkUrls: ImmutableSet<String> = persistentSetOf(),
     val tags: ImmutableList<String> = persistentListOf(),
     val imageUrl: String? = null,
     val newAvatarUri: Uri? = null,
@@ -436,6 +442,9 @@ data class EditProfileUiState(
     val showAddTagSheet: Boolean = false,
 ) {
     val isBusy: Boolean get() = isSaving || isDeleting || isPreparingRemoval
+
+    /** Links added or edited here must be web links, which social v1 requires; stored ones are left as they are. */
+    val hasOnlyWebLinks: Boolean get() = links.all { it.url in storedLinkUrls || it.url.isWebLink() }
 }
 
 enum class ProfileRemoval(

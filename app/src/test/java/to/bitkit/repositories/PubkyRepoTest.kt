@@ -89,6 +89,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.sharedpubky.SharedPubkyClient
 import to.bitkit.data.sharedpubky.SharedPubkyContract
 import to.bitkit.ext.isPaykitTemporarilyUnavailable
+import to.bitkit.ext.isWebLink
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthClaim.Item
@@ -96,6 +97,7 @@ import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.models.PubkyProfileDataLink
+import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
 import to.bitkit.services.PaykitProfileDeletionSnapshot
@@ -1587,6 +1589,27 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `saveProfile publishes every link the profile editor accepts as a social v1 web URL`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val accepted = listOf("example.com", "Https://example.com", "HTTP://example.com/path")
+        accepted.forEach { assertTrue(it.isWebLink(), it) }
+
+        sut.saveProfile(
+            name = "Test",
+            bio = "",
+            links = accepted.mapIndexed { i, url -> PubkyProfileLink(label = "Link $i", url = url) },
+            tags = emptyList(),
+            imageUrl = null,
+        )
+
+        val update = argumentCaptor<PubkyProfileUpdate>()
+        verifyBlocking(pubkyService) { publishPubkyProfile(update.capture(), anyOrNull(), any()) }
+        val rejectedByV1 = update.firstValue.links.orEmpty().map { it.url }
+            .filterNot { it.startsWith("http://") || it.startsWith("https://") }
+        assertEquals(emptyList(), rejectedByV1, "links social v1 rejects")
+    }
+
+    @Test
     fun `saveProfile reports a tag change it could not store while the tags cannot be read`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY)).thenAnswer { throw TestAppError("offline") }
@@ -2086,9 +2109,7 @@ class PubkyRepoTest : BaseUnitTest() {
                     image = null,
                     links = listOf(
                         SdkPubkyProfileLink(title = "Site", url = "https://example.com"),
-                        SdkPubkyProfileLink(title = "Mail", url = "mailto:a@b.com"),
                         SdkPubkyProfileLink(title = "Medium", url = "https://medium.com/@alice"),
-                        SdkPubkyProfileLink(title = "Dotted", url = "tel:5551234567"),
                         SdkPubkyProfileLink(title = "Loopback", url = "https://127.1"),
                     ),
                 ),
@@ -3408,6 +3429,43 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `wakeIdentity proves pk only with a key for the signed-in pubky on this device`() = test {
+        val bareKey = VALID_SELF_KEY.removePrefix("pubky")
+        sut.awaitInitialization()
+        assertNull(sut.wakeIdentity().getOrThrow(), "No profile")
+
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        assertNull(sut.wakeIdentity().getOrThrow(), "Session without a local key")
+
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("other_secret")
+        whenever(pubkyService.publicKeyFromSecret("other_secret")).thenReturn(VALID_CONTACT_KEY_A.removePrefix("pubky"))
+        assertNull(sut.wakeIdentity().getOrThrow(), "Key of another identity")
+
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        whenever(pubkyService.publicKeyFromSecret("local_secret")).thenReturn(bareKey)
+        whenever(pubkyService.signWakeRegistration("local_secret", "message")).thenReturn("local_signature")
+        assertEquals("pk:$bareKey", sut.wakeIdentity().getOrThrow(), "Local identity")
+        assertEquals("local_signature", sut.signWakeRegistration("pk:$bareKey", "message").getOrThrow())
+        assertTrue(sut.signWakeRegistration("pk:other", "message").isFailure, "Identity changed since preparing")
+    }
+
+    @Test
+    fun `wakeIdentity decides a Ring-adopted identity without Ring, and signing reads its key just in time`() = test {
+        val bareKey = VALID_SELF_KEY.removePrefix("pubky")
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        stubAdoptedRingSource()
+        whenever(sharedPubkyClient.ringCredential(bareKey)).thenReturn(Result.success("ring_secret"))
+        whenever(pubkyService.signWakeRegistration("ring_secret", "message")).thenReturn("ring_signature")
+
+        assertEquals("pk:$bareKey", sut.wakeIdentity().getOrThrow())
+        verify(sharedPubkyClient, never()).ringCredential(any())
+        assertEquals("ring_signature", sut.signWakeRegistration("pk:$bareKey", "message").getOrThrow())
+
+        whenever(sharedPubkyClient.ringCredential(bareKey)).thenReturn(Result.failure(TestAppError("Unavailable")))
+        assertTrue(sut.signWakeRegistration("pk:$bareKey", "message").isFailure, "A Ring read failure fails signing")
+    }
+
+    @Test
     fun `localIdentityPublicKey needs a saved session and a stored key without a Ring source`() = test {
         whenever(keychain.exists(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(true)
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
@@ -4361,6 +4419,43 @@ class PubkyRepoTest : BaseUnitTest() {
         }
 
     @Test
+    fun `initialize should flag an update when the saved session hits newer paykit state`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("secret_key")
+        whenever(pubkyService.importSession("saved_session")).thenAnswer {
+            throw AppError(PaykitException.Storage("storage_error", "unsupported SDK state blob version 6, expected 4"))
+        }
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertTrue(repo.sessionRestorationNeedsUpdate.value)
+        assertFalse(repo.sessionRestorationFailed.value)
+        assertFalse(repo.isAuthenticated.value)
+        verify(pubkyService, never()).signIn(any())
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+    }
+
+    @Test
+    fun `later restores of the same identity keep the update reason without repeating the prompt`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.importSession("saved_session")).thenAnswer {
+            throw AppError(PaykitException.Storage("storage_error", "unsupported SDK state blob version 6, expected 4"))
+        }
+        val repo = createSut()
+        repo.awaitInitialization()
+        assertTrue(repo.sessionRestorationNeedsUpdate.value)
+        repo.clearSessionRestorationNeedsUpdate()
+
+        repo.restoreSessionIfNeeded()
+
+        verify(pubkyService, times(2)).importSession("saved_session")
+        assertFalse(repo.sessionRestorationNeedsUpdate.value)
+        assertTrue(repo.restorationNeedsUpdate.value)
+        assertFalse(repo.sessionRestorationFailed.value)
+    }
+
+    @Test
     fun `initialize should not flag session restoration failure on identity error without saved session`() = test {
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
         whenever(pubkyService.initialize()).thenAnswer {
@@ -4636,6 +4731,22 @@ class PubkyRepoTest : BaseUnitTest() {
         assertFalse(sut.sessionRestorationFailed.value)
         restore.answer = { VALID_SELF_KEY }
         assertTrue(sut.restoreSessionIfNeeded())
+    }
+
+    @Test
+    fun `deferred restoration asks for an update when it finds newer paykit state`() = test {
+        val restore = stubSavedSessionRestore()
+        restore.answer = { throw PaykitException.SharedStateBusy("shared_state_busy", "Locked") }
+        sut.initialize()
+        restore.answer = {
+            throw PaykitException.Storage("storage_error", "unsupported SDK state blob version 6, expected 4")
+        }
+
+        sut.retryDeferredSessionRestoration()
+
+        assertTrue(sut.sessionRestorationNeedsUpdate.value)
+        assertFalse(sut.sessionRestorationFailed.value)
+        assertNull(sut.publicKey.value)
     }
 
     @Test

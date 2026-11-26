@@ -73,6 +73,7 @@ class SettingsStore @Inject constructor(
                 .withDefaultPaykitPaymentMethods()
                 .withRequiredNativeSegwitMonitoring()
                 .withPublicSharingDisabledForRestore()
+                .withRetiredElectrumServerReplaced()
             store.updateData { current ->
                 // The received-sheet hold is armed before the backup is read, so it has to survive the
                 // settings the backup brings with it - otherwise the replayed history raises sheets.
@@ -91,7 +92,7 @@ class SettingsStore @Inject constructor(
         }
 
     suspend fun update(transform: (SettingsData) -> SettingsData) {
-        store.updateData { transform(it).withRequiredNativeSegwitMonitoring() }
+        store.updateData { transform(it).withRequiredNativeSegwitMonitoring().withRetiredElectrumServerReplaced() }
     }
 
     suspend fun switchBalanceUnit(): BalanceUnitSwitch? {
@@ -235,6 +236,8 @@ data class SettingsData(
     val publicPaykitBolt11PaymentHash: String = "",
     val publicPaykitBolt11ExpiresAtMillis: Long = 0,
     val quickPayIntroSeen: Boolean = false,
+    val nfcIntroSeen: Boolean = false,
+    val isNearbyPaymentsEnabled: Boolean = true,
     val bgPaymentsIntroSeen: Boolean = false,
     val isQuickPayEnabled: Boolean = false,
     val quickPayAmount: Int = 5,
@@ -304,8 +307,9 @@ fun SettingsData.resetPin() = this.copy(
     isBiometricEnabled = false,
 )
 
-fun SettingsData.areContactPaymentsEnabled(): Boolean =
-    sharesPrivatePaykitEndpoints
+/** Whether payments must pass the PIN or biometric check before they are sent. */
+val SettingsData.requiresPaymentAuth: Boolean
+    get() = isPinEnabled && isPinForPaymentsEnabled
 
 fun SettingsData.withIndependentPaykitSharing(): SettingsData {
     if (hasIndependentPaykitSharing) return this
@@ -336,6 +340,28 @@ fun SettingsData.withDefaultPaykitPaymentMethods() = copy(
 fun SettingsData.withRequiredNativeSegwitMonitoring() = copy(
     addressTypesToMonitor = (addressTypesToMonitor + DEFAULT_ADDRESS_TYPE_STRING).distinct(),
 )
+
+/**
+ * Mainnet servers Bitkit used to ship as its default. Both fail TLS now (expired and self-signed certificates), so the
+ * node never starts on them. A wallet carries one only because an older build or a backup stored the default of its
+ * time, so they are replaced with the current default. Any other server, including a custom one, is kept.
+ */
+internal val RETIRED_DEFAULT_ELECTRUM_SERVERS = setOf(
+    "ssl://fulcrum.bitkit.blocktank.to:8900",
+    "ssl://35.187.18.233:8900",
+)
+
+/** Returns the current default for a retired default server URL, and [url] unchanged otherwise. */
+fun replaceRetiredElectrumServer(url: String): String {
+    if (url.trim().lowercase() !in RETIRED_DEFAULT_ELECTRUM_SERVERS) return url
+    Logger.info("Replacing retired default Electrum server '$url' with the current default", context = "SettingsStore")
+    return Env.electrumServerUrl
+}
+
+fun SettingsData.withRetiredElectrumServerReplaced(): SettingsData {
+    val replaced = replaceRetiredElectrumServer(electrumServer)
+    return if (replaced == electrumServer) this else copy(electrumServer = replaced)
+}
 
 fun SettingsData.hasPublicPaykitPublicationState(): Boolean =
     hasConfirmedPublicPaykitEndpoints ||

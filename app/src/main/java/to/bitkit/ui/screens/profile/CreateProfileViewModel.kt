@@ -21,11 +21,13 @@ import to.bitkit.models.PROFILE_NAME_MAX_LENGTH
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
 import to.bitkit.models.takeCodePoints
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PubkyProfileChangedError
 import to.bitkit.repositories.PubkyProfileTagsNotSavedError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.ui.utils.profileErrorDescription
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -33,6 +35,7 @@ import javax.inject.Inject
 class CreateProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "CreateProfileViewModel"
@@ -105,7 +108,7 @@ class CreateProfileViewModel @Inject constructor(
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.common__error),
-                    description = error.message,
+                    description = error.profileErrorDescription(context),
                 )
             }
     }
@@ -198,7 +201,7 @@ class CreateProfileViewModel @Inject constructor(
                 avatarBytes = state.avatarBytes,
             ).onSuccess {
                 _uiState.update { it.copy(isSaving = false) }
-                _effects.emit(CreateProfileEffect.CreateSuccess)
+                completeCreate()
             }.onFailure {
                 _uiState.update { it.copy(isSaving = false) }
                 if (it is PubkyProfileTagsNotSavedError) {
@@ -206,7 +209,7 @@ class CreateProfileViewModel @Inject constructor(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.profile__edit_tags_error),
                     )
-                    _effects.emit(CreateProfileEffect.CreateSuccess)
+                    completeCreate()
                     return@onFailure
                 }
                 Logger.error("Failed to create identity", it, context = TAG)
@@ -214,11 +217,20 @@ class CreateProfileViewModel @Inject constructor(
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.profile__create_error),
-                    description = if (changed) context.getString(R.string.profile__edit_changed_error) else it.message,
+                    description = if (changed) {
+                        context.getString(R.string.profile__edit_changed_error)
+                    } else {
+                        it.profileErrorDescription(context)
+                    },
                 )
                 if (changed) deriveAndCheckRemote()
             }
         }
+    }
+
+    private suspend fun completeCreate() {
+        contactPaymentSettingsRepo.enableForNewProfile()
+        _effects.emit(CreateProfileEffect.CreateSuccess)
     }
 }
 

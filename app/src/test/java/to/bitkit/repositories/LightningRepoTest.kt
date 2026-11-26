@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import androidx.datastore.core.DataStore
 import app.cash.turbine.test
 import breez_sdk_spark.Bolt11InvoiceDetails
 import breez_sdk_spark.FeePolicy
@@ -21,10 +22,13 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -34,11 +38,13 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.AddressTypeBalance
 import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
@@ -113,12 +119,14 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.UrlValidator
+import java.io.IOException
 import java.math.BigInteger
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -1349,6 +1357,53 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark retry rechecks only the payment's authorization`() = test {
+        startNodeForTesting()
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        val checks = mutableListOf<Boolean>()
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).doSuspendableAnswer {
+            val authorize = it.getArgument<suspend () -> Boolean>(4)
+            repeat(2) { checks += authorize() }
+            Result.success("hash")
+        }
+        var submissionChecks = 0
+
+        val result = sut.payInvoiceAuthorizedAtSubmission("invoice", 1_000uL, { ++submissionChecks > 0 }) { true }
+
+        assertEquals("hash", result.getOrThrow())
+        assertEquals(listOf(true, true), checks)
+        assertEquals(1, submissionChecks)
+    }
+
+    @Test
+    fun `a node send checks its authorization again where it is submitted`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())).thenReturn("hash")
+        val isAuthorizedAtSubmission = { false }
+
+        sut.payInvoiceAuthorizedAtSubmission("bolt11", 1_000uL, isAuthorizedAtSubmission) { true }
+
+        verify(lightningService).send(eq("bolt11"), eq(1_000uL), anyOrNull(), anyOrNull(), eq(isAuthorizedAtSubmission))
+    }
+
+    @Test
+    fun `a node send stopped at submission keeps an earlier send of the invoice`() = test {
+        // An earlier node send of this invoice is pending or paid, so its hash is kept.
+        val cache = AppCacheData(ldkSendHashesSeeded = true, ldkSendHashes = listOf("bolt11"))
+        val store = CacheStore(InMemoryDataStore(cache))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenAnswer { throw AppError(ServiceError.PaymentStoppedAtSubmission()) }
+
+        sut.payInvoiceAuthorizedAtSubmission("bolt11", 1_000uL, { false }) { true }
+
+        assertEquals(listOf("bolt11"), store.data.first().ldkSendHashes, "The earlier send's hash must stay")
+    }
+
+    @Test
     fun `a node-only payment fails instead of falling back to spark`() = test {
         startNodeForTesting()
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
@@ -1709,6 +1764,31 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a node send of an invoice that ends keeps the hold of another node send of it still under way`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        // The first node send waits in the node's queue, unlisted; the second fails before it is submitted.
+        val queued = CompletableDeferred<String>()
+        var sends = 0
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            if (sends++ == 0) queued.await() else throw ServiceError.NodeNotStarted()
+        }
+        val first = launch { sut.payInvoiceWithNode("h") }
+        runCurrent()
+        assertTrue(sut.payInvoiceWithNode("h").isFailure)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+
+        sut.payInvoice("h", 1_000uL)
+
+        assertEquals(listOf("h"), store.data.first().ldkSendHashes, "an ended node send released a queued one's hold")
+        queued.complete("h")
+        first.join()
+    }
+
+    @Test
     fun `a node send of an invoice spark admitted is refused at submission`() = test {
         val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
         sut = repoWith(store)
@@ -1968,6 +2048,110 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(events.none { it is Event.PaymentFailed }, "an older node failure failed the Spark retry")
     }
 
+    @Test
+    fun `a node send whose hash write fails releases its in-flight count`() = test {
+        sut = repoWith(CacheStore(failingOnceOnLdkHash("h")))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+
+        assertTrue(runCatching { sut.payInvoiceWithNode("h").getOrThrow() }.isFailure)
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("h"))
+
+        val result = sut.payInvoice("h", 1_000uL)
+
+        assertFalse(result.exceptionOrNull() is PaymentPendingException, "a node send that never left held the invoice")
+        verify(sparkRepo).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a failed hash write's in-flight count is released by the next node send of the invoice`() = test {
+        sut = repoWith(CacheStore(failingOnceOnLdkHash("h")))
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenAnswer { throw AppError("Route not found") }
+
+        assertTrue(runCatching { sut.payInvoiceWithNode("h").getOrThrow() }.isFailure)
+        // The node retries and fails before anything leaves.
+        assertTrue(sut.payInvoiceWithNode("h").isFailure)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("h"))
+
+        val result = sut.payInvoice("h", 1_000uL)
+
+        assertFalse(result.exceptionOrNull() is PaymentPendingException, "a node send that never left held the invoice")
+        verify(sparkRepo).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a node send recorded while a spark check releases the invoice keeps its hash`() = test {
+        assertNodeSendRecordedDuringReleaseKeepsHash(listed = emptyList())
+    }
+
+    @Test
+    fun `a node send recorded while the listing trims its failed attempt keeps its hash`() = test {
+        assertNodeSendRecordedDuringReleaseKeepsHash(listed = listOf(nodeSend("h", PaymentStatus.FAILED)))
+    }
+
+    /** The node sends the invoice again once a Spark send's check decided to release the node's [listed] attempt. */
+    private suspend fun TestScope.assertNodeSendRecordedDuringReleaseKeepsHash(listed: List<PaymentDetails>) {
+        val inner = InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true, ldkSendHashes = listOf("h")))
+        val entered = CompletableDeferred<Unit>()
+        val queued = CompletableDeferred<String>()
+        var isArmed = true
+        var node: Job? = null
+        val store = CacheStore(
+            object : DataStore<AppCacheData> by inner {
+                override suspend fun updateData(transform: suspend (t: AppCacheData) -> AppCacheData): AppCacheData {
+                    val current = inner.data.first()
+                    if (isArmed && "h" in current.ldkSendHashes && "h" !in transform(current).ldkSendHashes) {
+                        isArmed = false
+                        node = launch { sut.payInvoiceWithNode("h") }
+                        entered.await()
+                    }
+                    return inner.updateData(transform)
+                }
+            }
+        )
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(listed)
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            entered.complete(Unit)
+            queued.await()
+        }
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+
+        val result = sut.payInvoice("h", 1_000uL)
+
+        assertIs<PaymentPendingException>(result.exceptionOrNull())
+        assertEquals(listOf("h"), store.data.first().ldkSendHashes, "a Spark check released a node send's hold")
+        queued.complete("h")
+        node?.join()
+    }
+
+    private fun failingOnceOnLdkHash(hash: String): DataStore<AppCacheData> = object : DataStore<AppCacheData> {
+        private val inner = InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true))
+        private var isArmed = true
+        override val data: Flow<AppCacheData> = inner.data
+        override suspend fun updateData(transform: suspend (t: AppCacheData) -> AppCacheData) =
+            inner.updateData { current ->
+                transform(current).also {
+                    if (isArmed && hash in it.ldkSendHashes && hash !in current.ldkSendHashes) {
+                        isArmed = false
+                        throw IOException("disk full")
+                    }
+                }
+            }
+    }
+
     private fun nodeSend(hash: String, status: PaymentStatus) = PaymentDetails(
         id = hash,
         kind = PaymentKind.Bolt11(hash = hash, preimage = null, secret = null, description = null, bolt11 = hash),
@@ -2032,10 +2216,11 @@ class LightningRepoTest : BaseUnitTest() {
 
         verifyBlocking(cacheStore) {
             trimLdkSendHashes(
-                paid = setOf("paid"),
-                failed = setOf("failed"),
-                listed = setOf("pending", "paid", "failed"),
-                live = setOf("pending"),
+                paid = eq(setOf("paid")),
+                failed = eq(setOf("failed")),
+                listed = eq(setOf("pending", "paid", "failed")),
+                live = eq(setOf("pending")),
+                isLive = any(),
             )
         }
     }
@@ -2086,6 +2271,7 @@ class LightningRepoTest : BaseUnitTest() {
         val sparkService = mock<SparkService>()
         whenever(sparkService.isSupported).thenReturn(true)
         whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.sendKey(any(), any())).thenReturn("key")
         val details = mock<Bolt11InvoiceDetails> { on { paymentHash } doReturn "hash" }
         val prepared = PrepareSendPaymentResponse(
             paymentMethod = SendPaymentMethod.Bolt11Invoice(details, null, 1uL),
@@ -2095,6 +2281,7 @@ class LightningRepoTest : BaseUnitTest() {
             feePolicy = FeePolicy.FEES_EXCLUDED,
         )
         whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
         val sending = CompletableDeferred<Payment>()
         whenever(sparkService.send(any(), anyOrNull())).doSuspendableAnswer { sending.await() }
         val spark = SparkRepo(
@@ -2130,7 +2317,7 @@ class LightningRepoTest : BaseUnitTest() {
         startNodeForTesting()
         val first = async { spark.payInvoice("bolt11", 1_000uL) }
         runCurrent()
-        verify(sparkService).send(prepared)
+        verify(sparkService).send(eq(prepared), any())
         whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
 
         val retry = sut.payInvoice("bolt11", 1_000uL)
@@ -2450,6 +2637,21 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `hasPublicChannels should fail when node is not running`() = test {
+        val result = sut.hasPublicChannels("payee")
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `hasPublicChannels should report the graph lookup when node is running`() = test {
+        startNodeForTesting()
+        whenever(lightningService.hasPublicChannels("payee")).thenReturn(true)
+
+        val result = sut.hasPublicChannels("payee")
+        assertEquals(true, result.getOrNull())
+    }
+
+    @Test
     fun `openChannel should fail when node is not running`() = test {
         val testPeer = PeerDetails.of("nodeId", "host", "9735")
         val result = sut.openChannel(testPeer, 100000uL)
@@ -2758,6 +2960,21 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(sut.canSend(1_000uL))
         assertFalse(sut.canSend(1_001uL))
         verify(lightningService, never()).balances
+    }
+
+    @Test
+    fun `waitForUsableChannels without awaiting publishes unusable channels and returns`() = test {
+        val cached = createChannelDetails().copy(isChannelReady = true, isUsable = true)
+        whenever(lightningService.channels).thenReturn(listOf(cached))
+        startNodeForTesting()
+        val unavailable = cached.copy(isUsable = false)
+        whenever(lightningService.channels).thenReturn(listOf(unavailable))
+
+        val wait = async { sut.waitForUsableChannels(awaitUsable = false) }
+        runCurrent()
+
+        assertTrue(wait.isCompleted)
+        assertEquals(listOf(unavailable), sut.lightningState.value.channels)
     }
 
     @Test
@@ -3454,6 +3671,363 @@ class LightningRepoTest : BaseUnitTest() {
                 assertEquals(0, broadcasts)
             }
         }
+    }
+
+    @Test
+    fun `a prepared fee above the approved one is not broadcast before it is approved again`() = test {
+        val txid = "ab".repeat(32)
+        val (repo, store) = feeReviewRepo()
+        var broadcasts = 0
+        stubFeeReviewPreparation(txid, feeSats = 212uL) { broadcasts++ }
+        val approval = CompletableDeferred<Unit>()
+        val reviewed = mutableListOf<OnchainPreparedReceipt>()
+
+        val send = async {
+            repo.sendOnChain(
+                "address",
+                1_000uL,
+                approvedMiningFeeSats = 203uL,
+                reviewHigherFee = {
+                    reviewed += it
+                    approval.await()
+                },
+            )
+        }
+
+        assertEquals(0, broadcasts)
+        assertFalse(send.isCompleted)
+        assertEquals(listOf<ULong?>(212uL), reviewed.map { it.miningFeeSats })
+        assertEquals(1_000uL, reviewed.single().amountSats)
+        // The attempt owner is held without a candidate, so no other send starts and nothing can be recovered.
+        val held = assertNotNull(store.current())
+        assertTrue(held.candidateTxids.isEmpty() && !held.initialDispatchAttempted)
+
+        approval.complete(Unit)
+
+        assertEquals(OnchainSendOutcome.Accepted(txid), send.await().getOrThrow())
+        assertEquals(1, broadcasts)
+        val sent = assertNotNull(store.current())
+        assertEquals(listOf(txid), sent.candidateTxids)
+        assertEquals(mapOf(txid to 212uL), sent.candidateMiningFees)
+        assertEquals(OnchainSendEvidence.Accepted, sent.evidence)
+        verify(lightningService, times(1))
+            .prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `cancelling the review of a higher prepared fee sends nothing and releases the attempt`() = test {
+        val (repo, store) = feeReviewRepo()
+        var broadcasts = 0
+        stubFeeReviewPreparation("ab".repeat(32), feeSats = 212uL) { broadcasts++ }
+        val cancelled = AppError("cancelled")
+
+        val result = repo.sendOnChain(
+            "address",
+            1_000uL,
+            approvedMiningFeeSats = 203uL,
+            reviewHigherFee = { throw cancelled },
+        )
+
+        val error = assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull())
+        assertEquals(cancelled, error.cause)
+        assertEquals(0, broadcasts)
+        assertNull(store.current())
+
+        // The released owner blocks no later send.
+        stubFeeReviewPreparation("cd".repeat(32), feeSats = 203uL) { broadcasts++ }
+        assertTrue(repo.sendOnChain("address", 1_000uL, approvedMiningFeeSats = 203uL).isSuccess)
+        assertEquals(1, broadcasts)
+    }
+
+    @Test
+    fun `a request's higher prepared fee keeps its guard until the cancelled review's proof is removed`() = test {
+        val (repo, store) = feeReviewRepo()
+        val requestId = PaykitPaymentRequestId("request", "payer")
+        var broadcasts = 0
+        stubFeeReviewPreparation("ab".repeat(32), feeSats = 212uL) { broadcasts++ }
+        val reviewed = mutableListOf<OnchainSendAttempt?>()
+
+        val result = repo.sendOnChain(
+            "address",
+            1_000uL,
+            requestId = requestId,
+            payerIdentity = "payer-identity",
+            approvedMiningFeeSats = 203uL,
+            reviewHigherFee = {
+                reviewed += store.current()
+                throw AppError("cancelled")
+            },
+        )
+
+        assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull())
+        assertEquals(0, broadcasts)
+        assertTrue(reviewed.single()?.preparationPending == true)
+        // The request's guard outlives the cancelled review, so the same request is not admitted twice.
+        val guard = assertNotNull(store.current())
+        assertEquals(requestId, guard.requestId)
+        assertTrue(guard.preparationPending && guard.candidateTxids.isEmpty() && !guard.initialDispatchAttempted)
+        assertIs<OnchainSendBlockedError>(
+            repo.sendOnChain("address", 1_000uL, requestId = requestId, payerIdentity = "payer-identity")
+                .exceptionOrNull(),
+        )
+
+        // Removing its started proof, as the payment's failure cleanup does, releases the guard.
+        assertTrue(repo.releaseInterruptedShopPreparation { it.attemptId == guard.attemptId })
+        assertNull(store.current())
+    }
+
+    @Test
+    fun `a request's higher prepared fee is sent once after renewed approval`() = test {
+        val txid = "ab".repeat(32)
+        val (repo, store) = feeReviewRepo()
+        val requestId = PaykitPaymentRequestId("request", "payer")
+        var broadcasts = 0
+        stubFeeReviewPreparation(txid, feeSats = 212uL) { broadcasts++ }
+
+        val result = repo.sendOnChain(
+            "address",
+            1_000uL,
+            requestId = requestId,
+            payerIdentity = "payer-identity",
+            approvedMiningFeeSats = 203uL,
+            reviewHigherFee = { assertEquals(0, broadcasts) },
+        )
+
+        assertEquals(OnchainSendOutcome.Accepted(txid), result.getOrThrow())
+        assertEquals(1, broadcasts)
+        val sent = assertNotNull(store.current())
+        assertEquals(requestId, sent.requestId)
+        assertEquals(mapOf(txid to 212uL), sent.candidateMiningFees)
+        assertFalse(sent.preparationPending)
+    }
+
+    @Test
+    fun `a node stopping during the review of a higher prepared fee releases the send unsent`() = test {
+        val (repo, store) = feeReviewRepo()
+        var broadcasts = 0
+        var releases = 0
+        var reviewEnded = false
+        val prepared = feeReviewPrepared(discard = { releases++ }) { broadcasts++ }
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(prepared)
+
+        val send = async {
+            repo.sendOnChain(
+                "address",
+                1_000uL,
+                approvedMiningFeeSats = 203uL,
+                reviewHigherFee = {
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        reviewEnded = true
+                    }
+                },
+            )
+        }
+        assertFalse(send.isCompleted)
+        repo.stop()
+
+        val error = assertIs<OnchainSendNotDispatchedError>(send.await().exceptionOrNull())
+        assertIs<OnchainSendReviewInterruptedError>(error.cause)
+        assertTrue(reviewEnded)
+        assertEquals(1, releases)
+        assertFalse(prepared.isUsable)
+        assertEquals(0, broadcasts)
+        assertNull(store.current())
+        inOrder(lightningService) {
+            verify(lightningService).prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull())
+            verify(lightningService).stop()
+        }
+    }
+
+    @Test
+    fun `a review that ends without approval releases the prepared send at once`() = test {
+        val (repo, store) = feeReviewRepo()
+        var broadcasts = 0
+        var releases = 0
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(feeReviewPrepared(discard = { releases++ }) { broadcasts++ })
+
+        val result = repo.sendOnChain(
+            "address",
+            1_000uL,
+            approvedMiningFeeSats = 203uL,
+            reviewHigherFee = { throw AppError("cancelled") },
+        )
+
+        assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull())
+        assertEquals(1, releases)
+        assertEquals(0, broadcasts)
+        assertNull(store.current())
+        // The node stopping later finds nothing left to release.
+        repo.stop()
+        assertEquals(1, releases)
+    }
+
+    @Test
+    fun `an approved review keeps the prepared send for its broadcast`() = test {
+        val (repo, _) = feeReviewRepo()
+        var releases = 0
+        var releasesAtBroadcast = -1
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(feeReviewPrepared(discard = { releases++ }) { releasesAtBroadcast = releases })
+
+        val result = repo.sendOnChain("address", 1_000uL, approvedMiningFeeSats = 203uL, reviewHigherFee = {})
+
+        assertTrue(result.isSuccess)
+        assertEquals(0, releasesAtBroadcast)
+        assertEquals(0, releases)
+    }
+
+    @Test
+    fun `a request approved on a replaced node is refused before its candidate is saved`() = test {
+        val (repo, store) = feeReviewRepo()
+        val requestId = PaykitPaymentRequestId("request", "payer")
+        var broadcasts = 0
+        var isCurrent = true
+        val prepared = feeReviewPrepared(isCurrent = { isCurrent }) { broadcasts++ }
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(prepared)
+
+        val result = repo.sendOnChain(
+            "address",
+            1_000uL,
+            requestId = requestId,
+            payerIdentity = "payer-identity",
+            approvedMiningFeeSats = 203uL,
+            reviewHigherFee = { isCurrent = false },
+        )
+
+        // Never dispatched and never saved, so it is not reported as a pending payment.
+        val error = assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull())
+        assertIs<OnchainSendReviewInterruptedError>(error.cause)
+        assertEquals(0, broadcasts)
+        val guard = assertNotNull(store.current())
+        assertTrue(guard.preparationPending && guard.candidateTxids.isEmpty() && guard.txid == null)
+        assertTrue(repo.releaseInterruptedShopPreparation { it.attemptId == guard.attemptId })
+        assertNull(store.current())
+    }
+
+    private fun feeReviewPrepared(
+        isCurrent: () -> Boolean = { true },
+        discard: () -> Unit = {},
+        onBroadcast: () -> Unit,
+    ): PreparedOnchainSend {
+        val txid = "ab".repeat(32)
+        return PreparedOnchainSend(
+            OnchainPreparedReceipt(
+                txid = txid,
+                inputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+                address = "address",
+                amountSats = 1_000uL,
+                miningFeeSats = 212uL,
+            ),
+            isCurrent = isCurrent,
+            discard = discard,
+        ) { beforeDispatch ->
+            beforeDispatch()
+            onBroadcast()
+            OnchainSendOutcome.Accepted(txid)
+        }
+    }
+
+    @Test
+    fun `a review that outlives the payment deadline sends nothing and releases the attempt`() = test {
+        val (repo, store) = feeReviewRepo()
+        val prepared = PreparedOnchainSend(
+            OnchainPreparedReceipt(
+                txid = "ab".repeat(32),
+                inputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+                address = "address",
+                amountSats = 1_000uL,
+                miningFeeSats = 212uL,
+            ),
+        ) { throw to.bitkit.utils.ServiceError.PaymentDeadlineExpired() }
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(prepared)
+
+        val result = repo.sendOnChain("address", 1_000uL, approvedMiningFeeSats = 203uL, reviewHigherFee = {})
+
+        assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull())
+        assertNull(store.current())
+    }
+
+    @Test
+    fun `an equal or lower prepared fee sends without another review`() = test {
+        for (feeSats in listOf(203uL, 190uL)) {
+            val txid = "ab".repeat(32)
+            val (repo, _) = feeReviewRepo()
+            var broadcasts = 0
+            var reviews = 0
+            stubFeeReviewPreparation(txid, feeSats) { broadcasts++ }
+
+            val result = repo.sendOnChain(
+                "address",
+                1_000uL,
+                approvedMiningFeeSats = 203uL,
+                reviewHigherFee = { reviews++ },
+            )
+
+            assertEquals(OnchainSendOutcome.Accepted(txid), result.getOrThrow())
+            assertEquals(1, broadcasts, "Fee $feeSats")
+            assertEquals(0, reviews, "Fee $feeSats")
+        }
+    }
+
+    private suspend fun stubFeeReviewPreparation(txid: String, feeSats: ULong, onBroadcast: () -> Unit) {
+        val prepared = PreparedOnchainSend(
+            OnchainPreparedReceipt(
+                txid = txid,
+                inputs = listOf(OnchainSendInput("11".repeat(32), 0u)),
+                address = "address",
+                amountSats = 1_000uL,
+                miningFeeSats = feeSats,
+            ),
+        ) { beforeDispatch ->
+            beforeDispatch()
+            onBroadcast()
+            OnchainSendOutcome.Accepted(txid)
+        }
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(prepared)
+    }
+
+    /** The repository over a real attempt store, so admission, retention, dispatch and release are the app's own. */
+    private suspend fun feeReviewRepo(): Pair<LightningRepo, OnchainSendAttemptStore> {
+        val key = Keychain.Key.ONCHAIN_SEND_ATTEMPT.name
+        var saved: String? = null
+        whenever(keychain.loadString(key, 0)).thenAnswer { saved }
+        whenever(keychain.upsertString(eq(key), any(), eq(0))).doSuspendableAnswer { saved = it.getArgument(1) }
+        whenever(keychain.delete(key, 0)).doSuspendableAnswer {
+            saved = null
+            Unit
+        }
+        val store = OnchainSendAttemptStore(testDispatcher, keychain, lightningService, kotlin.time.Clock.System)
+        sut = LightningRepo(
+            bgDispatcher = testDispatcher,
+            lightningService = lightningService,
+            settingsStore = settingsStore,
+            coreService = coreService,
+            keychain = keychain,
+            lnurlService = lnurlService,
+            cacheStore = cacheStore,
+            preActivityMetadataRepo = preActivityMetadataRepo,
+            onchainSendAttemptStore = store,
+            connectivityRepo = connectivityRepo,
+            vssBackupClientLdk = vssBackupClientLdk,
+            urlValidator = urlValidator,
+            electrumProbeService = electrumProbeService,
+            sparkRepo = sparkRepo,
+        )
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
+        val activityService = mock<ActivityService>()
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
+        whenever(activityService.getOnchainActivityByTxId(any(), any())).thenReturn(mock())
+        startNodeForTesting()
+        val repo = spy(sut).also { doReturn(Result.success(1uL)).whenever(it).getFeeRateForSpeed(any(), anyOrNull()) }
+        return repo to store
     }
 
     private fun preparedOutcome(outcome: OnchainSendOutcome, amountSats: ULong = 1_000uL) = PreparedOnchainSend(
@@ -4281,6 +4855,195 @@ class LightningRepoTest : BaseUnitTest() {
         testScheduler.advanceUntilIdle()
     }
 
+    // Regression: a stopped node's VSS writes can keep retrying past one build's wait for them, so the
+    // recovery start retries while the build fails on the busy store instead of leaving the node offline.
+    @Test
+    fun `restartWithElectrumServer recovery retries while the vss store is busy`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { throw busy }
+        var recoveryAttempts = 0
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                recoveryAttempts++
+                if (recoveryAttempts < 3) throw busy
+            }
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(3, recoveryAttempts)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    // Regression: a stop requested while the app went to the background wins over the recovery retry,
+    // which would otherwise cancel it and leave the node running with background payments off.
+    @Test
+    fun `restartWithElectrumServer recovery does not retry over a requested stop`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { throw busy }
+        var recoveryAttempts = 0
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                recoveryAttempts++
+                sut.stopDebounced()
+                throw busy
+            }
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(1, recoveryAttempts)
+        assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    // Regression: a stop requested during the failed change's build is kept by recovery, whose first
+    // start would otherwise cancel it before any retry could see it.
+    @Test
+    fun `restartWithElectrumServer recovery does not start over a stop requested before it`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                sut.stopDebounced()
+                throw busy
+            }
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, never()).setup(any(), isNull(), isNull(), anyOrNull())
+        assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `restartWithElectrumServer recovery does not retry over a direct stop`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { throw busy }
+        var recoveryAttempts = 0
+        val testScope = this
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                recoveryAttempts++
+                if (recoveryAttempts == 1) {
+                    testScope.launch { sut.stop() }
+                    // Stands in for the build's wait on the stopped node's writes.
+                    delay(60.seconds)
+                    throw busy
+                }
+            }
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(1, recoveryAttempts)
+        assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `restartWithElectrumServer recovery graph reset keeps a requested stop`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        whenever(vssBackupClientLdk.setup(any())).thenReturn(Result.success(Unit))
+        whenever(vssBackupClientLdk.deleteObject(any(), any())).thenReturn(Result.success(true))
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { throw busy }
+        var recoveryAttempts = 0
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                recoveryAttempts++
+                if (recoveryAttempts == 1) {
+                    whenever(lightningService.aresRequiredPeersInNetworkGraph()).thenReturn(false, true)
+                    sut.stopDebounced()
+                }
+            }
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(2, recoveryAttempts)
+        assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `restartWithElectrumServer recovery graph reset keeps a debounced stop that fires mid-build`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        whenever(vssBackupClientLdk.setup(any())).thenReturn(Result.success(Unit))
+        whenever(vssBackupClientLdk.deleteObject(any(), any())).thenReturn(Result.success(true))
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { throw busy }
+        var recoveryAttempts = 0
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                recoveryAttempts++
+                if (recoveryAttempts == 1) {
+                    whenever(lightningService.aresRequiredPeersInNetworkGraph()).thenReturn(false, true)
+                    sut.stopDebounced()
+                    delay(6.seconds)
+                }
+            }
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(1, recoveryAttempts)
+        assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `restartWithElectrumServer recovery graph reset keeps a direct stop made mid-build`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        whenever(vssBackupClientLdk.setup(any())).thenReturn(Result.success(Unit))
+        whenever(vssBackupClientLdk.deleteObject(any(), any())).thenReturn(Result.success(true))
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { throw busy }
+        var recoveryAttempts = 0
+        val testScope = this
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                recoveryAttempts++
+                if (recoveryAttempts == 1) {
+                    whenever(lightningService.aresRequiredPeersInNetworkGraph()).thenReturn(false, true)
+                    testScope.launch { sut.stop() }
+                    delay(1.seconds)
+                }
+            }
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(1, recoveryAttempts)
+        assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
     // Regression: a server that cannot work is rejected by the probe before the node is touched.
     // Tearing the node down for one is what leaves its electrum tasks wedged, so that a later
     // free_node blocks for tens of seconds instead of milliseconds.
@@ -4983,6 +5746,34 @@ class LightningRepoTest : BaseUnitTest() {
         lightningBalances = emptyList(),
         pendingBalancesFromChannelClosures = emptyList(),
     )
+
+    @Test
+    fun `cancelling updateAddressType clears the change in progress`() = test {
+        startNodeForTesting()
+        whenever(settingsStore.data).thenReturn(MutableSharedFlow(replay = 1))
+
+        val job = CoroutineScope(testDispatcher).async { sut.updateAddressType("taproot", listOf("taproot")) }
+        testScheduler.advanceUntilIdle()
+        assertTrue(sut.isChangingAddressType())
+        job.cancel()
+        testScheduler.advanceUntilIdle()
+
+        assertFalse(sut.isChangingAddressType())
+    }
+
+    @Test
+    fun `cancelling setMonitoring clears the change in progress`() = test {
+        startNodeForTesting()
+        whenever(settingsStore.data).thenReturn(MutableSharedFlow(replay = 1))
+
+        val job = CoroutineScope(testDispatcher).async { sut.setMonitoring(AddressType.P2TR, enabled = true) }
+        testScheduler.advanceUntilIdle()
+        assertTrue(sut.isChangingAddressType())
+        job.cancel()
+        testScheduler.advanceUntilIdle()
+
+        assertFalse(sut.isChangingAddressType())
+    }
 
     @Test
     fun `updateAddressType should fail when already in progress`() = test {

@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -25,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -110,9 +112,24 @@ import kotlin.time.Duration.Companion.seconds
 
 private val EXPIRY_REFRESH_INTERVAL = 60.seconds
 
+/** How long the confirm stays locked after a swipe once nothing runs for it, before it frees the screen. */
+internal val SWIPE_IDLE_RELEASE = 1.seconds
+
 /** Characters of a swap provider's pubky shown on the confirm screen. */
 private const val PROVIDER_KEY_LENGTH = 12
 const val SEND_CONFIRM_RESET_RESULT_KEY = "SEND_CONFIRM_RESET_RESULT_KEY"
+
+/**
+ * Calls [onReset] for each reset [SEND_CONFIRM_RESET_RESULT_KEY] carries. The key goes back to false rather than
+ * away, since removing it detaches this collector from any later reset.
+ */
+internal suspend fun SavedStateHandle.collectConfirmResets(onReset: () -> Unit) {
+    getStateFlow(SEND_CONFIRM_RESET_RESULT_KEY, false).collect {
+        if (!it) return@collect
+        onReset()
+        set(SEND_CONFIRM_RESET_RESULT_KEY, false)
+    }
+}
 
 @Composable
 fun SendConfirmScreen(
@@ -126,6 +143,8 @@ fun SendConfirmScreen(
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,
     onNavigateToPin: () -> Unit,
+    isSwipeRunning: Boolean = false,
+    onLockChange: (Boolean) -> Unit = {},
     syncNodeVariant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
     autoPayContent: (@Composable () -> Unit)? = null,
 ) {
@@ -154,12 +173,7 @@ fun SendConfirmScreen(
     }
 
     LaunchedEffect(savedStateHandle) {
-        savedStateHandle.getStateFlow(SEND_CONFIRM_RESET_RESULT_KEY, false)
-            .collect {
-                if (!it) return@collect
-                isLoading = false
-                savedStateHandle.remove<Boolean>(SEND_CONFIRM_RESET_RESULT_KEY)
-            }
+        savedStateHandle.collectConfirmResets { isLoading = false }
     }
 
     // Confirm with pin or bio if required
@@ -187,12 +201,27 @@ fun SendConfirmScreen(
         if (uiState.initialSubscriptionPaymentNeedsConfirmation) isLoading = false
     }
 
+    // The prepared send costs more than the fee approved, so the swipe is offered again on its actual fee
+    LaunchedEffect(uiState.isPreparedFeeReview) {
+        if (uiState.isPreparedFeeReview) isLoading = false
+    }
+
+    val isLocked = rememberConfirmLock(isLoading, isSwipeRunning, uiState, showBiometrics)
+
+    // A running swipe holds the sheet too, until it moves on or returns here
+    DisposableEffect(isLocked) {
+        onLockChange(isLocked)
+        onDispose { onLockChange(false) }
+    }
+    BackHandler(enabled = isLocked) {}
+
     SendConfirmContent(
         uiState = uiState,
         isNodeRunning = isNodeRunning,
         isLoading = isLoading,
         showBiometrics = showBiometrics,
         canGoBack = canGoBack,
+        isLocked = isLocked,
         syncNodeVariant = syncNodeVariant,
         initialShowDetails = uiState.isInitialSubscriptionPayment && !uiState.shouldAutomaticallyPay,
         autoPayContent = autoPayContent,
@@ -200,6 +229,7 @@ fun SendConfirmScreen(
         onEvent = onEvent,
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag,
+        onDismissRetainedSendWarning = { isLoading = false },
         onSwipeToConfirm = {
             scope.launch {
                 isLoading = true
@@ -213,11 +243,38 @@ fun SendConfirmScreen(
             onEvent(SendEvent.PayConfirmed)
         },
         onBiometricsFailure = {
-            isLoading = false
+            // Loading stays on, as on the direct PIN path; the PIN result resets it.
             showBiometrics = false
             onNavigateToPin()
         },
     )
+}
+
+/**
+ * Whether the confirm screen is locked: from the swipe until it moves on or returns here. A swipe with nothing
+ * running for it for [SWIPE_IDLE_RELEASE], such as one stopped before paying, no longer holds it, and neither does
+ * the amount warning or the biometrics prompt, which the user answers. The review of a prepared fee clears the
+ * swipe's loading, so it stays leavable until the user swipes again to accept it.
+ */
+@Composable
+internal fun rememberConfirmLock(
+    isLoading: Boolean,
+    isSwipeRunning: Boolean,
+    uiState: SendUiState,
+    showBiometrics: Boolean = false,
+): Boolean {
+    val isAnswering = showBiometrics || uiState.showSanityWarningDialog != null
+    // Keyed so a new run, or a closed prompt, locks from its first composition, before the effect resets it.
+    var isSwipeIdle by remember(isLoading, isSwipeRunning, uiState.shouldConfirmPay, isAnswering) {
+        mutableStateOf(false)
+    }
+    LaunchedEffect(isLoading, isSwipeRunning, uiState.shouldConfirmPay, isAnswering) {
+        if (!isLoading || isSwipeRunning || uiState.shouldConfirmPay || isAnswering) return@LaunchedEffect
+        delay(SWIPE_IDLE_RELEASE)
+        isSwipeIdle = true
+    }
+    if (isAnswering) return false
+    return isLoading && !isSwipeIdle
 }
 
 @Composable
@@ -245,6 +302,7 @@ internal fun SendConfirmContent(
     preparingRequest: PaykitPaymentRequest? = null,
     preparingContact: PubkyProfile? = null,
     canGoBack: Boolean = true,
+    isLocked: Boolean = false,
     initialShowDetails: Boolean = false,
     syncNodeVariant: SyncNodeVariant = SyncNodeVariant.LIGHTNING,
     autoPayContent: (@Composable () -> Unit)? = null,
@@ -252,6 +310,7 @@ internal fun SendConfirmContent(
     onEvent: (SendEvent) -> Unit = {},
     onClickAddTag: () -> Unit = {},
     onClickTag: (String) -> Unit = {},
+    onDismissRetainedSendWarning: () -> Unit = {},
     onSwipeToConfirm: () -> Unit = {},
     onBiometricsSuccess: () -> Unit = {},
     onBiometricsFailure: () -> Unit = {},
@@ -288,7 +347,7 @@ internal fun SendConfirmContent(
                     else -> stringResource(R.string.wallet__send_review)
                 },
                 contact = if (isPreparing) preparingContact else uiState.contactPaymentProfile,
-                onBack = onBack.takeIf { canGoBack },
+                onBack = onBack.takeIf { canGoBack && !isLocked },
             )
 
             Spacer(Modifier.height(16.dp))
@@ -304,9 +363,10 @@ internal fun SendConfirmContent(
                     preparingRequest = preparingRequest,
                     preparingContact = preparingContact,
                     initialShowDetails = initialShowDetails,
-                    onEvent = onEvent,
-                    onClickAddTag = onClickAddTag,
-                    onClickTag = onClickTag,
+                    // The payment's inputs stay as swiped while the swipe runs
+                    onEvent = { if (!isLocked) onEvent(it) },
+                    onClickAddTag = { if (!isLocked) onClickAddTag() },
+                    onClickTag = { if (!isLocked) onClickTag(it) },
                     onSwipeToConfirm = onSwipeToConfirm,
                 )
             } else {
@@ -331,17 +391,17 @@ internal fun SendConfirmContent(
 
         uiState.showSanityWarningDialog?.takeUnless { isPreparing }?.let { dialog ->
             AppAlertDialog(
-                title = stringResource(R.string.common__are_you_sure),
+                title = stringResource(dialog.title),
                 text = stringResource(dialog.message),
                 confirmText = stringResource(R.string.wallet__send_yes),
                 dismissText = stringResource(R.string.common__cancel),
                 onConfirm = { onEvent(SendEvent.ConfirmAmountWarning(dialog)) },
                 onDismiss = {
                     onEvent(SendEvent.DismissAmountWarning)
-                    if (uiState.isInitialSubscriptionPayment) {
-                        onEvent(SendEvent.CancelInitialSubscriptionPayment)
-                    } else {
-                        onBack()
+                    when {
+                        dialog == SanityWarning.RETAINED_HARDWARE_SEND -> onDismissRetainedSendWarning()
+                        uiState.isInitialSubscriptionPayment -> onEvent(SendEvent.CancelInitialSubscriptionPayment)
+                        else -> onBack()
                     }
                 },
                 modifier = Modifier
@@ -367,6 +427,10 @@ private fun ContentRunning(
     onSwipeToConfirm: () -> Unit = {},
 ) {
     var showDetails by rememberSaveable(initialShowDetails) { mutableStateOf(initialShowDetails) }
+    // The update fee sits in the details: each new quote opens them, and the swipe waits for the quote.
+    LaunchedEffect(uiState.sparkUpdateQuote) {
+        if (uiState.sparkUpdateQuote != null) showDetails = true
+    }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
     val isPreparing = preparingRequest != null
     val isLnurlPay = !isPreparing && uiState.paysLnurl
@@ -432,7 +496,7 @@ private fun ContentRunning(
                 VerticalSpacer(if (isPreparing || uiState.isPaymentRequest) 24.dp else 44.dp)
 
                 if (isLnurlPay && !uiState.isPaymentRequest) {
-                    LnurlPayDetails(uiState = uiState, onEvent = onEvent)
+                    LnurlPayDetails(uiState = uiState, isLoading = isLoading, onEvent = onEvent)
                 } else if (showDetails && !isPreparing) {
                     when (uiState.payMethod) {
                         SendMethod.ONCHAIN -> {
@@ -459,7 +523,7 @@ private fun ContentRunning(
                             )
                             val lnurlPay = uiState.lnurl as? LnurlParams.LnurlPay
                             if (uiState.paysLnurl && lnurlPay?.data?.commentAllowed() == true) {
-                                LnurlCommentSection(uiState, onEvent)
+                                LnurlCommentSection(uiState, onEvent, enabled = !isLoading)
                             }
                         }
                     }
@@ -543,13 +607,15 @@ private fun ContentRunning(
 
 private fun SendUiState.canSwipeToPay() = isAmountInputValid &&
     !isFundingSourceLoading &&
-    isHardwareFeeReady &&
+    isHardwareReviewReady &&
+    !isSparkUpdateQuoting &&
     !(payMethod == SendMethod.ONCHAIN && onchainFeeUi.isLoading)
 
 @Composable
 private fun LnurlCommentSection(
     uiState: SendUiState,
     onEvent: (SendEvent) -> Unit,
+    enabled: Boolean,
 ) {
     Spacer(modifier = Modifier.height(16.dp))
     Caption13Up(stringResource(R.string.wallet__lnurl_pay_confirm__comment), color = Colors.White64)
@@ -561,6 +627,7 @@ private fun LnurlCommentSection(
         onValueChange = { onEvent(SendEvent.CommentChange(it)) },
         minLines = 3,
         maxLines = 3,
+        enabled = enabled,
         modifier = Modifier
             .fillMaxWidth()
             .testTag("CommentInput")
@@ -878,6 +945,8 @@ private fun LightningDetails(
             }
         }
 
+        UpdateFeeCell(uiState.sparkUpdateQuote?.feeSats)
+
         val swapRoute = uiState.paykitSwapRoute
         val swapQuote = swapRoute?.quote
         if (swapQuote != null) {
@@ -886,14 +955,6 @@ private fun LightningDetails(
             SendCell(caption = stringResource(R.string.wallet__send_swap_route)) {
                 BodySSB(
                     text = stringResource(R.string.wallet__send_swap_route_provider, provider),
-                    maxLines = 1,
-                    modifier = Modifier.testTag("ReviewSwapRoute")
-                )
-            }
-        } else if (uiState.routedPaykitRoute?.serviceLeg != null) {
-            SendCell(caption = stringResource(R.string.wallet__send_swap_route)) {
-                BodySSB(
-                    text = stringResource(R.string.wallet__send_swap_route_spark),
                     maxLines = 1,
                     modifier = Modifier.testTag("ReviewSwapRoute")
                 )
@@ -954,6 +1015,7 @@ private val SendUiState.confirmationRequestNote: String?
 @Composable
 private fun LnurlPayDetails(
     uiState: SendUiState,
+    isLoading: Boolean,
     onEvent: (SendEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1002,8 +1064,10 @@ private fun LnurlPayDetails(
             }
         }
 
+        UpdateFeeCell(uiState.sparkUpdateQuote?.feeSats)
+
         if (lnurlPay.data.commentAllowed()) {
-            LnurlCommentSection(uiState, onEvent)
+            LnurlCommentSection(uiState, onEvent, enabled = !isLoading)
         }
     }
 }
@@ -1363,5 +1427,20 @@ private fun PreviewNodeNotRunning() {
                 modifier = Modifier.sheetHeight(),
             )
         }
+    }
+}
+
+/** The fee of the spending balance update a payment that fits only across the channels and Spark runs first. */
+@Composable
+private fun UpdateFeeCell(feeSats: ULong?) {
+    if (feeSats == null) return
+    SendCell(caption = stringResource(R.string.wallet__send_update_fee)) {
+        BodySSB(
+            text = (rememberMoneyText(feeSats.toLong(), showSymbol = true) ?: "").withAccent(
+                accentColor = Colors.White
+            ),
+            maxLines = 1,
+            modifier = Modifier.testTag("ReviewUpdateFee")
+        )
     }
 }

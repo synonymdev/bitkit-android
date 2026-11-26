@@ -32,10 +32,9 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 
-/** When to use an emergency exit, what it costs and how long it takes. */
+/** Asks whether to force transfer the spending balance to savings, and for how long it is out of reach. */
 @Composable
 fun SparkExitIntroScreen(
     onBack: () -> Unit,
@@ -60,16 +59,6 @@ fun SparkExitIntroScreen(
                     .heightIn(min = maxHeight)
                     .padding(horizontal = 16.dp)
             ) {
-                VerticalSpacer(32.dp)
-                Display(
-                    text = stringResource(R.string.lightning__spark_exit__intro_title).withAccent(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                BodyM(
-                    text = stringResource(R.string.lightning__spark_exit__intro_text).withAccentBoldBright(),
-                    color = Colors.White64,
-                    modifier = Modifier.fillMaxWidth()
-                )
                 FillHeight()
                 Image(
                     painter = painterResource(R.drawable.exclamation_mark),
@@ -78,6 +67,16 @@ fun SparkExitIntroScreen(
                     modifier = Modifier.size(256.dp)
                 )
                 FillHeight()
+                Display(
+                    text = stringResource(R.string.lightning__spark_exit__intro_title).withExitAccent(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                BodyM(
+                    text = stringResource(R.string.lightning__spark_exit__intro_text).withAccentBoldBright(),
+                    color = Colors.White64,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                VerticalSpacer(32.dp)
             }
         }
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {

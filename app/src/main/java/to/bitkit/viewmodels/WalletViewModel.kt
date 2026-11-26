@@ -60,6 +60,7 @@ import to.bitkit.repositories.WipeInProgressError
 import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
 import to.bitkit.ui.onboarding.LOADING_MS
+import to.bitkit.ui.settings.lightning.MoveToSparkManager
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -86,6 +87,7 @@ class WalletViewModel @Inject constructor(
     private val connectionRecovery: WalletConnectionRecovery,
     private val pubkySwapsRouteRepo: PubkySwapsRouteRepo,
     sparkRepo: SparkRepo,
+    moveToSparkManager: MoveToSparkManager,
 ) : ViewModel() {
     companion object {
         private const val TAG = "WalletViewModel"
@@ -106,6 +108,7 @@ class WalletViewModel @Inject constructor(
 
     val lightningState = lightningRepo.lightningState
     val sparkState = sparkRepo.state
+    val hasRetainedMove = moveToSparkManager.hasRetainedMove
     val walletState = walletRepo.walletState
     private val _isFinishingWalletReset = MutableStateFlow(false)
     val isFinishingWalletReset = _isFinishingWalletReset.asStateFlow()
@@ -626,13 +629,15 @@ class WalletViewModel @Inject constructor(
                 swaps.restored.forEach { swapId ->
                     launch {
                         pubkySwapsRouteRepo.awaitClaim(swapId).onSuccess {
-                            // The claim also opens the received sheet above the toasts: stay until dismissed so the
-                            // user still sees why the money came back once that sheet closes.
+                            // The claim also opens the received sheet above the toasts: stay until dismissed, with
+                            // later toasts waiting behind, so the user still sees why the money came back once that
+                            // sheet closes.
                             ToastEventBus.send(
                                 type = Toast.ToastType.INFO,
                                 title = context.getString(R.string.wallet__swap_route_restored_title),
                                 description = context.getString(R.string.wallet__swap_route_restored_text),
                                 autoHide = false,
+                                interruptible = false,
                             )
                         }
                     }

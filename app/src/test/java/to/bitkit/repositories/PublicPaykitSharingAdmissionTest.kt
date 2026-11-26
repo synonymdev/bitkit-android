@@ -14,6 +14,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
@@ -31,6 +32,7 @@ import to.bitkit.data.UsdtPreference
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitSdkOperationLock.Priority
 import to.bitkit.services.PaykitSdkService
+import to.bitkit.services.PublicEndpointSync
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
@@ -44,6 +46,7 @@ import kotlin.time.ExperimentalTime
 class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
     private val pubkyRepo = mock<PubkyRepo>()
     private val paykitSdkService = mock<PaykitSdkService>()
+    private val endpointSync = PublicEndpointSync(EndpointSyncReport(emptyList(), emptyList(), emptyList()), epoch = 0L)
     private val settingsStore = mock<SettingsStore>()
     private val lightningRepo = mock<LightningRepo>()
     private val coreService = mock<CoreService>()
@@ -73,6 +76,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
         whenever(pubkyRepo.isCurrent(any())).thenReturn(true)
         whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringSession)
         whenever(settingsStore.data).thenReturn(settingsFlow)
+        whenever(settingsStore.isPaykitEnabled).thenReturn(MutableStateFlow(true))
         whenever(addressReservationRepo.currentOrRotatedPublicAddress(any())).thenReturn(Result.success("bc1ptest"))
         doSuspendableAnswer {
             it.getArgument<suspend (Boolean) -> Unit>(2)(true)
@@ -145,14 +149,14 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
                 val release = CompletableDeferred<Unit>()
                 var endpointWrites = 0
                 var registryWrites = 0
-                whenever(paykitSdkService.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
+                whenever(paykitSdkService.syncPublicEndpointsWithEpoch(any(), any(), anyOrNull())).doSuspendableAnswer {
                     assertTrue(it.getArgument<List<Endpoint>>(0).isEmpty())
                     entered.complete(Unit)
                     release.await()
                     val admission = it.getArgument<suspend () -> Boolean>(1)
                     if (!admission()) return@doSuspendableAnswer null
                     endpointWrites++
-                    EndpointSyncReport(emptyList(), emptyList(), emptyList())
+                    endpointSync
                 }
                 whenever(paykitSdkService.syncPaykitApp(isNull(), eq(Priority.Interactive), any()))
                     .doSuspendableAnswer {
@@ -206,13 +210,13 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             val entered = CompletableDeferred<Unit>()
             val release = CompletableDeferred<Unit>()
             var registryWrites = 0
-            whenever(paykitSdkService.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
+            whenever(paykitSdkService.syncPublicEndpointsWithEpoch(any(), any(), anyOrNull())).doSuspendableAnswer {
                 assertTrue(it.getArgument<suspend () -> Boolean>(1)())
                 if (boundary == "metadata") {
                     entered.complete(Unit)
                     release.await()
                 }
-                EndpointSyncReport(emptyList(), emptyList(), emptyList())
+                endpointSync
             }
             whenever(paykitSdkService.syncPaykitApp(isNull(), eq(Priority.Interactive), any())).doSuspendableAnswer {
                 if (boundary == "registry") {
@@ -241,8 +245,8 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
 
     @Test
     fun `USDT preparation failure allows Bitcoin publication and retries until recovery or disable`() = test {
-        whenever(paykitSdkService.syncPublicEndpoints(any(), any()))
-            .thenReturn(EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList()))
+        whenever(paykitSdkService.syncPublicEndpointsWithEpoch(any(), any(), anyOrNull()))
+            .thenReturn(endpointSync)
         settingsFlow.value = SettingsData(
             sharesPublicPaykitEndpoints = true,
             publicPaykitLightningEnabled = false,
@@ -272,7 +276,9 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             sut.syncCurrentPublishedEndpoints().getOrThrow()
             assertFalse(settingsFlow.value.publicPaykitCleanupPending)
             val endpoints = argumentCaptor<List<Endpoint>>()
-            verifyBlocking(paykitSdkService, times(6)) { syncPublicEndpoints(endpoints.capture(), any()) }
+            verifyBlocking(paykitSdkService, times(6)) {
+                syncPublicEndpointsWithEpoch(endpoints.capture(), any(), anyOrNull())
+            }
             assertEquals(
                 listOf(
                     null,
@@ -308,8 +314,8 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
         whenever(coreService.decode("ln-new")).thenReturn(Scanner.Lightning(invoice("ln-new")))
         whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.failure(AppError("USDT unavailable")))
 
-        whenever(paykitSdkService.syncPublicEndpoints(any(), any()))
-            .thenReturn(EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList()))
+        whenever(paykitSdkService.syncPublicEndpointsWithEpoch(any(), any(), anyOrNull()))
+            .thenReturn(endpointSync)
         sut.syncCurrentPublishedEndpoints().getOrThrow()
         assertEquals("ln-new", settingsFlow.value.publicPaykitBolt11)
         assertTrue(settingsFlow.value.publicPaykitCleanupPending)
@@ -320,11 +326,13 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             rawPayload = "{}",
         )
         whenever(usdtRepo.paymentEndpoint()).thenReturn(Result.success(usdt))
-        whenever(paykitSdkService.syncPublicEndpoints(any(), any()))
-            .thenReturn(EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList()))
+        whenever(paykitSdkService.syncPublicEndpointsWithEpoch(any(), any(), anyOrNull()))
+            .thenReturn(endpointSync)
         sut.syncCurrentPublishedEndpoints().getOrThrow()
         val endpoints = argumentCaptor<List<Endpoint>>()
-        verifyBlocking(paykitSdkService, times(2)) { syncPublicEndpoints(endpoints.capture(), any()) }
+        verifyBlocking(paykitSdkService, times(2)) {
+            syncPublicEndpointsWithEpoch(endpoints.capture(), any(), anyOrNull())
+        }
         assertEquals(listOf("ln-new"), endpoints.firstValue.map { it.value })
         assertEquals(listOf("ln-new", usdt.value), endpoints.secondValue.map { it.value })
         verifyBlocking(lightningRepo, times(1)) { createInvoice(null, "", 86_400u, true) }
@@ -354,7 +362,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             }
             var calls = 0
             val published = mutableListOf<List<String>>()
-            whenever(paykitSdkService.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
+            whenever(paykitSdkService.syncPublicEndpointsWithEpoch(any(), any(), anyOrNull())).doSuspendableAnswer {
                 calls += 1
                 if (calls == 1) {
                     if (outcome == "skipped") return@doSuspendableAnswer null
@@ -362,7 +370,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
                     sut.requestLightningRefresh(signIn)
                 }
                 published.add(it.getArgument<List<Endpoint>>(0).map { endpoint -> endpoint.value })
-                EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList())
+                endpointSync
             }
             sut.requestLightningRefresh(signIn)
             assertTrue(sut.hasPendingLightningRefresh)
@@ -412,9 +420,9 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             if (outcome == "replace before") ownsIdentity = false
             signIn = PubkySignIn("pubkyself", 1L)
             var publicationFails = true
-            whenever(paykitSdkService.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
+            whenever(paykitSdkService.syncPublicEndpointsWithEpoch(any(), any(), anyOrNull())).doSuspendableAnswer {
                 if (publicationFails) throw PublicPaykitError.PublicationFailed
-                EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList())
+                endpointSync
             }
             assertTrue(sut.syncCurrentPublishedEndpoints().isFailure)
             assertEquals(outcome != "replace before", sut.hasPendingLightningRefresh, outcome)
@@ -462,9 +470,9 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             whenever(coreService.decode(bolt11)).thenReturn(Scanner.Lightning(invoice(bolt11)))
         }
         var publicationFails = true
-        whenever(paykitSdkService.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
+        whenever(paykitSdkService.syncPublicEndpointsWithEpoch(any(), any(), anyOrNull())).doSuspendableAnswer {
             if (publicationFails) throw PublicPaykitError.PublicationFailed
-            EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList())
+            endpointSync
         }
         sut.requestLightningRefresh(signIn)
         val first = async { sut.syncCurrentPublishedEndpoints() }
@@ -503,8 +511,8 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
             publicPaykitBolt11PaymentHash = "01",
             publicPaykitBolt11ExpiresAtMillis = Long.MAX_VALUE,
         )
-        whenever(paykitSdkService.syncPublicEndpoints(any(), any()))
-            .thenReturn(EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList()))
+        whenever(paykitSdkService.syncPublicEndpointsWithEpoch(any(), any(), anyOrNull()))
+            .thenReturn(endpointSync)
         sut.requestLightningRefresh(original)
         generation += 1
         assertFalse(sut.hasPendingLightningRefresh)
@@ -567,7 +575,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
                 }
                 Result.success("bc1ptest")
             }
-            whenever(paykitSdkService.syncPublicEndpoints(any(), any())).doSuspendableAnswer {
+            whenever(paykitSdkService.syncPublicEndpointsWithEpoch(any(), any(), anyOrNull())).doSuspendableAnswer {
                 if (stage == "queued") {
                     reached.complete(Unit)
                     resume.await()
@@ -578,7 +586,7 @@ class PublicPaykitSharingAdmissionTest : BaseUnitTest() {
                     reached.complete(Unit)
                     resume.await()
                 }
-                EndpointSyncReport(published = emptyList(), removed = emptyList(), failed = emptyList())
+                endpointSync
             }
             val publication = async { sut.syncCurrentPublishedEndpoints() }
             reached.await()

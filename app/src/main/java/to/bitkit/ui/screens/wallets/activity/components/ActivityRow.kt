@@ -31,6 +31,7 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
+import to.bitkit.ext.isMoveToSpark
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.timestamp
@@ -45,7 +46,9 @@ import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.activityListViewModel
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
+import to.bitkit.ui.components.ActivitySubtitleWithReceipt
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
@@ -75,6 +78,18 @@ fun ActivityRow(
         mutableStateOf(null)
     }
     val feeRates = blocktankInfo?.onchain?.feeRates
+    val appViewModel = appViewModel
+    val receiptStatuses by appViewModel?.paykitReceiptStatuses?.collectAsStateWithLifecycle() ?: remember {
+        mutableStateOf(emptyMap())
+    }
+    val paymentId = when (item) {
+        is Activity.Lightning -> item.v1.id
+        is Activity.Onchain -> item.v1.txId
+    }.lowercase()
+    val receiptStatus = receiptStatuses[paymentId].takeIf { item.txType() == PaymentType.RECEIVED }
+    val moveHashes by appViewModel?.moveToSparkHashes?.collectAsStateWithLifecycle(initialValue = emptySet())
+        ?: remember { mutableStateOf(emptySet()) }
+    val isMoveToSpark = item.isMoveToSpark(moveHashes)
 
     val status: PaymentState? = when (item) {
         is Activity.Lightning -> item.v1.status
@@ -92,11 +107,13 @@ fun ActivityRow(
     val isTransfer = item.isTransfer()
     val activityListViewModel = activityListViewModel
     var isCpfpChild by remember { mutableStateOf(false) }
-    val resolvedTitle = title.takeIf {
-        shouldUseContactActivityTitle(item, status, isTransfer, isCpfpChild)
+    val resolvedTitle = if (isMoveToSpark) {
+        stringResource(R.string.wallet__activity_move_to_spark)
+    } else {
+        title.takeIf { shouldUseContactActivityTitle(item, status, isTransfer, isCpfpChild) }
     }
     val resolvedContact = contact.takeIf {
-        shouldUseContactActivityTitle(item, status, isTransfer, isCpfpChild)
+        !isMoveToSpark && shouldUseContactActivityTitle(item, status, isTransfer, isCpfpChild)
     }
 
     LaunchedEffect(item) {
@@ -113,6 +130,7 @@ fun ActivityRow(
             size = 40.dp,
             isCpfpChild = isCpfpChild,
             isHardware = isHardware,
+            isMoveToSpark = isMoveToSpark,
             contact = resolvedContact,
         )
         HorizontalSpacer(16.dp)
@@ -130,6 +148,11 @@ fun ActivityRow(
             )
             val context = LocalContext.current
             val subtitleText = when (item) {
+                is Activity.Lightning if isMoveToSpark -> when (item.v1.status) {
+                    PaymentState.FAILED -> stringResource(R.string.wallet__activity_failed)
+                    PaymentState.PENDING -> stringResource(R.string.wallet__activity_pending)
+                    PaymentState.SUCCEEDED -> activityTimeText(timestamp)
+                }
                 is Activity.Lightning -> item.v1.message.ifEmpty { activityTimeText(timestamp) }
                 is Activity.Onchain -> {
                     when {
@@ -163,10 +186,10 @@ fun ActivityRow(
                     }
                 }
             }
-            CaptionB(
-                text = subtitleText,
-                color = Colors.White64,
-                maxLines = 1,
+            ActivitySubtitleWithReceipt(
+                subtitle = subtitleText,
+                receiptStatus = receiptStatus,
+                onRetryClick = { appViewModel?.retryPaykitReceipt(paymentId) },
             )
         }
         HorizontalSpacer(16.dp)

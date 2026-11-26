@@ -77,6 +77,10 @@ class Keychain @Inject constructor(
     fun loadString(key: String, walletIndex: Int): String? =
         loadIndexed(key, stringPreferencesKey("${key}_$walletIndex"))?.decodeToString()
 
+    /** Reads an entry that belongs to [scope], such as one hardware wallet, whatever the current wallet index is. */
+    fun loadScopedString(key: String, scope: String): String? =
+        loadIndexed(key, scopedKey(key, scope))?.decodeToString()
+
     fun load(key: String): ByteArray? = loadIndexed(key, key.indexed)
 
     private fun loadIndexed(key: String, indexedKey: Preferences.Key<String>): ByteArray? {
@@ -87,7 +91,7 @@ class Keychain @Inject constructor(
         } catch (c: CancellationException) {
             throw c
         } catch (t: Throwable) {
-            emitLoadDiagnosticsOnce(key, t)
+            emitLoadDiagnosticsOnce(key, t) { indexedKey }
             throw KeychainError.FailedToLoad(key, cause = t)
         }
     }
@@ -158,6 +162,9 @@ class Keychain @Inject constructor(
     suspend fun upsertString(key: String, value: String, walletIndex: Int) =
         upsertIndexed(key, value, stringPreferencesKey("${key}_$walletIndex"))
 
+    suspend fun upsertScopedString(key: String, value: String, scope: String) =
+        upsertIndexed(key, value, scopedKey(key, scope))
+
     private suspend fun upsertIndexed(key: String, value: String, indexedKey: Preferences.Key<String>) {
         try {
             val encryptedValue = keyStore.encrypt(value.toByteArray())
@@ -173,6 +180,10 @@ class Keychain @Inject constructor(
     suspend fun delete(key: String) = deleteIndexed(key, key.indexed)
 
     suspend fun delete(key: String, walletIndex: Int) = deleteIndexed(key, stringPreferencesKey("${key}_$walletIndex"))
+
+    suspend fun deleteScoped(key: String, scope: String) = deleteIndexed(key, scopedKey(key, scope))
+
+    private fun scopedKey(key: String, scope: String) = stringPreferencesKey("${key}_$scope")
 
     private suspend fun deleteIndexed(key: String, indexedKey: Preferences.Key<String>) {
         try {
@@ -227,11 +238,15 @@ class Keychain @Inject constructor(
             .map { string -> string?.toIntOrNull() }
     }
 
-    private fun emitLoadDiagnosticsOnce(key: String, cause: Throwable) {
+    private fun emitLoadDiagnosticsOnce(
+        key: String,
+        cause: Throwable,
+        preferenceKey: () -> Preferences.Key<String> = { key.indexed },
+    ) {
         if (!loadDiagnosticsEmitted.add(key)) return
 
         val aliasPresent = probe { keyStore.containsAlias() }
-        val entryPresent = probe { snapshot.contains(key.indexed) }
+        val entryPresent = probe { snapshot.contains(preferenceKey()) }
         val walletIndex = probe {
             runBlocking { db.configDao().getAll().first() }.firstOrNull()?.walletIndex ?: 0L
         }
@@ -255,7 +270,6 @@ class Keychain @Inject constructor(
 
     enum class Key {
         PUSH_NOTIFICATION_TOKEN,
-        PUSH_NOTIFICATION_PRIVATE_KEY,
         BIP39_MNEMONIC,
         BIP39_PASSPHRASE,
         PIN,
@@ -275,6 +289,9 @@ class Keychain @Inject constructor(
         PAYKIT_ALLOWANCE_RESTORE_PAUSE,
         PUBKY_SECRET_KEY,
         SHARED_PUBKY_SOURCE,
+        HW_RETAINED_SEND,
+        WAKE_CREDENTIALS,
+        WAKE_REGISTRATION,
     }
 }
 
