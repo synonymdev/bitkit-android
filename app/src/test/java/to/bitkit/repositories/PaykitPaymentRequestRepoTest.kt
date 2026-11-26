@@ -3204,6 +3204,20 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `recipient status is failed only on the first load when saved contacts cannot be read`() = test {
+        sut.markEligibleTargetsUnknown()
+        assertEquals(PaykitPaymentRequestTargetsStatus.Failed, sut.eligibleTargetsStatus.value)
+
+        whenever(
+            paykitSdkService.identityStatus()
+        ).thenReturn(IdentityStatus(LOCAL_IDENTITY, PubkyIdentityCapability.PRIVATE_LINK_CAPABLE))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(emptyList())
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+        sut.markEligibleTargetsUnknown()
+        assertEquals(PaykitPaymentRequestTargetsStatus.Loaded, sut.eligibleTargetsStatus.value)
+    }
+
+    @Test
     fun `recipient status is failed when the identity cannot be activated`() = test {
         sut.clear()
         whenever(presentationStore.loadSubscriptionState(any())).doSuspendableAnswer { error("storage unavailable") }

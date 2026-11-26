@@ -1480,6 +1480,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `maintenance discovers targets and refreshes inbox without joining all contact preparation`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
+        pubkyContactsLoadVersion.value = 1L
         sut.setIsAuthenticated(true)
         whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
         sut.startPaykitPaymentRequestPolling()
@@ -1693,6 +1694,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `payment requests refresh promptly without repeating maintenance on each poll`() = test {
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
+        pubkyContactsLoadVersion.value = 1L
         whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
         runCurrent()
         clearInvocations(paykitPaymentRequestRepo)
@@ -20874,6 +20876,30 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         } finally {
             sut.stopPaykitPaymentRequestPolling()
         }
+    }
+
+    @Test
+    fun `payment request picker checks recipients only after saved contacts load`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.update { testPublicKey }
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo)
+
+        sut.showPaymentRequestRecipient()
+        runCurrent()
+        verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+        verify(paykitPaymentRequestRepo, never()).markEligibleTargetsUnknown()
+
+        pubkyContactsLoadCompletionVersion.update { 1L }
+        sut.showPaymentRequestRecipient()
+        runCurrent()
+        verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+        verify(paykitPaymentRequestRepo).markEligibleTargetsUnknown()
+
+        pubkyContactsLoadVersion.update { 1L }
+        sut.showPaymentRequestRecipient()
+        runCurrent()
+        verify(paykitPaymentRequestRepo, atLeastOnce()).refreshEligibleTargets(any(), eq(true))
     }
 
     @Test

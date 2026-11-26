@@ -1633,6 +1633,12 @@ class AppViewModel @Inject constructor(
     private suspend fun refreshPaymentRequestTargets(force: Boolean = false) {
         if (privatePaykitRepo.isProfileDeletionInProgress.value) return
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
+        // An empty list read before the saved contacts load is not "no contacts"; the load triggers this again.
+        if (pubkyRepo.contactsLoadVersion.value == 0L) {
+            val didContactsLoadFail = pubkyRepo.contactsLoadCompletionVersion.value > 0L
+            if (didContactsLoadFail) paykitPaymentRequestRepo.markEligibleTargetsUnknown()
+            return
+        }
         paykitPaymentRequestRepo.refreshEligibleTargets(
             savedPublicKeys = pubkyRepo.contacts.value.map { it.publicKey },
             force = force,

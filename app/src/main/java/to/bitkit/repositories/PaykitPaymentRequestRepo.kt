@@ -885,6 +885,15 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
+    /** Saved contacts could not be loaded, so a first load cannot tell whether any of them can receive a request. */
+    suspend fun markEligibleTargetsUnknown() = withContext(ioDispatcher) {
+        operationMutex.withLock {
+            _eligibleTargetsStatus.update {
+                if (it == PaykitPaymentRequestTargetsStatus.Loading) PaykitPaymentRequestTargetsStatus.Failed else it
+            }
+        }
+    }
+
     suspend fun refreshEligibleTarget(savedPublicKey: String): Result<PaykitPaymentRequestTargetCheck> {
         val generation = stateGeneration.get()
         val expectedIdentity = activeIdentity
