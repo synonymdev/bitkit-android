@@ -239,7 +239,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         sut.followRecoveredSparkFunding(funding)
         sut.followRecoveredSparkFunding(funding.copy(evidence = OnchainSendEvidence.Observed, orderId = "order"))
-        verify(sparkRepo, never()).onDepositBroadcast(any(), any())
+        verify(sparkRepo, never()).onDepositBroadcast(any(), any(), anyOrNull())
 
         sut.followRecoveredSparkFunding(funding.copy(evidence = OnchainSendEvidence.Observed))
 

@@ -357,7 +357,7 @@ class SparkFundingViewModel @Inject constructor(
         val quote = state.quote ?: return
         viewModelScope.launch {
             withContext(NonCancellable) {
-                sparkRepo.onDepositBroadcast(txid, amountSats)
+                sparkRepo.onDepositBroadcast(txid, amountSats, walletId = state.hwWalletId)
                 sparkRepo.followDepositClaim(txid, state.speed, quote.instantFeeSats.toULong())
             }
             Logger.info("Funded Spark from a hardware wallet with '$amountSats' sats in '$txid'", context = TAG)

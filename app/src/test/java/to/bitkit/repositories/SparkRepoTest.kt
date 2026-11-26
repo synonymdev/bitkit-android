@@ -2559,7 +2559,12 @@ class SparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `a relaunch resumes an instant claim at the fee ceiling the user approved`() = test {
-        val sentDeposit = SparkSentDeposit(amountSats = 50_000uL, sentAt = now.epochSeconds, ceilingSats = 500uL)
+        val sentDeposit = SparkSentDeposit(
+            amountSats = 50_000uL,
+            sentAt = now.epochSeconds,
+            ceilingSats = 500uL,
+            step = SparkSentDeposit.Step.Looking,
+        )
         cacheData.value = AppCacheData(sparkSentDeposits = mapOf("txid" to sentDeposit))
         listDeposit()
         whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
@@ -2593,6 +2598,88 @@ class SparkRepoTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(sparkService).releaseDepositClaimFee("txid", 0u)
+    }
+
+    @Test
+    fun `a relaunch whose first refresh failed resumes the instant claim on a later refresh`() = test {
+        val sentDeposit = SparkSentDeposit(
+            amountSats = 50_000uL,
+            sentAt = now.epochSeconds,
+            ceilingSats = 500uL,
+            step = SparkSentDeposit.Step.Looking,
+        )
+        cacheData.value = AppCacheData(sparkSentDeposits = mapOf("txid" to sentDeposit))
+        listDeposit()
+        whenever { sparkService.getInfo() }.thenAnswer { throw IllegalStateException("offline") }.thenReturn(info(0uL))
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
+        whenever { sparkService.claimDeposit("txid", 0u, 500uL) }.thenReturn(ClaimDepositOutcome.Submitted)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val sut = createSut()
+        sut.start(0)
+        advanceUntilIdle()
+
+        sut.refreshState()
+        advanceUntilIdle()
+
+        verify(sparkService).claimDeposit("txid", 0u, 500uL)
+    }
+
+    @Test
+    fun `a relaunch before the transfer followed its claim starts no instant claim`() = test {
+        val sent = SparkSentDeposit(50_000uL, now.epochSeconds)
+        cacheData.value = AppCacheData(sparkSentDeposits = mapOf("txid" to sent))
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
+        val sut = createSut()
+
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        verify(sparkService, never()).claimDeposit(any(), any(), any())
+        assertNull(sut.depositClaims.value["txid"])
+    }
+
+    @Test
+    fun `a sent deposit whose funding a fee bump replaced leaves the transfer banner`() = test {
+        val sent = SparkSentDeposit(50_000uL, now.epochSeconds, walletId = "jade:wallet")
+        cacheData.value = AppCacheData(sparkSentDeposits = mapOf("replaced" to sent))
+        val replaced = OnchainActivity.create(
+            id = "replaced",
+            txType = ActivityPaymentType.SENT,
+            txId = "replaced",
+            value = 50_000uL,
+            fee = 200uL,
+            address = "bcrt1q",
+            timestamp = 1uL,
+            doesExist = false,
+        )
+        whenever { activityRepo.getOnchainActivityByTxId(eq("replaced"), eq("jade:wallet")) }.thenReturn(replaced)
+        val sut = createSut()
+
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertEquals(0uL, sut.state.value.pendingDepositSats)
+        assertNull(sut.state.value.inProgressDepositTxid)
+        assertTrue(cacheData.value.sparkSentDeposits.isEmpty())
+    }
+
+    @Test
+    fun `the early claim output is saved before spark sets its fee cap`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
+        var savedVout: UInt? = null
+        whenever { sparkService.claimDeposit("txid", 0u, 500uL) }.doSuspendableAnswer {
+            savedVout = cacheData.value.sparkSentDeposits["txid"]?.earlyClaimVout
+            ClaimDepositOutcome.Submitted
+        }
+        val sut = createSut()
+
+        sut.onDepositBroadcast("txid", 50_000uL)
+        sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        assertEquals(0u, savedVout, "A relaunch during the claim could not clear the cap it sets")
     }
 
     @Test

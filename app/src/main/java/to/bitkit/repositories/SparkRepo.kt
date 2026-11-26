@@ -318,7 +318,6 @@ class SparkRepo @Inject constructor(
             if (synced) _state.update { it.copy(hasSynced = true) }
             if (connected) _exitStateGeneration.update { it + 1 }
             refresh()
-            resumeSentDeposits()
             // Only a full sync settles a pending withdrawal journal, so the sync runs until the journal clears. Only a
             // sync that saved every write marks the activities synced, so a failed write is redone on the next start.
             if (!hasSyncedActivities || cacheStore.data.first().pendingSparkWithdrawal != null) {
@@ -1153,25 +1152,21 @@ class SparkRepo @Inject constructor(
         saveSentDeposits()
     }
 
-    /** Saves each sent deposit with its claim as it stands now; the latest state is written last. */
     private fun saveSentDeposits() {
-        scope.launch {
-            sentDepositsMutex.withLock {
-                val claims = _depositClaims.value
-                val choices = _claimChoices.value
-                val saved = sentDeposits.mapValues { (txid, sent) ->
-                    sent.withClaim(claims[txid], choices[txid], earlyClaimVouts[txid])
-                }
-                runSuspendCatching { cacheStore.update { it.copy(sparkSentDeposits = saved) } }
-                    .onFailure { Logger.warn("Failed to save the sent Spark deposits", it, context = TAG) }
-            }
-        }
+        scope.launch { writeSentDeposits() }
     }
 
-    /**
-     * Takes back the deposits the transfer flow sent before a relaunch, each at the claim step, fee ceiling and fee
-     * choice it had, and lists those Spark has not listed yet as pending.
-     */
+    // Each write saves the claims as they stand then, so the latest state is written last.
+    private suspend fun writeSentDeposits() = sentDepositsMutex.withLock {
+        val claims = _depositClaims.value
+        val choices = _claimChoices.value
+        val saved = sentDeposits.mapValues { (txid, sent) ->
+            sent.withClaim(claims[txid], choices[txid], earlyClaimVouts[txid])
+        }
+        runSuspendCatching { cacheStore.update { it.copy(sparkSentDeposits = saved) } }
+            .onFailure { Logger.warn("Failed to save the sent Spark deposits", it, context = TAG) }
+    }
+
     private suspend fun restoreSentDeposits() = sentDepositsMutex.withLock {
         if (hasRestoredSentDeposits) return@withLock
         val keptSince = clock.now().epochSeconds - SENT_DEPOSIT_LIFETIME.inWholeSeconds
@@ -1185,16 +1180,15 @@ class SparkRepo @Inject constructor(
             broadcastDeposits.putIfAbsent(txid, sent.amountSats)
             sent.earlyClaimVout?.let { earlyClaimVouts.putIfAbsent(txid, it) }
             sent.choice?.let { choice -> _claimChoices.update { it + (txid to choice) } }
-            _depositClaims.update { it + (txid to sent.toDepositClaim()) }
+            // A deposit whose claim the transfer flow never saved shows as pending but isn't followed again.
+            sent.toDepositClaim()?.let { claim -> _depositClaims.update { it + (txid to claim) } }
         }
         _state.update { it.withBroadcastDeposits() }
         if (saved.size != sentDeposits.size) saveSentDeposits()
     }
 
-    /**
-     * Starts again the Instant claims a relaunch cut short, at the fee ceiling the user approved, and clears again the
-     * early claim caps of those left to the claim at 3 confirmations.
-     */
+    // Instant claims a relaunch cut short start again at the approved ceiling; caps of those left to 3 confirmations
+    // are cleared again.
     private fun resumeSentDeposits() {
         if (hasResumedSentDeposits || !hasRestoredSentDeposits) return
         hasResumedSentDeposits = true
@@ -1227,6 +1221,8 @@ class SparkRepo @Inject constructor(
         maxFeeSats: ULong = offer.earlyFeeSats,
     ): Result<SparkEarlyClaim> = withContext(bgDispatcher) {
         earlyClaimVouts[offer.txid] = offer.vout
+        // Saved before the claim, so Wait after a relaunch mid-claim still clears the cap it sets.
+        if (sentDeposits.containsKey(offer.txid)) writeSentDeposits()
         runSuspendCatching { sparkService.claimDeposit(offer.txid, offer.vout, maxFeeSats) }
             .map { SparkEarlyClaim.from(it) }
             .recoverCatching { if (it is SdkException.DepositClaimInProgress) SparkEarlyClaim.Claimed else throw it }
@@ -1505,11 +1501,12 @@ class SparkRepo @Inject constructor(
      * Lists a deposit the app just broadcast as pending right away, then syncs so Spark sees it sooner than its
      * minute-long background sync; Spark's own deposit state replaces it once listed.
      */
-    fun onDepositBroadcast(txid: String, amountSats: ULong) {
+    fun onDepositBroadcast(txid: String, amountSats: ULong, walletId: String? = null) {
         broadcastDeposits[txid] = amountSats
         // A recovered funding the transfer screen already follows keeps its ceiling and claim.
         sentDeposits.compute(txid) { _, sent ->
-            sent?.copy(amountSats = amountSats) ?: SparkSentDeposit(amountSats, sentAt = clock.now().epochSeconds)
+            sent?.copy(amountSats = amountSats)
+                ?: SparkSentDeposit(amountSats, sentAt = clock.now().epochSeconds, walletId = walletId)
         }
         saveSentDeposits()
         _state.update { it.withBroadcastDeposits() }
@@ -1699,6 +1696,7 @@ class SparkRepo @Inject constructor(
             .filter { (it.txid.lowercase() to it.vout) !in claimedOutputs }
             .map { SparkDeposit(txid = it.txid, amountSats = it.amountSats, isClaimed = false) }
         (pending + claimed).forEach { broadcastDeposits.remove(it.txid) }
+        dropReplacedSentDeposits(listed = (pending + claimed).mapTo(mutableSetOf()) { it.txid.lowercase() })
         // The open journal's withdrawal pays a contact, also before its send activity is written.
         val journal = cacheStore.data.first().pendingSparkWithdrawal
         val transfers = payments.filterNot { journal?.matches(it) == true }.toWithdrawals()
@@ -1745,7 +1743,28 @@ class SparkRepo @Inject constructor(
         // Off the refresh, so a slow Electrum server never holds a send that waits for it.
         scope.launch { confirmMinedPayouts(payments) }
         markTransfers(payments)
+        // After the first refresh that worked, as Spark's list then drops the deposits it claimed meanwhile.
+        resumeSentDeposits()
     }
+
+    // A sent deposit Spark doesn't list whose funding a fee bump replaced or the mempool dropped leaves the banner and
+    // the pending amount: its activity no longer exists.
+    private suspend fun dropReplacedSentDeposits(listed: Set<String>) {
+        val replaced = sentDeposits.filter { (txid, sent) ->
+            txid.lowercase() !in listed && !doesFundingExist(txid, sent.walletId ?: WalletScope.default)
+        }.keys
+        if (replaced.isEmpty()) return
+        replaced.forEach { txid ->
+            Logger.info("Dropped the replaced Spark deposit '$txid'", context = TAG)
+            sentDeposits.remove(txid)
+            broadcastDeposits.remove(txid)
+        }
+        saveSentDeposits()
+    }
+
+    private suspend fun doesFundingExist(txid: String, walletId: String) =
+        runSuspendCatching { activityRepo.get().getOnchainActivityByTxId(txid, walletId) }
+            .getOrNull()?.doesExist != false
 
     /**
      * Spark lists a withdrawal completed once its provider took the payout on, which can be before the payout
@@ -2630,8 +2649,11 @@ data class PendingSparkWithdrawal(
 data class SparkSentDeposit(
     val amountSats: ULong,
     val sentAt: Long,
+    /** The hardware wallet that sent it, whose activity says when a fee bump replaced it; null for Savings. */
+    val walletId: String? = null,
     val ceilingSats: ULong = 0uL,
-    val step: Step = Step.Looking,
+    /** Null until the transfer flow follows its claim: such a deposit shows as pending but isn't followed again. */
+    val step: Step? = null,
     /** The offer whose early fee the user is asked to approve when [step] is [Step.Repriced]. */
     val repricedOffer: SparkClaimOffer.Choice? = null,
     val choice: SparkClaimChoice? = null,
@@ -2643,7 +2665,8 @@ data class SparkSentDeposit(
 
     fun withClaim(claim: SparkDepositClaim?, choice: SparkClaimChoice?, earlyClaimVout: UInt?) = copy(
         step = when (claim) {
-            null, SparkDepositClaim.Looking, SparkDepositClaim.Claimed -> Step.Looking
+            null -> null
+            SparkDepositClaim.Looking, SparkDepositClaim.Claimed -> Step.Looking
             SparkDepositClaim.Adding -> Step.Adding
             is SparkDepositClaim.Repriced -> Step.Repriced
             SparkDepositClaim.Unavailable -> Step.Unavailable
@@ -2655,7 +2678,8 @@ data class SparkSentDeposit(
         earlyClaimVout = earlyClaimVout,
     )
 
-    fun toDepositClaim(): SparkDepositClaim = when (step) {
+    fun toDepositClaim(): SparkDepositClaim? = when (step) {
+        null -> null
         Step.Looking -> SparkDepositClaim.Looking
         Step.Adding -> SparkDepositClaim.Adding
         Step.Repriced -> repricedOffer?.let { SparkDepositClaim.Repriced(it) } ?: SparkDepositClaim.Looking
