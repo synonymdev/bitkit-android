@@ -155,7 +155,9 @@ data class PubkyAuthRequest(
          * Reads the pubky a sign-in request must be approved with. Absent is fine; a repeated value or anything other
          * than a bare canonical z-base-32 key makes the request invalid, as in the Pubky SDK parser for `signin_grant`.
          * Only signup requests ignore the parameter, so a sign-in this parser reads differently from the SDK is still
-         * held to it.
+         * held to it. Upstream reads `spk` for `signin_grant` alone (pubky/pubky-homeserver at d95161af3e:
+         * `pubky-sdk/src/actors/auth/deep_links/signin_grant.rs:106` is the only caller of `parse_expected_signer`,
+         * `deep_link.rs:211` tests that `signin` and `signup_grant` ignore it, `docs/AUTH.md:81`).
          */
         fun parseExpectedSigner(rawUrl: String): Result<String?> = runCatching {
             val uri = URI(rawUrl)
