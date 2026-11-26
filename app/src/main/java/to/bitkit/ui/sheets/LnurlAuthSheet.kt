@@ -31,6 +31,8 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.AppViewModel
 import java.net.URI
+import java.net.URLDecoder
+import java.util.Locale
 
 @Composable
 fun LnurlAuthSheet(
@@ -139,10 +141,13 @@ enum class LnurlAuthAction(
 
     companion object {
         fun fromUri(uri: String): LnurlAuthAction {
-            val action = runCatching { URI(uri).rawQuery }.getOrNull()
-                ?.split('&')
-                ?.firstNotNullOfOrNull { it.split('=', limit = 2).takeIf { kv -> kv[0] == "action" }?.getOrNull(1) }
-            return when (action?.lowercase()) {
+            val action = runCatching {
+                URI(uri).rawQuery?.split('&')?.firstNotNullOfOrNull {
+                    val kv = it.split('=', limit = 2).map { part -> URLDecoder.decode(part, Charsets.UTF_8.name()) }
+                    kv.takeIf { kv[0] == "action" }?.getOrNull(1)
+                }
+            }.getOrNull()
+            return when (action?.lowercase(Locale.ROOT)) {
                 "login" -> LOGIN
                 "register" -> REGISTER
                 "link" -> LINK
