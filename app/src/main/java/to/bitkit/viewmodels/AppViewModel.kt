@@ -8310,7 +8310,7 @@ class AppViewModel @Inject constructor(
                 error.isStoppedAtSubmission()
         } == true
         authorizationError?.takeIf { sentNothing }?.let {
-            paykitPaymentProofRepo.failLightningPayment(paymentHash)
+            paykitPaymentProofRepo.failLightningPayment(paymentHash, incomingPaymentRequest?.id)
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(proofRequest)
             finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
@@ -8335,14 +8335,16 @@ class AppViewModel @Inject constructor(
             )
             lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
         }.onFailure { error ->
-            if (!clearFailedLightningPayment(paymentHash, error, incomingPaymentRequest != null, updateFailed)) {
+            if (!clearFailedLightningPayment(paymentHash, error, incomingPaymentRequest?.id, updateFailed)) {
                 val pendingHash = (error as? PaymentPendingException)?.paymentHash ?: paymentHash
                 proofRequest = null
                 Logger.info("Lightning payment pending", context = TAG)
                 pendingPaymentRepo.track(pendingHash)
                 preserveContactPaymentContext(pendingHash)
                 if (incomingPaymentRequest != null) refreshIncomingPaykitPaymentRequests()
-                setSendEffect(SendEffect.NavigateToPending(pendingHash, displayAmountSats.toLong()))
+                // A repeat of a pending payment shows what that payment sends, also when its amount was typed.
+                val pendingSats = earlierLightningSendSats(pendingHash) ?: displayAmountSats
+                setSendEffect(SendEffect.NavigateToPending(pendingHash, pendingSats.toLong()))
                 lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
                 resolveSettledPendingSend(pendingHash)
                 return@onFailure
@@ -8369,12 +8371,17 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private suspend fun earlierLightningSendSats(paymentHash: String): ULong? {
+        val sent = (activityRepo.getActivity(paymentHash).getOrNull() as? Activity.Lightning)?.v1
+            ?.takeIf { it.txType == PaymentType.SENT && it.status != PaymentState.FAILED }
+        if (sent != null) return sent.value
+        val hash = paymentHash.lowercase()
+        val cache = cacheStore.data.first()
+        return cache.sparkSendAttempts[hash]?.amountSats?.takeIf { hash in cache.sparkUncertainSends }
+    }
+
     private class LightningRepeat(val paymentHash: String, val bolt11: String, val earlierSentSats: ULong?)
 
-    /**
-     * The earlier payment of the plain Lightning invoice being sent, or null when its hash was never paid. A contact's
-     * payment keeps its request, proof and route steps, so it is not decided here.
-     */
     private suspend fun lightningRepeat(contactPaymentContext: ContactPaymentContext?): LightningRepeat? {
         if (contactPaymentContext != null) return null
         val state = _sendUiState.value
@@ -8382,7 +8389,8 @@ class AppViewModel @Inject constructor(
         if (state.routedPaykitRoute?.serviceLeg != null || state.activePaykitSwapRoute != null) return null
         val invoice = state.decodedInvoice ?: return null
         val paymentHash = invoice.paymentHash.toHex()
-        val earlierSend = earlierLightningSend(paymentHash)
+        // A send recorded without its invoice ("No invoice", "migrated:<id>") cannot tell which invoice it paid.
+        val earlierSend = earlierLightningSend(paymentHash)?.takeIf { it.invoice.startsWith("ln", ignoreCase = true) }
         val wasPaidBefore = earlierSend != null ||
             synchronized(processedPaymentsLock) { paymentHash in processedPayments }
         if (!wasPaidBefore) return null
@@ -8508,17 +8516,17 @@ class AppViewModel @Inject constructor(
     private suspend fun clearFailedLightningPayment(
         paymentHash: String,
         error: Throwable,
-        isPaymentRequest: Boolean,
+        requestId: PaykitPaymentRequestId?,
         updateFailed: Boolean,
     ): Boolean = when (error) {
         is PaymentPendingException -> false
-        else if !isPaymentRequest -> true
+        else if requestId == null -> true
         // Any failed spending balance update happens before the invoice is paid, so nothing was sent.
         else if updateFailed || error is LightningPaymentFailedError -> {
-            paykitPaymentProofRepo.failLightningPayment(paymentHash)
+            paykitPaymentProofRepo.failLightningPayment(paymentHash, requestId)
             true
         }
-        else -> paykitPaymentProofRepo.failLightningPayment(paymentHash, error)
+        else -> paykitPaymentProofRepo.failLightningPayment(paymentHash, error, requestId)
     }
 
     private suspend fun prepareContactPayment(

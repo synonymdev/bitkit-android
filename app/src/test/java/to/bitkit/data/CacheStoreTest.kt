@@ -37,11 +37,11 @@ class CacheStoreTest : BaseUnitTest() {
 
     @Test
     fun `a spark send attempt drops expired ones and restores the earlier one`() = test {
-        sut.setSparkSendAttempt("OLD", attempt = 2, expiresAt = 1_500, now = 1_000)
-        sut.setSparkSendAttempt("hash", attempt = 0, expiresAt = 3_000, now = 1_000)
-        sut.setSparkSendAttempt("hash", attempt = 1, expiresAt = 3_000, now = 2_000)
+        sut.setSparkSendAttempt("OLD", attempt = 2, amountSats = 100uL, expiresAt = 1_500, now = 1_000)
+        sut.setSparkSendAttempt("hash", attempt = 0, amountSats = 100uL, expiresAt = 3_000, now = 1_000)
+        sut.setSparkSendAttempt("hash", attempt = 1, amountSats = 100uL, expiresAt = 3_000, now = 2_000)
 
-        assertEquals(mapOf("hash" to SparkSendAttempt(1, 3_000)), sut.data.first().sparkSendAttempts)
+        assertEquals(mapOf("hash" to SparkSendAttempt(1, 3_000, 100uL)), sut.data.first().sparkSendAttempts)
 
         sut.dropSparkUnsentSend("HASH", restoresAttempt = true, previous = SparkSendAttempt(0, 3_000))
         assertEquals(0, sut.data.first().sparkSendAttempts["hash"]?.attempt)
@@ -53,7 +53,7 @@ class CacheStoreTest : BaseUnitTest() {
     @Test
     fun `dropping an unsent spark send clears its hold and hash and keeps a reused attempt`() = test {
         sut.addSparkSendHash("hash", expiresAt = 3_000)
-        sut.setSparkSendAttempt("hash", attempt = 1, expiresAt = 3_000, now = 1_000)
+        sut.setSparkSendAttempt("hash", attempt = 1, amountSats = 100uL, expiresAt = 3_000, now = 1_000)
         sut.addSparkUncertainSend("hash", startedAt = 1_000, attemptId = "id")
 
         sut.dropSparkUnsentSend("HASH", restoresAttempt = false, previous = null)
@@ -71,7 +71,7 @@ class CacheStoreTest : BaseUnitTest() {
         val store = FailingDataStore(InMemoryDataStore(AppCacheData()))
         val cache = CacheStore(store)
         cache.addSparkSendHash("hash", expiresAt = 3_000)
-        cache.setSparkSendAttempt("hash", attempt = 1, expiresAt = 3_000, now = 1_000)
+        cache.setSparkSendAttempt("hash", attempt = 1, amountSats = 100uL, expiresAt = 3_000, now = 1_000)
         cache.addSparkUncertainSend("hash", startedAt = 1_000, attemptId = "id")
         val held = cache.data.first()
 
