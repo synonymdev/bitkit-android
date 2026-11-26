@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.contacts
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -81,14 +82,16 @@ fun ContactDetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
+    val activity = LocalActivity.current
+
     DisposableEffect(viewModel) {
-        onDispose { viewModel.dismissRequestOrPaySheet() }
+        onDispose { viewModel.onScreenDisposed(isChangingConfigurations = activity?.isChangingConfigurations == true) }
     }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
             when (it) {
-                is ContactDetailEffect.OpenPayment -> {
+                is ContactDetailEffect.OpenPayment -> if (viewModel.claimPendingPayment(it)) {
                     val scanJob = onPayContact(it.paymentRequest, it.publicKey, it.privatePaymentContext, it.endpoints)
                     viewModel.onPaymentOpening(scanJob)
                 }

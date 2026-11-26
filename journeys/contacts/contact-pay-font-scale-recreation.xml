@@ -1,0 +1,22 @@
+<journey name="contact pay font scale recreation">
+  <description>
+    Paying from Contact Detail survives an activity recreation. A font-scale change recreates the
+    activity while the contact's payment details are still resolving; the pending payment must stay
+    alive and open the send amount screen exactly once, and leaving the screen must still cancel it.
+    Requires a funded regtest wallet, a Pubky profile and a saved contact whose Pay opens a payment,
+    such as one that publishes public payment details. Resolution takes about a second: send the tap and the font-scale
+    command in one `adb shell` invocation, and slow the network on an emulator when the amount screen
+    opens before the change lands. A run where the amount screen was already open when the font scale
+    changed proves nothing; repeat it. Android only: iOS has no activity recreation. No payment is sent.
+  </description>
+  <actions>
+    <action>Run `adb shell settings put system font_scale 1.0`, open the saved contact from Contacts and verify Pay (testTag "ContactPay") is visible</action>
+    <action>Tap Pay (testTag "ContactPay"); if the Request or Pay sheet (testTag "RequestOrPaySheet") appears, tap Pay on the sheet. With the same `adb shell` invocation as that last tap, run `settings put system font_scale 1.3`</action>
+    <action>Verify the send amount screen (testTag "send_amount_screen") opens once with the contact's name, at the larger font scale, and no "Unable To Pay Contact" toast appears in a screenshot</action>
+    <action>Close the payment flow without paying and verify Contact Detail shows Pay (testTag "ContactPay") without a spinner and no Request or Pay sheet (testTag "RequestOrPaySheet"), and no second amount screen opens within 5 seconds</action>
+    <action>Tap Pay again, taking the same route, without changing the font scale, and verify the send amount screen (testTag "send_amount_screen") opens; close it without paying</action>
+    <action>Tap Pay, taking the same route, and with the same `adb shell` invocation run `settings put system font_scale 1.0; input keyevent KEYCODE_BACK`</action>
+    <action>Verify no send amount screen (testTag "send_amount_screen") opens within 10 seconds and no toast appears</action>
+    <action>Run `adb shell settings put system font_scale 1.0`</action>
+  </actions>
+</journey>

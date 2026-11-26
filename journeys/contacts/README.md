@@ -18,6 +18,12 @@ only paid privately: while only one side has saved the other, Pay shows the priv
 and opens no payment, and Pay works once both sides have saved each other. It requires two
 disposable, request-capable identities with contact payment sharing enabled.
 
+`contact-pay-font-scale-recreation.xml` checks that Pay on Contact Detail survives the activity
+recreation a font-scale change causes while payment details resolve, opens the amount screen once,
+and is still cancelled by leaving the screen. Android only: iOS does not recreate the screen on a
+Dynamic Type change. The font-scale change must land while the contact is resolving; record a run
+where the amount screen opened first as not proven.
+
 Network and storage fault injection are outside journey-runner capabilities. With private contact sharing
 on, delete the profile with one private-list withdrawal failing and the following app-registry update
 failing as well. The app must report the failure and retain cleanup without republishing cleared
