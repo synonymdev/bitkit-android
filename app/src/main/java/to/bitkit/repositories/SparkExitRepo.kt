@@ -986,7 +986,7 @@ class SparkExitRepo @Inject constructor(
                 sats = refusal.sats,
                 feeSats = feeSats,
                 feeRates = feeRates,
-                canPay = SparkExitMath.canFundFromSavings(spendable, refusal.sats, feeSats, Env.sparkSharesNodeChain),
+                canPay = SparkExitMath.canFundFromSavings(spendable, refusal.sats, feeSats, sharesNodeChain()),
             )
         }
     }
@@ -997,6 +997,7 @@ class SparkExitRepo @Inject constructor(
      */
     suspend fun paySavingsRefusal(retry: SparkExitSavingsRetry): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching {
+            require(sharesNodeChain()) { "Spark does not read the node's chain" }
             if (!paymentMutex.tryLock()) throw SparkExitError("A Spark exit payment is already running")
             try {
                 // Never cut short between the payment and its saved txid.
@@ -1005,10 +1006,15 @@ class SparkExitRepo @Inject constructor(
                     val address = requireNotNull(record.funding.firstOrNull()?.address) {
                         "No Spark exit funding address"
                     }
-                    // Checked again under the tick lock: a tick may have seen or adopted funding meanwhile.
+                    // Checked again under the tick lock, over the address read now: funding may have reached it since
+                    // the last tick, or a tick adopted it.
                     runSuspendCatching {
                         payFunding(record.createdAt, address, retry.sats, retry.feeRates, retry.feeSats) { exit ->
-                            savingsRefusal(exit)?.let { it.sats == retry.sats && it.feeSats <= retry.feeSats } == true
+                            val current = exit.record ?: return@payFunding false
+                            val held = runSuspendCatching { requireNotNull(chain).utxos(address) }.getOrNull()
+                                ?: return@payFunding false
+                            val now = exit.copy(fundingState = SparkExitMath.fundingState(current, held))
+                            savingsRefusal(now)?.let { it.sats == retry.sats && it.feeSats <= retry.feeSats } == true
                         }
                     }
                         // A payment that went out and failed shows as such, with its own retry.

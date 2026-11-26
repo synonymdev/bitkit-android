@@ -58,6 +58,9 @@ class SparkExitViewModel @Inject constructor(
     companion object {
         /** How often the funding screen looks at the funding address while the user pays from another wallet. */
         private val FUNDING_POLL_INTERVAL = 15.seconds
+
+        /** How often progress prices a refused savings payment again after a failed price, as before the node runs. */
+        private val SAVINGS_RETRY_PRICE_INTERVAL = 15.seconds
     }
 
     /** Spark reads the node's chain, so savings can pay a higher fee's extra funding. */
@@ -317,8 +320,13 @@ class SparkExitViewModel @Inject constructor(
         savingsRetryPricing?.cancel()
         if (!hasRefusal) return _uiState.update { it.copy(savingsRetry = null) }
         savingsRetryPricing = viewModelScope.launch {
-            val retry = sparkExitRepo.priceSavingsRefusal().getOrNull()
-            _uiState.update { it.copy(savingsRetry = retry) }
+            // Priced again until it succeeds, while progress can still offer it.
+            while (isActive) {
+                val retry = sparkExitRepo.priceSavingsRefusal().getOrNull()
+                _uiState.update { it.copy(savingsRetry = retry) }
+                if (retry != null || !_uiState.value.isSavingsRetryDue) return@launch
+                delay(SAVINGS_RETRY_PRICE_INTERVAL)
+            }
         }
     }
 
@@ -463,10 +471,18 @@ data class SparkExitUiState(
      */
     val savingsRetryOffer: SparkExitSavingsRetry?
         get() {
+            val refusal = savingsRefusal ?: return null
+            return savingsRetry?.takeIf { it.canPay && it.sats == refusal.sats && it.feeSats >= refusal.feeSats }
+        }
+
+    /** The start's refused savings payment progress can still offer, priced or not. */
+    val isSavingsRetryDue: Boolean get() = savingsRefusal != null
+
+    private val savingsRefusal: SparkExitRecord.SavingsRefusal?
+        get() {
             val record = record ?: return null
             val hasSavingsSend = isSavingsSendUnresolved || isSavingsPaymentRefused
-            val refusal = SparkExitMath.savingsRefusal(record, fundingState, hasSavingsSend) ?: return null
-            return savingsRetry?.takeIf { it.canPay && it.sats == refusal.sats && it.feeSats >= refusal.feeSats }
+            return SparkExitMath.savingsRefusal(record, fundingState, hasSavingsSend)
         }
 
     /** Progress says the savings payment didn't go through and offers to pay it again. */
