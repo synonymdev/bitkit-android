@@ -424,7 +424,11 @@ class SparkExitRepo @Inject constructor(
             _state.update { it.copy(fundingState = null) }
             return
         }
-        val utxos = runSuspendCatching { chain.utxos(address) }.getOrNull()
+        noteFundingSeen(record, runSuspendCatching { chain.utxos(address) }.getOrNull())
+    }
+
+    /** What [utxos] at the funding address, null when unread, says the exit still needs. */
+    private fun noteFundingSeen(record: SparkExitRecord, utxos: List<EsploraUtxo>?) {
         // Only new funding counts as seen; adopted inputs and their CPFP change are already part of the exit.
         val seen = utxos?.let { SparkExitMath.newFunding(it, record) }?.fold(0uL) { sum, utxo ->
             sum.safe() + utxo.value.safe()
@@ -1012,11 +1016,11 @@ class SparkExitRepo @Inject constructor(
                         payFunding(record.createdAt, address, retry.sats, retry.feeRates, retry.feeSats) { exit ->
                             val current = exit.record ?: return@payFunding false
                             val held = requireNotNull(chain) { "No chain host for this network" }.utxos(address)
-                            val funding = SparkExitMath.fundingState(current, held)
                             // Progress shows what the read found, so it stops offering savings once funding arrived.
-                            _state.update { it.copy(fundingState = funding) }
-                            val now = exit.copy(fundingState = funding)
-                            savingsRefusal(now)?.let { it.sats == retry.sats && it.feeSats <= retry.feeSats } == true
+                            noteFundingSeen(current, held)
+                            savingsRefusal(_state.value)?.let {
+                                it.sats == retry.sats && it.feeSats <= retry.feeSats
+                            } == true
                         }
                     }
                         // A payment that went out and failed shows as such, with its own retry.

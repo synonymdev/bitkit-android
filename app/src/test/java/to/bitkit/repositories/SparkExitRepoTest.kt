@@ -1681,6 +1681,7 @@ class SparkExitRepoTest : BaseUnitTest() {
         // Another wallet's payment reached the address since the last tick: savings pays nothing.
         held = """[{"txid":"${"e1".repeat(32)}","vout":0,"value":8000,"status":{"confirmed":false}}]"""
         assertTrue(sut.paySavingsRefusal(retry).isFailure)
+        assertEquals(8_000uL, sut.state.value.fundingSeenSats, "progress shows what the read found")
         held = "[]"
         // A payment with no answer may have gone out: it is never offered again.
         outcome = Result.failure(OnchainSendPendingError(IOException("no answer"), "pending"))

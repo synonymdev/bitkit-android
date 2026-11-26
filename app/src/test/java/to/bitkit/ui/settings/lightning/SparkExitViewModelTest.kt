@@ -318,6 +318,7 @@ class SparkExitViewModelTest : BaseUnitTest() {
             .thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 800uL))))
         val context = mock<Context> { on { getString(any()) } doReturn "Fees changed" }
         val sut = SparkExitViewModel(context, repo, sparkRepo)
+        sut.startSavingsRetryPricing()
         sut.loadSavingsRetry()
         assertEquals(20_650uL, sut.uiState.value.savingsRetryOffer?.totalSats)
         assertTrue(sut.uiState.value.offersSavingsRetry)

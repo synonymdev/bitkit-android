@@ -59,8 +59,11 @@ fun SparkExitProgressScreen(
         viewModel.effects.collect { if (it == SparkExitEffect.Cancelled) onDone() }
     }
     val isEnded = uiState.record?.isActive == false
+    DisposableEffect(Unit) {
+        viewModel.startSavingsRetryPricing()
+        onDispose { viewModel.stopSavingsRetryPricing() }
+    }
     LaunchedEffect(uiState.record?.savingsRefusal) { viewModel.loadSavingsRetry() }
-    DisposableEffect(Unit) { onDispose { viewModel.stopSavingsRetryPricing() } }
     LaunchedEffect(isEnded) { if (isEnded) viewModel.onResultShown() }
     LifecycleResumeEffect(Unit) {
         viewModel.refreshBackgroundLimits()
