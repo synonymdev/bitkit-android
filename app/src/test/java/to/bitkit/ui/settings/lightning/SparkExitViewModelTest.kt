@@ -438,6 +438,10 @@ class SparkExitViewModelTest : BaseUnitTest() {
         assertEquals(SparkExitFundingState.Paid, landing.progressFunding)
         assertFalse(landing.copy(isSavingsSendUnresolved = false).isSavingsSendLanding, "accepted")
         assertFalse(landing.copy(isSavingsPaymentRefused = true).isSavingsSendLanding, "refused: its own retry shows")
+        val seen = landing.copy(fundingState = SparkExitFundingState.Seen)
+        assertFalse(seen.isSavingsSendLanding, "it reached the address")
+        // Before the first read of the address, the kept payment still holds the ask.
+        assertEquals(SparkExitFundingState.Paid, landing.copy(fundingState = null).progressFunding)
         // Once the own-payment wait forgets it, the ask comes back, even with the journal still unresolved.
         val ask = SparkExitFundingState.Ask(20_000uL)
         val forgotten = landing.copy(record = paid.copy(fundingPaymentTxid = null), fundingState = ask)

@@ -512,7 +512,8 @@ data class SparkExitUiState(
      * so progress says to wait for it before paying from another wallet.
      */
     val isSavingsSendLanding: Boolean
-        get() = record?.isAwaitingOwnPayment == true && isSavingsSendUnresolved && !isSavingsPaymentRefused
+        get() = record?.isAwaitingOwnPayment == true && isSavingsSendUnresolved && !isSavingsPaymentRefused &&
+            progressFunding == SparkExitFundingState.Paid
 
     /** Progress offers Pay a higher fee. */
     val canPayHigherFee: Boolean get() = record?.canPayHigherFee(tipHeight, networkFees) == true
@@ -567,8 +568,11 @@ data class SparkExitUiState(
      */
     val progressFunding: SparkExitFundingState?
         get() {
-            val shortfall = record?.fundingShortfallSats ?: return null
-            return fundingState ?: SparkExitFundingState.Ask(maxOf(shortfall, SparkExitMath.FUNDING_DUST_SATS))
+            val current = record ?: return null
+            val shortfall = current.fundingShortfallSats ?: return null
+            // Before the first read, a payment the record keeps still holds the ask.
+            return fundingState ?: SparkExitFundingState.Paid.takeIf { current.isAwaitingOwnPayment }
+                ?: SparkExitFundingState.Ask(maxOf(shortfall, SparkExitMath.FUNDING_DUST_SATS))
         }
 }
 

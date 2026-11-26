@@ -976,15 +976,17 @@ class SparkExitRepo @Inject constructor(
 
     /**
      * The transaction of a savings payment to [address] with no answer yet: it may still go out, so it is kept like
-     * one of unknown result. From the error, or else from the send journal.
+     * one of unknown result. From the error, or else from the send journal. A retry the journal rolled back to refused
+     * never went out, whatever txid its error names.
      */
     private suspend fun pendingFundingTxid(error: Throwable, address: String): String? {
         if (error !is OnchainSendPendingError) return null
-        error.txid?.let { return it }
         val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
+            ?.takeIf { it.address == address }
+        if (attempt?.evidence == OnchainSendEvidence.Rejected) return null
         val isPending = attempt?.evidence == OnchainSendEvidence.Pending ||
             attempt?.evidence == OnchainSendEvidence.Unknown
-        return attempt?.takeIf { it.address == address && isPending }?.txid
+        return error.txid ?: attempt?.takeIf { isPending }?.txid
     }
 
     private fun noteSavingsRefusal(sats: ULong, feeSats: ULong) =
@@ -1154,6 +1156,7 @@ class SparkExitRepo @Inject constructor(
                             }
                         keepFundingPayment(fundingTxid(outcome, refused.amountSats))
                         _state.value.record?.let { current -> noteSavingsSend(current) }
+                        Unit
                     }
                 }
             } finally {
