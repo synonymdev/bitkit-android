@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import breez_sdk_spark.AutoOptimizationEvent
+import breez_sdk_spark.Bolt11InvoiceDetails
 import breez_sdk_spark.ClaimDeferredReason
 import breez_sdk_spark.ClaimDepositOutcome
 import breez_sdk_spark.FeePolicy
@@ -51,6 +52,7 @@ import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.SparkPayoutChain
+import to.bitkit.data.SparkSendAttempt
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
@@ -655,6 +657,9 @@ class SparkRepo @Inject constructor(
                 // A held send whose attempt Spark lists failed is settled by the next listing, and a send after that
                 // goes through the restore checks above, as a new key's send must.
                 if (isKeyedRetry && !isReusedKey) throw PaymentPendingException(paymentHash)
+                // Spark returns the earlier attempt's payment for its key, so a retry at another amount is refused.
+                val sendSats = sendAmountSats(amountSats, invoice)
+                if (isReusedKey) ensureKeptAmount(previousAttempt, sendSats)
 
                 // A send refused before anything went out is taken as not having used its key, so a retry refuses the
                 // same way. The hold of an earlier attempt under the same key stays, as it may have committed a
@@ -672,6 +677,7 @@ class SparkRepo @Inject constructor(
                     cacheStore.setSparkSendAttempt(
                         paymentHash,
                         attempt,
+                        sendSats,
                         expiresAt.toEpochSeconds(),
                         clock.now().epochSeconds,
                     )
@@ -1020,6 +1026,14 @@ class SparkRepo @Inject constructor(
         info.lastSyncError?.let { Logger.warn("Spark's last sync failed: '$it'", context = TAG) }
         val syncedAt = info.lastSyncedAt
         return info.lastSyncError == null && syncedAt != null && (seconds == null || syncedAt > seconds)
+    }
+
+    private fun sendAmountSats(amountSats: ULong?, invoice: Bolt11InvoiceDetails): ULong =
+        amountSats ?: invoice.amountMsat?.div(MSATS_PER_SAT) ?: 0uL
+
+    private fun ensureKeptAmount(previous: SparkSendAttempt?, sendSats: ULong) {
+        val keptSats = previous?.amountSats ?: return
+        if (keptSats != sendSats) throw SparkError.SendRefused("An earlier attempt at '$keptSats' sats may still pay")
     }
 
     private fun ensurePaymentDeadline(paymentDeadlineAt: Instant?) {

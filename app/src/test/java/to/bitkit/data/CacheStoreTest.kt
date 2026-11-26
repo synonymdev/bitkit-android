@@ -34,11 +34,11 @@ class CacheStoreTest : BaseUnitTest() {
 
     @Test
     fun `a spark send attempt drops expired ones and restores the earlier one`() = test {
-        sut.setSparkSendAttempt("OLD", attempt = 2, expiresAt = 1_500, now = 1_000)
-        sut.setSparkSendAttempt("hash", attempt = 0, expiresAt = 3_000, now = 1_000)
-        sut.setSparkSendAttempt("hash", attempt = 1, expiresAt = 3_000, now = 2_000)
+        sut.setSparkSendAttempt("OLD", attempt = 2, amountSats = 100uL, expiresAt = 1_500, now = 1_000)
+        sut.setSparkSendAttempt("hash", attempt = 0, amountSats = 100uL, expiresAt = 3_000, now = 1_000)
+        sut.setSparkSendAttempt("hash", attempt = 1, amountSats = 100uL, expiresAt = 3_000, now = 2_000)
 
-        assertEquals(mapOf("hash" to SparkSendAttempt(1, 3_000)), sut.data.first().sparkSendAttempts)
+        assertEquals(mapOf("hash" to SparkSendAttempt(1, 3_000, 100uL)), sut.data.first().sparkSendAttempts)
 
         sut.restoreSparkSendAttempt("HASH", SparkSendAttempt(0, 3_000))
         assertEquals(0, sut.data.first().sparkSendAttempts["hash"]?.attempt)
