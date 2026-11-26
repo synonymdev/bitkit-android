@@ -40,6 +40,7 @@ import to.bitkit.models.TransportType
 import to.bitkit.services.JadeService
 import to.bitkit.services.JadeTransport
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -726,6 +727,33 @@ class JadeRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(jadeService).verifyAddress(JadeNetwork.REGTEST, JadeAddressVariant.WPKH, "m/84'/1'/0'/0/0", "bcrt1q")
+    }
+
+    @Test
+    fun `a jade logged out on the device marks the session locked so ensureConnected unlocks it`() = test {
+        val sut = connectedReadyRepo()
+        whenever(jadeService.verifyAddress(any(), any(), any(), any()))
+            .doSuspendableAnswer { throw AppError(JadeException.DeviceLocked()) }
+
+        val verified = sut.verifyAddress(HwFundingAddressType.NATIVE_SEGWIT, "m/84'/1'/0'/0/0", "bcrt1q")
+
+        assertTrue(verified.isFailure)
+        assertTrue(sut.state.value.connected?.isLocked == true)
+        val unlocked = sut.ensureConnected(knownUsb.id, WALLET_ID).getOrThrow()
+        assertFalse(unlocked.isLocked)
+        assertEquals(WALLET_ID, unlocked.walletId)
+        verify(jadeService).unlock(JadeNetwork.REGTEST)
+    }
+
+    private suspend fun connectedReadyRepo(): JadeRepo {
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.READY))
+        val sut = createRepo()
+        val connected = sut.autoReconnect(preferredTransport = TransportType.USB).getOrThrow()
+        assertEquals(WALLET_ID, connected.walletId)
+        whenever { jadeService.isConnected() }.thenReturn(true)
+        return sut
     }
 
     private fun createRepo() = JadeRepo(
