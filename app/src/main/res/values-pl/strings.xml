@@ -567,6 +567,7 @@
     <string name="profile__add_tag">Dodaj tag</string>
     <string name="profile__auth_approval_authorize">Autoryzuj</string>
     <string name="profile__auth_approval_details">Szczegóły</string>
+    <string name="profile__auth_approval_relay">Przekaźnik autoryzacji</string>
     <string name="profile__auth_approval_title">Autoryzuj</string>
     <string name="profile__create_nav_title">Utwórz profil</string>
     <string name="profile__edit_nav_title">Edytuj profil</string>

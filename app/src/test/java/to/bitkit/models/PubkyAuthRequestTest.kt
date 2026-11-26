@@ -208,6 +208,32 @@ class PubkyAuthRequestTest {
     }
 
     @Test
+    fun `relay origin shows only the authorization destination`() {
+        val origins = mapOf(
+            "https://Relay.Example:8443/inbox/" to "https://relay.example:8443",
+            "https://httprelay.pubky.app/inbox/" to "https://httprelay.pubky.app",
+            "http://user@10.0.2.2:15412/link?x=1#y" to "http://10.0.2.2:15412",
+            "https://trusted.example@relay.example/inbox/" to "https://relay.example",
+            "ftp://relay.example/inbox/" to null,
+            "relay.example/inbox/" to null,
+            "https:///inbox/" to null,
+            "not a url" to null,
+            "" to null,
+        )
+
+        origins.forEach { (relay, origin) ->
+            val request = PubkyAuthRequest.parse(
+                rawUrl = authUrl("/pub/example.app/:rw"),
+                clientId = "example.app",
+                relay = relay,
+                capabilities = "/pub/example.app/:rw",
+            ).getOrThrow()
+
+            assertEquals(origin, request.relayOrigin, relay)
+        }
+    }
+
+    @Test
     fun `matcher recognizes the Paykit scope with surrounding whitespace`() {
         val capabilities = " ${PubkyAuthClaim.REQUIRED_CAPABILITIES} "
 

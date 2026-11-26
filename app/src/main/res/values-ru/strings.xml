@@ -598,6 +598,7 @@
     <string name="profile__auth_approval_authorize">Авторизовать</string>
     <string name="profile__auth_approval_details">Подробности</string>
     <string name="profile__auth_approval_ok">Ок</string>
+    <string name="profile__auth_approval_relay">Ретранслятор авторизации</string>
     <string name="profile__auth_approval_title">Авторизовать</string>
     <string name="profile__create_nav_title">Создать Профиль</string>
     <string name="profile__edit_nav_title">Редактировать Профиль</string>

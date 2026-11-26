@@ -15,6 +15,7 @@
     <action>Verify a toast with a spinner reads Loading Your Pubky Profile (screenshot; toasts are not in the layout)</action>
     <action>Verify the toast stays until the authorization sheet opens</action>
     <action>Verify the authorization sheet shows the requesting app and permissions</action>
+    <action>Verify the relay origin (id "PubkyAuthRelayOrigin") shows the scheme, host and port of the link's relay parameter, without its path</action>
     <action>Tap Authorize (id "PubkyAuthAuthorize") and complete PIN or biometric approval when enabled</action>
     <action>Verify the authorization success state is shown (id "PubkyAuthOK")</action>
     <action>Verify the requesting app receives approval from the recorded public key</action>

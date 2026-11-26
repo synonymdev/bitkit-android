@@ -20,6 +20,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
@@ -516,6 +517,10 @@ private fun ColumnScope.ApprovalDetails(
                     BodyM(text = stringResource(R.string.profile__auth_approval_usdt_disabled), color = Colors.White64)
                     VerticalSpacer(24.dp)
                 }
+                uiState.relayOrigin?.let {
+                    RelayOriginSection(relayOrigin = it)
+                    VerticalSpacer(32.dp)
+                }
                 if (uiState.permissions.isNotEmpty()) {
                     PermissionsSection(permissions = uiState.permissions)
                 }
@@ -672,6 +677,14 @@ private fun PermissionsSection(permissions: ImmutableList<PubkyAuthPermission>) 
 }
 
 @Composable
+private fun RelayOriginSection(relayOrigin: String) {
+    Section(title = stringResource(R.string.profile__auth_approval_relay)) {
+        BodySSB(text = relayOrigin, modifier = Modifier.testTag("PubkyAuthRelayOrigin"))
+        HorizontalDivider(color = Colors.White10)
+    }
+}
+
+@Composable
 private fun PermissionRow(permission: PubkyAuthPermission) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -824,6 +837,7 @@ private fun AuthorizePreview() {
                     permissions = persistentListOf(
                         PubkyAuthPermission(path = "/pub/paykit/", accessLevel = "rw"),
                     ),
+                    relayOrigin = "https://httprelay.pubky.app",
                     bitkitClaim = PubkyAuthClaim(Item.PAYKIT_ACCESS_V1, Item.WATCH_ONLY_ACCOUNT_V1),
                     profile = PubkyProfile(
                         publicKey = "pk8e3qm5f4kgczagxhertyuiop1gxag",

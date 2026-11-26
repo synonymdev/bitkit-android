@@ -582,6 +582,7 @@
     <string name="profile__add_link_note">Nota: Qualsevol enllaç que afegiu serà visible públicament.</string>
     <string name="profile__add_tag">Afegeix etiqueta</string>
     <string name="profile__auth_approval_details">Detalls</string>
+    <string name="profile__auth_approval_relay">Relé d\'autorització</string>
     <string name="profile__create_nav_title">Crear perfil</string>
     <string name="profile__edit_nav_title">Editar perfil</string>
     <string name="profile__nav_title">Perfil</string>

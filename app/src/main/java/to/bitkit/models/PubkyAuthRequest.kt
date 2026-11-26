@@ -139,7 +139,19 @@ data class PubkyAuthRequest(
 
     fun requiresIdentityCreation(hasIdentity: Boolean): Boolean = isSignup && (!isGrantSignup || !hasIdentity)
 
+    /** The network origin that receives the authorization. This is a delivery destination, not a service identity. */
+    val relayOrigin: String?
+        get() {
+            val uri = runCatching { URI(relay) }.getOrNull() ?: return null
+            val scheme = uri.scheme?.lowercase()?.takeIf { it in RELAY_SCHEMES } ?: return null
+            val host = uri.host?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
+            val port = if (uri.port >= 0) ":${uri.port}" else ""
+            return "$scheme://$host$port"
+        }
+
     companion object {
+        private val RELAY_SCHEMES = setOf("http", "https")
+
         fun parse(
             rawUrl: String,
             clientId: String,

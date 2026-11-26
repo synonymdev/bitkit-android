@@ -583,6 +583,7 @@
     <string name="profile__add_link_note">Nota: qualsiasi link aggiunto sarà visibile pubblicamente.</string>
     <string name="profile__add_tag">Aggiungi Tag</string>
     <string name="profile__auth_approval_details">Dettagli</string>
+    <string name="profile__auth_approval_relay">Relay di autorizzazione</string>
     <string name="profile__create_nav_title">Crea Profilo</string>
     <string name="profile__edit_nav_title">Modifica Profilo</string>
     <string name="profile__nav_title">Profilo</string>

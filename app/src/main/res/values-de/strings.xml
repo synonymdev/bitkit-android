@@ -567,6 +567,7 @@
     <string name="profile__add_link_note">Beachte: Jeder Link den du hinzufügst ist öffentlich sichtbar.</string>
     <string name="profile__add_tag">Tag hinzufügen</string>
     <string name="profile__auth_approval_authorize">Autorisieren Sie</string>
+    <string name="profile__auth_approval_relay">Autorisierungs-Relay</string>
     <string name="profile__auth_approval_title">Autorisieren Sie</string>
     <string name="profile__create_nav_title">Profil erstellen</string>
     <string name="profile__edit_nav_title">Profil bearbeiten</string>

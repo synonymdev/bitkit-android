@@ -792,6 +792,7 @@
     <string name="profile__auth_approval_ok">OK</string>
     <string name="profile__auth_approval_paykit_access_description">This service will manage your private Paykit data and send Paykit messages for you. Your pubky secret and wallet keys stay private.</string>
     <string name="profile__auth_approval_permissions">Requested permissions</string>
+    <string name="profile__auth_approval_relay">Authorization relay</string>
     <string name="profile__auth_approval_service">A service is requesting permission to access and edit your &lt;accent&gt;%1$s&lt;/accent&gt; data.</string>
     <string name="profile__auth_approval_service_named">&lt;accent&gt;%1$s&lt;/accent&gt; is requesting permission to access and edit your &lt;accent&gt;%2$s&lt;/accent&gt; data.</string>
     <string name="profile__auth_approval_service_unknown">Unknown service</string>
