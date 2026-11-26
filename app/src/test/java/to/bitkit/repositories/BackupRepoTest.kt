@@ -77,6 +77,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.withPublicSharingDisabledForRestore
 import to.bitkit.di.json
 import to.bitkit.env.Env
+import to.bitkit.ext.scopedActivityId
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
@@ -2196,6 +2197,44 @@ class BackupRepoTest : BaseUnitTest() {
         verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture()) }
         val payload = json.decodeFromString<MetadataBackupV1>(dataCaptor.firstValue.decodeToString())
         assertEquals(listOf("aa", "bb"), payload.moveToSparkPaymentHashes)
+    }
+
+    @Test
+    fun `a metadata backup carries the move parts Activity leaves out`() = test {
+        stubMetadataBackupReads()
+        cacheData.value = cacheData.value.copy(
+            moveToSparkHashes = listOf("bb", "aa"),
+            deletedActivities = listOf(scopedActivityId(WalletScope.default, "bb")),
+        )
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        sut.triggerBackup(BackupCategory.METADATA)
+
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture()) }
+        val payload = json.decodeFromString<MetadataBackupV1>(dataCaptor.firstValue.decodeToString())
+        assertEquals(listOf("bb"), payload.moveToSparkDroppedPaymentHashes)
+    }
+
+    @Test
+    fun `a metadata restore leaves out the move parts the other app's Activity left out`() = test {
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+        val envelope = json.encodeToString(
+            MetadataBackupV1(
+                createdAt = 123,
+                tagMetadata = emptyList(),
+                cache = AppCacheData(),
+                moveToSparkPaymentHashes = listOf("aa", "bb"),
+                moveToSparkDroppedPaymentHashes = listOf("BB"),
+            )
+        )
+        stubMetadataRestore(envelope = envelope)
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertTrue(cacheData.value.isActivityDeleted("bb", WalletScope.default))
+        assertFalse(cacheData.value.isActivityDeleted("aa", WalletScope.default))
     }
 
     @Test

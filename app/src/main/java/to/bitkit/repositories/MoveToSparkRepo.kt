@@ -108,6 +108,9 @@ class MoveToSparkRepo internal constructor(
     private val moveLock = Mutex()
     private val reportedPaymentHashes = ConcurrentHashMap.newKeySet<String>()
 
+    /** The payments of the larger parts a part still in flight replaced, by that part's hash, for when it settles. */
+    private val retriedBeforeInFlight = ConcurrentHashMap<String, List<String>>()
+
     /**
      * Whether [paymentHash] is a move to Spark, whose send and receive the app does not announce as payments; also one
      * from before a restart.
@@ -198,8 +201,13 @@ class MoveToSparkRepo internal constructor(
         quote: MoveToSparkQuote,
         amountSats: ULong,
         feeSats: ULong,
-    ): MoveToSparkOutcome? = moveLock.withLock {
-        if (quote.amountSats.safe() + quote.feeSats.safe() <= movableSats()) return@withLock payPart(quote)
+    ): MoveToSparkOutcome? {
+        val outcome = moveLock.withLock {
+            // Another move, such as the modal's, may have taken the channels' balance while this one waited for it.
+            val fits = quote.amountSats.safe() + quote.feeSats.safe() <= movableSats()
+            if (fits) payPart(quote) else null
+        }
+        if (outcome != null) return outcome
         val covered = withTimeoutOrNull(SPARK_BALANCE_WAIT) {
             while (!MoveToSparkMath.sparkCovers(sparkRepo.state.value, amountSats, feeSats)) {
                 sparkRepo.refreshState()
@@ -209,7 +217,7 @@ class MoveToSparkRepo internal constructor(
             }
         }
         if (covered == null) throw MoveToSparkError.UpdateFallsShort(amountSats)
-        null
+        return null
     }
 
     /**
@@ -372,8 +380,10 @@ class MoveToSparkRepo internal constructor(
                 continue
             }
             when (outcome) {
-                is MoveToSparkOutcome.InFlight ->
-                    return outcome.copy(earlierSats = movedSats, retriedHashes = retriedHashes.toList())
+                is MoveToSparkOutcome.InFlight -> {
+                    if (retriedHashes.isNotEmpty()) retriedBeforeInFlight[outcome.paymentHash] = retriedHashes.toList()
+                    return outcome.copy(earlierSats = movedSats)
+                }
                 is MoveToSparkOutcome.Moved -> {
                     parts++
                     movedSats = movedSats.safe() + outcome.amountSats.safe()
@@ -392,10 +402,12 @@ class MoveToSparkRepo internal constructor(
         return MoveToSparkOutcome.Moved(movedSats, paidMsat / 1000uL, paidMsat)
     }
 
-    private suspend fun dropFromActivity(retriedHashes: List<String>) = retriedHashes.forEach {
+    private suspend fun dropFromActivity(retriedHashes: List<String>) = retriedHashes.forEach { hash ->
         // A smaller part moved what the larger ones could not, so their failures are no failed moves.
-        cacheStore.addActivityToDeletedList(it)
-        activityRepo.get().handlePaymentEvent(it)
+        runSuspendCatching {
+            cacheStore.addActivityToDeletedList(hash)
+            activityRepo.get().handlePaymentEvent(hash)
+        }.onFailure { Logger.warn("Failed to drop the retried move part '$hash' from Activity", it, context = TAG) }
     }
 
     private fun feeRoseError(movedSats: ULong, paidMsat: ULong) = MoveToSparkError.FeeRose(movedSats, paidMsat / 1000uL)
@@ -524,10 +536,11 @@ class MoveToSparkRepo internal constructor(
                         }
                     }
                     settled.cancel()
-                    dropFromActivity(inFlight.retriedHashes)
+                    retriedBeforeInFlight.remove(inFlight.paymentHash)?.let { dropFromActivity(it) }
                     moved
                 }
             }.onFailure {
+                if (it is MoveToSparkError.PaymentFailed) retriedBeforeInFlight.remove(inFlight.paymentHash)
                 Logger.warn("Failed to move '${inFlight.amountSats}' sats to Spark after the wait", it, context = TAG)
             }
         }
@@ -792,15 +805,13 @@ sealed interface MoveToSparkOutcome {
 
     /**
      * The payment of [amountSats] left but had not settled when the move stopped waiting; Spark shows it once it does.
-     * [earlierSats] is what earlier parts of the same move had moved, and [retriedHashes] the payments of the larger
-     * parts this one replaced, which Activity drops once it settles.
+     * [earlierSats] is what earlier parts of the same move had moved.
      */
     data class InFlight(
         override val amountSats: ULong,
         val paymentHash: String,
         val paymentId: String,
         val earlierSats: ULong = 0uL,
-        val retriedHashes: List<String> = emptyList(),
     ) : MoveToSparkOutcome
 }
 

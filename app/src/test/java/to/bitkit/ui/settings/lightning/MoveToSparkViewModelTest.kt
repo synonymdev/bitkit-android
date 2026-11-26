@@ -16,6 +16,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.ext.createChannelDetails
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.MoveToSparkError
@@ -211,6 +212,7 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
 
     @Test
     fun `a last part that fails late quotes the rest when a running sync skips the channel refresh`() = test {
+        lightningState.value = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
         val lastPart = MoveToSparkOutcome.InFlight(20_000uL, "hash_3", "id_3", earlierSats = 30_000uL)
         val lastSettled = CompletableDeferred<Result<MoveToSparkOutcome.Moved>>()
         var nodeMovableSats = 0uL

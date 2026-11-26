@@ -381,6 +381,31 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a split move whose smaller part settles after the wait drops the failed part from Activity then`() = test {
+        channelsRouting(50_000uL, maxPaySats = 30_000uL) { false }
+        val plan = MoveToSparkPlan(sut.quoteAll().getOrThrow().firstPart, feeSats = 100uL)
+        val inFlight = assertIs<MoveToSparkOutcome.InFlight>(sut.moveAll(plan).getOrThrow())
+        verify(activityRepo, never()).handlePaymentEvent(any())
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(nodeSend(PaymentStatus.SUCCEEDED)))
+
+        sut.awaitSettled(inFlight).getOrThrow()
+
+        verify(activityRepo).handlePaymentEvent("hash")
+    }
+
+    @Test
+    fun `a split move whose smaller part fails after the wait keeps the failed part in Activity`() = test {
+        channelsRouting(50_000uL, maxPaySats = 30_000uL) { false }
+        val plan = MoveToSparkPlan(sut.quoteAll().getOrThrow().firstPart, feeSats = 100uL)
+        val inFlight = assertIs<MoveToSparkOutcome.InFlight>(sut.moveAll(plan).getOrThrow())
+        whenever(lightningRepo.listPaymentsOrNull()).thenReturn(listOf(nodeSend(PaymentStatus.FAILED)))
+
+        sut.awaitSettled(inFlight)
+
+        verify(activityRepo, never()).handlePaymentEvent(any())
+    }
+
+    @Test
     fun `a move that moves nothing keeps its failed parts in Activity`() = test {
         channelsRouting(1_800uL, maxPaySats = 1_000uL)
 
