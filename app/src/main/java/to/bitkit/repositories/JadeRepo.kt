@@ -36,6 +36,7 @@ import to.bitkit.data.PendingNameUpdate
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.isJadeDeviceBusy
+import to.bitkit.ext.isJadeDeviceLocked
 import to.bitkit.ext.isJadeUserCancellation
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
@@ -352,12 +353,14 @@ class JadeRepo @Inject constructor(
         expectedAddress: String,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
-            jadeService.verifyAddress(
-                network = Env.network.toJadeNetwork(),
-                variant = addressType.jadeVariant,
-                derivationPath = derivationPath,
-                expectedAddress = expectedAddress,
-            )
+            retryingOnceIfLocked {
+                jadeService.verifyAddress(
+                    network = Env.network.toJadeNetwork(),
+                    variant = addressType.jadeVariant,
+                    derivationPath = derivationPath,
+                    expectedAddress = expectedAddress,
+                )
+            }
         }.onFailure {
             Logger.error("Jade verifyAddress failed", it, context = TAG)
             _state.update { s -> s.copy(error = errorMessage(it)) }
@@ -367,7 +370,9 @@ class JadeRepo @Inject constructor(
     /** Signs on the device and completes the PSBT into a broadcastable transaction. */
     suspend fun signPsbt(psbtBase64: String): Result<CompletedTransaction> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val signed = jadeService.signPsbt(network = Env.network.toJadeNetwork(), psbtBase64 = psbtBase64)
+            val signed = retryingOnceIfLocked {
+                jadeService.signPsbt(network = Env.network.toJadeNetwork(), psbtBase64 = psbtBase64)
+            }
             jadeService.finalizePsbt(originalPsbt = psbtBase64, signedPsbt = signed)
         }.onFailure {
             Logger.error("Jade signPsbt failed", it, context = TAG)
@@ -720,6 +725,28 @@ class JadeRepo @Inject constructor(
             jadeTransport.disconnectDevice(path)
             runSuspendCatching { jadeService.disconnect() }
             _state.update { it.copy(connected = null) }
+        }
+    }
+
+    /**
+     * A Jade logged out or timed out on the device since it connected answers with [JadeException.DeviceLocked]:
+     * it asks for its PIN, must open the same wallet, and the request runs once more.
+     */
+    private suspend fun <T> retryingOnceIfLocked(operation: suspend () -> T): T {
+        try {
+            return operation()
+        } catch (e: Throwable) {
+            if (!e.isJadeDeviceLocked()) throw e
+            val current = _state.value.connected ?: throw e
+            Logger.info("The Jade locked since it connected; unlocking and retrying", context = TAG)
+            val locked = current.copy(versionInfo = current.versionInfo.copy(jadeState = JadeState.LOCKED))
+            _state.update { it.copy(connected = locked) }
+            val unlocked = ensureConnected(current.id, current.walletId).getOrThrow()
+            if (current.walletId != null && unlocked.walletId != current.walletId) {
+                Logger.warn("The Jade unlocked into another wallet than '${current.walletId}'", context = TAG)
+                throw HwWalletMismatchError()
+            }
+            return operation()
         }
     }
 

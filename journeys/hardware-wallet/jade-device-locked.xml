@@ -3,7 +3,8 @@
     Logs the paired Jade out on the device itself and checks the message the app shows when it
     next needs the Jade. Requires `JADE_MODE=interactive ./scripts/jade-emulator start` in
     `bitkit-docker`, a regtest debug build with the Jade emulator enabled (see the README) and no
-    Jade paired. The device answers the next request with HW_LOCKED, which the app reports as busy.
+    Jade paired. The device answers the next request with HW_LOCKED, and the app asks for the PIN on
+    the device again and retries.
   </description>
   <actions>
     <action>
@@ -22,7 +23,10 @@
       Run `./scripts/jade-emulator press front right front` in `bitkit-docker` to choose Session, then Log Out, on the device
     </action>
     <action>
-      Tap Receive (testTag "Receive"), select the Jade tab, tap "Show Details" if the address is hidden behind it, then tap "Verify on Device" (testTag "HardwareVerifyAddress") and verify a toast reads "Your Jade is busy. Finish what is shown on the device, then try again."
+      Tap Receive (testTag "Receive"), select the Jade tab, tap "Show Details" if the address is hidden behind it, then tap "Verify on Device" (testTag "HardwareVerifyAddress") and verify the Jade shows its PIN pad again
+    </action>
+    <action>
+      Run `./scripts/jade-emulator pin 012345`, then `./scripts/jade-emulator press right front` once the device shows Verify Address, and verify the button returns to "Verify on Device" with no error
     </action>
   </actions>
 </journey>

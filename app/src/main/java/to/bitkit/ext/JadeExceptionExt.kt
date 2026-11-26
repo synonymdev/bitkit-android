@@ -9,6 +9,9 @@ fun Throwable.isJadeUserCancellation(): Boolean =
 fun Throwable.isJadeDeviceBusy(): Boolean =
     generateSequence(this) { it.cause }.any { it is JadeException.DeviceBusy || it is JadeException.DeviceLocked }
 
+fun Throwable.isJadeDeviceLocked(): Boolean =
+    generateSequence(this) { it.cause }.any { it is JadeException.DeviceLocked }
+
 fun Throwable.isJadeFirmwareError(): Boolean =
     generateSequence(this) { it.cause }.any { it is JadeException.UnsupportedFirmware }
 
