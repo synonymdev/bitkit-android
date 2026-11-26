@@ -74,6 +74,7 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -109,6 +110,9 @@ class SparkRepo @Inject constructor(
 
         /** Looks for 5 minutes before telling the user Spark hasn't seen the deposit yet. */
         private const val CLAIM_POLL_ATTEMPTS = 60
+
+        /** How long a sent deposit Spark never claimed is kept across relaunches: a mempool drops it after 2 weeks. */
+        private val SENT_DEPOSIT_LIFETIME = 14.days
 
         private val SEND_STATUS_PRIORITY = listOf(PaymentStatus.COMPLETED, PaymentStatus.PENDING, PaymentStatus.FAILED)
 
@@ -238,6 +242,20 @@ class SparkRepo @Inject constructor(
     /** Vouts of the deposits an early claim was attempted for, so Wait can clear the fee cap it left on them. */
     private val earlyClaimVouts = ConcurrentHashMap<String, UInt>()
 
+    /**
+     * The deposits the transfer flow sent that Spark has not claimed yet, by txid, saved with their claim so a relaunch
+     * shows and follows each claim as before.
+     */
+    private val sentDeposits = ConcurrentHashMap<String, SparkSentDeposit>()
+
+    private val sentDepositsMutex = Mutex()
+
+    @Volatile
+    private var hasRestoredSentDeposits = false
+
+    @Volatile
+    private var hasResumedSentDeposits = false
+
     private val _depositClaims = MutableStateFlow<Map<String, SparkDepositClaim>>(emptyMap())
 
     /** Where the claim of each deposit sent from the transfer flow stands, by txid. */
@@ -286,6 +304,8 @@ class SparkRepo @Inject constructor(
             // Only the first start of the process takes back holds that settled while the app was closed.
             restoreUncertainSends(atStart = !hasRestoredAtStart)
             hasRestoredAtStart = true
+            // Before connecting, so the transfer banner opens a sent deposit's claim while Spark can't list it yet.
+            restoreSentDeposits()
             val isExiting = exitStore(walletIndex).isActive()
             _state.update { it.copy(isExiting = isExiting) }
             val connected = sparkService.connect(walletIndex, isExiting)
@@ -298,6 +318,7 @@ class SparkRepo @Inject constructor(
             if (synced) _state.update { it.copy(hasSynced = true) }
             if (connected) _exitStateGeneration.update { it + 1 }
             refresh()
+            resumeSentDeposits()
             // Only a full sync settles a pending withdrawal journal, so the sync runs until the journal clears. Only a
             // sync that saved every write marks the activities synced, so a failed write is redone on the next start.
             if (!hasSyncedActivities || cacheStore.data.first().pendingSparkWithdrawal != null) {
@@ -320,6 +341,12 @@ class SparkRepo @Inject constructor(
         claimJobs.values.forEach { it.cancel() }
         claimJobs.clear()
         earlyClaimVouts.clear()
+        // Under the lock, so a save already under way can't write the wiped wallet's deposits back after the wipe.
+        sentDepositsMutex.withLock {
+            sentDeposits.clear()
+            hasRestoredSentDeposits = false
+            hasResumedSentDeposits = false
+        }
         preparedWithdrawal = null
         withdrawalTxids.clear()
         withdrawalFailedAtSecs = null
@@ -1013,6 +1040,7 @@ class SparkRepo @Inject constructor(
      */
     fun followDepositClaim(txid: String, speed: SparkClaimSpeed, ceilingSats: ULong) {
         claimJobs.remove(txid)?.cancel()
+        sentDeposits.computeIfPresent(txid) { _, sent -> sent.copy(ceilingSats = ceilingSats) }
         when (speed) {
             SparkClaimSpeed.Later -> setDepositClaim(txid, SparkDepositClaim.Later)
             SparkClaimSpeed.Instant -> {
@@ -1043,12 +1071,16 @@ class SparkRepo @Inject constructor(
     }
 
     private fun releaseEarlyClaimCap(txid: String) {
-        val vout = earlyClaimVouts.remove(txid) ?: return
+        // Kept until cleared, so a relaunch while it is tried again clears it then.
+        val vout = earlyClaimVouts[txid] ?: return
         // Tried again while another claim of the deposit, such as Spark's own sync, leaves the cap in place.
         scope.launch {
             repeat(CLAIM_POLL_ATTEMPTS) { attempt ->
                 runSuspendCatching { sparkService.releaseDepositClaimFee(txid, vout) }
-                    .onSuccess { return@launch }
+                    .onSuccess {
+                        if (earlyClaimVouts.remove(txid, vout)) saveSentDeposits()
+                        return@launch
+                    }
                     .onFailure {
                         Logger.warn("Failed to clear the early claim cap of Spark deposit '$txid'", it, context = TAG)
                     }
@@ -1117,6 +1149,64 @@ class SparkRepo @Inject constructor(
     private fun setDepositClaim(txid: String, claim: SparkDepositClaim) {
         Logger.debug("Set claim of Spark deposit '$txid' to '$claim'", context = TAG)
         _depositClaims.update { it + (txid to claim) }
+        if (claim == SparkDepositClaim.Claimed) sentDeposits.remove(txid)
+        saveSentDeposits()
+    }
+
+    /** Saves each sent deposit with its claim as it stands now; the latest state is written last. */
+    private fun saveSentDeposits() {
+        scope.launch {
+            sentDepositsMutex.withLock {
+                val claims = _depositClaims.value
+                val choices = _claimChoices.value
+                val saved = sentDeposits.mapValues { (txid, sent) ->
+                    sent.withClaim(claims[txid], choices[txid], earlyClaimVouts[txid])
+                }
+                runSuspendCatching { cacheStore.update { it.copy(sparkSentDeposits = saved) } }
+                    .onFailure { Logger.warn("Failed to save the sent Spark deposits", it, context = TAG) }
+            }
+        }
+    }
+
+    /**
+     * Takes back the deposits the transfer flow sent before a relaunch, each at the claim step, fee ceiling and fee
+     * choice it had, and lists those Spark has not listed yet as pending.
+     */
+    private suspend fun restoreSentDeposits() = sentDepositsMutex.withLock {
+        if (hasRestoredSentDeposits) return@withLock
+        val keptSince = clock.now().epochSeconds - SENT_DEPOSIT_LIFETIME.inWholeSeconds
+        val saved = runSuspendCatching { cacheStore.data.first().sparkSentDeposits }
+            .onFailure { Logger.warn("Failed to read the sent Spark deposits", it, context = TAG) }
+            .getOrElse { return@withLock }
+        hasRestoredSentDeposits = true
+        saved.filterValues { it.sentAt >= keptSince }.forEach { (txid, sent) ->
+            // A deposit sent in this process already follows its own claim.
+            if (sentDeposits.putIfAbsent(txid, sent) != null) return@forEach
+            broadcastDeposits.putIfAbsent(txid, sent.amountSats)
+            sent.earlyClaimVout?.let { earlyClaimVouts.putIfAbsent(txid, it) }
+            sent.choice?.let { choice -> _claimChoices.update { it + (txid to choice) } }
+            _depositClaims.update { it + (txid to sent.toDepositClaim()) }
+        }
+        _state.update { it.withBroadcastDeposits() }
+        if (saved.size != sentDeposits.size) saveSentDeposits()
+    }
+
+    /**
+     * Starts again the Instant claims a relaunch cut short, at the fee ceiling the user approved, and clears again the
+     * early claim caps of those left to the claim at 3 confirmations.
+     */
+    private fun resumeSentDeposits() {
+        if (hasResumedSentDeposits || !hasRestoredSentDeposits) return
+        hasResumedSentDeposits = true
+        sentDeposits.forEach { (txid, sent) ->
+            when (_depositClaims.value[txid]) {
+                SparkDepositClaim.Looking if !claimJobs.containsKey(txid) ->
+                    followDepositClaim(txid, SparkClaimSpeed.Instant, sent.ceilingSats)
+                SparkDepositClaim.Later, SparkDepositClaim.Unavailable, SparkDepositClaim.NotSeen ->
+                    releaseEarlyClaimCap(txid)
+                else -> Unit
+            }
+        }
     }
 
     /** How the deposit in [txid] can be claimed, or null while Spark has not seen it yet. */
@@ -1417,6 +1507,11 @@ class SparkRepo @Inject constructor(
      */
     fun onDepositBroadcast(txid: String, amountSats: ULong) {
         broadcastDeposits[txid] = amountSats
+        // A recovered funding the transfer screen already follows keeps its ceiling and claim.
+        sentDeposits.compute(txid) { _, sent ->
+            sent?.copy(amountSats = amountSats) ?: SparkSentDeposit(amountSats, sentAt = clock.now().epochSeconds)
+        }
+        saveSentDeposits()
         _state.update { it.withBroadcastDeposits() }
         scope.launch {
             runSuspendCatching {
@@ -1694,6 +1789,10 @@ class SparkRepo @Inject constructor(
             }
         }
         claimJobs.keys.filter { it.lowercase() in claimedTxids }.forEach { claimJobs.remove(it)?.cancel() }
+        val settled = sentDeposits.keys.filter { it.lowercase() in claimedTxids }
+        if (settled.isEmpty()) return
+        settled.forEach { sentDeposits.remove(it) }
+        saveSentDeposits()
     }
 
     private fun List<Payment>.toWithdrawals() = filter { it.status != PaymentStatus.FAILED }
@@ -2523,6 +2622,49 @@ data class PendingSparkWithdrawal(
     }
 }
 
+/**
+ * A deposit the transfer flow sent, kept until Spark claims it: its amount, when it was sent in epoch seconds, the
+ * Instant fee ceiling the user approved, and where its claim stood with the user's choice over a changed fee.
+ */
+@Serializable
+data class SparkSentDeposit(
+    val amountSats: ULong,
+    val sentAt: Long,
+    val ceilingSats: ULong = 0uL,
+    val step: Step = Step.Looking,
+    /** The offer whose early fee the user is asked to approve when [step] is [Step.Repriced]. */
+    val repricedOffer: SparkClaimOffer.Choice? = null,
+    val choice: SparkClaimChoice? = null,
+    /** The output an early claim was attempted for, whose fee cap Wait clears. */
+    val earlyClaimVout: UInt? = null,
+) {
+    /** Where a saved claim stood; a claimed deposit is no longer kept. */
+    enum class Step { Looking, Adding, Repriced, Unavailable, Later, NotSeen }
+
+    fun withClaim(claim: SparkDepositClaim?, choice: SparkClaimChoice?, earlyClaimVout: UInt?) = copy(
+        step = when (claim) {
+            null, SparkDepositClaim.Looking, SparkDepositClaim.Claimed -> Step.Looking
+            SparkDepositClaim.Adding -> Step.Adding
+            is SparkDepositClaim.Repriced -> Step.Repriced
+            SparkDepositClaim.Unavailable -> Step.Unavailable
+            SparkDepositClaim.Later -> Step.Later
+            SparkDepositClaim.NotSeen -> Step.NotSeen
+        },
+        repricedOffer = (claim as? SparkDepositClaim.Repriced)?.offer,
+        choice = choice,
+        earlyClaimVout = earlyClaimVout,
+    )
+
+    fun toDepositClaim(): SparkDepositClaim = when (step) {
+        Step.Looking -> SparkDepositClaim.Looking
+        Step.Adding -> SparkDepositClaim.Adding
+        Step.Repriced -> repricedOffer?.let { SparkDepositClaim.Repriced(it) } ?: SparkDepositClaim.Looking
+        Step.Unavailable -> SparkDepositClaim.Unavailable
+        Step.Later -> SparkDepositClaim.Later
+        Step.NotSeen -> SparkDepositClaim.NotSeen
+    }
+}
+
 /** A withdrawal to a Paykit contact that Spark sent as [txid]. */
 @Serializable
 data class SentSparkWithdrawal(
@@ -2673,6 +2815,7 @@ sealed interface SparkClaimOffer {
     ) : SparkClaimOffer
 
     /** The early claim costs more than the cap, so it waits for the user to accept [earlyFeeSats]. */
+    @Serializable
     data class Choice(
         override val txid: String,
         override val vout: UInt,
@@ -2739,6 +2882,7 @@ enum class SparkClaimSpeed {
 }
 
 /** What the user chose over a changed fast transfer fee. */
+@Serializable
 enum class SparkClaimChoice { Approved, Waited }
 
 /** Where the claim of a deposit the user sent stands. */

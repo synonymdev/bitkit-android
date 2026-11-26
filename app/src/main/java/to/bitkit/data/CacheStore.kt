@@ -20,6 +20,7 @@ import to.bitkit.models.QuickPayLedger
 import to.bitkit.models.WalletScope
 import to.bitkit.repositories.PendingSparkWithdrawal
 import to.bitkit.repositories.SentSparkWithdrawal
+import to.bitkit.repositories.SparkSentDeposit
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -416,6 +417,8 @@ data class AppCacheData(
     val pendingSparkWithdrawal: PendingSparkWithdrawal? = null,
     /** The latest Spark withdrawals to Paykit contacts that settled as sent, so a restart never reads one as unsent. */
     val sentSparkWithdrawals: List<SentSparkWithdrawal> = listOf(),
+    /** Deposits the transfer flow sent that Spark has not claimed yet, by txid, so a relaunch follows each claim. */
+    val sparkSentDeposits: Map<String, SparkSentDeposit> = mapOf(),
     /** Pubky Swaps routes committed or restored whose claim has not confirmed yet, so each start resumes them. */
     val unfinishedPubkySwaps: List<String> = listOf(),
     /** The hold payment hash of each unfinished Pubky Swaps route by swap id, so its failure stops the swap. */

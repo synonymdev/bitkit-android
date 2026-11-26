@@ -53,6 +53,9 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -107,6 +110,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
@@ -2511,6 +2515,114 @@ class SparkRepoTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(sparkService, times(2)).releaseDepositClaimFee("txid", 0u)
+    }
+
+    @Test
+    fun `a relaunch shows the changed fast transfer fee again before spark connects`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 900uL))
+        val sent = createSut()
+        sent.onDepositBroadcast("txid", 50_000uL)
+        sent.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+        val saved = Json.decodeFromString<AppCacheData>(Json.encodeToString(cacheData.value))
+
+        cacheData.value = saved
+        whenever { sparkService.connect(any(), any()) }.thenAnswer { throw IllegalStateException("offline") }
+        val relaunched = createSut()
+        relaunched.start(0)
+
+        val claim = assertIs<SparkDepositClaim.Repriced>(relaunched.depositClaims.value["txid"])
+        assertEquals(900uL, claim.offer.earlyFeeSats)
+        assertEquals("txid", relaunched.state.value.inProgressDepositTxid)
+    }
+
+    @Test
+    fun `a relaunch keeps the choice made over a changed fee`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 900uL))
+        val sent = createSut()
+        sent.onDepositBroadcast("txid", 50_000uL)
+        sent.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+        sent.waitForMatureClaim("txid")
+        advanceUntilIdle()
+
+        val relaunched = createSut()
+        relaunched.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertEquals(SparkDepositClaim.Later, relaunched.depositClaims.value["txid"])
+        assertEquals(SparkClaimChoice.Waited, relaunched.claimChoices.value["txid"])
+        verify(sparkService, never()).claimDeposit(any(), any(), any())
+    }
+
+    @Test
+    fun `a relaunch resumes an instant claim at the fee ceiling the user approved`() = test {
+        val sentDeposit = SparkSentDeposit(amountSats = 50_000uL, sentAt = now.epochSeconds, ceilingSats = 500uL)
+        cacheData.value = AppCacheData(sparkSentDeposits = mapOf("txid" to sentDeposit))
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
+        whenever { sparkService.claimDeposit("txid", 0u, 500uL) }.thenReturn(ClaimDepositOutcome.Submitted)
+        val sut = createSut()
+
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        verify(sparkService).claimDeposit("txid", 0u, 500uL)
+        assertEquals(SparkDepositClaim.Adding, sut.depositClaims.value["txid"])
+    }
+
+    @Test
+    fun `wait on a changed fee after a relaunch clears the early claim cap`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
+        whenever { sparkService.claimDeposit("txid", 0u, 500uL) }.thenReturn(
+            ClaimDepositOutcome.Deferred(
+                ClaimDeferredReason.MaxFeeExceeded(requiredFeeSats = 600uL, maxFeeSats = 500uL)
+            )
+        )
+        val sent = createSut()
+        sent.onDepositBroadcast("txid", 50_000uL)
+        sent.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        val relaunched = createSut()
+        relaunched.start(0).getOrThrow()
+        relaunched.waitForMatureClaim("txid")
+        advanceUntilIdle()
+
+        verify(sparkService).releaseDepositClaimFee("txid", 0u)
+    }
+
+    @Test
+    fun `a relaunch drops a sent deposit spark never listed in two weeks`() = test {
+        val sentAt = now.epochSeconds - 15.days.inWholeSeconds
+        cacheData.value = AppCacheData(sparkSentDeposits = mapOf("txid" to SparkSentDeposit(50_000uL, sentAt)))
+        val sut = createSut()
+
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertNull(sut.depositClaims.value["txid"])
+        assertNull(sut.state.value.inProgressDepositTxid)
+        assertTrue(cacheData.value.sparkSentDeposits.isEmpty())
+    }
+
+    @Test
+    fun `a claimed deposit is no longer kept for a relaunch`() = test {
+        listDeposit()
+        whenever { sparkService.fetchClaimQuote("txid", 0u) }.thenReturn(quote(earlyFee = 300uL))
+        whenever { sparkService.claimDeposit("txid", 0u, 500uL) }.thenReturn(ClaimDepositOutcome.Submitted)
+        whenever { sparkService.listPayments() }.thenReturn(emptyList(), listOf(depositPayment()))
+        val sut = createSut()
+
+        sut.onDepositBroadcast("txid", 50_000uL)
+        sut.followDepositClaim("txid", SparkClaimSpeed.Instant, ceilingSats = 500uL)
+        advanceUntilIdle()
+
+        assertEquals(SparkDepositClaim.Claimed, sut.depositClaims.value["txid"])
+        assertTrue(cacheData.value.sparkSentDeposits.isEmpty())
     }
 
     @Test
