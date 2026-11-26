@@ -405,7 +405,7 @@ object SparkExitAlerts {
     /** A started exit nothing was paid into: no adopted funding, no payment from savings. */
     fun isAwaitingFirstFunding(record: SparkExitRecord): Boolean =
         record.phase is SparkExitRecord.Phase.AwaitingFunding && record.fundingShortfallSats != null &&
-            record.fundedSats == 0uL && record.fundingPaymentTxid == null
+            record.fundedSats == 0uL && record.fundingPaymentTxid == null && !record.isSavingsSendUnsaved
 
     /**
      * How long from [nowMillis] until the one reminder about [record] waiting for its first funding, or null when no

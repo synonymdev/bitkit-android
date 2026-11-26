@@ -50,6 +50,27 @@ class SparkExitFundingTest {
     }
 
     @Test
+    fun `a started savings payment whose txid was never kept holds the ask and the offer to pay again`() {
+        val started = SparkExitFixtures.record().copy(
+            savingsRefusal = SparkExitRecord.SavingsRefusal(20_000uL, 650uL),
+            savingsSendStarted = SparkExitRecord.SavingsSendStarted(SparkExitFixtures.FUNDING_ADDRESS, 990u, null),
+        )
+        val partial = listOf(EsploraUtxo("e1".repeat(32), 0u, 5_000uL, EsploraTxStatus(false)))
+
+        assertTrue(started.isAwaitingOwnPayment)
+        assertIs<SparkExitFundingState.Paid>(SparkExitMath.fundingState(started, emptyList()))
+        // It may pay the rest of another wallet's partial payment.
+        assertIs<SparkExitFundingState.Paid>(SparkExitMath.fundingState(started, partial))
+        assertNull(SparkExitMath.savingsRefusal(started, funding = null, hasSavingsSend = false))
+        assertFalse(SparkExitAlerts.isAwaitingFirstFunding(started), "no reminder to fund it")
+
+        val expired = started.withSavingsSendLooked(990u + SparkExitRecord.OWN_PAYMENT_TIMEOUT_BLOCKS)
+        assertNull(expired.savingsSendStarted)
+        assertIs<SparkExitFundingState.Ask>(SparkExitMath.fundingState(expired, emptyList()))
+        assertEquals(started.savingsRefusal, SparkExitMath.savingsRefusal(expired, null, hasSavingsSend = false))
+    }
+
+    @Test
     fun `cooperative only quote needs no funding`() {
         assertEquals(0uL, SparkExitQuote(SparkExitFixtures.prepared(funding = null)).fundingSats)
     }

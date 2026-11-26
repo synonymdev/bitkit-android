@@ -231,6 +231,9 @@ class AppStatusViewModelTest : BaseUnitTest() {
             funding = listOf(SparkExitRecord.Funding(0u, "address", "pubkey", txid = "txid")),
         )
         assertEquals(ExitStep.FUNDING, adopted.exitStep())
+        // A savings payment whose txid was never kept counts as paid too.
+        val unsaved = exitRecord(SparkExitRecord.Phase.AwaitingFunding(1_000uL), 1_000uL, isSavingsSendUnsaved = true)
+        assertEquals(ExitStep.RUNNING, unsaved.exitStep())
     }
 
     @Test
@@ -265,7 +268,9 @@ class AppStatusViewModelTest : BaseUnitTest() {
         isActive: Boolean = true,
         paymentTxid: String? = null,
         funding: List<SparkExitRecord.Funding> = emptyList(),
+        isSavingsSendUnsaved: Boolean = false,
     ) = mock<SparkExitRecord> {
+        on { this.isSavingsSendUnsaved } doReturn isSavingsSendUnsaved
         on { this.phase } doReturn phase
         on { this.isActive } doReturn isActive
         on { fundingShortfallSats } doReturn shortfallSats
