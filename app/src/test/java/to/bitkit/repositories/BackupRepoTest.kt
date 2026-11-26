@@ -77,6 +77,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.withPublicSharingDisabledForRestore
 import to.bitkit.di.json
 import to.bitkit.env.Env
+import to.bitkit.ext.scopedActivityId
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
@@ -2199,6 +2200,45 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a metadata backup carries the move parts Activity leaves out`() = test {
+        stubMetadataBackupReads()
+        cacheData.value = cacheData.value.copy(
+            moveToSparkHashes = listOf("bb", "aa"),
+            deletedActivities = listOf(scopedActivityId(WalletScope.default, "bb")),
+        )
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        sut.triggerBackup(BackupCategory.METADATA)
+
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture()) }
+        val payload = json.decodeFromString<MetadataBackupV1>(dataCaptor.firstValue.decodeToString())
+        assertEquals(listOf("bb"), payload.moveToSparkDroppedPaymentHashes)
+    }
+
+    @Test
+    fun `a metadata restore leaves out the move parts the other app's Activity left out`() = test {
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+        val envelope = json.encodeToString(
+            MetadataBackupV1(
+                createdAt = 123,
+                tagMetadata = emptyList(),
+                cache = AppCacheData(),
+                moveToSparkPaymentHashes = listOf("aa"),
+                moveToSparkDroppedPaymentHashes = listOf("BB"),
+            )
+        )
+        stubMetadataRestore(envelope = envelope)
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertTrue(cacheData.value.isActivityDeleted("bb", WalletScope.default))
+        assertFalse(cacheData.value.isActivityDeleted("aa", WalletScope.default))
+        assertEquals(setOf("aa", "bb"), cacheData.value.moveToSparkHashes.toSet())
+    }
+
+    @Test
     fun `a metadata backup leaves the move to spark hashes out with none`() = test {
         stubMetadataBackupReads()
         val dataCaptor = argumentCaptor<ByteArray>()
@@ -3890,6 +3930,7 @@ class BackupRepoTest : BaseUnitTest() {
             sparkSendAttempts = mapOf(id to SparkSendAttempt(0, 1)),
             sparkUnsavedOwnFailures = setOf(id),
             moveToSparkHashes = listOf(id),
+            moveToSparkRetriedBefore = mapOf(id to listOf(id)),
             ldkSendHashes = listOf(id),
             ldkSendExpiries = mapOf(id to 1),
         )

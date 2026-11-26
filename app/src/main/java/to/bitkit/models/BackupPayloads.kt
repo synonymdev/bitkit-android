@@ -62,6 +62,14 @@ data class MetadataBackupV1(
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     @Serializable(with = LenientStringListSerializer::class)
     val moveToSparkPaymentHashes: List<String>? = null,
+    /**
+     * The payment hashes of failed move parts that smaller parts of the same move replaced, lowercase hex and sorted,
+     * which Activity leaves out. Null in envelopes written before this field or with none.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @Serializable(with = LenientStringListSerializer::class)
+    val moveToSparkDroppedPaymentHashes: List<String>? = null,
 )
 
 /** Reads a list of strings, or an empty list for any other value, so one unreadable field keeps the rest. */

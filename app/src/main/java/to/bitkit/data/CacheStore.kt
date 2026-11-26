@@ -237,6 +237,20 @@ class CacheStore internal constructor(
         store.updateData { it.copy(moveToSparkHashes = it.moveToSparkHashes + hash) }
     }
 
+    /** Keeps [retriedHashes], the move parts that did not route before the part [paymentHash], until it settles. */
+    suspend fun setMoveRetriedBefore(paymentHash: String, retriedHashes: List<String>) {
+        store.updateData {
+            it.copy(moveToSparkRetriedBefore = it.moveToSparkRetriedBefore + (paymentHash.lowercase() to retriedHashes))
+        }
+    }
+
+    /** Removes the parts kept for [paymentHash], once they are dropped from Activity or the part failed. */
+    suspend fun takeMoveRetriedBefore(paymentHash: String) {
+        val hash = paymentHash.lowercase()
+        if (hash !in store.data.first().moveToSparkRetriedBefore) return
+        store.updateData { it.copy(moveToSparkRetriedBefore = it.moveToSparkRetriedBefore - hash) }
+    }
+
     /** Keeps [paymentHash] with its invoice's expiry in epoch seconds, [expiresAt], when known. */
     suspend fun addLdkSendHash(paymentHash: String, expiresAt: Long? = null) {
         val hash = paymentHash.lowercase()
@@ -446,6 +460,11 @@ data class AppCacheData(
      * Activity shows the move as one.
      */
     val moveToSparkHashes: List<String> = listOf(),
+    /**
+     * The payment hashes of the move parts that did not route and were retried smaller, by the hash of the smaller part
+     * still in flight, kept across a restart so its late success still drops their failures from Activity.
+     */
+    val moveToSparkRetriedBefore: Map<String, List<String>> = mapOf(),
     /** Hashes of the Lightning sends the node started, so Spark holds off while the node can't list them. */
     val ldkSendHashes: List<String> = listOf(),
     /** Invoice expiry in epoch seconds of the [ldkSendHashes] that know it. */

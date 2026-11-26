@@ -67,6 +67,7 @@ import to.bitkit.ext.formatPlural
 import to.bitkit.ext.isPaykitTemporarilyUnavailable
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.ext.scopedActivityId
 import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.BackupCategory
@@ -979,6 +980,9 @@ class BackupRepo @Inject constructor(
             sparkExitEarlierAddresses = sparkExitEarlierAddressesBackup(),
             moveToSparkPaymentHashes = cacheData.moveToSparkHashes.map { it.lowercase() }.distinct().sorted()
                 .takeIf { it.isNotEmpty() },
+            moveToSparkDroppedPaymentHashes = cacheData.moveToSparkHashes.map { it.lowercase() }.distinct()
+                .filter { cacheData.isActivityDeleted(it, WalletScope.default) }.sorted()
+                .takeIf { it.isNotEmpty() },
         )
 
         json.encodeToString(payload).toByteArray()
@@ -1331,8 +1335,14 @@ class BackupRepo @Inject constructor(
                 sparkExitFundingRecoveryPending = it.sparkExitFundingRecoveryPending + restoredIndexKeys,
                 // Both apps back the moves up beside the cache; the device's own stay.
                 moveToSparkHashes = (
-                    it.moveToSparkHashes + cleanCache.moveToSparkHashes + parsed.moveToSparkPaymentHashes.orEmpty()
+                    it.moveToSparkHashes + cleanCache.moveToSparkHashes + parsed.moveToSparkPaymentHashes.orEmpty() +
+                        parsed.moveToSparkDroppedPaymentHashes.orEmpty()
                     ).map { hash -> hash.lowercase() }.distinct(),
+                // The other app backs up the move parts its Activity leaves out beside the moves.
+                deletedActivities = (
+                    cleanCache.deletedActivities + parsed.moveToSparkDroppedPaymentHashes.orEmpty()
+                        .map { hash -> scopedActivityId(WalletScope.default, hash.lowercase()) }
+                    ).distinct(),
             )
         }
         runCatching { restoreSparkExitEarlierAddresses(parsed.sparkExitEarlierAddresses) }
@@ -1743,6 +1753,7 @@ internal fun AppCacheData.withoutPaymentDetails() = copy(
     sparkSendAttempts = emptyMap(),
     sparkUnsavedOwnFailures = emptySet(),
     moveToSparkHashes = emptyList(),
+    moveToSparkRetriedBefore = emptyMap(),
     ldkSendHashes = emptyList(),
     ldkSendExpiries = emptyMap(),
 )
