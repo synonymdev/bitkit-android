@@ -80,18 +80,18 @@ class WipeWalletUseCase @Inject constructor(
         var credentialsMayBeErased = false
         val result = try {
             runSuspendCatching {
-                connectionRecovery.withIdentityChange(
-                    isStillNeeded = {
-                        expectedPendingAttemptId?.let { profileRemovalStore.requirePendingWalletReset(it) }
-                        backupRepo.setWiping(true)
-                        lightningRepo.setWiping(true)
-                        wipeAdmitted = true
-                        true
-                    },
-                    beforeClientsSuspend = { backupRepo.reset() },
-                ) {
-                    expectedPendingAttemptId?.let { profileRemovalStore.requirePendingWalletReset(it) }
-                    contactPaymentSettingsRepo.get().withWalletWipe(pubkyRepo::withWalletWipeAdmission) {
+                // Drain profile removal first: backup reset must follow it and still precede VSS client suspension.
+                contactPaymentSettingsRepo.get().withWalletWipe(pubkyRepo::withWalletWipeAdmission) {
+                    connectionRecovery.withIdentityChange(
+                        isStillNeeded = {
+                            expectedPendingAttemptId?.let { profileRemovalStore.requirePendingWalletReset(it) }
+                            backupRepo.setWiping(true)
+                            lightningRepo.setWiping(true)
+                            wipeAdmitted = true
+                            true
+                        },
+                        beforeClientsSuspend = { backupRepo.reset() },
+                    ) {
                         paykitSdkService.withWalletWipe {
                             expectedPendingAttemptId?.let { profileRemovalStore.requirePendingWalletReset(it) }
                             val pending = profileRemovalStore.pendingState()

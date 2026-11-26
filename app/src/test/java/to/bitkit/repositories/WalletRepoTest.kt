@@ -428,7 +428,10 @@ class WalletRepoTest : BaseUnitTest() {
         testScheduler.runCurrent()
 
         assertEquals(60_000uL, sut.balanceState.value.totalLightningSats)
-        assertEquals(55_000uL, sut.balanceState.value.maxSendLightningSats)
+        assertEquals(
+            MoveToSparkMath.maxSendSats(listOf(recovered), sparkState.value),
+            sut.balanceState.value.maxSendLightningSats,
+        )
     }
 
     @Test

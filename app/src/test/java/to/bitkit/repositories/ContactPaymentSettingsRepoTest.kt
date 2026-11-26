@@ -132,7 +132,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         val publication = CompletableDeferred<Unit>()
         val enteredRemoval = CompletableDeferred<Unit>()
         val finishRemoval = CompletableDeferred<Unit>()
-        whenever(publicPaykitRepo.syncPaykitApp(isNull(), canSync = any())).doSuspendableAnswer {
+        whenever(publicPaykitRepo.syncPaykitApp(isNull(), eq(Priority.Background), any())).doSuspendableAnswer {
             publication.await()
             Result.failure(IllegalStateException("Uncertain publication"))
         }

@@ -1220,7 +1220,7 @@ class PaykitSdkService @Inject constructor(
         endpoints: List<Endpoint>,
         onAcknowledged: () -> Unit,
         canPublish: suspend () -> Boolean,
-    ): EndpointSyncReport? = syncPublicEndpointsWithEpoch(endpoints, canPublish, reusable = null, onAcknowledged)?.report
+    ): EndpointSyncReport? = syncPublicEndpoints(endpoints, canPublish, reusable = null, onAcknowledged)?.report
 
     internal fun publicEndpointSyncEpoch(): Long = publicEndpointEpoch.get()
 
@@ -1228,7 +1228,13 @@ class PaykitSdkService @Inject constructor(
         endpoints: List<Endpoint>,
         canPublish: suspend () -> Boolean,
         reusable: PublicEndpointSync?,
-        onAcknowledged: () -> Unit = {},
+    ): PublicEndpointSync? = syncPublicEndpoints(endpoints, canPublish, reusable, onAcknowledged = {})
+
+    private suspend fun syncPublicEndpoints(
+        endpoints: List<Endpoint>,
+        canPublish: suspend () -> Boolean,
+        reusable: PublicEndpointSync?,
+        onAcknowledged: () -> Unit,
     ): PublicEndpointSync? {
         isSetup.await()
         val priority = if (endpoints.isEmpty()) {

@@ -387,7 +387,9 @@ class PublicPaykitRepo @Inject constructor(
                             desired,
                             beforePublish = { markPublicationPending(ownsPublication) },
                             acknowledge = { current ->
-                                acknowledgePublishedEndpoints(desired, signIn.publicKey) { current() && ownsPublication() }
+                                acknowledgePublishedEndpoints(desired, signIn.publicKey) {
+                                    current() && ownsPublication()
+                                }
                             },
                             canPublish = { isAutomaticPublicationAllowed(ownsPublication) },
                             refresh = refresh,

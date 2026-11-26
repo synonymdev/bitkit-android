@@ -731,7 +731,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
                 it.getArgument<suspend (Boolean) -> Unit>(2)(true)
             }.whenever(addressReservationRepo).withPublicAddressMatch(any(), any(), any())
 
-            val paid = async { sut.refreshPublishedBolt11ForPayment("010203") }
+            val paid = async { sut.refreshPublishedBolt11ForPayment("010203", admitPublication = { it() }) }
             entered.await()
             val refresh = async { sut.syncCurrentPublishedEndpoints() }
             assertFalse(refresh.isCompleted)

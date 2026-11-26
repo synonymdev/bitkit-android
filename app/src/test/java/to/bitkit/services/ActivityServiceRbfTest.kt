@@ -39,8 +39,8 @@ import to.bitkit.repositories.PaykitReceivedPaymentContacts
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitContactResolver
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.utils.RbfOriginalConfirmed
 import to.bitkit.test.connectionRecoveryFixture
+import to.bitkit.utils.RbfOriginalConfirmed
 import javax.inject.Provider
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith

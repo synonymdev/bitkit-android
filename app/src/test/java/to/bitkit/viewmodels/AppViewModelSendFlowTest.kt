@@ -3575,6 +3575,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             lightningRepo = lightningRepo,
             activityRepo = activityRepo,
             clock = Clock.System,
+            backupRepo = { backupRepo },
         )
         val activationStarted = CompletableDeferred<Unit>()
         val finishActivation = CompletableDeferred<Unit>()

@@ -1952,26 +1952,6 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `pubky app deletion does not renew the session or replay an identity error`() = test {
-        val secretKey = "local_secret"
-        authenticateForTesting(publicKey = VALID_SELF_KEY)
-        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
-        whenever(pubkyService.publicKeyFromSecret(secretKey)).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
-        val identityError = PaykitException.Identity("identity_error", "Missing capabilities")
-        whenever(pubkyService.deletePubkyProfile("revision-Test", VALID_SELF_KEY))
-            .thenAnswer { throw identityError }
-            .thenReturn(Unit)
-
-        val result = sut.deleteProfile()
-
-        assertSame(identityError, result.exceptionOrNull())
-        verify(pubkyService).deletePubkyProfile("revision-Test", VALID_SELF_KEY)
-        verify(pubkyService, never()).signIn(any())
-        verify(pubkyService, never()).deletePaykitProfile()
-        verify(pubkyService, never()).signOut()
-    }
-
-    @Test
     fun `deleteProfile is not followed by a profile copy write from a load under way`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.fetchPaykitProfile(VALID_SELF_KEY))

@@ -80,10 +80,10 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
+import to.bitkit.ui.settings.lightning.MoveToSparkManager
 import java.io.IOException
 import java.io.OutputStream
 import java.util.UUID
-import to.bitkit.ui.settings.lightning.MoveToSparkManager
 import javax.inject.Provider
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith

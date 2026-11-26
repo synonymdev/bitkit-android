@@ -4016,9 +4016,11 @@ class LightningRepoTest : BaseUnitTest() {
             onchainSendAttemptStore = store,
             connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk,
+            vssClients = vssClients,
             urlValidator = urlValidator,
             electrumProbeService = electrumProbeService,
             sparkRepo = sparkRepo,
+            profileRemovalStore = profileRemovalStore,
         )
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(coinSelectAuto = false)))
         val activityService = mock<ActivityService>()

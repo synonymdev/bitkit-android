@@ -122,8 +122,8 @@ import to.bitkit.services.BlocktankService
 import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkOperationLock
 import to.bitkit.services.PaykitSdkService
-import to.bitkit.services.UsdtService
 import to.bitkit.services.SparkError
+import to.bitkit.services.UsdtService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.usecases.WipeWalletUseCase
@@ -505,7 +505,23 @@ class BackupRepoTest : BaseUnitTest() {
         }
     }
 
-    private fun createWipeUseCase() = WipeWalletUseCase(
+    private suspend fun createWipeUseCase(): WipeWalletUseCase {
+        val sharing = mock<ContactPaymentSettingsRepo>()
+        whenever { sharing.withWalletWipe<Unit>(any(), any()) }.doSuspendableAnswer {
+            it.getArgument<suspend (suspend () -> Unit) -> Unit>(0)(it.getArgument(1))
+        }
+        whenever { privatePaykitRepo.withProfileDeletionPaused<Unit>(any()) }.doSuspendableAnswer {
+            it.getArgument<suspend (PrivatePaykitRepo.ProfileDeletionPause) -> Unit>(0)
+                .invoke(PrivatePaykitRepo.ProfileDeletionPause())
+        }
+        whenever { privatePaykitRepo.finishProfileRemoval(any()) }.thenReturn(Result.success(Unit))
+        whenever { pubkyRepo.withWalletWipeAdmission<Unit>(any()) }.doSuspendableAnswer {
+            it.getArgument<suspend () -> Unit>(0).invoke()
+        }
+        return createWipeUseCase(sharing)
+    }
+
+    private fun createWipeUseCase(sharing: ContactPaymentSettingsRepo) = WipeWalletUseCase(
         backupRepo = sut,
         keychain = keychain,
         coreService = coreService,
@@ -527,7 +543,12 @@ class BackupRepoTest : BaseUnitTest() {
         paykitSdkService = PaykitSdkService(mock(), keychain, mock(), settingsStore = mock()) { mock() },
         usdtRepo = usdtRepo,
         paykitUsdtPaymentRepo = paykitUsdtPaymentRepo,
+        paykitReceiptRepo = mock(),
+        profileRemovalStore = ProfileRemovalStore.inMemoryForTesting(),
+        contactPaymentSettingsRepo = Provider { sharing },
         connectionRecovery = connectionRecoveryFixture(settingsStore, keychain, vssClients),
+        wakeRepo = mock(),
+        moveToSparkManager = Provider { mock() },
     )
 
     @Test
@@ -6698,7 +6719,6 @@ class BackupRepoTest : BaseUnitTest() {
             Result.success(Unit)
         }
     }
-}
 
     @Test
     fun `legacy USDT restore gate precedes malformed connection correction`() = test {
@@ -6750,3 +6770,4 @@ class BackupRepoTest : BaseUnitTest() {
         connectionRecovery = connectionRecoveryFixture(settingsStore, keychain, vssClients),
         vssClients = vssClients,
     )
+}
