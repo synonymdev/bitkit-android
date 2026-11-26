@@ -74,6 +74,8 @@ and retry steps are reproducible.
 
 `contact-request-or-pay.xml` uses the same two-instance setup and starts from the payer's Contact Detail screen, opened through the `bitkit://contact` deeplink. Its timing step assumes the payer has been running for about a minute: right after launch, the Paykit session restore and link refresh hold the SDK and can push the Pay step well past the budget.
 
+`contact-request-or-pay-compact.xml` uses the same setup on a 320 x 640 dp display (`adb shell wm size` and `wm density`) at font scale 1.0 and 2.0; it resets both at the end. iOS runs it on an iPhone SE simulator with accessibility Dynamic Type.
+
 `definite-pre-broadcast-retry.xml` uses the linked fixture issuer and the local regtest LNURL server. Configure its LNURL-pay metadata endpoint normally, but make its invoice callback fail the first request and succeed after it is switched back to the healthy response. Do not republish the Paykit payment list between attempts. This makes the first send fail before Lightning dispatch and proves that the same private payment details can be opened and paid on retry.
 
 ## Foreground synchronization
