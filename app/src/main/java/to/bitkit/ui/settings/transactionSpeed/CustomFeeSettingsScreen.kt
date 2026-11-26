@@ -25,7 +25,6 @@ import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.LargeRow
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadType
@@ -34,6 +33,8 @@ import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.screens.wallets.send.feeInputAfterKey
+import to.bitkit.ui.screens.wallets.send.presetSelection
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -50,6 +51,7 @@ fun CustomFeeSettingsScreen(
     var input by remember {
         mutableStateOf((customFeeRate.value as? TransactionSpeed.Custom)?.satsPerVByte?.toString() ?: "")
     }
+    var isPresetSelected by remember { mutableStateOf(input.isNotEmpty()) }
     val totalFee = Defaults.recommendedBaseFee * (input.toUIntOrNull() ?: 0u)
 
     LaunchedEffect(input) {
@@ -74,11 +76,10 @@ fun CustomFeeSettingsScreen(
     CustomFeeSettingsContent(
         input = input,
         totalFeeText = totalFeeText,
+        isPresetSelected = isPresetSelected,
         onKeyPress = { key ->
-            when (key) {
-                KEY_DELETE -> input = if (input.isNotEmpty()) input.dropLast(1) else ""
-                else -> if (input.length < 3) input = (input + key).trimStart('0')
-            }
+            input = feeInputAfterKey(input, key, isPresetSelected)
+            isPresetSelected = false
         },
         onContinue = {
             val feeRate = input.toUIntOrNull() ?: 0u
@@ -93,6 +94,7 @@ fun CustomFeeSettingsScreen(
 private fun CustomFeeSettingsContent(
     input: String,
     totalFeeText: String,
+    isPresetSelected: Boolean = false,
     onKeyPress: (String) -> Unit = {},
     onContinue: () -> Unit = {},
     onBackClick: () -> Unit = {},
@@ -120,6 +122,7 @@ private fun CustomFeeSettingsContent(
                 text = input.ifEmpty { "0" },
                 symbol = BITCOIN_SYMBOL,
                 showSymbol = true,
+                modifier = Modifier.presetSelection(isPresetSelected),
             )
 
             if (isValid) {

@@ -1,0 +1,14 @@
+<journey name="custom fee replaces preset in settings">
+  <description>
+    Verifies that the default custom fee screen in Settings shows the saved rate as selected, so the
+    first number pad key replaces it instead of appending to it, and Remove clears it. Preconditions:
+    an onboarded wallet; no funds needed.
+  </description>
+  <actions>
+    <action>Open Settings, tap Transaction Speed (id "TransactionSpeedSettings"), tap Custom (id "custom"), enter 20 with the number pad (ids "N2", "N0") and tap Continue</action>
+    <action>Tap Custom (id "custom") again and verify the amount reads 20 with a highlighted background</action>
+    <action>Tap 5 (id "N5") and verify the amount reads 5, not 205, with no highlight</action>
+    <action>Tap 0 (id "N0") and verify the amount reads 50</action>
+    <action>Go back without saving, tap Custom (id "custom") again, tap Remove (id "NRemove") and verify the amount reads 0</action>
+  </actions>
+</journey>
