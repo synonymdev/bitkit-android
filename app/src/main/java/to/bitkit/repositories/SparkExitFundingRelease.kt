@@ -58,7 +58,8 @@ object SparkExitFundingRelease {
         return when (val state = SparkExitMath.fundingState(record, utxos)) {
             is SparkExitFundingState.Ask -> state.receivedSats == 0uL
             SparkExitFundingState.Paid ->
-                attempt.hasCandidate(record.fundingPaymentTxid) && utxos.all { attempt.hasCandidate(it.txid) }
+                attempt.hasCandidate(record.fundingPaymentTxid) &&
+                    SparkExitMath.newFunding(utxos, record).all { attempt.hasCandidate(it.txid) }
             else -> false
         }
     }

@@ -645,6 +645,8 @@ class PaykitPaymentProofRepo @Inject constructor(
      */
     suspend fun isSparkExitFunding(attempt: OnchainSendAttempt): Boolean = withContext(ioDispatcher) {
         if (!attempt.mayFundSparkExit) return@withContext false
+        // An approved release is finished from here, even once the exit's record is gone.
+        if (attempt.releaseApproved) return@withContext true
         val exit = sparkExit(attempt) ?: return@withContext true
         SparkExitFundingRelease.isExitFunding(attempt, exit)
     }

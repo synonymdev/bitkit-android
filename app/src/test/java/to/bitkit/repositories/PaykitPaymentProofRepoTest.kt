@@ -3687,6 +3687,14 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `approved release of a Spark exit funding stays owned after the exit is gone`() = test {
+        val attempt = exitFundingAttempt().copy(releaseApproved = true)
+        val repo = paymentProofRepo().apply { sparkExit = { SparkExitFundingRelease.Exit(null, emptyList()) } }
+        assertTrue(repo.isSparkExitFunding(attempt), "Payment Pending must finish the release, never retry it")
+        assertTrue(repo.onchainRequestHasEnded(attempt))
+    }
+
+    @Test
     fun `ordinary savings send is never released without a Spark exit`() = test {
         val attempt = exitFundingAttempt().copy(address = "bcrt1qordinary")
         val exit = SparkExitFundingRelease.Exit(
