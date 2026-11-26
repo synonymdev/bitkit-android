@@ -330,6 +330,8 @@ class SparkExitRepo @Inject constructor(
         val updated = driver.tick(current)
         rememberLostLeaves(updated)
         _state.update { it.copy(record = updated, lastError = null) }
+        // Funding the tick adopted, or an exit it ended, leaves no refused savings payment to pay again.
+        if (updated.fundedSats != current.fundedSats || updated.isActive != current.isActive) noteSavingsSend(updated)
         // A tick that changed the phase, such as a build short of fees, needs the funding state of the new phase.
         // So does one that forgot the exit's own payment, or stopped waiting for an unsaved one, which brings the ask
         // back. A failed read then keeps the first: a short payment it saw still counts, so only the rest is asked for.
@@ -1000,10 +1002,6 @@ class SparkExitRepo @Inject constructor(
         }
     }
 
-    /**
-     * Saves on the record that a savings payment to [address] is about to go out, so a stop before its txid is kept
-     * still holds the ask and the cancel. A failed save throws, and nothing is sent.
-     */
     private fun markSavingsSend(address: String, earlierAttemptId: String?) {
         val record = requireNotNull(_state.value.record) { "No running Spark exit" }
         // Its height comes from the next tick's tip: the one in memory may be an earlier exit's or stale.
@@ -1013,7 +1011,6 @@ class SparkExitRepo @Inject constructor(
         _state.update { it.copy(record = marked, fundingState = SparkExitMath.fundingState(marked, utxos = null)) }
     }
 
-    /** The started savings payment can no longer land: nothing went out, or a node refused it. */
     private fun clearSavingsSend() {
         val record = _state.value.record?.takeIf { it.savingsSendStarted != null } ?: return
         val cleared = record.copy(savingsSendStarted = null)

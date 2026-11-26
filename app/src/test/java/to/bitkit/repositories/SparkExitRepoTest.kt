@@ -1973,6 +1973,23 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a started savings payment a node refused frees the ask and keeps its own retry`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(startedRecord())
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(refusedSavingsPayment())
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain())
+        sut.load().getOrThrow()
+        sut.tick().getOrThrow()
+        sut.onAppBackgrounded()
+
+        val record = assertNotNull(store.load())
+        assertNull(record.fundingPaymentTxid)
+        assertNull(record.savingsSendStarted)
+        assertIs<SparkExitFundingState.Ask>(sut.state.value.fundingState)
+        assertTrue(sut.state.value.isSavingsPaymentRefused, "the retry is offered")
+    }
+
+    @Test
     fun `a started savings payment found nowhere is forgotten after the own-payment timeout`() = test {
         val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
         val elsewhere = refusedSavingsPayment().copy(

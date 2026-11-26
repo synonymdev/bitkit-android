@@ -382,7 +382,7 @@ object SparkExitMath {
      */
     fun isSavingsPaymentRefused(record: SparkExitRecord, attempt: OnchainSendAttempt?): Boolean {
         if (!record.isActive || record.phase !is SparkExitRecord.Phase.AwaitingFunding) return false
-        if (record.fundingPaymentTxid != null) return false
+        if (record.fundingPaymentTxid != null || record.fundedSats > 0uL) return false
         val address = record.funding.firstOrNull()?.address ?: return false
         return attempt != null && attempt.address == address && attempt.evidence == OnchainSendEvidence.Rejected
     }

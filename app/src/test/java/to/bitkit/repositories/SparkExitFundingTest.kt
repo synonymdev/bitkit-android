@@ -10,6 +10,8 @@ import breez_sdk_spark.RecoveryTxKind
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
+import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.mock
 import to.bitkit.models.FeeRate
 import to.bitkit.utils.SignedTransactionId
 import kotlin.random.Random
@@ -540,6 +542,19 @@ class SparkExitFundingTest {
             funding = listOf(record.funding.single().copy(txid = "paid", vout = 0u, valueSats = 20_000uL)),
         )
         assertEquals(SparkExitFundingState.Ask(10_000uL), SparkExitMath.fundingState(topUp, emptyList()))
+    }
+
+    @Test
+    fun `a node-refused savings payment is no longer refused once the exit holds funding`() {
+        val record = SparkExitFixtures.record()
+        val refused = mock<OnchainSendAttempt> {
+            on { address } doReturn SparkExitFixtures.FUNDING_ADDRESS
+            on { evidence } doReturn OnchainSendEvidence.Rejected
+        }
+        assertTrue(SparkExitMath.isSavingsPaymentRefused(record, refused))
+        val adopted = record.funding.single().copy(txid = "f0", vout = 0u, valueSats = 20_000uL)
+        val funded = record.copy(funding = listOf(adopted))
+        assertFalse(SparkExitMath.isSavingsPaymentRefused(funded, refused))
     }
 
     @Test
