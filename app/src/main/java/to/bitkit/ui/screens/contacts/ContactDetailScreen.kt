@@ -30,7 +30,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.Job
@@ -88,13 +91,24 @@ fun ContactDetailScreen(
         onDispose { viewModel.onScreenDisposed(isChangingConfigurations = activity?.isChangingConfigurations == true) }
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.effects.collect {
-            when (it) {
-                is ContactDetailEffect.OpenPayment -> if (viewModel.claimPendingPayment(it)) {
+    // A payment opens only while this screen is the settled, resumed destination: one that resolves while the screen is
+    // being left or the app is in the background waits, and is cancelled when the screen goes away.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(viewModel, lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            viewModel.pendingPayments.collect {
+                if (viewModel.claimPendingPayment(it)) {
                     val scanJob = onPayContact(it.paymentRequest, it.publicKey, it.privatePaymentContext, it.endpoints)
                     viewModel.onPaymentOpening(scanJob)
                 }
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.effects.collect {
+            when (it) {
+                is ContactDetailEffect.OpenPayment -> Unit
                 ContactDetailEffect.ContactDeleted -> {
                     viewModel.dismissRequestOrPaySheet()
                     onContactDeleted()
