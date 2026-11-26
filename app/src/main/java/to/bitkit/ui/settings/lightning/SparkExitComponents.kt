@@ -127,11 +127,11 @@ internal fun SparkExitFeesRow(label: String, sats: ULong, modifier: Modifier = M
 }
 
 @Composable
-private fun SparkExitAmountRow(label: String, sats: ULong) {
+internal fun SparkExitAmountRow(label: String, sats: ULong, modifier: Modifier = Modifier) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(50.dp)
     ) {
