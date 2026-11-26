@@ -1187,6 +1187,7 @@
     <string name="wallet__send_paykit_no_route__description">ليس لدى جهة الاتصال هذه أي طريقة دفع يمكن لـ Bitkit استخدامها الآن.</string>
     <string name="wallet__send_paykit_no_route__title">لا يمكن الدفع لجهة الاتصال هذه</string>
     <string name="wallet__send_paykit_withdrawal_settling__description">لا يزال سحب سابق من رصيد الإنفاق قيد التسوية. حاول مرة أخرى بعد اكتماله.</string>
+    <string name="wallet__send_pending__abandon_exit_note">لم يعد هذا التحويل القسري بحاجة إلى هذه الدفعة. يتحقق Bitkit أولًا من الشبكة، ثم يعيد عملاتها إلى محفظتك حتى لا تتأكد أبدًا. يكلّف ذلك رسوم شبكة.</string>
     <string name="wallet__send_pending__abandon_transfer_note">لم تعد التحويلات إلى رصيد الإنفاق متاحة. يتحقق Bitkit أولًا من الشبكة، ثم يعيد عملات هذا التحويل إلى محفظتك حتى لا يتأكد التحويل الأصلي أبدًا. يكلّف ذلك رسوم شبكة.</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">جارٍ دفع\n&lt;accent&gt;الفاتورة...&lt;/accent&gt;</string>

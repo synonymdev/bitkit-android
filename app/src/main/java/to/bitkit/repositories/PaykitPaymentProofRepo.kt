@@ -144,6 +144,9 @@ class PaykitPaymentProofRepo @Inject constructor(
         private val HARDWARE_OBSERVATION_TIMEOUT = 15.seconds
     }
 
+    /** The Spark exit a savings send may fund, read from its stores; null when it cannot be read. */
+    internal var sparkExit: (OnchainSendAttempt) -> SparkExitFundingRelease.Exit? = SparkExitFundingRelease::storedExit
+
     private val operationMutex = Mutex()
     private val persistenceMutex = Mutex()
     private val deliveryScope = appScope(ioDispatcher, TAG)
@@ -623,6 +626,7 @@ class PaykitPaymentProofRepo @Inject constructor(
     suspend fun onchainRequestHasEnded(attempt: OnchainSendAttempt): Boolean = withContext(ioDispatcher) {
         // Blocktank no longer sells channels, so its order has always ended.
         if (attempt.isBlocktankFunding) return@withContext attempt.canBeAbandoned
+        if (attempt.mayFundSparkExit) return@withContext sparkExitFundingHasEnded(attempt)
         val identity = currentIdentity()?.takeIf { PubkyPublicKeyFormat.matches(it, attempt.payerIdentity) }
         val record = attempt.takeIf { it.canBeAbandoned && identity != null }?.let { payerRecord(it) }
         val periodStartsAt = attempt.requestId?.billingPeriodStartsAt
@@ -633,6 +637,22 @@ class PaykitPaymentProofRepo @Inject constructor(
             record.paymentProofs.isNotEmpty() -> false
             else -> oneTimeRequestHasEnded(record, identity)
         }
+    }
+
+    /**
+     * Whether [attempt] pays a Spark exit's funding address, current or earlier, or the exit cannot be read: its
+     * Progress owns that payment, so Payment Pending never pays it again.
+     */
+    suspend fun isSparkExitFunding(attempt: OnchainSendAttempt): Boolean = withContext(ioDispatcher) {
+        if (!attempt.mayFundSparkExit) return@withContext false
+        val exit = sparkExit(attempt) ?: return@withContext true
+        SparkExitFundingRelease.isExitFunding(attempt, exit)
+    }
+
+    private fun sparkExitFundingHasEnded(attempt: OnchainSendAttempt): Boolean {
+        val exit = sparkExit(attempt)?.takeIf { attempt.canBeAbandoned } ?: return false
+        if (attempt.releaseApproved) return !SparkExitFundingRelease.isAdopted(attempt, exit)
+        return SparkExitFundingRelease.exitNoLongerNeeds(attempt, exit)
     }
 
     private suspend fun payerRecord(attempt: OnchainSendAttempt): PaymentRequestRecord? {
@@ -770,7 +790,7 @@ class PaykitPaymentProofRepo @Inject constructor(
         // failure leaves the release unfinished, to be finished again later.
         attempt.requestId?.let { allowanceExecutor.get().onchainSendReleased(attempt.payerIdentity, it) }
         val removeOriginalProof: suspend (OnchainSendAttempt) -> Boolean =
-            { if (it.isBlocktankFunding) true else removeOriginalShopProofs(it) }
+            { if (it.isBlocktankFunding || it.mayFundSparkExit) true else removeOriginalShopProofs(it) }
         if (!lightningRepo.abandonUnbroadcastOnchainSend(attempt, removeOriginalProof)) {
             throw OnchainSendBlockedError(attempt)
         }

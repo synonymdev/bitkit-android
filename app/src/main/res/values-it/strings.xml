@@ -1214,6 +1214,7 @@
     <string name="wallet__send_paykit_no_route__description">Questo contatto non ha alcun metodo di pagamento che Bitkit possa usare ora.</string>
     <string name="wallet__send_paykit_no_route__title">Impossibile pagare questo contatto</string>
     <string name="wallet__send_paykit_withdrawal_settling__description">Un precedente prelievo dal tuo saldo di spesa è ancora in fase di regolamento. Riprova al termine.</string>
+    <string name="wallet__send_pending__abandon_exit_note">Questo trasferimento forzato non ha più bisogno di questo pagamento. Bitkit controlla prima la rete, poi rimanda le sue monete al tuo wallet, così non potrà mai essere confermato. Questo costa una commissione di rete.</string>
     <string name="wallet__send_pending__abandon_transfer_note">I trasferimenti al saldo di spesa non sono più disponibili. Bitkit controlla prima la rete, poi rimanda le monete di questo trasferimento al tuo wallet, così il trasferimento originale non potrà mai essere confermato. Questo costa una commissione di rete.</string>
     <string name="wallet__send_pending__description">Questo pagamento sta richiedendo un po\' più tempo del previsto. Puoi continuare a utilizzare Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Pagamento in sospeso</string>

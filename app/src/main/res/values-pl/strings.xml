@@ -1054,6 +1054,7 @@
     <string name="wallet__send_paykit_no_route__description">Ten kontakt nie ma teraz metody płatności, której Bitkit może użyć.</string>
     <string name="wallet__send_paykit_no_route__title">Nie można zapłacić temu kontaktowi</string>
     <string name="wallet__send_paykit_withdrawal_settling__description">Wcześniejsza wypłata z Twojego salda wydatków wciąż się rozlicza. Spróbuj ponownie po jej zakończeniu.</string>
+    <string name="wallet__send_pending__abandon_exit_note">Ten wymuszony transfer nie potrzebuje już tej płatności. Bitkit najpierw sprawdza sieć, a potem odsyła jej monety do Twojego portfela, aby nigdy nie została potwierdzona. Wiąże się to z opłatą sieciową.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Przelewy na saldo wydatków nie są już dostępne. Bitkit najpierw sprawdza sieć, a potem odsyła monety z tego przelewu do Twojego portfela, aby pierwotny przelew nigdy nie został potwierdzony. Wiąże się to z opłatą sieciową.</string>
     <string name="wallet__send_to">Do</string>
     <string name="wallet__recipient_contact">Kontakt</string>

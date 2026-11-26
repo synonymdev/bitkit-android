@@ -39,6 +39,7 @@ import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.viewmodels.SanityWarning
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -67,6 +68,7 @@ class SendPendingViewModelTest : BaseUnitTest() {
         whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any(), any()) }
             .thenReturn(Result.failure(Exception("not found")))
         whenever(lightningRepo.onchainSendAttemptUpdates).thenReturn(attemptUpdates)
+        whenever { paykitPaymentProofRepo.isSparkExitFunding(any()) }.thenReturn(false)
         sut = createViewModel()
     }
 
@@ -549,6 +551,29 @@ class SendPendingViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
         sut.initOnchain(original.txid, amount)
         advanceUntilIdle()
+        assertNull(sut.uiState.value.abandonableAttempt)
+    }
+
+    @Test
+    fun `Spark exit funding offers no retry and its release once the exit no longer needs it`() = test {
+        val original = pendingOriginal()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        whenever(paykitPaymentProofRepo.isSparkExitFunding(original)).thenReturn(true)
+        whenever(paykitPaymentProofRepo.onchainRequestHasEnded(original)).thenReturn(true)
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+        assertEquals(original, sut.uiState.value.recoveryAttempt)
+        assertFalse(sut.uiState.value.canRetry)
+        assertEquals(original, sut.uiState.value.abandonableAttempt)
+    }
+
+    @Test
+    fun `ordinary send keeps its retry and offers no release`() = test {
+        val original = pendingOriginal()
+        whenever(lightningRepo.currentOnchainSendAttempt()).thenReturn(original)
+        sut.initOnchain(original.txid, amount)
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.canRetry)
         assertNull(sut.uiState.value.abandonableAttempt)
     }
 

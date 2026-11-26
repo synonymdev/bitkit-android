@@ -1118,7 +1118,15 @@ class SparkExitRepo @Inject constructor(
                             attemptId = refused.attemptId,
                             walletId = refused.walletId,
                             feeRateSatsPerVByte = refused.feeRateSatsPerVByte,
-                        ) { check(it.attemptId == refused.attemptId && it.address == refused.address) }
+                        ) {
+                            check(it.attemptId == refused.attemptId && it.address == refused.address)
+                            // Funding from another wallet may have reached the address while the payment was prepared.
+                            val utxos = runSuspendCatching { chain?.utxos(it.address) }.getOrNull()
+                            val exit = SparkExitFundingRelease.Exit(record, _state.value.earlierAddresses)
+                            check(SparkExitFundingRelease.mayPayAgain(it, exit, utxos)) {
+                                "The Spark exit no longer asks for this funding"
+                            }
+                        }
                             .getOrThrow()
                         val txid = fundingTxid(outcome, refused.amountSats)
                         val current = _state.value.record ?: return@withLock
