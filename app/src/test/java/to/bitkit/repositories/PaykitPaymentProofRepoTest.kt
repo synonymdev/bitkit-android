@@ -1490,7 +1490,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             SparkError.SendRefused("Spark fee over the limit"),
             to.bitkit.utils.AppError(SparkError.SendRefused("Spark could not prepare the payment")),
             ServiceError.PaymentStoppedAtSubmission(),
-            to.bitkit.utils.AppError(ServiceError.PaymentStoppedAtSubmission()),
+            AppError(ServiceError.PaymentStoppedAtSubmission()),
             PaymentAbortedBeforeSend(),
         )
         for (error in errors) {

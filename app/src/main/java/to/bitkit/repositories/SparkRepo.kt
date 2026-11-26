@@ -800,8 +800,9 @@ class SparkRepo @Inject constructor(
             if (result.exceptionOrNull()?.isLeafSelectionFailure() != true || !canRetry()) return result
             Logger.info("Retrying Spark send '$attemptId' as Spark could not select its leaves", context = TAG)
             delay(LEAF_SELECTION_RETRY_DELAY)
-            // A cancel, block or identity change can land during the delay, so each resend is checked again.
-            if (!canRetry() || !onBeforeSend()) return result
+            // A cancel, block or identity change can land during the delay, so each resend is checked again. The
+            // authorization check can suspend, so the deadline and an exit hold are read after it.
+            if (!onBeforeSend() || !canRetry()) return result
             val retried = runSuspendCatching { sparkService.send(prepared, attemptId) }
             // A failed try can have committed a transfer before Spark selected leaves again, so a short balance or an
             // expiry on a retry, which would read as nothing sent, ends with the earlier leaf failure instead.

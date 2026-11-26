@@ -5528,6 +5528,28 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark resend checks its deadline after its authorization check returns`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw leafSelectionFailure() }
+        val sut = createSut(CacheStore(InMemoryDataStore(AppCacheData()), clock))
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+        val deadline = now + 1.minutes
+        var checks = 0
+
+        // The retry's check returns allowed only after the deadline has passed.
+        val result = sut.payInvoice("lnbc1", 100uL, paymentDeadlineAt = deadline, onBeforeSend = {
+            if (++checks == 3) now = deadline + 1.minutes
+            true
+        })
+
+        assertIs<PaymentPendingException>(result.exceptionOrNull())
+        verify(sparkService, times(1)).send(any(), anyOrNull())
+    }
+
+    @Test
     fun `a spark send whose leaves spark can't select is held under a new key`() = test {
         whenever(sparkService.isConnected).thenReturn(true)
         val prepared = unexpiredPrepared()
