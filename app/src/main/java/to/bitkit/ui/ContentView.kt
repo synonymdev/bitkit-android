@@ -1189,9 +1189,11 @@ private fun RootNavHost(
                 val sparkState by walletViewModel.sparkState.collectAsStateWithLifecycle()
                 val balances = LocalBalances.current
                 val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
+                val canFundOnChain by Env.sparkSharesNodeChainFlow
+                    .collectAsStateWithLifecycle(initialValue = Env.sparkSharesNodeChain)
                 FundingScreen(
                     canFundWithSpark = sparkState.isUsable,
-                    canFundOnChain = Env.sparkSharesNodeChain,
+                    canFundOnChain = canFundOnChain,
                     onTransfer = { navController.navigateToTransferSpendingStart(hasSeenSpendingIntro) },
                     onFund = {
                         scope.launch {

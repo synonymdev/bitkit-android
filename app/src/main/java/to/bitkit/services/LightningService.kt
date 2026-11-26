@@ -1,6 +1,7 @@
 package to.bitkit.services
 
 import android.os.Process
+import androidx.annotation.VisibleForTesting
 import com.synonym.bitkitcore.AddressType
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -319,6 +321,11 @@ class LightningService internal constructor(
 
     private var listenerJob: Job? = null
 
+    // The Electrum server the node being built syncs from; published to Env once that node starts.
+    @Volatile
+    @VisibleForTesting
+    internal var chainElectrumUrl: String? = null
+
     @Volatile
     private var watchOnlyReconcileRetryJob: Job? = null
     private val watchOnlyReconcileRetryLock = Any()
@@ -467,6 +474,7 @@ class LightningService internal constructor(
     private suspend fun Builder.configureChainSource(customServerUrl: String? = null) {
         Env.regtestEsploraUrl?.let { esploraUrl ->
             Logger.info("Using onchain source Esplora url: '$esploraUrl'", context = TAG)
+            chainElectrumUrl = null
             setChainSourceEsplora(
                 serverUrl = esploraUrl,
                 config = EsploraSyncConfig(
@@ -481,6 +489,7 @@ class LightningService internal constructor(
         }
         val serverUrl = customServerUrl ?: settingsStore.data.first().electrumServer
         Logger.info("Using onchain source Electrum Sever url: $serverUrl", context = TAG)
+        chainElectrumUrl = serverUrl
         setChainSourceElectrum(
             serverUrl = serverUrl,
             config = ElectrumSyncConfig(
@@ -504,6 +513,8 @@ class LightningService internal constructor(
         ServiceQueue.LDK.background(ldkQueue) {
             try {
                 node.start()
+                // Published before the queue returns, so a start whose caller was cancelled still shows it.
+                Env.activeElectrumServerUrl.update { chainElectrumUrl }
             } catch (e: NodeException) {
                 throw LdkError(e)
             }
@@ -610,6 +621,7 @@ class LightningService internal constructor(
     // let the GC free it later on the finalizer thread, racing the next node. This covers the whole
     // body, including the listener join, so cancellation during listener cleanup cannot skip it.
     suspend fun stop() = withContext(NonCancellable) {
+        Env.activeElectrumServerUrl.update { null }
         watchOnlyReconcileRetryJob?.cancelAndJoin()
         shouldListenForEvents = false
         // A stop requested from inside an event handler runs on the listener job itself; joining it
