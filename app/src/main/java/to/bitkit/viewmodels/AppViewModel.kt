@@ -957,6 +957,7 @@ class AppViewModel @Inject constructor(
         observePublicPaykitInvoiceExpiry()
         observePrivatePaykitContacts()
         observePaykitPaymentRequestConnectivity()
+        observeSavedContactsLoadFailure()
         observeIncomingPaykitPaymentRequests()
         observePaykitOnchainPaymentResolution()
         observePaykitSparkWithdrawalReleases()
@@ -1286,6 +1287,14 @@ class AppViewModel @Inject constructor(
             onlyWhileActive = true,
         )
         if (!isPaymentRequestPollingStopped.value) refreshPaymentRequestTargets(force = true)
+    }
+
+    private fun observeSavedContactsLoadFailure() {
+        viewModelScope.launch {
+            pubkyRepo.contactsLoadCompletionVersion
+                .filter { it > 0L && pubkyRepo.contactsLoadVersion.value == 0L }
+                .collect { paykitPaymentRequestRepo.markEligibleTargetsUnknown() }
+        }
     }
 
     private fun observePaykitPaymentRequestConnectivity() {

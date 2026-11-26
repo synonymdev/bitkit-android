@@ -20891,10 +20891,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(paykitPaymentRequestRepo, never()).markEligibleTargetsUnknown()
 
         pubkyContactsLoadCompletionVersion.update { 1L }
-        sut.showPaymentRequestRecipient()
         runCurrent()
         verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
-        verify(paykitPaymentRequestRepo).markEligibleTargetsUnknown()
+        verify(paykitPaymentRequestRepo, atLeastOnce()).markEligibleTargetsUnknown()
 
         pubkyContactsLoadVersion.update { 1L }
         sut.showPaymentRequestRecipient()
