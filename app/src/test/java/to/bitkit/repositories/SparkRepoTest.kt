@@ -4015,9 +4015,7 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertIs<ServiceError.PaymentStoppedAtSubmission>(result.exceptionOrNull())
         verify(sparkService, never()).send(any(), anyOrNull())
-        verifyBlocking(cacheStore) { removeSparkUncertainSend("hash") }
-        verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
-        verifyBlocking(cacheStore) { restoreSparkSendAttempt("hash", null) }
+        verifyBlocking(cacheStore) { dropSparkUnsentSend("hash", true, null) }
     }
 
     @Test
@@ -4030,7 +4028,8 @@ class SparkRepoTest : BaseUnitTest() {
             isAuthorized = false
             Unit
         }
-        whenever(cacheStore.removeSparkSendHash(any())).thenAnswer { throw IllegalStateException("disk full") }
+        val diskFull = IllegalStateException("disk full")
+        whenever(cacheStore.dropSparkUnsentSend(any(), any(), anyOrNull())).thenAnswer { throw diskFull }
         val sut = createSut()
 
         val result = sut.payInvoice("lnbc1", 100uL, null, null) { isAuthorized }

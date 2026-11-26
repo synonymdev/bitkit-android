@@ -686,8 +686,7 @@ class SparkRepo @Inject constructor(
                             ensurePaymentDeadline(paymentDeadlineAt)
                             ensureNotExiting()
                         }.onFailure {
-                            // The refusal reaches the caller even when its cleanup fails, as nothing went out.
-                            bestEffort("drop unsent Spark send '$paymentHash'") { dropUnsentSend() }
+                            dropUnsentSend()
                             throw it
                         }
                         sendRetryingLeafSelection(prepared, attemptId, paymentDeadlineAt, onBeforeSend)
