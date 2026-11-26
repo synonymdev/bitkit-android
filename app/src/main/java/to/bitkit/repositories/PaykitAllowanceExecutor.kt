@@ -111,12 +111,19 @@ class PaykitAllowancePayer @Inject constructor(
     ): Result<Unit> =
         paymentProofRepo.associateLightningPayment(request, paymentHash, paymentEndpointIdentifier, paymentAppId)
 
+    /** Pays [bolt11], checking again right before submission that [request]'s contact is not blocked. */
     suspend fun payLightning(
+        request: PaykitPaymentRequest,
         bolt11: String,
         sats: ULong?,
         paymentDeadlineAt: Instant?,
         maxTotalRoutingFeeMsat: ULong,
-    ): Result<String> = lightningRepo.payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat) { true }
+    ): Result<String> = lightningRepo.payInvoiceRecheckedAtSubmission(
+        bolt11,
+        sats,
+        paymentDeadlineAt,
+        maxTotalRoutingFeeMsat,
+    ) { paymentRequestRepo.ensureAutomaticPaymentAllowed(request).isSuccess }
 
     /** Clears the proof when [error] proves the payment never left; returns whether it did. */
     suspend fun failLightningPayment(paymentHash: String, error: Throwable): Boolean =
@@ -980,6 +987,7 @@ class PaykitAllowanceExecutor @Inject constructor(
         // Routing fees fall outside the allowance's accounting, so they are capped at 1% of the requested amount.
         val maxRoutingFeeMsat = amountSats.safe() * MAX_ROUTING_FEE_MSAT_PER_SAT.safe()
         payer.payLightning(
+            request,
             payment.endpoint.value,
             sats,
             request.submissionDeadline(null),

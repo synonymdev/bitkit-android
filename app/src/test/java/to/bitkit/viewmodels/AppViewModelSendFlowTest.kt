@@ -897,9 +897,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.isPending(any())).thenReturn(true)
         whenever { paykitPaymentRequestRepo.ensurePaymentAllowed(any()) }.thenReturn(Result.success(Unit))
         whenever { paykitPaymentRequestRepo.claimForPayment(any()) }.thenReturn(Result.success(Unit))
-        whenever { lightningRepo.payInvoiceRecheckedAtSubmission(any(), anyOrNull(), anyOrNull(), any()) }
+        whenever { lightningRepo.payInvoiceRecheckedAtSubmission(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()) }
             .doSuspendableAnswer {
-                val check = it.getArgument<suspend () -> Boolean>(3)
+                val check = it.getArgument<suspend () -> Boolean>(4)
                 when {
                     !check() -> Result.failure(PaymentAbortedBeforeSend())
                     !check() -> Result.failure(ServiceError.PaymentStoppedAtSubmission())
@@ -16312,9 +16312,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             ),
         )
 
-        whenever(lightningRepo.payInvoiceRecheckedAtSubmission(any(), anyOrNull(), anyOrNull(), any()))
+        whenever(lightningRepo.payInvoiceRecheckedAtSubmission(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
             .doSuspendableAnswer {
-                val check = it.getArgument<suspend () -> Boolean>(3)
+                val check = it.getArgument<suspend () -> Boolean>(4)
                 // The first try may have committed a transfer, so the refused resend leaves the send uncertain.
                 repeat(3) { check() }
                 Result.failure(PaymentPendingException(paymentHash))
@@ -18813,7 +18813,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
         verify(
             lightningRepo
-        ).payInvoiceRecheckedAtSubmission(any(), anyOrNull(), eq(Instant.parse(quote.expiresAt)), any())
+        ).payInvoiceRecheckedAtSubmission(any(), anyOrNull(), eq(Instant.parse(quote.expiresAt)), anyOrNull(), any())
     }
 
     @Test

@@ -7,11 +7,17 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.WalletScope
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.ServiceError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -21,7 +27,8 @@ import breez_sdk_spark.PaymentStatus as SparkPaymentStatus
 class PaykitAllowancePayerTest : BaseUnitTest() {
     private val paymentProofRepo = mock<PaykitPaymentProofRepo>()
     private val lightningRepo = mock<LightningRepo>()
-    private val sut = PaykitAllowancePayer(mock(), paymentProofRepo, lightningRepo, mock())
+    private val paymentRequestRepo = mock<PaykitPaymentRequestRepo>()
+    private val sut = PaykitAllowancePayer(mock(), paymentProofRepo, lightningRepo, paymentRequestRepo)
 
     private val requestId = PaykitPaymentRequestId(paymentRequestId = "req-1", counterparty = "payee")
     private val txid = "ab".repeat(32)
@@ -33,6 +40,25 @@ class PaykitAllowancePayerTest : BaseUnitTest() {
         whenever(lightningRepo.listPaymentsOrNull()).thenReturn(emptyList())
         whenever(lightningRepo.canListSparkPayments()).thenReturn(true)
         whenever(lightningRepo.sparkLightningSend(any())).thenReturn(SparkLightningSend.NotFound)
+    }
+
+    @Test
+    fun `a lightning payment checks its contact again right before submission`() = test {
+        val request = mock<PaykitPaymentRequest>()
+        var isAllowedAtSubmission: Boolean? = null
+        whenever(lightningRepo.payInvoiceRecheckedAtSubmission(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .doSuspendableAnswer {
+                isAllowedAtSubmission = it.getArgument<suspend () -> Boolean>(4).invoke()
+                Result.failure(ServiceError.PaymentStoppedAtSubmission())
+            }
+        whenever(paymentRequestRepo.ensureAutomaticPaymentAllowed(request))
+            .thenReturn(Result.failure(PaykitPaymentRequestError.RequestUnavailable))
+
+        val result = sut.payLightning(request, "lnbc1", null, null, 10_000uL)
+
+        assertFalse(requireNotNull(isAllowedAtSubmission))
+        assertTrue(result.exceptionOrNull() is ServiceError.PaymentStoppedAtSubmission)
+        verify(lightningRepo).payInvoiceRecheckedAtSubmission(eq("lnbc1"), isNull(), isNull(), eq(10_000uL), any())
     }
 
     @Test
