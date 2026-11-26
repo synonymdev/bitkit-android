@@ -1448,8 +1448,13 @@ class SparkRepo @Inject constructor(
                     try {
                         isAllowed = runSuspendCatching { recheckBeforeSend() }.getOrDefault(false)
                     } finally {
-                        // Nothing was sent, so a refusal or a cancel closes the journal at once.
-                        if (!isAllowed) withContext(NonCancellable) { clearJournal(opened) }
+                        // Nothing was sent, so a refusal or a cancel closes the journal at once, and the refusal
+                        // reaches the caller even when that write fails.
+                        if (!isAllowed) {
+                            withContext(NonCancellable) {
+                                bestEffort("close the refused Spark withdrawal's journal") { clearJournal(opened) }
+                            }
+                        }
                     }
                     if (!isAllowed) throw ServiceError.PaymentStoppedAtSubmission()
                     spending {

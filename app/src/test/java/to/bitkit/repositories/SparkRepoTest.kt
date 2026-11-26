@@ -2039,6 +2039,21 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a withdrawal refused once its journal is written stays refused when closing the journal fails`() = test {
+        val sut = journaledSpark()
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            // The journal opens, then closing it fails.
+            if (cacheData.value.pendingSparkWithdrawal != null) throw IOException("disk full")
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, null, recheckBeforeSend = { false })
+
+        assertIs<ServiceError.PaymentStoppedAtSubmission>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any(), anyOrNull())
+    }
+
+    @Test
     fun `a withdrawal whose proof is starting reads as in flight before its journal is written`() = test {
         val sut = journaledSpark()
         var outcomeWhileStarting: SparkWithdrawalOutcome? = null

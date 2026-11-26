@@ -1623,6 +1623,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = eq(650uL),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
         assertEquals(1, sent.size)
         val paid = assertNotNull(store.load())
@@ -1662,6 +1663,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -1700,6 +1702,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -1862,6 +1865,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
