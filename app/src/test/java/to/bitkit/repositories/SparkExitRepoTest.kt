@@ -1384,6 +1384,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
         verify(sparkRepo, never()).setExiting(true, true)
     }
@@ -1526,6 +1527,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -1554,6 +1556,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             // Savings never pays more fee than the one confirmed.
             approvedMiningFeeSats = eq(300uL),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -1578,6 +1581,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = eq(600uL),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -1601,6 +1605,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 
@@ -1746,6 +1751,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             contactPublicKey = anyOrNull(),
             approvedMiningFeeSats = anyOrNull(),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
         assertEquals("again", assertNotNull(store.load()).fundingPaymentTxid)
         assertFalse(sut.state.value.isSavingsPaymentRefused)
@@ -1833,6 +1839,7 @@ class SparkExitRepoTest : BaseUnitTest() {
                 contactPublicKey = anyOrNull(),
                 approvedMiningFeeSats = anyOrNull(),
                 reviewHigherFee = anyOrNull(),
+                recheckBeforeSubmission = any(),
             )
         }.doSuspendableAnswer { answer() }
         whenever(lightning.completeAcceptedOrdinaryFollowup(any())).thenReturn(Unit)
@@ -2007,6 +2014,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             // The total shown less the extra funding.
             approvedMiningFeeSats = eq(400uL),
             reviewHigherFee = anyOrNull(),
+            recheckBeforeSubmission = any(),
         )
     }
 

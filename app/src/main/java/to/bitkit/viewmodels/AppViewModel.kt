@@ -7363,6 +7363,9 @@ class AppViewModel @Inject constructor(
                 }
                 incomingPaymentRequest?.let { paykitPaymentRequestRepo.ensurePaymentAllowed(it).getOrThrow() }
             },
+            recheckBeforeSubmission = {
+                incomingPaymentRequest?.let { paykitPaymentRequestRepo.ensurePaymentAllowed(it).getOrThrow() }
+            },
         ).onSuccess { outcome ->
             proofRequest = null
             when (outcome) {
@@ -8053,11 +8056,18 @@ class AppViewModel @Inject constructor(
     ) {
         uncertainSparkWithdrawal = null
         var earlierTxids: Set<String>? = null
+        var authorizationError: Throwable? = null
         val txid = paykitRouteRepo.payServiceLeg(
             leg,
             contactPaymentContext?.publicKey,
             _sendUiState.value.selectedTags,
             incomingPaymentRequest?.submissionDeadline(paykitPaymentTerms),
+            recheckBeforeSend = {
+                authorizationError = incomingPaymentRequest?.let {
+                    paykitPaymentRequestRepo.ensurePaymentAllowed(it).exceptionOrNull()
+                }
+                authorizationError == null
+            },
         ) {
             val earlier = lightningRepo.sparkWithdrawalTxidsTo(leg.endpoint.value)
             startSparkOnchainProof(
@@ -8072,6 +8082,7 @@ class AppViewModel @Inject constructor(
         }.getOrElse {
             handleServiceLegFailure(
                 error = it,
+                authorizationError = authorizationError,
                 leg = leg,
                 earlierTxids = earlierTxids,
                 incomingPaymentRequest = incomingPaymentRequest,
@@ -8104,6 +8115,7 @@ class AppViewModel @Inject constructor(
     @Suppress("LongParameterList")
     private suspend fun handleServiceLegFailure(
         error: Throwable,
+        authorizationError: Throwable?,
         leg: ServiceRouteLeg,
         earlierTxids: Set<String>?,
         incomingPaymentRequest: PaykitPaymentRequest?,
@@ -8113,9 +8125,13 @@ class AppViewModel @Inject constructor(
     ) {
         // Spark refuses a send past its deadline, or one its balance can't cover, before it sends and clears its
         // journal, so no listing is needed.
-        if (error is ServiceError.PaymentDeadlineExpired || error is SparkError.SendRefused) {
+        if (error is ServiceError.PaymentDeadlineExpired || error is SparkError.SendRefused ||
+            error is ServiceError.PaymentStoppedAtSubmission
+        ) {
             incomingPaymentRequest?.let { paykitPaymentProofRepo.releaseRefusedSparkOnchainProof(it) }
-            failServiceLegBeforeSend(error, preparedPaymentProofRequest, contactPaymentContext, allowanceAttemptId)
+            // A request refused at its last check shows why, as a refusal up front does.
+            val shown = authorizationError ?: error
+            failServiceLegBeforeSend(shown, preparedPaymentProofRequest, contactPaymentContext, allowanceAttemptId)
             return
         }
         incomingPaymentRequest?.let { paykitPaymentProofRepo.releaseUnsentSparkOnchainProof(it) }
@@ -8785,6 +8801,7 @@ class AppViewModel @Inject constructor(
         onBroadcast: suspend (Txid) -> Unit = {},
         approvedMiningFeeSats: ULong? = null,
         reviewHigherFee: (suspend (OnchainPreparedReceipt) -> Unit)? = null,
+        recheckBeforeSubmission: suspend () -> Unit = {},
     ): Result<OnchainSendOutcome> = lightningRepo.sendOnChain(
         address = address,
         sats = amount,
@@ -8802,6 +8819,7 @@ class AppViewModel @Inject constructor(
         onBroadcast = onBroadcast,
         approvedMiningFeeSats = approvedMiningFeeSats,
         reviewHigherFee = reviewHigherFee,
+        recheckBeforeSubmission = recheckBeforeSubmission,
     )
 
     private suspend fun sendLightning(

@@ -1406,6 +1406,7 @@ class SparkRepo @Inject constructor(
         maxDebitSats: ULong? = null,
         tags: List<String> = emptyList(),
         paymentDeadlineAt: Instant? = null,
+        recheckBeforeSend: suspend () -> Boolean = { true },
         onBeforeSend: suspend () -> Boolean = { true },
     ): Result<String> =
         withContext(bgDispatcher) {
@@ -1442,6 +1443,15 @@ class SparkRepo @Inject constructor(
                     )
                     journal = opened
                     cacheStore.update { it.copy(pendingSparkWithdrawal = opened) }
+                    // The proof and journal writes suspend, so the authorization is checked again after them.
+                    var isAllowed = false
+                    try {
+                        isAllowed = runSuspendCatching { recheckBeforeSend() }.getOrDefault(false)
+                    } finally {
+                        // Nothing was sent, so a refusal or a cancel closes the journal at once.
+                        if (!isAllowed) withContext(NonCancellable) { clearJournal(opened) }
+                    }
+                    if (!isAllowed) throw ServiceError.PaymentStoppedAtSubmission()
                     spending {
                         // Saving the journal suspends, so the deadline and an exit that started meanwhile are checked
                         // last, before the send.

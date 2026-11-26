@@ -1331,6 +1331,66 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a payment request's node send stopped at submission leaves no record of a send`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        var isAllowed = true
+
+        sut.payInvoiceRecheckedAtSubmission("bolt11", 1_000uL, null) { isAllowed.also { isAllowed = false } }
+
+        // A retry on Spark while the node can't list its payments isn't refused as a possible node send.
+        assertEquals(emptyList(), store.data.first().ldkSendHashes)
+    }
+
+    @Test
+    fun `a payment request's node send stopped at submission keeps an earlier send's record`() = test {
+        val store =
+            CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true, ldkSendHashes = listOf("bolt11"))))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        var isAllowed = true
+
+        sut.payInvoiceRecheckedAtSubmission("bolt11", 1_000uL, null) { isAllowed.also { isAllowed = false } }
+
+        assertEquals(listOf("bolt11"), store.data.first().ldkSendHashes, "The earlier send's hash must stay")
+    }
+
+    @Test
+    fun `a payment request's node send stopped at submission keeps the record of a send in flight`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData(ldkSendHashesSeeded = true)))
+        sut = repoWith(store)
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        val releaseSend = CompletableDeferred<Unit>()
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            releaseSend.await()
+            "payment-id"
+        }
+        val refusal = CompletableDeferred<Unit>()
+        var checks = 0
+        val refused = async {
+            sut.payInvoiceRecheckedAtSubmission("bolt11", 1_000uL, null) {
+                // The recheck at submission waits while another send of the invoice starts.
+                if (++checks == 2) refusal.await()
+                checks < 2
+            }
+        }
+        runCurrent()
+        val inFlight = async { sut.payInvoiceRecheckedAtSubmission("bolt11", 1_000uL, null) { true } }
+        runCurrent()
+
+        refusal.complete(Unit)
+        refused.await()
+
+        assertEquals(listOf("bolt11"), store.data.first().ldkSendHashes, "The send in flight must keep its hash")
+        releaseSend.complete(Unit)
+        inFlight.await()
+    }
+
+    @Test
     fun `a node-only payment fails instead of falling back to spark`() = test {
         startNodeForTesting()
         whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
@@ -3785,6 +3845,31 @@ class LightningRepoTest : BaseUnitTest() {
         // The node stopping later finds nothing left to release.
         repo.stop()
         assertEquals(1, releases)
+    }
+
+    @Test
+    fun `a payment refused once its send is prepared is released unsent`() = test {
+        val (repo, store) = feeReviewRepo()
+        var broadcasts = 0
+        var rechecks = 0
+        var releases = 0
+        whenever(lightningService.prepareOnchainSend(any(), any(), any(), anyOrNull(), any(), any(), anyOrNull()))
+            .thenReturn(feeReviewPrepared(discard = { releases++ }) { broadcasts++ })
+
+        val result = repo.sendOnChain(
+            "address",
+            1_000uL,
+            recheckBeforeSubmission = {
+                rechecks++
+                throw AppError("blocked")
+            },
+        )
+
+        assertIs<OnchainSendNotDispatchedError>(result.exceptionOrNull())
+        assertEquals(1, rechecks)
+        assertEquals(0, broadcasts)
+        assertEquals(1, releases)
+        assertNull(store.current())
     }
 
     @Test

@@ -2021,6 +2021,24 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a withdrawal refused once its journal is written never leaves`() = test {
+        val sut = journaledSpark()
+        var isBlocked = false
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+            // The contact is blocked while the journal is written.
+            if (cacheData.value.pendingSparkWithdrawal != null) isBlocked = true
+        }
+        whenever { sparkService.send(any(), anyOrNull()) }.thenReturn(contactWithdrawal())
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, null, recheckBeforeSend = { !isBlocked })
+
+        assertIs<ServiceError.PaymentStoppedAtSubmission>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any(), anyOrNull())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
     fun `a withdrawal whose proof is starting reads as in flight before its journal is written`() = test {
         val sut = journaledSpark()
         var outcomeWhileStarting: SparkWithdrawalOutcome? = null
