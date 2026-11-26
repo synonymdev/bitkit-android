@@ -146,35 +146,51 @@ internal fun ProfileContent(
     when {
         uiState.recoveryPending -> ScreenColumn {
             topBar(Modifier)
-            VerticalSpacer(32.dp)
-            BodyM(
-                text = stringResource(
-                    if (uiState.recoveryCanDisconnect) {
-                        R.string.profile__cleanup_pending
-                    } else {
-                        R.string.profile__wallet_recovery_pending
-                    },
-                ),
-            )
-            if (uiState.recoveryCanDisconnect) {
-                VerticalSpacer(24.dp)
-                if (uiState.recoveryCanRetry) {
-                    PrimaryButton(
-                        text = stringResource(R.string.common__retry),
-                        onClick = onClickRemoteRetry,
-                        enabled = !uiState.isSigningOut,
-                        modifier = Modifier.testTag("ProfileRecoveryRetry"),
-                    )
-                    VerticalSpacer(16.dp)
-                }
-                PrimaryButton(
-                    text = stringResource(R.string.profile__sign_out),
-                    onClick = onClickSignOut,
-                    enabled = !uiState.isSigningOut,
-                    modifier = Modifier.testTag("ProfileRecoveryDisconnect"),
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                    .testTag("ProfileRecoveryContent")
+            ) {
+                VerticalSpacer(32.dp)
+                BodyM(
+                    text = stringResource(
+                        if (uiState.recoveryCanDisconnect) {
+                            R.string.profile__cleanup_pending
+                        } else {
+                            R.string.profile__wallet_recovery_pending
+                        },
+                    ),
                 )
+                if (uiState.recoveryCanDisconnect) {
+                    VerticalSpacer(24.dp)
+                    if (uiState.recoveryCanRetry) {
+                        PrimaryButton(
+                            text = stringResource(R.string.common__retry),
+                            onClick = onClickRemoteRetry,
+                            enabled = !uiState.isSigningOut,
+                            modifier = Modifier.testTag("ProfileRecoveryRetry"),
+                        )
+                        VerticalSpacer(16.dp)
+                    }
+                    PrimaryButton(
+                        text = stringResource(R.string.profile__sign_out),
+                        onClick = onClickSignOut,
+                        enabled = !uiState.isSigningOut,
+                        modifier = Modifier.testTag("ProfileRecoveryDisconnect"),
+                    )
+                }
+                if (uiState.isSigningOut) {
+                    VerticalSpacer(24.dp)
+                    GradientCircularProgressIndicator(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .align(Alignment.CenterHorizontally)
+                            .testTag("ProfileRecoveryProgress")
+                    )
+                }
             }
-            if (uiState.isSigningOut) GradientCircularProgressIndicator(Modifier.size(32.dp))
         }
 
         currentProfile != null -> Box(modifier = Modifier.screen()) {
@@ -566,6 +582,34 @@ private fun Preview() {
                     tags = listOf("Founder", "Bitcoin"),
                     status = null,
                 ),
+            ),
+            onBackClick = {},
+            onClickEdit = {},
+            onClickCopy = {},
+            onClickShare = {},
+            onClickSignOut = {},
+            onDismissSignOutDialog = {},
+            onConfirmSignOut = {},
+            onClickRetry = {},
+            onClickAddTag = {},
+            onRemoveTag = {},
+            onDismissAddTagSheet = {},
+            onSaveTag = {},
+            onDismissCopiedPopup = {},
+        )
+    }
+}
+
+@Preview(showSystemUi = true, widthDp = 320)
+@Composable
+private fun PreviewRecoveryPending() {
+    AppThemeSurface {
+        ProfileContent(
+            uiState = ProfileUiState(
+                recoveryPending = true,
+                recoveryCanDisconnect = true,
+                recoveryCanRetry = true,
+                isSigningOut = true,
             ),
             onBackClick = {},
             onClickEdit = {},

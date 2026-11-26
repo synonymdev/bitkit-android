@@ -1,16 +1,35 @@
 package to.bitkit.ui.screens.profile
 
+import android.content.res.Configuration
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertLeftPositionInRootIsEqualTo
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso.pressBackUnconditionally
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
@@ -18,10 +37,17 @@ import org.junit.Test
 import to.bitkit.R
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
+import java.util.Locale
+import kotlin.math.abs
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @ComposeUi
 class ProfileRecoveryContentTest {
+    private companion object {
+        val GREEK: Locale = Locale.forLanguageTag("el")
+    }
+
     @get:Rule
     val compose = createComposeRule()
 
@@ -79,6 +105,88 @@ class ProfileRecoveryContentTest {
         pressBackUnconditionally()
         compose.onNodeWithTag("ProfileRecoveryDisconnect").assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, back) }
+    }
+
+    @Test
+    fun cleanupRecoveryContentKeepsStandardGutter() {
+        var locale by mutableStateOf(Locale.ENGLISH)
+        var width by mutableStateOf<Dp?>(null)
+        var height by mutableStateOf<Dp?>(null)
+        var fontScale by mutableFloatStateOf(1f)
+        compose.setContent {
+            val configuration = Configuration(LocalConfiguration.current).apply { setLocale(locale) }
+            val localized = LocalContext.current.createConfigurationContext(configuration)
+            CompositionLocalProvider(
+                LocalContext provides localized,
+                LocalConfiguration provides configuration,
+                LocalDensity provides Density(LocalDensity.current.density, fontScale),
+                LocalInspectionMode provides true,
+            ) {
+                AppThemeSurface {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier = Modifier
+                                .then(width?.let { Modifier.width(it) } ?: Modifier.fillMaxWidth())
+                                .then(height?.let { Modifier.height(it) } ?: Modifier)
+                                .testTag("RecoveryFrame")
+                        ) {
+                            ProfileContent(
+                                uiState = ProfileUiState(
+                                    recoveryPending = true,
+                                    recoveryCanDisconnect = true,
+                                    recoveryCanRetry = true,
+                                    isSigningOut = true,
+                                ),
+                                onBackClick = {},
+                                onClickEdit = {},
+                                onClickCopy = {},
+                                onClickShare = {},
+                                onClickSignOut = {},
+                                onDismissSignOutDialog = {},
+                                onConfirmSignOut = {},
+                                onClickRetry = {},
+                                onClickAddTag = {},
+                                onRemoveTag = {},
+                                onDismissAddTagSheet = {},
+                                onSaveTag = {},
+                                onDismissCopiedPopup = {},
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        assertGutter(cleanupText(Locale.ENGLISH))
+        compose.runOnIdle {
+            locale = GREEK
+            width = 320.dp
+            fontScale = 1.3f
+        }
+        assertGutter(cleanupText(GREEK))
+        compose.runOnIdle {
+            height = 400.dp
+            fontScale = 1.5f
+        }
+        compose.onNodeWithTag("ProfileRecoveryDisconnect").assertIsNotDisplayed()
+        compose.onNodeWithTag("ProfileRecoveryDisconnect").performScrollTo().assertIsDisplayed()
+    }
+
+    private fun cleanupText(locale: Locale): String {
+        val configuration = Configuration(context.resources.configuration).apply { setLocale(locale) }
+        return context.createConfigurationContext(configuration).getString(R.string.profile__cleanup_pending)
+    }
+
+    private fun assertGutter(text: String) {
+        val frame = compose.onNodeWithTag("RecoveryFrame").getUnclippedBoundsInRoot()
+        val left = frame.left + 16.dp
+        val right = frame.right - 16.dp
+        compose.onNodeWithText(text).assertExists().assertLeftPositionInRootIsEqualTo(left)
+        listOf("ProfileRecoveryRetry", "ProfileRecoveryDisconnect").forEach {
+            val bounds = compose.onNodeWithTag(it).assertLeftPositionInRootIsEqualTo(left).getUnclippedBoundsInRoot()
+            assertTrue(abs((right - bounds.right).value) < 0.5f, "'$it' right edge '${bounds.right}' is off the gutter")
+        }
+        val progress = compose.onNodeWithTag("ProfileRecoveryProgress").assertExists().getUnclippedBoundsInRoot()
+        assertTrue(progress.left >= left && progress.right <= right, "progress '$progress' crosses the gutter")
     }
 
     @Test
