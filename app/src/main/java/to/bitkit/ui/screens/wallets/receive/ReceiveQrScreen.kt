@@ -589,6 +589,7 @@ fun ReceiveQrView(
     copyMessage: String = stringResource(R.string.wallet__receive_copied),
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val qrButtonTooltipState = rememberTooltipState()
     val coroutineScope = rememberCoroutineScope()
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -642,6 +643,7 @@ fun ReceiveQrView(
                         enabled = copyText.isNotBlank(),
                         onClick = {
                             context.setClipboardText(copyText)
+                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                             coroutineScope.launch { qrButtonTooltipState.show() }
                         },
                         fullWidth = true,
@@ -886,6 +888,7 @@ fun CopyAddressCard(
     copyMessage: String = stringResource(R.string.wallet__receive_copied),
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val shareBitmap = shareQrContent?.let { rememberQrBitmap(it, 400.dp) }
 
     val tooltipState = rememberTooltipState()
@@ -941,6 +944,7 @@ fun CopyAddressCard(
                             size = ButtonSize.Small,
                             onClick = {
                                 context.setClipboardText(address)
+                                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                 coroutineScope.launch { tooltipState.show() }
                             },
                             fullWidth = true,
