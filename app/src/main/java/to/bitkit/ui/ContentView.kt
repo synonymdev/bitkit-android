@@ -678,6 +678,7 @@ fun ContentView(
                                     hardwareWalletId = sheet.hardwareWalletId,
                                     walletState = walletState,
                                     isOffline = connectivityState != ConnectivityState.CONNECTED,
+                                    presentationId = receiveSheetPresentationKey(sheet),
                                 )
                             }
                         }

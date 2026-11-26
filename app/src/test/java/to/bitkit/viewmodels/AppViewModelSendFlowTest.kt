@@ -271,6 +271,7 @@ import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
 import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.screens.paymentrequests.paymentRequestLifecycleStatusRes
+import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.screens.wallets.send.HwRetainedSendStatus
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRetryRoute
@@ -9544,8 +9545,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `received lightning payment closes the active receive sheet after wallet invoice is cleared`() = test {
-        walletState.value = WalletState(bolt11 = "settled-invoice")
         sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "settled-invoice")
         advanceUntilIdle()
         walletState.value = WalletState(bolt11 = "")
         advanceUntilIdle()
@@ -9565,6 +9567,267 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(activityRepo).notifyPaymentActivityChanged()
         verify(activityRepo, never()).handlePaymentEvent("payment-hash")
         verify(notifyPaymentReceivedHandler).invoke(any())
+    }
+
+    @Test
+    fun `late payment of a refreshed receive invoice closes the receive sheet and resets the request`() = test {
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "first-invoice", bolt11PaymentHash = "first-hash")
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "refreshed-invoice", bolt11PaymentHash = "refreshed-hash")
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "first-hash",
+                amountMsat = 4_000_000uL,
+                customRecords = emptyList(),
+            ),
+        )
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(walletRepo).resetReceiveRequest()
+    }
+
+    @Test
+    fun `late payment of any invoice issued while receive is open closes the receive sheet`() = test {
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "opened-invoice", bolt11PaymentHash = "opened-hash")
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "edited-invoice", bolt11PaymentHash = "edited-hash")
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "refreshed-invoice", bolt11PaymentHash = "refreshed-hash")
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "edited-hash",
+                amountMsat = 4_000_000uL,
+                customRecords = emptyList(),
+            ),
+        )
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `payment of an invoice issued for an earlier receive visit preserves the receive sheet`() = test {
+        walletState.value = WalletState(bolt11 = "earlier-invoice", bolt11PaymentHash = "earlier-hash")
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "replaced-invoice", bolt11PaymentHash = "replaced-hash")
+        advanceUntilIdle()
+        sut.hideSheet()
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "current-invoice", bolt11PaymentHash = "current-hash")
+        val sheet = Sheet.Receive()
+        sut.showSheet(sheet)
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "replaced-hash",
+                amountMsat = 4_000_000uL,
+                customRecords = emptyList(),
+            ),
+        )
+        advanceUntilIdle()
+
+        assertEquals(sheet, sut.currentSheet.value)
+    }
+
+    @Test
+    fun `onchain payment to an address issued while receive is open closes the receive sheet`() = test {
+        walletState.value = WalletState(onchainAddress = "bcrt1qfirst")
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        walletState.value = WalletState(onchainAddress = "bcrt1qrotated")
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            event = Event.OnchainTransactionReceived(
+                txid = "txid",
+                details = TransactionDetails(amountSats = 4_000L, inputs = emptyList(), outputs = emptyList()),
+            ),
+            settledReceiveAddress = SettledReceiveAddress("bcrt1qrotated"),
+        )
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `payment of the invoice cached before receive opened preserves the receive sheet`() = test {
+        walletState.value = WalletState(
+            bolt11 = "cached-invoice",
+            bolt11PaymentHash = "cached-hash",
+            onchainAddress = "bcrt1qfirst",
+        )
+        val sheet = Sheet.Receive()
+        sut.showSheet(sheet)
+        advanceUntilIdle()
+        walletState.value = walletState.value.copy(onchainAddress = "bcrt1qrotated")
+        advanceUntilIdle()
+        walletState.value = WalletState(
+            bolt11 = "opened-invoice",
+            bolt11PaymentHash = "opened-hash",
+            onchainAddress = "bcrt1qrotated",
+        )
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "cached-hash",
+                amountMsat = 4_000_000uL,
+                customRecords = emptyList(),
+            ),
+        )
+        advanceUntilIdle()
+
+        assertEquals(sheet, sut.currentSheet.value)
+        verify(walletRepo, never()).resetReceiveRequest()
+    }
+
+    @Test
+    fun `payment of an invoice the cache load publishes after receive opened preserves the receive sheet`() = test {
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(bolt11 = "cached-invoice")))
+        val sheet = Sheet.Receive()
+        sut.showSheet(sheet)
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "cached-invoice", bolt11PaymentHash = "cached-hash")
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "opened-invoice", bolt11PaymentHash = "opened-hash")
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "cached-hash",
+                amountMsat = 4_000_000uL,
+                customRecords = emptyList(),
+            ),
+        )
+        advanceUntilIdle()
+
+        assertEquals(sheet, sut.currentSheet.value)
+    }
+
+    @Test
+    fun `pairing code requested while the receive sheet reads the cache replaces the pending receive`() = test {
+        val releaseCache = CompletableDeferred<Unit>()
+        whenever(cacheStore.data).thenReturn(
+            flow {
+                releaseCache.await()
+                emit(AppCacheData())
+            },
+        )
+        sut.showSheet(Sheet.Receive())
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+
+        needsPairingCode.value = true
+        pairingCodeRequestId.value = 1L
+        runCurrent()
+        val pairingSheet = sut.currentSheet.value
+        assertTrue(pairingSheet is Sheet.Hardware)
+        releaseCache.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(pairingSheet, sut.currentSheet.value)
+        verify(walletRepo, never()).setBip21AmountSats(null)
+    }
+
+    @Test
+    fun `payment of an invoice shown by a replaced receive sheet closes the receive sheet replacing it`() = test {
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "shown-invoice", bolt11PaymentHash = "shown-hash")
+        advanceUntilIdle()
+        val replacement = Sheet.Receive(route = ReceiveRoute.PaymentRequestRecipient)
+        sut.showSheet(replacement)
+        advanceUntilIdle()
+        assertEquals(replacement, sut.currentSheet.value)
+
+        emitNodeEvent(
+            Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "shown-hash",
+                amountMsat = 4_000_000uL,
+                customRecords = emptyList(),
+            ),
+        )
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `onchain payment seen only in the outputs closes the receive sheet after the address rotated`() = test {
+        walletState.value = WalletState(onchainAddress = "bcrt1qfirst")
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        walletState.value = WalletState(onchainAddress = "bcrt1qrotated")
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            event = Event.OnchainTransactionReceived(
+                txid = "txid",
+                details = TransactionDetails(
+                    amountSats = 4_000L,
+                    inputs = emptyList(),
+                    outputs = listOf(TxOutput("", null, "bcrt1qfirst", 4_000L, 0u)),
+                ),
+            ),
+        )
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `hideSheet resets the receive request of the closed receive sheet`() = test {
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        verify(walletRepo, never()).resetReceiveRequest()
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        verify(walletRepo).resetReceiveRequest()
+    }
+
+    @Test
+    fun `showSheet resets the receive request of the receive sheet it replaces`() = test {
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+
+        sut.showSheet(Sheet.Pin())
+        advanceUntilIdle()
+
+        assertTrue(sut.currentSheet.value is Sheet.Pin)
+        verify(walletRepo).resetReceiveRequest()
+    }
+
+    @Test
+    fun `receive request is kept while the receive sheet stays open and other sheets close`() = test {
+        sut.showSheet(Sheet.Pin())
+        advanceUntilIdle()
+        sut.hideSheet()
+        advanceUntilIdle()
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "refreshed-invoice", bolt11PaymentHash = "refreshed-hash")
+        advanceUntilIdle()
+
+        verify(walletRepo, never()).resetReceiveRequest()
     }
 
     @Test
@@ -10281,8 +10544,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             processingStarted.complete(Unit)
             resumeProcessing.await()
         }
-        walletState.value = WalletState(bolt11 = "settled-invoice")
         sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "settled-invoice")
         advanceUntilIdle()
 
         emitNodeEvent(
@@ -10314,9 +10578,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             processingStarted.complete(Unit)
             resumeProcessing.await()
         }
-        walletState.value = WalletState(bolt11 = "settled-invoice")
         val receiveSheet = Sheet.Receive()
         sut.showSheet(receiveSheet)
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "settled-invoice")
         advanceUntilIdle()
 
         emitNodeEvent(

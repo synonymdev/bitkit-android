@@ -349,6 +349,7 @@ class LightningRepoTest : BaseUnitTest() {
             sparkRepo = sparkRepo,
             sparkExitRepo = mock { on { state } doReturn MutableStateFlow(SparkExitState()) },
             backupRepo = mock { on { restoreInProgress } doReturn MutableStateFlow(false) },
+            invoiceParser = { null },
         )
     }
 
