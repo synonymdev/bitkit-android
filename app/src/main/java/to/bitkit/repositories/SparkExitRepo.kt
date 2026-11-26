@@ -924,7 +924,7 @@ class SparkExitRepo @Inject constructor(
         sats: ULong,
         feeRates: FeeRates?,
         approvedFeeSats: ULong?,
-        isDue: (SparkExitState) -> Boolean = { true },
+        isDue: suspend (SparkExitState) -> Boolean = { true },
     ) {
         // Under the tick lock from the check to the saved txid: a cancel either ends the exit before anything is paid
         // or finds the payment and refuses. After the tick in flight, so its save cannot drop the txid.
@@ -939,6 +939,8 @@ class SparkExitRepo @Inject constructor(
                     // Refused before it went out for a higher fee: progress offers it again at that fee.
                     val changed = (it as? OnchainSendNotDispatchedError)?.cause as? OnchainSendChangedError
                     changed?.preparedFeeSats?.let { fee -> noteSavingsRefusal(sats, fee) }
+                    // Refused by a node, or with no answer, it went out: its own retry or the exit's wait takes over.
+                    if (it is OnchainSendPendingError || it is SparkExitError) noteSavingsRefusal(null)
                 }
                 .getOrThrow()
             val record = _state.value.record ?: return@withLock
@@ -950,9 +952,12 @@ class SparkExitRepo @Inject constructor(
         }
     }
 
-    private fun noteSavingsRefusal(sats: ULong, feeSats: ULong) {
-        val record = _state.value.record ?: return
-        val refused = record.copy(savingsRefusal = SparkExitRecord.SavingsRefusal(sats, feeSats))
+    private fun noteSavingsRefusal(sats: ULong, feeSats: ULong) =
+        noteSavingsRefusal(SparkExitRecord.SavingsRefusal(sats, feeSats))
+
+    private fun noteSavingsRefusal(refusal: SparkExitRecord.SavingsRefusal?) {
+        val record = _state.value.record?.takeIf { it.savingsRefusal != refusal } ?: return
+        val refused = record.copy(savingsRefusal = refusal)
         runCatching { saveRecord(refused) }
             .onFailure { Logger.warn("Failed to save the refused Spark exit savings payment", it, context = TAG) }
             .onSuccess { _state.update { it.copy(record = refused) } }
@@ -1018,9 +1023,12 @@ class SparkExitRepo @Inject constructor(
         }
     }
 
-    private fun savingsRefusal(exit: SparkExitState): SparkExitRecord.SavingsRefusal? {
+    /** Reads the savings send attempt itself: the flags a tick sets are not read yet after a relaunch. */
+    private suspend fun savingsRefusal(exit: SparkExitState): SparkExitRecord.SavingsRefusal? {
         val record = exit.record ?: return null
-        val hasSavingsSend = exit.isSavingsSendUnresolved || exit.isSavingsPaymentRefused
+        val attempt = savingsSend(record)
+        val hasSavingsSend = exit.isSavingsSendUnresolved || exit.isSavingsPaymentRefused ||
+            attempt?.isUnresolved == true || SparkExitMath.isSavingsPaymentRefused(record, attempt)
         return SparkExitMath.savingsRefusal(record, exit.fundingState, hasSavingsSend)
     }
 
@@ -1066,7 +1074,7 @@ class SparkExitRepo @Inject constructor(
                             .getOrThrow()
                         val txid = fundingTxid(outcome, refused.amountSats)
                         val current = _state.value.record ?: return@withLock
-                        val paid = current.copy(fundingPaymentTxid = txid)
+                        val paid = current.copy(fundingPaymentTxid = txid, savingsRefusal = null)
                         saveRecord(paid)
                         _state.update {
                             it.copy(

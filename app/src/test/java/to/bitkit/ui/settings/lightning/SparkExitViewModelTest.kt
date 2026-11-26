@@ -1,6 +1,7 @@
 package to.bitkit.ui.settings.lightning
 
 import android.content.Context
+import com.synonym.bitkitcore.FeeRates
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Test
@@ -9,6 +10,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -25,6 +27,7 @@ import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
 import to.bitkit.repositories.SparkExitSavingsFunding
+import to.bitkit.repositories.SparkExitSavingsRetry
 import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.SparkState
@@ -303,6 +306,31 @@ class SparkExitViewModelTest : BaseUnitTest() {
         // Savings' coin selection needs 600 sats where the estimate says 420: the next funding prices that.
         verify(repo).savingsFundingFee(null)
         verify(repo).savingsFundingFee(600uL)
+    }
+
+    @Test
+    fun `progress pays a start's refused savings payment at its shown price, then prices a higher fee`() = test {
+        val refusal = SparkExitRecord.SavingsRefusal(20_000uL, 650uL)
+        exitState.value = SparkExitState(record = SparkExitFixtures.record().copy(savingsRefusal = refusal))
+        val retry = SparkExitSavingsRetry(20_000uL, 650uL, FeeRates(fast = 7u, mid = 4u, slow = 1u), canPay = true)
+        whenever(repo.priceSavingsRefusal()).thenReturn(Result.success(retry))
+        whenever(repo.paySavingsRefusal(retry))
+            .thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 800uL))))
+        val context = mock<Context> { on { getString(any()) } doReturn "Fees changed" }
+        val sut = SparkExitViewModel(context, repo, sparkRepo)
+        sut.loadSavingsRetry()
+        assertEquals(20_650uL, sut.uiState.value.savingsRetryOffer?.totalSats)
+        assertTrue(sut.uiState.value.offersSavingsRetry)
+
+        sut.retrySavingsPayment()
+
+        verify(repo).paySavingsRefusal(retry)
+        verify(repo, never()).retrySavingsPayment()
+        verify(repo, times(2)).priceSavingsRefusal()
+        // Once the refusal is at 800, the price at 650 is never offered.
+        val raised = SparkExitFixtures.record().copy(savingsRefusal = refusal.copy(feeSats = 800uL))
+        exitState.value = SparkExitState(record = raised)
+        assertNull(sut.uiState.value.savingsRetryOffer)
     }
 
     @Test

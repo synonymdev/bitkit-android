@@ -1628,6 +1628,40 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a savings retry refused for a fee that rose again is offered at that fee, never at the older one`() = test {
+        var refusedFee = 650uL
+        stubFunding {
+            Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = refusedFee)))
+        }
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.loadQuote().getOrThrow()
+        whenever(lightning.getFeeRates()).thenReturn(Result.success(FeeRates(fast = 7u, mid = 4u, slow = 1u)))
+        whenever(lightning.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success(420uL))
+        whenever(lightning.getBalancesAsync()).thenReturn(Result.success(balances(100_000uL)))
+        sut.savingsFundingFee().getOrThrow()
+        assertTrue(sut.start(fundFromSavings = true).isFailure)
+        val stale = sut.priceSavingsRefusal().getOrThrow()
+
+        refusedFee = 800uL
+        assertTrue(sut.paySavingsRefusal(stale).isFailure)
+        assertEquals(800uL, assertNotNull(store.load()).savingsRefusal?.feeSats)
+        assertTrue(sut.paySavingsRefusal(stale).isFailure, "the older fee is never sent again")
+        assertEquals(800uL, sut.priceSavingsRefusal().getOrThrow().feeSats)
+        sut.onAppBackgrounded()
+
+        verify(lightning, times(2)).sendOnChain(
+            any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            paymentDeadlineAt = anyOrNull(),
+            contactPublicKey = anyOrNull(),
+            approvedMiningFeeSats = anyOrNull(),
+            reviewHigherFee = anyOrNull(),
+        )
+    }
+
+    @Test
     fun `savings never pays more than the confirmed funding when the start quotes again`() = test {
         stubFunding { Result.success(OnchainSendOutcome.Accepted("paid")) }
         val sdk = FakeSparkExitRecovering()

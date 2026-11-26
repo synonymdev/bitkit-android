@@ -313,10 +313,9 @@ class SparkExitViewModel @Inject constructor(
      */
     fun loadSavingsRetry() {
         val hasRefusal = _uiState.value.record?.savingsRefusal != null
-        // Only the latest price shows: an older one may be at a fee that was refused since.
+        // Only the latest price shows; one below a fee refused since is never offered (savingsRetryOffer).
         savingsRetryPricing?.cancel()
-        _uiState.update { it.copy(savingsRetry = null) }
-        if (!hasRefusal) return
+        if (!hasRefusal) return _uiState.update { it.copy(savingsRetry = null) }
         savingsRetryPricing = viewModelScope.launch {
             val retry = sparkExitRepo.priceSavingsRefusal().getOrNull()
             _uiState.update { it.copy(savingsRetry = retry) }
@@ -329,7 +328,7 @@ class SparkExitViewModel @Inject constructor(
      */
     fun retrySavingsPayment() {
         val state = _uiState.value
-        if (state.isRetryingSavingsPayment) return
+        if (state.isRetryingSavingsPayment || !state.offersSavingsRetry) return
         viewModelScope.launch {
             _uiState.update { it.copy(isRetryingSavingsPayment = true) }
             val retry = state.savingsRetryOffer
