@@ -426,6 +426,14 @@ class SparkExitViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `progress never offers to pay a refused savings payment again once funding reached the address`() {
+        val refused = SparkExitUiState(record = SparkExitFixtures.record(), isSavingsPaymentRefused = true)
+
+        assertTrue(refused.offersSavingsRetry)
+        assertFalse(refused.copy(fundingSeenSats = 1_000uL).offersSavingsRetry)
+    }
+
+    @Test
     fun `progress says a savings payment may still land only while the exit waits for it`() {
         val paid = SparkExitFixtures.record().copy(fundingPaymentTxid = "pending")
         val landing = SparkExitUiState(

@@ -128,7 +128,10 @@
     <string name="contacts__edit_public_note">Please note contact information is stored in public files. Changes you make to a contact in Bitkit will not update their profile.</string>
     <string name="contacts__edit_save_error">Failed to save contact</string>
     <string name="contacts__import_all">Import All</string>
-    <string name="contacts__import_friends_count" tools:ignore="PluralsCandidate">%1$d friends</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d friend</item>
+        <item quantity="other">%1$d friends</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Found\n&lt;accent&gt;profile &amp; contacts&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit found profile and contacts data connected to pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Select</string>
@@ -793,6 +796,7 @@
     <string name="profile__auth_approval_ok">OK</string>
     <string name="profile__auth_approval_paykit_access_description">This service will manage your private Paykit data and send Paykit messages for you. Your pubky secret and wallet keys stay private.</string>
     <string name="profile__auth_approval_permissions">Requested permissions</string>
+    <string name="profile__auth_approval_relay">Relay</string>
     <string name="profile__auth_approval_service">A service is requesting permission to access and edit your &lt;accent&gt;%1$s&lt;/accent&gt; data.</string>
     <string name="profile__auth_approval_service_named">&lt;accent&gt;%1$s&lt;/accent&gt; is requesting permission to access and edit your &lt;accent&gt;%2$s&lt;/accent&gt; data.</string>
     <string name="profile__auth_approval_service_unknown">Unknown service</string>
@@ -821,6 +825,7 @@
     <string name="profile__auth_error_invalid_capabilities">The requested access does not match this Bitkit claim.</string>
     <string name="profile__auth_error_invalid_url">This Pubky authorization link is invalid.</string>
     <string name="profile__auth_error_missing_claim">This authorization is missing its required Bitkit claim.</string>
+    <string name="profile__auth_error_other_pubky">This request is for %1$s, not this wallet\'s pubky.</string>
     <string name="profile__auth_error_signup_code_rejected">The homeserver did not accept this signup code. Try again or use another signup link.</string>
     <string name="profile__auth_error_timeout">The authorization relay did not respond in time. Please try again.</string>
     <string name="profile__auth_error_title">Authorization Failed</string>
@@ -1669,6 +1674,7 @@
     <string name="wallet__payment_request_queued_description">Your payment request is queued and will send automatically</string>
     <string name="wallet__payment_request_rate_unavailable">Payment rates are unavailable or expired. Try again when online.</string>
     <string name="wallet__payment_request_recipient">RECIPIENT</string>
+    <string name="wallet__payment_request_recipient_failed">Couldn\'t check which contacts can receive a payment request. Check your connection.</string>
     <string name="wallet__payment_request_recipient_no_match">No matching saved contact with a private connection.</string>
     <string name="wallet__payment_request_recipient_unavailable">Payment requests can only be sent to a saved contact with a private connection.</string>
     <string name="wallet__payment_request_request">Request</string>
@@ -1781,6 +1787,7 @@
     <string name="wallet__send_pending__abandon">Cancel expired payment</string>
     <string name="wallet__send_pending__abandon_checking">Checking the network. This can take up to 30 seconds.</string>
     <string name="wallet__send_pending__abandon_done">Payment cancelled. Its coins are back in your wallet.</string>
+    <string name="wallet__send_pending__abandon_exit_note">This force transfer no longer needs this payment. Bitkit first checks the network, then sends its coins back to your wallet so it can never confirm. This costs a network fee.</string>
     <string name="wallet__send_pending__abandon_note">This payment\'s request has ended. Bitkit first checks the network, then sends the payment\'s coins back to your wallet so the original payment can never confirm. This costs a network fee.</string>
     <string name="wallet__send_pending__abandon_pending">The cancellation was sent but is not confirmed yet. Open this payment again later to finish it.</string>
     <string name="wallet__send_pending__abandon_refused">This payment may still reach the network, so it cannot be cancelled.</string>

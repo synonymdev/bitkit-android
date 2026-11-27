@@ -44,7 +44,7 @@ import to.bitkit.ui.screens.transfer.components.ProgressSteps
 import to.bitkit.ui.screens.transfer.components.TransferAnimationView
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.screenWidth
+import to.bitkit.ui.utils.phoneScreenWidth
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 
@@ -141,7 +141,7 @@ internal fun Content(
                         contentDescription = null,
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
-                            .width(screenWidth() * CHECK_SCREEN_SHARE)
+                            .width(phoneScreenWidth() * CHECK_SCREEN_SHARE)
                             .aspectRatio(1f)
                             .testTag("TransferSuccessCheck")
                     )

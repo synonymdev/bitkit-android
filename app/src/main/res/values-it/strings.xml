@@ -584,6 +584,8 @@
     <string name="profile__add_link_note">Nota: qualsiasi link aggiunto sarà visibile pubblicamente.</string>
     <string name="profile__add_tag">Aggiungi Tag</string>
     <string name="profile__auth_approval_details">Dettagli</string>
+    <string name="profile__auth_approval_relay">Relay</string>
+    <string name="profile__auth_error_other_pubky">Questa richiesta è per %1$s, non per il pubky di questo portafoglio.</string>
     <string name="profile__create_nav_title">Crea Profilo</string>
     <string name="profile__edit_nav_title">Modifica Profilo</string>
     <string name="profile__nav_title">Profilo</string>
@@ -1215,6 +1217,7 @@
     <string name="wallet__send_paykit_no_route__description">Questo contatto non ha alcun metodo di pagamento che Bitkit possa usare ora.</string>
     <string name="wallet__send_paykit_no_route__title">Impossibile pagare questo contatto</string>
     <string name="wallet__send_paykit_withdrawal_settling__description">Un precedente prelievo dal tuo saldo di spesa è ancora in fase di regolamento. Riprova al termine.</string>
+    <string name="wallet__send_pending__abandon_exit_note">Questo trasferimento forzato non ha più bisogno di questo pagamento. Bitkit controlla prima la rete, poi rimanda le sue monete al tuo wallet, così non potrà mai essere confermato. Questo costa una commissione di rete.</string>
     <string name="wallet__send_pending__abandon_transfer_note">I trasferimenti al saldo di spesa non sono più disponibili. Bitkit controlla prima la rete, poi rimanda le monete di questo trasferimento al tuo wallet, così il trasferimento originale non potrà mai essere confermato. Questo costa una commissione di rete.</string>
     <string name="wallet__send_pending__description">Questo pagamento sta richiedendo un po\' più tempo del previsto. Puoi continuare a utilizzare Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Pagamento in sospeso</string>
@@ -1360,7 +1363,11 @@
     <string name="contacts__edit_public_note">Tieni presente che le informazioni dei contatti sono salvate in file pubblici. Le modifiche che apporti a un contatto in Bitkit non aggiorneranno il suo profilo.</string>
     <string name="contacts__edit_save_error">Impossibile salvare il contatto</string>
     <string name="contacts__import_all">Importa Tutti</string>
-    <string name="contacts__import_friends_count">%1$d amici</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d amico</item>
+        <item quantity="many">%1$d amici</item>
+        <item quantity="other">%1$d amici</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Trovati\n&lt;accent&gt;profilo e contatti&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit ha trovato dati di profilo e contatti collegati al pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Seleziona</string>
@@ -1802,6 +1809,7 @@
     <string name="wallet__payment_request_queued_description">La tua richiesta di pagamento è in coda e verrà inviata automaticamente</string>
     <string name="wallet__payment_request_rate_unavailable">I tassi di pagamento non sono disponibili o sono scaduti. Riprova quando sei online.</string>
     <string name="wallet__payment_request_recipient">DESTINATARIO</string>
+    <string name="wallet__payment_request_recipient_failed">Impossibile verificare quali contatti possono ricevere una richiesta di pagamento. Controlla la connessione.</string>
     <string name="wallet__payment_request_recipient_no_match">Nessun contatto salvato corrispondente con una connessione privata.</string>
     <string name="wallet__payment_request_recipient_unavailable">Le richieste di pagamento possono essere inviate solo a un contatto salvato con una connessione privata.</string>
     <string name="wallet__payment_request_request">Richiedi</string>

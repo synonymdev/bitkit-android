@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -126,7 +127,7 @@ fun SendPendingScreen(
     AbandonExpiredPayment(
         abandonError = uiState.abandonErrorMessage(),
         isAbandoned = uiState.abandoned,
-        isTransfer = uiState.abandonableAttempt?.isBlocktankFunding == true,
+        note = uiState.abandonableAttempt.abandonNote(),
         showConfirmation = showAbandonConfirmation,
         onConfirm = { requiresPin, useBiometrics ->
             showAbandonConfirmation = false
@@ -159,7 +160,7 @@ fun SendPendingScreen(
             refusalReason = refusalReason,
             onClose = onClose,
             onViewDetails = onViewDetails,
-            canRetry = uiState.recoveryAttempt != null,
+            canRetry = uiState.canRetry,
             isRecovering = uiState.isRecovering,
             recoveryError = uiState.abandonErrorMessage() ?: uiState.recoveryErrorMessage(),
             onRetry = onRetry,
@@ -174,7 +175,7 @@ fun SendPendingScreen(
 private fun AbandonExpiredPayment(
     abandonError: String?,
     isAbandoned: Boolean,
-    isTransfer: Boolean,
+    @StringRes note: Int,
     showConfirmation: Boolean,
     onConfirm: (requiresPin: Boolean, useBiometrics: Boolean) -> Unit,
     onDismiss: () -> Unit,
@@ -199,19 +200,20 @@ private fun AbandonExpiredPayment(
     if (showConfirmation) {
         AppAlertDialog(
             title = stringResource(R.string.wallet__send_pending__abandon),
-            text = stringResource(
-                if (isTransfer) {
-                    R.string.wallet__send_pending__abandon_transfer_note
-                } else {
-                    R.string.wallet__send_pending__abandon_note
-                }
-            ),
+            text = stringResource(note),
             confirmText = stringResource(R.string.common__continue),
             dismissText = stringResource(R.string.common__cancel),
             onConfirm = { onConfirm(isPinEnabled && pinForPayments, isBiometricEnabled && isBiometrySupported) },
             onDismiss = onDismiss,
         )
     }
+}
+
+@StringRes
+private fun OnchainSendAttempt?.abandonNote(): Int = when {
+    this?.isBlocktankFunding == true -> R.string.wallet__send_pending__abandon_transfer_note
+    this?.mayFundSparkExit == true -> R.string.wallet__send_pending__abandon_exit_note
+    else -> R.string.wallet__send_pending__abandon_note
 }
 
 @Composable

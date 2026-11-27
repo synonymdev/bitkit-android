@@ -577,6 +577,8 @@
     <string name="profile__add_tag">إضافة علامة</string>
     <string name="profile__auth_approval_details">التفاصيل</string>
     <string name="profile__auth_approval_ok">حسنًا</string>
+    <string name="profile__auth_approval_relay">المُرحّل</string>
+    <string name="profile__auth_error_other_pubky">هذا الطلب موجّه إلى %1$s، وليس إلى pubky هذه المحفظة.</string>
     <string name="profile__create_nav_title">إنشاء ملف شخصي</string>
     <string name="profile__nav_title">الملف الشخصي</string>
     <string name="profile__retry_load">حاول مرة أخرى</string>
@@ -1188,6 +1190,7 @@
     <string name="wallet__send_paykit_no_route__description">ليس لدى جهة الاتصال هذه أي طريقة دفع يمكن لـ Bitkit استخدامها الآن.</string>
     <string name="wallet__send_paykit_no_route__title">لا يمكن الدفع لجهة الاتصال هذه</string>
     <string name="wallet__send_paykit_withdrawal_settling__description">لا يزال سحب سابق من رصيد الإنفاق قيد التسوية. حاول مرة أخرى بعد اكتماله.</string>
+    <string name="wallet__send_pending__abandon_exit_note">لم يعد هذا التحويل القسري بحاجة إلى هذه الدفعة. يتحقق Bitkit أولًا من الشبكة، ثم يعيد عملاتها إلى محفظتك حتى لا تتأكد أبدًا. يكلّف ذلك رسوم شبكة.</string>
     <string name="wallet__send_pending__abandon_transfer_note">لم تعد التحويلات إلى رصيد الإنفاق متاحة. يتحقق Bitkit أولًا من الشبكة، ثم يعيد عملات هذا التحويل إلى محفظتك حتى لا يتأكد التحويل الأصلي أبدًا. يكلّف ذلك رسوم شبكة.</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">جارٍ دفع\n&lt;accent&gt;الفاتورة...&lt;/accent&gt;</string>
@@ -1331,7 +1334,14 @@
     <string name="contacts__edit_public_note">يرجى ملاحظة أن معلومات جهات الاتصال مخزنة في ملفات عامة. التغييرات التي تجريها على جهة اتصال في Bitkit لن تحدّث ملفها الشخصي.</string>
     <string name="contacts__edit_save_error">فشل حفظ جهة الاتصال</string>
     <string name="contacts__import_all">استيراد الكل</string>
-    <string name="contacts__import_friends_count">%1$d أصدقاء</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="zero">%1$d أصدقاء</item>
+        <item quantity="one">%1$d صديق</item>
+        <item quantity="two">%1$d صديقان</item>
+        <item quantity="few">%1$d أصدقاء</item>
+        <item quantity="many">%1$d صديقًا</item>
+        <item quantity="other">%1$d صديق</item>
+    </plurals>
     <string name="contacts__import_overview_headline">تم العثور على\n&lt;accent&gt;ملف شخصي وجهات اتصال&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">عثر Bitkit على بيانات ملف شخصي وجهات اتصال مرتبطة بـ pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">تحديد</string>
@@ -1795,6 +1805,7 @@
     <string name="wallet__payment_request_queued_description">طلب الدفع الخاص بك في قائمة الانتظار وسيُرسل تلقائيًا</string>
     <string name="wallet__payment_request_rate_unavailable">أسعار الدفع غير متاحة أو منتهية الصلاحية. حاول مرة أخرى عند الاتصال بالإنترنت.</string>
     <string name="wallet__payment_request_recipient">المستلم</string>
+    <string name="wallet__payment_request_recipient_failed">تعذّر التحقق من جهات الاتصال التي يمكنها استلام طلب دفع. تحقق من اتصالك.</string>
     <string name="wallet__payment_request_recipient_no_match">لا توجد جهة اتصال محفوظة مطابقة لديها اتصال خاص.</string>
     <string name="wallet__payment_request_recipient_unavailable">لا يمكن إرسال طلبات الدفع إلا إلى جهة اتصال محفوظة لديها اتصال خاص.</string>
     <string name="wallet__payment_request_request">طلب</string>

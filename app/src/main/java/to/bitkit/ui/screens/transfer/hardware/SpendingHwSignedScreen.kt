@@ -34,7 +34,7 @@ import to.bitkit.ui.screens.transfer.SparkFundingViewModel
 import to.bitkit.ui.screens.transfer.SpendingFeeGrid
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.screenWidth
+import to.bitkit.ui.utils.phoneScreenWidth
 import to.bitkit.ui.utils.withAccent
 import kotlin.time.Duration.Companion.seconds
 
@@ -98,7 +98,7 @@ internal fun Content(
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .size(screenWidth() * HW_ILLUSTRATION_SIZE_RATIO)
+                    .size(phoneScreenWidth() * HW_ILLUSTRATION_SIZE_RATIO)
                     .testTag("HardwareTransferSignedCheck")
             )
         }

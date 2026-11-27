@@ -587,7 +587,9 @@
     <string name="profile__add_tag">Vložit tag</string>
     <string name="profile__auth_approval_authorize">Autorizovat</string>
     <string name="profile__auth_approval_details">Podrobnosti</string>
+    <string name="profile__auth_approval_relay">Relay</string>
     <string name="profile__auth_approval_title">Autorizovat</string>
+    <string name="profile__auth_error_other_pubky">Tento požadavek je určen pro %1$s, ne pro pubky této peněženky.</string>
     <string name="profile__create_nav_title">Vytvořit profil</string>
     <string name="profile__edit_nav_title">Upravit profil</string>
     <string name="profile__nav_title">Profil</string>
@@ -1217,6 +1219,7 @@
     <string name="wallet__send_paykit_no_route__description">Tento kontakt nemá žádnou platební metodu, kterou by Bitkit mohl nyní použít.</string>
     <string name="wallet__send_paykit_no_route__title">Tomuto kontaktu nelze zaplatit</string>
     <string name="wallet__send_paykit_withdrawal_settling__description">Dřívější výběr z vašeho zůstatku pro výdaje se stále vypořádává. Zkuste to znovu, až se dokončí.</string>
+    <string name="wallet__send_pending__abandon_exit_note">Tento vynucený převod už tuto platbu nepotřebuje. Bitkit nejprve zkontroluje síť a pak vrátí její mince do vaší peněženky, aby se nikdy nepotvrdila. Stojí to síťový poplatek.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Převody na útratový zůstatek už nejsou dostupné. Bitkit nejprve zkontroluje síť a pak vrátí mince tohoto převodu do vaší peněženky, aby se původní převod nikdy nepotvrdil. Stojí to síťový poplatek.</string>
     <string name="wallet__send_pending__description">Tato platba trvá o něco déle, než se očekávalo. Bitkit můžete používat i nadále.</string>
     <string name="wallet__send_pending__nav_title">Platba čeká na vyřízení</string>
@@ -1363,7 +1366,12 @@
     <string name="contacts__edit_public_note">Upozorňujeme, že informace o kontaktech jsou uloženy ve veřejných souborech. Změny kontaktu provedené v Bitkitu neaktualizují jeho profil.</string>
     <string name="contacts__edit_save_error">Kontakt se nepodařilo uložit</string>
     <string name="contacts__import_all">Importovat vše</string>
-    <string name="contacts__import_friends_count">Počet přátel: %1$d</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d přítel</item>
+        <item quantity="few">%1$d přátelé</item>
+        <item quantity="many">%1$d přítele</item>
+        <item quantity="other">%1$d přátel</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Nalezen\n&lt;accent&gt;profil a kontakty&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit našel data profilu a kontaktů propojená s pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Vybrat</string>
@@ -1802,6 +1810,7 @@
     <string name="wallet__payment_request_queued_description">Vaše žádost o platbu je ve frontě a bude odeslána automaticky</string>
     <string name="wallet__payment_request_rate_unavailable">Platební kurzy nejsou k dispozici nebo vypršely. Zkuste to znovu, až budete online.</string>
     <string name="wallet__payment_request_recipient">PŘÍJEMCE</string>
+    <string name="wallet__payment_request_recipient_failed">Nepodařilo se ověřit, které kontakty mohou přijmout žádost o platbu. Zkontrolujte připojení.</string>
     <string name="wallet__payment_request_recipient_no_match">Žádný odpovídající uložený kontakt se soukromým spojením.</string>
     <string name="wallet__payment_request_recipient_unavailable">Žádosti o platbu lze posílat pouze uloženým kontaktům se soukromým spojením.</string>
     <string name="wallet__payment_request_request">Požádat</string>

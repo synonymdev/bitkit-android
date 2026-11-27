@@ -99,6 +99,7 @@ sealed class PubkyAuthRequestError(cause: Throwable? = null) : AppError(cause = 
     data object DuplicateBitkitClaim : PubkyAuthRequestError()
     data class UnsupportedBitkitClaim(val value: String) : PubkyAuthRequestError()
     data object InvalidBitkitClaimCapabilities : PubkyAuthRequestError()
+    data class SignerMismatch(val expectedSigner: String) : PubkyAuthRequestError()
 }
 
 @Immutable
@@ -130,6 +131,7 @@ data class PubkyAuthRequest(
     val homeserverPublicKey: String? = null,
     val signupToken: String? = null,
     val authorizationUrl: String? = rawUrl,
+    val expectedSigner: String? = null,
 ) {
     val isSignup: Boolean
         get() = isSignupUrl(rawUrl)
@@ -139,7 +141,159 @@ data class PubkyAuthRequest(
 
     fun requiresIdentityCreation(hasIdentity: Boolean): Boolean = isSignup && (!isGrantSignup || !hasIdentity)
 
+    /**
+     * The relay URL that receives the authorization, without user info or fragment so the host cannot be disguised.
+     * This is a delivery destination, not a service identity. Null only when the request has no relay.
+     */
+    val relayDisplayUrl: String? get() = displayRelay(relay)
+
     companion object {
+        /** Query parameter naming the only pubky that may approve a grant sign-in. */
+        private const val EXPECTED_SIGNER_PARAMETER = "spk"
+
+        /** A 32-byte key in canonical z-base-32: 52 symbols, the last one carrying a single bit. */
+        private val CANONICAL_Z32_KEY = Regex("[ybndrfg8ejkmcpqxot1uwisza345h769]{51}[yo]")
+
+        /** Length of a z-base-32 key carrying the `pubky` prefix. */
+        private const val PREFIXED_KEY_LENGTH = 57
+
+        /**
+         * Reads the pubky a sign-in request must be approved with. Absent is fine; a repeated value or anything other
+         * than a bare canonical z-base-32 key makes the request invalid, as in the Pubky SDK parser for `signin_grant`.
+         * Only signup requests ignore the parameter, so a sign-in this parser reads differently from the SDK is still
+         * held to it. Upstream reads `spk` for `signin_grant` alone (pubky/pubky-homeserver at d95161af3e:
+         * `pubky-sdk/src/actors/auth/deep_links/signin_grant.rs:106` is the only caller of `parse_expected_signer`,
+         * `deep_link.rs:211` tests that `signin` and `signup_grant` ignore it, `docs/AUTH.md:81`).
+         */
+        fun parseExpectedSigner(rawUrl: String): Result<String?> = runCatching {
+            val uri = URI(rawUrl)
+            if (uri.isSignupRequest()) return@runCatching null
+            val values = uri.rawQuery.orEmpty()
+                .split("&")
+                .filter { it.isNotEmpty() }
+                .map { it.split("=", limit = 2) }
+                .filter { decodeQueryComponent(it.first()) == EXPECTED_SIGNER_PARAMETER }
+                .map { decodeQueryComponent(it.getOrElse(1) { "" }) }
+            require(values.size <= 1) { "Duplicate Pubky auth parameter: $EXPECTED_SIGNER_PARAMETER" }
+            values.singleOrNull()?.also {
+                require(CANONICAL_Z32_KEY.matches(it)) { "Malformed Pubky auth parameter: $EXPECTED_SIGNER_PARAMETER" }
+            }
+        }.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { Result.failure(PubkyAuthRequestError.InvalidUrl(it)) },
+        )
+
+        /** Whether [publicKey], bare or with the `pubky` prefix, may approve a request naming [expectedSigner]. */
+        fun isExpectedSigner(expectedSigner: String?, publicKey: String): Boolean {
+            if (expectedSigner == null) return true
+            val isPrefixed = publicKey.length == PREFIXED_KEY_LENGTH && publicKey.startsWith("pubky")
+            return expectedSigner == if (isPrefixed) publicKey.removePrefix("pubky") else publicKey
+        }
+
+        private val RELAY_SCHEMES = setOf("http", "https")
+
+        /** A relay host as the Pubky SDK's URL parser would keep it, with an optional port. */
+        private val RELAY_HOST_PORT = Regex("""(\[[0-9a-f:.]+]|[a-z0-9._~-]+)(:[0-9]{1,5})?""")
+
+        /** A host label the SDK's URL parser reads as a number, which makes the whole host an IPv4 address. */
+        private val NUMERIC_HOST_LABEL = Regex("[0-9]+|0x[0-9a-f]*")
+
+        /** An IPv4 address in the only form the SDK's URL parser leaves unchanged. */
+        private val CANONICAL_IPV4 = "(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])".let { Regex("""($it\.){3}$it""") }
+
+        /**
+         * Characters the SDK's URL parser (rust-url 2.5.8, `url/src/parser.rs`) changes in the path of an http(s) URL:
+         * its `PATH` set percent-encodes them, and a backslash becomes a slash.
+         */
+        private const val RELAY_PATH_REWRITTEN_CHARACTERS = "\\\"<>`{}"
+
+        /** Characters the SDK's URL parser percent-encodes in the query of an http(s) URL (`SPECIAL_QUERY`). */
+        private const val RELAY_QUERY_REWRITTEN_CHARACTERS = "\"<>'"
+
+        /** Ports the SDK's URL parser drops because they are the scheme's default. */
+        private val RELAY_DEFAULT_PORTS = mapOf("http" to 80, "https" to 443)
+
+        /** Highest TCP port. */
+        private const val MAX_PORT = 65535
+
+        /** Number of 16-bit groups in an IPv6 address. */
+        private const val IPV6_GROUPS = 8
+
+        /** Highest value of one IPv6 group. */
+        private const val MAX_IPV6_GROUP = 0xFFFF
+
+        /** First code point past printable ASCII. */
+        private const val DEL = 0x7F
+
+        /**
+         * The relay as shown on the approval sheet: scheme, host, port, path and query, exactly as the Pubky SDK's URL
+         * parser keeps them. Null when [relay] is not already in that form apart from letter case, user info, the
+         * fragment and a missing root path: a space, control or non-ASCII characters, a backslash before the query,
+         * characters the parser percent-encodes in the path or in the query, a missing, percent-encoded or
+         * non-canonical host, a default, padded or out-of-range port, or a `.` or `..` path segment.
+         */
+        fun displayRelay(relay: String): String? {
+            if (relay.any { it.code <= ' '.code || it.code >= DEL }) return null
+            val schemeEnd = relay.indexOf("://")
+            if (schemeEnd <= 0) return null
+            val scheme = relay.substring(0, schemeEnd).lowercase().takeIf { it in RELAY_SCHEMES } ?: return null
+            val rest = relay.substring(schemeEnd + "://".length)
+            val authorityEnd = rest.indexOfAny(charArrayOf('/', '?', '#')).takeIf { it >= 0 } ?: rest.length
+            val authority = rest.substring(0, authorityEnd)
+            val hostPort = authority.substringAfterLast('@').lowercase()
+            val pathAndQuery = rest.substring(authorityEnd).substringBefore('#')
+            val path = pathAndQuery.substringBefore('?')
+            val isRewritten = '\\' in authority ||
+                path.any { it in RELAY_PATH_REWRITTEN_CHARACTERS } ||
+                pathAndQuery.substringAfter('?', "").any { it in RELAY_QUERY_REWRITTEN_CHARACTERS } ||
+                path.split('/').any { it.lowercase().replace("%2e", ".") in setOf(".", "..") }
+            if (isRewritten || !isUnchangedRelayHostPort(scheme, hostPort)) return null
+            val rootPath = if (pathAndQuery.startsWith("/")) "" else "/"
+            return "$scheme://$hostPort$rootPath$pathAndQuery"
+        }
+
+        private fun isUnchangedRelayHostPort(scheme: String, hostPort: String): Boolean {
+            val (host, portSuffix) = RELAY_HOST_PORT.matchEntire(hostPort)?.destructured ?: return false
+            val port = portSuffix.removePrefix(":")
+            val isUnchangedPort = port.isEmpty() || port.toInt().let {
+                port == it.toString() && it <= MAX_PORT && it != RELAY_DEFAULT_PORTS[scheme]
+            }
+            if (!isUnchangedPort) return false
+            if (host.startsWith("[")) return isCanonicalIpv6(host.removeSurrounding("[", "]"))
+            val readsAsNumber = NUMERIC_HOST_LABEL.matches(host.removeSuffix(".").substringAfterLast('.'))
+            return !readsAsNumber || CANONICAL_IPV4.matches(host)
+        }
+
+        private fun isCanonicalIpv6(address: String): Boolean {
+            val halves = address.split("::")
+            val head = halves[0].split(':').filter { it.isNotEmpty() }
+            val tail = halves.getOrNull(1)?.split(':')?.filter { it.isNotEmpty() }.orEmpty()
+            val missing = IPV6_GROUPS - head.size - tail.size
+            val isComplete = if (halves.size == 1) missing == 0 else halves.size == 2 && missing >= 1
+            if (!isComplete || '.' in address) return false
+            val groups = (head + List(missing) { "0" } + tail).map { group ->
+                group.toIntOrNull(radix = 16)?.takeIf { it <= MAX_IPV6_GROUP } ?: return false
+            }
+            var runStart = -1
+            var runLength = 0
+            var index = 0
+            while (index < groups.size) {
+                val end = (index until groups.size).firstOrNull { groups[it] != 0 } ?: groups.size
+                if (end - index > runLength) {
+                    runStart = index
+                    runLength = end - index
+                }
+                index = maxOf(end, index + 1)
+            }
+            val hex = { part: List<Int> -> part.joinToString(":") { it.toString(radix = 16) } }
+            val canonical = if (runLength < 2) {
+                hex(groups)
+            } else {
+                "${hex(groups.take(runStart))}::${hex(groups.drop(runStart + runLength))}"
+            }
+            return canonical == address
+        }
+
         fun parse(
             rawUrl: String,
             clientId: String,
@@ -148,7 +302,11 @@ data class PubkyAuthRequest(
             homeserverPublicKey: String? = null,
             signupToken: String? = null,
             authorizationUrl: String? = rawUrl,
-        ): Result<PubkyAuthRequest> = parseBitkitClaim(rawUrl, capabilities).map { bitkitClaim ->
+        ): Result<PubkyAuthRequest> = parseBitkitClaim(rawUrl, capabilities).mapCatching { bitkitClaim ->
+            val expectedSigner = parseExpectedSigner(rawUrl).getOrThrow()
+            if (relay.isNotEmpty() && displayRelay(relay) == null) {
+                throw PubkyAuthRequestError.InvalidUrl(IllegalArgumentException("Unreadable Pubky auth relay"))
+            }
             val permissions = parseCapabilities(capabilities)
             PubkyAuthRequest(
                 rawUrl = rawUrl,
@@ -161,6 +319,7 @@ data class PubkyAuthRequest(
                 homeserverPublicKey = homeserverPublicKey,
                 signupToken = signupToken,
                 authorizationUrl = authorizationUrl,
+                expectedSigner = expectedSigner,
             )
         }
 

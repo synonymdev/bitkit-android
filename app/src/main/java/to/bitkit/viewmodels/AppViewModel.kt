@@ -160,6 +160,7 @@ import to.bitkit.models.PaykitAmountError
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPayment
 import to.bitkit.models.PubkyAuthRequest
+import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyContactLink
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -544,6 +545,7 @@ class AppViewModel @Inject constructor(
     }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val eligiblePaymentRequestTargets = paykitPaymentRequestRepo.eligibleTargets
+    val eligiblePaymentRequestTargetsStatus = paykitPaymentRequestRepo.eligibleTargetsStatus
     val isCreatingPaymentRequest = paykitPaymentRequestRepo.isCreatingRequest
     private val _rejectingPaymentRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
     val rejectingPaymentRequestIds = _rejectingPaymentRequestIds.asStateFlow()
@@ -984,6 +986,7 @@ class AppViewModel @Inject constructor(
         observePublicPaykitInvoiceExpiry()
         observePrivatePaykitContacts()
         observePaykitPaymentRequestConnectivity()
+        observeSavedContactsLoadFailure()
         observeIncomingPaykitPaymentRequests()
         observePaykitOnchainPaymentResolution()
         observePaykitSparkWithdrawalReleases()
@@ -1343,6 +1346,14 @@ class AppViewModel @Inject constructor(
         if (!isPaymentRequestPollingStopped.value) refreshPaymentRequestTargets(force = true)
     }
 
+    private fun observeSavedContactsLoadFailure() {
+        viewModelScope.launch {
+            pubkyRepo.contactsLoadCompletionVersion
+                .filter { it > 0L && pubkyRepo.contactsLoadVersion.value == 0L }
+                .collect { paykitPaymentRequestRepo.markEligibleTargetsUnknown() }
+        }
+    }
+
     private fun observePaykitPaymentRequestConnectivity() {
         viewModelScope.launch {
             isOnline
@@ -1688,6 +1699,13 @@ class AppViewModel @Inject constructor(
     private suspend fun refreshPaymentRequestTargets(force: Boolean = false) {
         if (privatePaykitRepo.isProfileDeletionInProgress.value) return
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
+        // An empty list read before the saved contacts load is not "no contacts"; the load triggers this again.
+        if (pubkyRepo.contactsLoadVersion.value == 0L) {
+            val didContactsLoadFail = pubkyRepo.contactsLoadCompletionVersion.value > 0L &&
+                !pubkyRepo.isLoadingContacts.value
+            if (didContactsLoadFail) paykitPaymentRequestRepo.markEligibleTargetsUnknown()
+            return
+        }
         paykitPaymentRequestRepo.refreshEligibleTargets(
             savedPublicKeys = pubkyRepo.contacts.value.map { it.publicKey },
             force = force,
@@ -7783,6 +7801,8 @@ class AppViewModel @Inject constructor(
                 attempt.attemptId == original.attemptId && attempt.requestId == original.requestId &&
                     attempt.orderId == original.orderId && attempt.payerIdentity == original.payerIdentity
             )
+            // Read right before dispatch: a Spark exit's funding is paid again only while the exit still asks for it.
+            sparkExitRepo.authorizePayAgain(attempt)
             if (request != null) {
                 val currentRequest =
                     (
@@ -10315,17 +10335,50 @@ class AppViewModel @Inject constructor(
 
     fun showPaymentRequests() {
         showSheet(Sheet.PaymentRequests)
-        viewModelScope.launch { refreshPaymentRequestTargets(force = true) }
+        viewModelScope.launch { refreshPaymentRequestTargetsForPicker() }
     }
 
     fun showPaymentRequestRecipient() {
         showSheet(Sheet.Receive(route = ReceiveRoute.PaymentRequestRecipient))
-        viewModelScope.launch { refreshPaymentRequestTargets(force = true) }
+        viewModelScope.launch { refreshPaymentRequestTargetsForPicker() }
     }
 
     fun showSubscriptionCreator() {
         showSheet(Sheet.CreateSubscription)
-        viewModelScope.launch { refreshPaymentRequestTargets(force = true) }
+        viewModelScope.launch { refreshPaymentRequestTargetsForPicker() }
+    }
+
+    /**
+     * Settles the recipient picker on open: no profile means no saved contacts, a stored profile that is not signed in
+     * (restoring, or its restore failed) cannot be checked, and saved contacts that are not loaded and not loading are
+     * loaded again, which retries a failed load.
+     */
+    private suspend fun refreshPaymentRequestTargetsForPicker() {
+        if (pubkyRepo.publicKey.value == null) {
+            // A stored profile whose session failed to restore is not "no profile": its contacts cannot be checked.
+            val hasStoredProfile = pubkyRepo.isRestoringSession.value ||
+                runSuspendCatching { pubkyRepo.hasIdentity() }.getOrDefault(true)
+            if (hasStoredProfile) {
+                paykitPaymentRequestRepo.markEligibleTargetsUnknown()
+            } else {
+                paykitPaymentRequestRepo.markNoEligibleTargets()
+            }
+            return
+        }
+        if (pubkyRepo.contactsLoadVersion.value == 0L) {
+            paykitPaymentRequestRepo.markEligibleTargetsLoading()
+            if (pubkyRepo.isLoadingContacts.value) {
+                pubkyRepo.isLoadingContacts.first { !it }
+            } else {
+                pubkyRepo.loadContacts()
+            }
+            // The load can also end cancelled, which marks no completion.
+            if (pubkyRepo.contactsLoadVersion.value == 0L) {
+                paykitPaymentRequestRepo.markEligibleTargetsUnknown()
+                return
+            }
+        }
+        refreshPaymentRequestTargets(force = true)
     }
 
     fun subscription(id: PaykitSubscriptionId): PaykitSubscription? =
@@ -10871,6 +10924,20 @@ class AppViewModel @Inject constructor(
         if (pubkyRepo.publicKey.value == null) {
             if (pubkyRepo.localIdentityPublicKey() == null) return showPubkyIdentityUnavailableToast()
             showSheet(Sheet.PubkyAuth(authUrl))
+            return
+        }
+
+        val expectedSigner = pubkyRepo.validExpectedSigner(authUrl)
+        val publicKey = pubkyRepo.publicKey.value
+        if (expectedSigner != null && publicKey != null &&
+            !PubkyAuthRequest.isExpectedSigner(expectedSigner, publicKey)
+        ) {
+            Logger.warn("Refused auth request for another pubky", context = TAG)
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.profile__auth_error_title),
+                description = PubkyAuthRequestError.SignerMismatch(expectedSigner).localizedPubkyAuthMessage(context),
+            )
             return
         }
 

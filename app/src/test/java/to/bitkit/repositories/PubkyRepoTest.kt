@@ -86,6 +86,7 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthClaim.Item
 import to.bitkit.models.PubkyAuthRequest
+import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.models.PubkyProfileDataLink
@@ -539,6 +540,124 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verifyBlocking(pubkyService) { approveAuth(authUrl, capabilities, clientId, secretKey) }
+    }
+
+    @Test
+    fun `approveAuth signs a grant sign-in that names this pubky`() = test {
+        val signer = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/bitkit.to/:rw&spk=$signer"
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        whenever(pubkyService.publicKeyFromSecret("local_secret")).thenReturn(signer)
+
+        val result = sut.approveAuth(authUrl, "/pub/bitkit.to/:rw", "paykit.test")
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(pubkyService) { approveAuth(authUrl, "/pub/bitkit.to/:rw", "paykit.test", "local_secret") }
+    }
+
+    @Test
+    fun `approval never signs a grant sign-in that names another pubky`() = test {
+        val signer = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        val other = "5jsjx1o6fzu6aeeo697r3i5rx15zq41kikcye8wtwdqm4nb4tryo"
+        val claim = PubkyAuthClaim(Item.PAYKIT_ACCESS_V1).wireValue
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/:rw&x-bitkit-claim=$claim&spk=$other"
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        whenever(pubkyService.publicKeyFromSecret("local_secret")).thenReturn(signer)
+
+        val results = listOf(
+            sut.approveAuth(authUrl, PubkyAuthClaim.REQUIRED_CAPABILITIES, "paykit.test"),
+            sut.approveAuthWithCompanionClaim(authUrl, "paykit.test", byteArrayOf()),
+        )
+
+        results.forEach {
+            assertEquals(PubkyAuthRequestError.SignerMismatch(other), it.exceptionOrNull())
+        }
+        verifyBlocking(pubkyService, never()) { approveAuth(any(), any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { approveAuthWithCompanionClaim(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `approval never signs a grant sign-in with a repeated or malformed expected signer`() = test {
+        val signer = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        val claim = PubkyAuthClaim(Item.PAYKIT_ACCESS_V1).wireValue
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        whenever(pubkyService.publicKeyFromSecret("local_secret")).thenReturn(signer)
+
+        listOf("spk=$signer&spk=$signer", "spk=pubky$signer", "spk=").forEach { query ->
+            val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/:rw&x-bitkit-claim=$claim&$query"
+
+            listOf(
+                sut.approveAuth(authUrl, PubkyAuthClaim.REQUIRED_CAPABILITIES, "paykit.test"),
+                sut.approveAuthWithCompanionClaim(authUrl, "paykit.test", byteArrayOf()),
+            ).forEach { assertIs<PubkyAuthRequestError.InvalidUrl>(it.exceptionOrNull(), query) }
+        }
+        verifyBlocking(pubkyService, never()) { approveAuth(any(), any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { approveAuthWithCompanionClaim(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `expected signer that is not a public key makes the request invalid and is never signed`() = test {
+        val notAKey = "ye" + "y".repeat(50)
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/bitkit.to/:rw&spk=$notAKey"
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        whenever(pubkyService.validatePublicKey(notAKey)).thenAnswer { throw TestAppError("not a public key") }
+
+        listOf(
+            sut.parseAuthUrl(authUrl),
+            sut.checkExpectedSigner(authUrl),
+            sut.approveAuth(authUrl, "/pub/bitkit.to/:rw", "paykit.test"),
+        ).forEach { assertIs<PubkyAuthRequestError.InvalidUrl>(it.exceptionOrNull()) }
+        assertNull(sut.validExpectedSigner(authUrl))
+        verifyBlocking(pubkyService, never()) { parseAuthUrl(any()) }
+        verifyBlocking(pubkyService, never()) { approveAuth(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `validExpectedSigner names a pubky only for a request that parses in full`() = test {
+        val other = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/locks.app/:rw&spk=$other"
+        val details = mock<PubkyAuthDetails>()
+        whenever(details.clientId).thenReturn("locks.test")
+        whenever(details.capabilities).thenReturn("/pub/locks.app/:rw")
+        whenever(details.relayUrl).thenReturn("https://relay.example/inbox/", "ftp://relay.example/inbox/")
+        whenever(pubkyService.parseAuthUrl(authUrl)).thenReturn(details)
+
+        assertEquals(other, sut.validExpectedSigner(authUrl))
+        assertNull(sut.validExpectedSigner(authUrl))
+        assertIs<PubkyAuthRequestError.InvalidUrl>(sut.parseAuthUrl(authUrl).exceptionOrNull())
+        assertNull(sut.validExpectedSigner("pubkyauth://signin_grant?caps=/pub/locks.app/:rw"))
+    }
+
+    @Test
+    fun `checkExpectedSigner fails for another pubky and passes for this one or none`() = test {
+        val signer = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        val other = "5jsjx1o6fzu6aeeo697r3i5rx15zq41kikcye8wtwdqm4nb4tryo"
+        val base = "pubkyauth://signin_grant?caps=/pub/bitkit.to/:rw"
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        whenever(pubkyService.publicKeyFromSecret("local_secret")).thenReturn(signer)
+
+        assertTrue(sut.checkExpectedSigner(base).isSuccess)
+        assertTrue(sut.checkExpectedSigner("$base&spk=$signer").isSuccess)
+        assertEquals(
+            PubkyAuthRequestError.SignerMismatch(other),
+            sut.checkExpectedSigner("$base&spk=$other").exceptionOrNull(),
+        )
+    }
+
+    @Test
+    fun `grant signup with an existing identity is approved whatever its spk says`() = test {
+        val capabilities = "/pub/pubky.app/:rw"
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
+        whenever(pubkyService.publicKeyFromSecret("local_secret"))
+            .thenReturn("8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty")
+
+        listOf("5jsjx1o6fzu6aeeo697r3i5rx15zq41kikcye8wtwdqm4nb4tryo", "not-a-public-key", "a&spk=b").forEach {
+            val authUrl = "pubkyauth://signup_grant?hs=homeserver&cid=shop.pubky.app&spk=$it"
+
+            assertTrue(sut.approveAuth(authUrl, capabilities, "shop.pubky.app").isSuccess, it)
+            verifyBlocking(pubkyService) { approveAuth(authUrl, capabilities, "shop.pubky.app", "local_secret") }
+        }
+        verifyBlocking(pubkyService, never()) { validatePublicKey(any()) }
     }
 
     @Test

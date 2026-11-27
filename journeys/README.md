@@ -155,6 +155,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `cjit-notifications/non-cjit-channel-no-payment-notification.xml` | not ported — iOS dropped its CJIT notification suite with the Blocktank sunset; this one checks Android's channel-ready notification on a Manual Setup channel |
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `hardware-wallet/scan-onchain-amount-over-spendable.xml` | ported with synonymdev/bitkit-ios#1228 — iOS opens Confirm and switches to the hardware wallet there, then shows Insufficient Savings and closes the sheet when its fee preview fails |
+| `home/tablet-layout.xml` | not ported — the iOS app is iPhone-only (`TARGETED_DEVICE_FAMILY = 1`), so iPadOS shows it at iPhone size and nothing stretches; checked on an iPad Pro 13-inch simulator, iPadOS 26.5 |
 | `activity/date-range-rapid-month-taps.xml` | not ported — iOS has no activity journey suite, and the rapid month tap behaviour was not checked there |
 | `coin-selection/manual-coin-selection.xml` | not ported — iOS has the screen (`SendUtxoSelectionView`) but no accessibility identifiers on it yet |
 | `coin-selection/manual-wallet-switch.xml` | same file, journey name and actions; iOS can open the picker on the wallet switch, Android on the next swipe. The iOS picker has no accessibility identifiers, so assert its visible "Coin Selection" title. |
@@ -183,6 +184,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `security/forgot-pin-nav-bar-inset.xml` | not ported — Android-only fix (synonymdev/bitkit-android#1572): the Android sheet host adds no navigation-bar inset, so each sheet screen pads itself. iOS sheets keep their content inside the bottom safe area |
 | `deeplinks/pubky-contact.xml` | ported — same contact routing and unlock behavior |
 | `pubky-auth/signin-cold-start.xml` | `pubky-auth/open-signin-link.xml`, adapted — iOS opens the same sign-in link on a terminated app through `bitkit://pubky-auth/signin`. Android only: the raw `pubkyauth` scheme, the "Loading Your Pubky Profile" toast while the session restores, and Authorize through to `PubkyAuthOK` |
+| `pubky-auth/signin-expected-pubky.xml` | ported — same file, journey name and steps; iOS opens the same query through `bitkit://pubky-auth/signin` and its toasts carry the ids `PubkyAuthOtherPubkyToast` and `PubkyAuthInvalidRequestToast` |
 | `pubky-auth/loading-toast-long-locale.xml` | not ported — iOS has no Pubky loading toast; `settings/applying-toast-close-button.xml` checks the same close-button inset on both platforms |
 | `pubky-auth/signin-with-second-link.xml` | not ported — iOS still drops a pending sign-in link when a second link opens on the PIN screen (synonymdev/bitkit-ios#985); port it with that fix |
 | `pubky-profile/cached-profile-header.xml` | same file, journey name and steps — one step differs: Android adds a screenshot check of the cached avatar, which comes from the Pubky image disk cache synonymdev/bitkit-android#1399 adds |

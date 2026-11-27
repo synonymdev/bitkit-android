@@ -568,7 +568,9 @@
     <string name="profile__add_tag">Dodaj tag</string>
     <string name="profile__auth_approval_authorize">Autoryzuj</string>
     <string name="profile__auth_approval_details">Szczegóły</string>
+    <string name="profile__auth_approval_relay">Przekaźnik</string>
     <string name="profile__auth_approval_title">Autoryzuj</string>
+    <string name="profile__auth_error_other_pubky">To żądanie jest przeznaczone dla %1$s, a nie dla pubky tego portfela.</string>
     <string name="profile__create_nav_title">Utwórz profil</string>
     <string name="profile__edit_nav_title">Edytuj profil</string>
     <string name="profile__nav_title">Profil</string>
@@ -1055,6 +1057,7 @@
     <string name="wallet__send_paykit_no_route__description">Ten kontakt nie ma teraz metody płatności, której Bitkit może użyć.</string>
     <string name="wallet__send_paykit_no_route__title">Nie można zapłacić temu kontaktowi</string>
     <string name="wallet__send_paykit_withdrawal_settling__description">Wcześniejsza wypłata z Twojego salda wydatków wciąż się rozlicza. Spróbuj ponownie po jej zakończeniu.</string>
+    <string name="wallet__send_pending__abandon_exit_note">Ten wymuszony transfer nie potrzebuje już tej płatności. Bitkit najpierw sprawdza sieć, a potem odsyła jej monety do Twojego portfela, aby nigdy nie została potwierdzona. Wiąże się to z opłatą sieciową.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Przelewy na saldo wydatków nie są już dostępne. Bitkit najpierw sprawdza sieć, a potem odsyła monety z tego przelewu do Twojego portfela, aby pierwotny przelew nigdy nie został potwierdzony. Wiąże się to z opłatą sieciową.</string>
     <string name="wallet__send_to">Do</string>
     <string name="wallet__recipient_contact">Kontakt</string>
@@ -1363,7 +1366,12 @@
     <string name="contacts__edit_public_note">Pamiętaj, że dane kontaktów są przechowywane w publicznych plikach. Zmiany wprowadzone w kontakcie w Bitkit nie zaktualizują jego profilu.</string>
     <string name="contacts__edit_save_error">Nie udało się zapisać kontaktu</string>
     <string name="contacts__import_all">Importuj wszystkie</string>
-    <string name="contacts__import_friends_count">Znajomi: %1$d</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d znajomy</item>
+        <item quantity="few">%1$d znajomych</item>
+        <item quantity="many">%1$d znajomych</item>
+        <item quantity="other">%1$d znajomego</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Znaleziono\n&lt;accent&gt;profil i kontakty&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit znalazł dane profilu i kontaktów powiązane z pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Wybierz</string>
@@ -1801,6 +1809,7 @@
     <string name="wallet__payment_request_queued_description">Twoje żądanie płatności jest w kolejce i zostanie wysłane automatycznie</string>
     <string name="wallet__payment_request_rate_unavailable">Kursy płatności są niedostępne lub nieaktualne. Spróbuj ponownie, gdy będziesz online.</string>
     <string name="wallet__payment_request_recipient">ODBIORCA</string>
+    <string name="wallet__payment_request_recipient_failed">Nie udało się sprawdzić, które kontakty mogą otrzymać żądanie płatności. Sprawdź połączenie.</string>
     <string name="wallet__payment_request_recipient_no_match">Brak pasującego zapisanego kontaktu z prywatnym połączeniem.</string>
     <string name="wallet__payment_request_recipient_unavailable">Żądania płatności można wysyłać tylko do zapisanego kontaktu z prywatnym połączeniem.</string>
     <string name="wallet__payment_request_request">Zażądaj</string>

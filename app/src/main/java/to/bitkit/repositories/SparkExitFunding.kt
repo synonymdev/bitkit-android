@@ -382,7 +382,7 @@ object SparkExitMath {
      */
     fun isSavingsPaymentRefused(record: SparkExitRecord, attempt: OnchainSendAttempt?): Boolean {
         if (!record.isActive || record.phase !is SparkExitRecord.Phase.AwaitingFunding) return false
-        if (record.fundingPaymentTxid != null) return false
+        if (record.fundingPaymentTxid != null || record.fundedSats > 0uL) return false
         val address = record.funding.firstOrNull()?.address ?: return false
         return attempt != null && attempt.address == address && attempt.evidence == OnchainSendEvidence.Rejected
     }
@@ -402,7 +402,7 @@ object SparkExitMath {
     ): SparkExitRecord.SavingsRefusal? {
         if (!record.isActive || record.phase !is SparkExitRecord.Phase.AwaitingFunding) return null
         if (fundingSeenSats > 0uL) return null
-        if (record.fundingPaymentTxid != null || hasSavingsSend) return null
+        if (record.fundingPaymentTxid != null || record.isSavingsSendUnsaved || hasSavingsSend) return null
         if (record.fundingShortfallSats == null || record.fundedSats > 0uL) return null
         if (funding != null && (funding !is SparkExitFundingState.Ask || funding.receivedSats > 0uL)) return null
         return record.savingsRefusal
@@ -429,6 +429,8 @@ object SparkExitMath {
             // Covered: waiting for it to confirm, or for the next tick to take it once it has.
             return SparkExitFundingState.Seen
         }
+        // A savings payment whose txid was never kept is waited for, also when it pays the rest of a partial one.
+        if (record.isSavingsSendUnsaved) return SparkExitFundingState.Paid
         // A partial payment leaves another coin to send, with its own input fee. Nodes refuse an output under its dust
         // limit, so a smaller remainder is asked as the funding output's dust.
         val required = if (fresh.isEmpty()) shortfall else shortfall.safe() + inputFee.safe()

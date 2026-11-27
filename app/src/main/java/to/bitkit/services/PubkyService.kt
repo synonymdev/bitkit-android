@@ -12,6 +12,7 @@ import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PubkyProfileSnapshot
 import com.synonym.paykit.PubkyProfileUpdate
 import com.synonym.paykit.PubkySessionBootstrapResult
+import com.synonym.paykit.normalizePubkyPublicKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withTimeoutOrNull
@@ -146,6 +147,12 @@ class PubkyService @Inject constructor(
             PaykitPublicKeys.normalize(homeserverPublicKey)
             Unit
         }
+
+    /** Throws unless [publicKey] decodes to an Ed25519 point; `PaykitPublicKeys.normalize` checks only its spelling. */
+    suspend fun validatePublicKey(publicKey: String): Unit = ServiceQueue.PUBKY.background {
+        normalizePubkyPublicKey(publicKey)
+        Unit
+    }
 
     suspend fun approveAuth(
         authUrl: String,

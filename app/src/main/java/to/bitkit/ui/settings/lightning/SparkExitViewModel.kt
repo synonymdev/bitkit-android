@@ -505,7 +505,9 @@ data class SparkExitUiState(
         }
 
     /** Progress says the savings payment didn't go through and offers to pay it again. */
-    val offersSavingsRetry: Boolean get() = isSavingsPaymentRefused || savingsRetryOffer != null
+    val offersSavingsRetry: Boolean
+        // Never once funding reached the address: paying again would send nothing.
+        get() = (isSavingsPaymentRefused && fundingSeenSats == 0uL) || savingsRetryOffer != null
 
     /**
      * The exit waits for its own savings payment, which the send journal has not seen accepted yet: it may still land,

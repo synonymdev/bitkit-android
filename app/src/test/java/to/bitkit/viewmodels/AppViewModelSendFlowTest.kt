@@ -395,6 +395,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val isProfileDeletionInProgress = MutableStateFlow(false)
     private val pubkyContactsLoadVersion = MutableStateFlow(0L)
     private val pubkyContactsLoadCompletionVersion = MutableStateFlow(0L)
+    private val pubkyIsLoadingContacts = MutableStateFlow(false)
     private val pubkyContactImportFailure = MutableStateFlow<Throwable?>(null)
     private val pendingPaykitPaymentRequests = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     private val expiredPaykitProposals = MutableSharedFlow<List<PaykitPaymentRequest>>(extraBufferCapacity = 8)
@@ -844,6 +845,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkyRepo.contactImportFailure).thenReturn(pubkyContactImportFailure)
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
         whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringPubkySession)
+        whenever(pubkyRepo.isLoadingContacts).thenReturn(pubkyIsLoadingContacts)
         whenever(pubkyRepo.currentSignIn()).thenAnswer { pubkyPublicKey.value?.let { PubkySignIn(it, 0L) } }
         whenever(pubkyRepo.isCurrent(any())).thenAnswer {
             pubkyPublicKey.value == it.getArgument<PubkySignIn>(0).publicKey
@@ -1492,6 +1494,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `maintenance discovers targets and refreshes inbox without joining all contact preparation`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
+        pubkyContactsLoadVersion.value = 1L
         sut.setIsAuthenticated(true)
         whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
         sut.startPaykitPaymentRequestPolling()
@@ -1705,6 +1708,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `payment requests refresh promptly without repeating maintenance on each poll`() = test {
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
+        pubkyContactsLoadVersion.value = 1L
         whenever(paykitPaymentRequestRepo.refresh(any())).thenReturn(Result.success(Unit))
         runCurrent()
         clearInvocations(paykitPaymentRequestRepo)
@@ -5955,6 +5959,48 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `pubky auth deeplink for another pubky is refused before the Ring hint`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(false)
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw" +
+            "&spk=8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        whenever(pubkyRepo.validExpectedSigner(authUrl))
+            .thenReturn("8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty")
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(context).getString(R.string.profile__auth_error_other_pubky, "8um7...1dty")
+        verify(context, never()).getString(R.string.pubky_auth__use_ring)
+    }
+
+    @Test
+    fun `pubky auth deeplink that is invalid is not reported as meant for another pubky`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        val invalidLinks = listOf(
+            "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw&spk=ye${"y".repeat(50)}",
+            "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw&relay=ftp%3A%2F%2Frelay.example%2Finbox%2F" +
+                "&spk=8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty",
+        )
+
+        invalidLinks.forEach { authUrl ->
+            whenever(pubkyRepo.validExpectedSigner(authUrl)).thenReturn(null)
+
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+            advanceUntilIdle()
+
+            assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+            sut.hideSheet()
+            advanceUntilIdle()
+        }
+        verify(context, never()).getString(eq(R.string.profile__auth_error_other_pubky), any())
     }
 
     @Test
@@ -20615,6 +20661,32 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `send pending pays a Spark exit's funding again only while the exit asks for it`() = test {
+        val original = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "exit-funding", requestId = null, orderId = null,
+            address = "bcrt1qexitfunding", amountSats = 5_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+            evidence = OnchainSendEvidence.Unknown,
+        )
+        var dispatched = 0
+        whenever(lightningRepo.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any()))
+            .doSuspendableAnswer { invocation ->
+                val authorize = invocation.getArgument<suspend (OnchainSendAttempt) -> Unit>(5)
+                runCatching {
+                    authorize(original)
+                    dispatched++
+                    OnchainSendOutcome.Accepted("ab".repeat(32))
+                }
+            }
+
+        assertTrue(sut.retryOriginalOnchainSend(original, 2uL).isSuccess)
+        verify(sparkExitRepo).authorizePayAgain(original)
+        whenever(sparkExitRepo.authorizePayAgain(any())).thenThrow(IllegalStateException("funded"))
+        assertTrue(sut.retryOriginalOnchainSend(original, 2uL).isFailure)
+        assertEquals(1, dispatched, "Paid again once the exit no longer asked")
+    }
+
+    @Test
     fun `recovery of a Blocktank order shows the sheet and broadcasts nothing`() = test {
         val order = to.bitkit.ext.mockOrder().copy(
             orderExpiresAt = (Clock.System.now() + 60.seconds).toString(),
@@ -21699,6 +21771,110 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         } finally {
             sut.stopPaykitPaymentRequestPolling()
         }
+    }
+
+    @Test
+    fun `payment request picker checks recipients only after saved contacts load`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.update { testPublicKey }
+        pubkyIsLoadingContacts.update { true }
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo)
+
+        sut.showPaymentRequestRecipient()
+        runCurrent()
+        verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+        verify(paykitPaymentRequestRepo, never()).markEligibleTargetsUnknown()
+
+        pubkyContactsLoadCompletionVersion.update { 1L }
+        pubkyIsLoadingContacts.update { false }
+        runCurrent()
+        verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+        verify(paykitPaymentRequestRepo, atLeastOnce()).markEligibleTargetsUnknown()
+
+        pubkyContactsLoadVersion.update { 1L }
+        sut.showPaymentRequestRecipient()
+        runCurrent()
+        verify(paykitPaymentRequestRepo, atLeastOnce()).refreshEligibleTargets(any(), eq(true))
+    }
+
+    @Test
+    fun `recipient picker fails when the contacts load it waits for is cancelled`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.update { testPublicKey }
+        pubkyIsLoadingContacts.update { true }
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo)
+
+        sut.showSubscriptionCreator()
+        runCurrent()
+        verify(paykitPaymentRequestRepo, never()).markEligibleTargetsUnknown()
+
+        pubkyIsLoadingContacts.update { false }
+        runCurrent()
+
+        verify(paykitPaymentRequestRepo).markEligibleTargetsUnknown()
+        verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+    }
+
+    @Test
+    fun `subscription recipient picker without a profile shows no eligible contact`() = test {
+        enablePaykitUi()
+        isRestoringPubkySession.update { false }
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo)
+
+        sut.showSubscriptionCreator()
+        runCurrent()
+
+        verify(paykitPaymentRequestRepo).markNoEligibleTargets()
+        verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+    }
+
+    @Test
+    fun `recipient picker while the profile is still signing in fails at once`() = test {
+        enablePaykitUi()
+        isRestoringPubkySession.update { true }
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo)
+
+        sut.showPaymentRequestRecipient()
+        runCurrent()
+
+        verify(paykitPaymentRequestRepo).markEligibleTargetsUnknown()
+        verify(paykitPaymentRequestRepo, never()).markNoEligibleTargets()
+    }
+
+    @Test
+    fun `recipient picker for a profile whose session failed to restore fails instead of showing no contacts`() = test {
+        enablePaykitUi()
+        isRestoringPubkySession.update { false }
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo)
+
+        sut.showSubscriptionCreator()
+        runCurrent()
+
+        verify(paykitPaymentRequestRepo).markEligibleTargetsUnknown()
+        verify(paykitPaymentRequestRepo, never()).markNoEligibleTargets()
+    }
+
+    @Test
+    fun `reopening the recipient picker retries a failed contacts load`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.update { testPublicKey }
+        pubkyContactsLoadCompletionVersion.update { 1L }
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo, pubkyRepo)
+        whenever(pubkyRepo.loadContacts()).doSuspendableAnswer { pubkyContactsLoadVersion.update { 1L } }
+
+        sut.showPaymentRequestRecipient()
+        runCurrent()
+
+        verify(paykitPaymentRequestRepo).markEligibleTargetsLoading()
+        verify(pubkyRepo).loadContacts()
+        verify(paykitPaymentRequestRepo, atLeastOnce()).refreshEligibleTargets(any(), eq(true))
     }
 
     @Test

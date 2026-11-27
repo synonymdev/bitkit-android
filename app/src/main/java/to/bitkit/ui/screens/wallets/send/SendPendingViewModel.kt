@@ -83,6 +83,8 @@ class SendPendingViewModel @Inject constructor(
                 val hasOriginalReceipt = !attempt?.originalInputs.isNullOrEmpty() &&
                     attempt.candidateTxids.any { it.equals(txid, true) }
                 if (matchesOriginalWallet && hasOriginalReceipt) {
+                    val isExitFunding = paykitPaymentProofRepo.isSparkExitFunding(attempt)
+                    _uiState.update { it.copy(isSparkExitFunding = isExitFunding) }
                     if (attempt.isUnresolved) _uiState.update { it.copy(recoveryAttempt = attempt) }
                     observeOriginalCompletion(attempt)
                     offerAbandonIfRequestEnded(attempt)
@@ -180,6 +182,8 @@ class SendPendingViewModel @Inject constructor(
     // The request can end, or a failed check recover, while Payment Pending stays open.
     private fun offerAbandonIfRequestEnded(attempt: OnchainSendAttempt) {
         if (!attempt.canBeAbandoned) return
+        // Only a Spark exit's funding is released among ordinary sends.
+        if (attempt.mayFundSparkExit && !_uiState.value.isSparkExitFunding) return
         viewModelScope.launch {
             // Transfers do not come back once unavailable, so one check decides a Blocktank funding.
             if (attempt.isBlocktankFunding) {
@@ -351,7 +355,15 @@ data class SendPendingUiState(
     val isAbandoning: Boolean = false,
     val abandoned: Boolean = false,
     val abandonError: AbandonError? = null,
-)
+    /** The attempt pays a Spark exit's funding: paid again while the exit asks, released once it no longer does. */
+    val isSparkExitFunding: Boolean = false,
+) {
+    val canRetry: Boolean
+        get() {
+            val attempt = recoveryAttempt ?: return false
+            return !(isSparkExitFunding && (abandonableAttempt != null || attempt.releaseApproved))
+        }
+}
 
 enum class AbandonError { MayStillConfirm, SyncUnavailable, ReleasePending }
 

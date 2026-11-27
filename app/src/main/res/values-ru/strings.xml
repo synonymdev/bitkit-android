@@ -599,7 +599,9 @@
     <string name="profile__auth_approval_authorize">Авторизовать</string>
     <string name="profile__auth_approval_details">Подробности</string>
     <string name="profile__auth_approval_ok">Ок</string>
+    <string name="profile__auth_approval_relay">Ретранслятор</string>
     <string name="profile__auth_approval_title">Авторизовать</string>
+    <string name="profile__auth_error_other_pubky">Этот запрос предназначен для %1$s, а не для pubky этого кошелька.</string>
     <string name="profile__create_nav_title">Создать Профиль</string>
     <string name="profile__edit_nav_title">Редактировать Профиль</string>
     <string name="profile__nav_title">Профиль</string>
@@ -1232,6 +1234,7 @@
     <string name="wallet__send_paykit_no_route__description">У этого контакта сейчас нет способа оплаты, который может использовать Bitkit.</string>
     <string name="wallet__send_paykit_no_route__title">Невозможно оплатить этому контакту</string>
     <string name="wallet__send_paykit_withdrawal_settling__description">Предыдущий вывод с вашего баланса расходов ещё проводится. Попробуйте ещё раз после его завершения.</string>
+    <string name="wallet__send_pending__abandon_exit_note">Этому принудительному переводу этот платёж больше не нужен. Bitkit сначала проверяет сеть, а затем возвращает его монеты в ваш кошелёк, чтобы он никогда не подтвердился. За это взимается сетевая комиссия.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Переводы на баланс расходов больше недоступны. Bitkit сначала проверяет сеть, а затем возвращает монеты этого перевода в ваш кошелёк, чтобы исходный перевод никогда не подтвердился. За это взимается сетевая комиссия.</string>
     <string name="wallet__send_pending__description">Этот платеж занимает больше времени, чем ожидалось. Вы можете продолжать использовать Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Платеж в ожидании</string>
@@ -1379,7 +1382,12 @@
     <string name="contacts__edit_public_note">Обратите внимание: данные контактов хранятся в публичных файлах. Изменения контакта в Bitkit не обновят его профиль.</string>
     <string name="contacts__edit_save_error">Не удалось сохранить контакт</string>
     <string name="contacts__import_all">Импортировать Все</string>
-    <string name="contacts__import_friends_count">Друзей: %1$d</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d друг</item>
+        <item quantity="few">%1$d друга</item>
+        <item quantity="many">%1$d друзей</item>
+        <item quantity="other">%1$d друга</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Найдены\n&lt;accent&gt;профиль и контакты&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit нашёл данные профиля и контактов, связанные с pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Выбрать</string>
@@ -1814,6 +1822,7 @@
     <string name="wallet__payment_request_queued_description">Ваш запрос на оплату в очереди и будет отправлен автоматически</string>
     <string name="wallet__payment_request_rate_unavailable">Курсы для оплаты недоступны или устарели. Попробуйте ещё раз, когда будете онлайн.</string>
     <string name="wallet__payment_request_recipient">ПОЛУЧАТЕЛЬ</string>
+    <string name="wallet__payment_request_recipient_failed">Не удалось проверить, какие контакты могут получить запрос на оплату. Проверьте подключение.</string>
     <string name="wallet__payment_request_recipient_no_match">Нет подходящего сохранённого контакта с приватным соединением.</string>
     <string name="wallet__payment_request_recipient_unavailable">Запросы на оплату можно отправлять только сохранённому контакту с приватным соединением.</string>
     <string name="wallet__payment_request_request">Запросить</string>

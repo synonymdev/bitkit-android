@@ -568,7 +568,9 @@
     <string name="profile__add_link_note">Beachte: Jeder Link den du hinzufügst ist öffentlich sichtbar.</string>
     <string name="profile__add_tag">Tag hinzufügen</string>
     <string name="profile__auth_approval_authorize">Autorisieren Sie</string>
+    <string name="profile__auth_approval_relay">Relay</string>
     <string name="profile__auth_approval_title">Autorisieren Sie</string>
+    <string name="profile__auth_error_other_pubky">Diese Anfrage ist für %1$s bestimmt, nicht für den Pubky dieses Wallets.</string>
     <string name="profile__create_nav_title">Profil erstellen</string>
     <string name="profile__edit_nav_title">Profil bearbeiten</string>
     <string name="profile__nav_title">Profil</string>
@@ -1052,6 +1054,7 @@
     <string name="wallet__send_paykit_no_route__description">Dieser Kontakt hat derzeit keine Zahlungsmethode, die Bitkit nutzen kann.</string>
     <string name="wallet__send_paykit_no_route__title">Zahlung an diesen Kontakt nicht möglich</string>
     <string name="wallet__send_paykit_withdrawal_settling__description">Eine frühere Auszahlung von deinem Ausgabenguthaben wird noch abgewickelt. Versuche es erneut, sobald sie abgeschlossen ist.</string>
+    <string name="wallet__send_pending__abandon_exit_note">Diese forcierte Übertragung braucht diese Zahlung nicht mehr. Bitkit prüft zuerst das Netzwerk und schickt ihre Coins dann zurück in deine Wallet, damit sie nie bestätigt wird. Dafür fällt eine Netzwerkgebühr an.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Überweisungen auf dein Ausgabenguthaben sind nicht mehr verfügbar. Bitkit prüft zuerst das Netzwerk und schickt die Coins dieser Überweisung dann zurück in deine Wallet, damit die ursprüngliche Überweisung nie bestätigt wird. Dafür fällt eine Netzwerkgebühr an.</string>
     <string name="wallet__send_to">An</string>
     <string name="wallet__recipient_contact">Kontakt</string>
@@ -1360,7 +1363,10 @@
     <string name="contacts__edit_public_note">Bitte beachte, dass Kontaktinformationen in öffentlichen Dateien gespeichert werden. Änderungen, die du in Bitkit an einem Kontakt vornimmst, aktualisieren nicht dessen Profil.</string>
     <string name="contacts__edit_save_error">Kontakt konnte nicht gespeichert werden</string>
     <string name="contacts__import_all">Alle importieren</string>
-    <string name="contacts__import_friends_count">%1$d Freunde</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d Freund</item>
+        <item quantity="other">%1$d Freunde</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Gefunden:\n&lt;accent&gt;Profil &amp; Kontakte&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit hat Profil- und Kontaktdaten gefunden, die mit dem pubky &lt;accent&gt;%1$s&lt;/accent&gt; verknüpft sind</string>
     <string name="contacts__import_select">Auswählen</string>
@@ -1801,6 +1807,7 @@
     <string name="wallet__payment_request_queued_description">Deine Zahlungsanforderung ist in der Warteschlange und wird automatisch gesendet</string>
     <string name="wallet__payment_request_rate_unavailable">Wechselkurse sind nicht verfügbar oder abgelaufen. Versuche es erneut, wenn du online bist.</string>
     <string name="wallet__payment_request_recipient">EMPFÄNGER</string>
+    <string name="wallet__payment_request_recipient_failed">Es konnte nicht geprüft werden, welche Kontakte eine Zahlungsanforderung empfangen können. Prüfe deine Verbindung.</string>
     <string name="wallet__payment_request_recipient_no_match">Kein passender gespeicherter Kontakt mit privater Verbindung.</string>
     <string name="wallet__payment_request_recipient_unavailable">Zahlungsanforderungen können nur an einen gespeicherten Kontakt mit privater Verbindung gesendet werden.</string>
     <string name="wallet__payment_request_request">Anfordern</string>

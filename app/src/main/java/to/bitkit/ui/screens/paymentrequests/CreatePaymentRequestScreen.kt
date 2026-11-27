@@ -49,7 +49,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -70,6 +73,7 @@ import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestDirection
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestTarget
+import to.bitkit.repositories.PaykitPaymentRequestTargetsStatus
 import to.bitkit.repositories.paykitRate
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BodyM
@@ -80,6 +84,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.NumberPadAmountText
@@ -570,10 +575,12 @@ fun PaymentRequestRecipientScreen(
 ) {
     val context = LocalContext.current
     val targets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
+    val targetsStatus by appViewModel.eligiblePaymentRequestTargetsStatus.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
 
     PaymentRequestRecipientContent(
         targets = targets.toImmutableList(),
+        targetsStatus = targetsStatus,
         contacts = contacts.toImmutableList(),
         onBack = onBack,
         onPaste = { context.getClipboardText()?.trim().orEmpty() },
@@ -585,6 +592,7 @@ fun PaymentRequestRecipientScreen(
 internal fun PaymentRequestRecipientContent(
     modifier: Modifier = Modifier,
     targets: ImmutableList<PaykitPaymentRequestTarget>,
+    targetsStatus: PaykitPaymentRequestTargetsStatus,
     contacts: ImmutableList<PubkyProfile>,
     onBack: () -> Unit,
     onPaste: () -> String,
@@ -659,22 +667,40 @@ internal fun PaymentRequestRecipientContent(
         VerticalSpacer(16.dp)
         HorizontalDivider(color = Colors.White10)
         LazyColumn(modifier = Modifier.weight(1f)) {
-            if (recipients.isEmpty()) {
-                item {
-                    BodyM(
-                        text = stringResource(
-                            if (query.isBlank()) {
-                                R.string.wallet__payment_request_recipient_unavailable
-                            } else {
-                                R.string.wallet__payment_request_recipient_no_match
-                            }
-                        ),
-                        color = Colors.White64,
-                        textAlign = TextAlign.Center,
+            val emptyState = recipientEmptyState(
+                hasRecipients = recipients.isNotEmpty(),
+                hasEligibleTargets = targets.isNotEmpty(),
+                query = query,
+                status = targetsStatus,
+            )
+            when (emptyState) {
+                null -> Unit
+                RecipientEmptyState.Loading -> item {
+                    Box(
+                        contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 24.dp)
-                            .testTag("${testTagPrefix}RecipientUnavailable"),
+                            .semantics { progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate }
+                            .testTag("${testTagPrefix}RecipientLoading")
+                    ) {
+                        GradientCircularProgressIndicator(modifier = Modifier.size(32.dp))
+                    }
+                }
+                RecipientEmptyState.Failed -> item {
+                    RecipientEmptyMessage(
+                        textRes = R.string.wallet__payment_request_recipient_failed,
+                        modifier = Modifier.testTag("${testTagPrefix}RecipientFailed")
+                    )
+                }
+                RecipientEmptyState.Unavailable, RecipientEmptyState.NoMatch -> item {
+                    RecipientEmptyMessage(
+                        textRes = if (emptyState == RecipientEmptyState.Unavailable) {
+                            R.string.wallet__payment_request_recipient_unavailable
+                        } else {
+                            R.string.wallet__payment_request_recipient_no_match
+                        },
+                        modifier = Modifier.testTag("${testTagPrefix}RecipientUnavailable")
                     )
                 }
             }
@@ -694,6 +720,49 @@ internal fun PaymentRequestRecipientContent(
             }
         }
         footer()
+    }
+}
+
+@Composable
+private fun RecipientEmptyMessage(
+    @StringRes textRes: Int,
+    modifier: Modifier = Modifier,
+) {
+    BodyM(
+        text = stringResource(textRes),
+        color = Colors.White64,
+        textAlign = TextAlign.Center,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 24.dp)
+    )
+}
+
+internal enum class RecipientEmptyState {
+    Loading,
+    Failed,
+    Unavailable,
+    NoMatch,
+}
+
+/**
+ * What the picker shows instead of recipients: null when it has some to list.
+ * A failed check with a search that filtered out known recipients is a plain no-match.
+ */
+internal fun recipientEmptyState(
+    hasRecipients: Boolean,
+    hasEligibleTargets: Boolean,
+    query: String,
+    status: PaykitPaymentRequestTargetsStatus,
+): RecipientEmptyState? {
+    if (hasRecipients) return null
+    val isSearching = query.isNotBlank()
+    return when (status) {
+        PaykitPaymentRequestTargetsStatus.Loading -> RecipientEmptyState.Loading
+        PaykitPaymentRequestTargetsStatus.Failed if isSearching && hasEligibleTargets -> RecipientEmptyState.NoMatch
+        PaykitPaymentRequestTargetsStatus.Failed -> RecipientEmptyState.Failed
+        PaykitPaymentRequestTargetsStatus.Loaded if !isSearching -> RecipientEmptyState.Unavailable
+        PaykitPaymentRequestTargetsStatus.Loaded -> RecipientEmptyState.NoMatch
     }
 }
 
@@ -851,6 +920,7 @@ private fun PaymentRequestRecipientPreview() {
         BottomSheetPreview {
             PaymentRequestRecipientContent(
                 targets = persistentListOf(previewTarget),
+                targetsStatus = PaykitPaymentRequestTargetsStatus.Loaded,
                 contacts = persistentListOf(PubkyProfile.placeholder(previewTarget.publicKey)),
                 onBack = {},
                 onPaste = { "" },

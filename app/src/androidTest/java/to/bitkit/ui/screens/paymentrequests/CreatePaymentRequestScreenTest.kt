@@ -39,6 +39,7 @@ import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestDirection
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestTarget
+import to.bitkit.repositories.PaykitPaymentRequestTargetsStatus
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.theme.AppThemeSurface
@@ -156,12 +157,42 @@ class CreatePaymentRequestScreenTest {
     }
 
     @Test
+    fun recipientShowsLoadingUntilDiscoveryFinishes() {
+        var status by mutableStateOf(PaykitPaymentRequestTargetsStatus.Loading)
+        composeTestRule.setContent {
+            AppThemeSurface {
+                PaymentRequestRecipientContent(
+                    targets = persistentListOf(),
+                    targetsStatus = status,
+                    contacts = persistentListOf(),
+                    onBack = {},
+                    onPaste = { "" },
+                    onSelected = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("PaymentRequestRecipientLoading").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestRecipientUnavailable").assertDoesNotExist()
+
+        status = PaykitPaymentRequestTargetsStatus.Failed
+        composeTestRule.onNodeWithTag("PaymentRequestRecipientFailed").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestRecipientLoading").assertDoesNotExist()
+
+        status = PaykitPaymentRequestTargetsStatus.Loaded
+        composeTestRule.onNodeWithText(
+            "Payment requests can only be sent to a saved contact with a private connection."
+        ).assertIsDisplayed()
+    }
+
+    @Test
     fun recipientShowsEligibleContactAndAdvancesOnSelection() {
         var selectedTarget: PaykitPaymentRequestTarget? = null
         composeTestRule.setContent {
             AppThemeSurface {
                 PaymentRequestRecipientContent(
                     targets = persistentListOf(target),
+                    targetsStatus = PaykitPaymentRequestTargetsStatus.Loaded,
                     contacts = persistentListOf(PubkyProfile.placeholder(target.publicKey)),
                     onBack = {},
                     onPaste = { target.publicKey },

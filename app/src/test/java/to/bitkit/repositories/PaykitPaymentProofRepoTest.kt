@@ -89,6 +89,7 @@ import java.io.FileOutputStream
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -108,6 +109,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         private const val PAYMENT_REQUEST_ID = "550e8400-e29b-41d4-a716-446655440000"
         private const val PAYMENT_HASH = "66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925"
         private const val ONCHAIN_ADDRESS = "bcrt1qpaymentproof"
+        private const val EXIT_FUNDING_ADDRESS = "bcrt1qexitfunding"
         private const val ALLOWANCE_ID = "4f1c2d3e-5a6b-4c7d-8e9f-0a1b2c3d4e5f"
         private val PREIMAGE = "00".repeat(32)
     }
@@ -3625,6 +3627,179 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertEquals(1, wallet.broadcasts)
         assertEquals(listOf(shopProof), storedProofs)
     }
+
+    @Test
+    fun `savings send the Spark exit no longer needs is released`() = test {
+        val attempt = exitFundingAttempt()
+        val cancelled = SparkExitEarlierAddress(
+            EXIT_FUNDING_ADDRESS,
+            "m/0",
+            SparkExitEarlierAddress.Kind.CANCELLED_FUNDING,
+            atMillis = 0L,
+        )
+        val exits = listOf(
+            SparkExitFundingRelease.Exit(
+                exitRecord(SparkExitRecord.Phase.Running, fundingTxid = "f1".repeat(32)),
+                emptyList()
+            ),
+            SparkExitFundingRelease.Exit(
+                exitRecord(SparkExitRecord.Phase.Done, fundingTxid = "f1".repeat(32)),
+                emptyList()
+            ),
+            SparkExitFundingRelease.Exit(exitRecord(SparkExitRecord.Phase.Failed("cancelled")), emptyList()),
+            SparkExitFundingRelease.Exit(null, listOf(cancelled)),
+            // Funded by another wallet while this send's txid stayed behind as the exit's own payment.
+            SparkExitFundingRelease.Exit(
+                exitRecord(SparkExitRecord.Phase.Running, fundingTxid = "f1".repeat(32))
+                    .copy(fundingPaymentTxid = requireNotNull(attempt.txid)),
+                emptyList(),
+            ),
+        )
+        stubAbandon(attempt)
+        for (exit in exits) {
+            val repo = paymentProofRepo().apply { sparkExit = { exit } }
+            assertTrue(repo.onchainRequestHasEnded(attempt))
+            assertTrue(repo.isSparkExitFunding(attempt), "Payment Pending treats it as the exit's funding")
+            val wallet = FakeReleaseWallet()
+            assertTrue(repo.abandonUnbroadcastOnchainPayment(attempt, wallet) {}.isSuccess)
+            assertEquals(1, wallet.broadcasts)
+        }
+    }
+
+    @Test
+    fun `savings send the Spark exit still needs or adopted is kept`() = test {
+        val attempt = exitFundingAttempt()
+        val sent = requireNotNull(attempt.txid)
+        val topUp = exitRecord(SparkExitRecord.Phase.NeedsFunding(9_000uL), fundingTxid = "f1".repeat(32))
+        val exits = listOf(
+            SparkExitFundingRelease.Exit(exitRecord(SparkExitRecord.Phase.Running, fundingTxid = sent), emptyList()),
+            SparkExitFundingRelease.Exit(
+                exitRecord(SparkExitRecord.Phase.AwaitingFunding(5_000uL)).copy(fundingPaymentTxid = sent),
+                emptyList(),
+            ),
+            SparkExitFundingRelease.Exit(exitRecord(SparkExitRecord.Phase.AwaitingFunding(5_000uL)), emptyList()),
+            SparkExitFundingRelease.Exit(topUp, emptyList()),
+            null,
+        )
+        for (exit in exits) {
+            val repo = paymentProofRepo().apply { sparkExit = { exit } }
+            assertFalse(repo.onchainRequestHasEnded(attempt))
+            assertTrue(repo.isSparkExitFunding(attempt), "Payment Pending treats it as the exit's funding")
+            val result = repo.abandonUnbroadcastOnchainPayment(attempt, FakeReleaseWallet()) {}
+            assertEquals(true, (result.exceptionOrNull() as? OnchainSendAbandonRefusedError)?.requestOpen)
+        }
+        val adopted = SparkExitFundingRelease.Exit(
+            exitRecord(SparkExitRecord.Phase.Running, fundingTxid = sent),
+            emptyList()
+        )
+        val repo = paymentProofRepo().apply { sparkExit = { adopted } }
+        assertFalse(repo.onchainRequestHasEnded(attempt.copy(releaseApproved = true)))
+        val sweptBack = SparkExitFundingRelease.Exit(
+            exitRecord(SparkExitRecord.Phase.Failed("cancelled")).copy(
+                leftover = listOf(SparkExitRecord.Leftover(sent, 0u, 5_000uL)),
+            ),
+            emptyList(),
+        )
+        val leftoverRepo = paymentProofRepo().apply { sparkExit = { sweptBack } }
+        assertFalse(leftoverRepo.onchainRequestHasEnded(attempt.copy(releaseApproved = true)), "It landed as leftover")
+    }
+
+    @Test
+    fun `approved release of a Spark exit funding stays owned after the exit is gone`() = test {
+        val attempt = exitFundingAttempt().copy(releaseApproved = true)
+        val repo = paymentProofRepo().apply { sparkExit = { SparkExitFundingRelease.Exit(null, emptyList()) } }
+        assertTrue(repo.isSparkExitFunding(attempt), "Payment Pending must finish the release, never retry it")
+        assertTrue(repo.onchainRequestHasEnded(attempt))
+        val gone = SparkExitFundingRelease.Exit(null, emptyList())
+        assertFalse(SparkExitFundingRelease.mayPayAgain(attempt, gone, emptyList()), "Never paid again")
+    }
+
+    @Test
+    fun `ordinary savings send is never released without a Spark exit`() = test {
+        val attempt = exitFundingAttempt().copy(address = "bcrt1qordinary")
+        val exit = SparkExitFundingRelease.Exit(
+            exitRecord(SparkExitRecord.Phase.Done, fundingTxid = "f1".repeat(32)),
+            emptyList()
+        )
+        val repo = paymentProofRepo().apply { sparkExit = { exit } }
+        assertTrue(attempt.canBeAbandoned)
+        assertFalse(repo.onchainRequestHasEnded(attempt))
+        assertFalse(repo.isSparkExitFunding(attempt))
+        val result = repo.abandonUnbroadcastOnchainPayment(attempt, FakeReleaseWallet()) {}
+        assertEquals(true, (result.exceptionOrNull() as? OnchainSendAbandonRefusedError)?.requestOpen)
+    }
+
+    @Test
+    fun `Spark exit funding is paid again only while the exit asks or waits for this payment`() {
+        val attempt = exitFundingAttempt()
+        val asking = SparkExitFundingRelease.Exit(
+            exitRecord(SparkExitRecord.Phase.AwaitingFunding(5_000uL)),
+            emptyList()
+        )
+        val arrived = EsploraUtxo("f1".repeat(32), 0u, 6_000uL, EsploraTxStatus(confirmed = false))
+        assertTrue(SparkExitFundingRelease.mayPayAgain(attempt, asking, emptyList()))
+        assertFalse(SparkExitFundingRelease.mayPayAgain(attempt, asking, listOf(arrived)), "Another wallet covered it")
+        val partial = arrived.copy(value = 1_000uL)
+        assertTrue(SparkExitFundingRelease.mayPayAgain(attempt, asking, listOf(partial)), "It still asks for the rest")
+        val own = arrived.copy(txid = assertNotNull(attempt.txid))
+        assertTrue(SparkExitFundingRelease.mayPayAgain(attempt, asking, listOf(own)), "Its own coin covers it: a bump")
+        assertFalse(SparkExitFundingRelease.mayPayAgain(attempt, asking, listOf(own, arrived)), "Others alone cover it")
+        assertFalse(SparkExitFundingRelease.mayPayAgain(attempt, asking, null))
+        val funded = SparkExitFundingRelease.Exit(
+            exitRecord(SparkExitRecord.Phase.Running, fundingTxid = "f1".repeat(32)),
+            emptyList(),
+        )
+        assertFalse(SparkExitFundingRelease.mayPayAgain(attempt, funded, emptyList()))
+        assertTrue(SparkExitFundingRelease.mayPayAgain(attempt.copy(address = "bcrt1qordinary"), funded, null))
+        val awaiting = SparkExitFundingRelease.Exit(
+            exitRecord(SparkExitRecord.Phase.AwaitingFunding(5_000uL)).copy(fundingPaymentTxid = attempt.txid),
+            emptyList(),
+        )
+        assertTrue(SparkExitFundingRelease.mayPayAgain(attempt, awaiting, emptyList()))
+        assertTrue(SparkExitFundingRelease.mayPayAgain(attempt, awaiting, listOf(partial)), "It waits for this payment")
+        assertFalse(
+            SparkExitFundingRelease.mayPayAgain(attempt, awaiting, listOf(arrived)),
+            "Another wallet covered it",
+        )
+        val otherPayment = SparkExitFundingRelease.Exit(
+            exitRecord(SparkExitRecord.Phase.AwaitingFunding(5_000uL)).copy(fundingPaymentTxid = "f2".repeat(32)),
+            emptyList(),
+        )
+        assertFalse(
+            SparkExitFundingRelease.mayPayAgain(attempt, otherPayment, emptyList()),
+            "It waits for another payment",
+        )
+        val dust = own.copy(value = 100uL)
+        assertFalse(
+            SparkExitFundingRelease.mayPayAgain(attempt, asking, listOf(dust, arrived)),
+            "Others alone cover it",
+        )
+        val confirmed = own.copy(status = EsploraTxStatus(confirmed = true))
+        assertFalse(SparkExitFundingRelease.mayPayAgain(attempt, asking, listOf(confirmed)), "Its own coin confirmed")
+    }
+
+    private fun exitFundingAttempt() = unknownShopAttempt("ab".repeat(32))
+        .copy(requestId = null, payerIdentity = null, address = EXIT_FUNDING_ADDRESS)
+
+    private fun exitRecord(phase: SparkExitRecord.Phase, fundingTxid: String? = null) = SparkExitRecord(
+        network = "regtest",
+        createdAt = 0L,
+        phase = phase,
+        feeRateSatPerVbyte = 2uL,
+        destination = "bcrt1qdestination",
+        leafIds = listOf("leaf-1"),
+        funding = listOf(
+            SparkExitRecord.Funding(
+                index = 0u,
+                address = EXIT_FUNDING_ADDRESS,
+                pubkey = "02",
+                txid = fundingTxid,
+                vout = fundingTxid?.let { 0u },
+                valueSats = fundingTxid?.let { 5_000uL },
+            )
+        ),
+        expectedSats = 1_000uL,
+    )
 
     @Test
     fun `recurring period counts as ended only without its own proof`() = test {

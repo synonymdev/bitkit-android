@@ -19,7 +19,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
@@ -516,13 +518,16 @@ private fun ColumnScope.ApprovalDetails(
                     BodyM(text = stringResource(R.string.profile__auth_approval_usdt_disabled), color = Colors.White64)
                     VerticalSpacer(24.dp)
                 }
+                val showsPaykitAccess = uiState.bitkitClaim?.includesPaykitAccess == true
                 if (uiState.permissions.isNotEmpty()) {
                     PermissionsSection(permissions = uiState.permissions)
+                    if (uiState.relayUrl != null || showsPaykitAccess) SectionDivider()
                 }
-                if (uiState.bitkitClaim?.includesPaykitAccess == true) {
-                    VerticalSpacer(32.dp)
-                    PaykitAccessSection()
+                uiState.relayUrl?.let {
+                    RelaySection(relayUrl = it)
+                    if (showsPaykitAccess) SectionDivider()
                 }
+                if (showsPaykitAccess) PaykitAccessSection()
             }
 
             Column {
@@ -669,6 +674,31 @@ private fun PermissionsSection(permissions: ImmutableList<PubkyAuthPermission>) 
     Section(title = stringResource(R.string.profile__auth_approval_permissions)) {
         permissions.forEach { PermissionRow(it) }
     }
+}
+
+@Composable
+private fun RelaySection(relayUrl: String) {
+    Section(title = stringResource(R.string.profile__auth_approval_relay)) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Icon(
+                painter = painterResource(R.drawable.ic_globe),
+                contentDescription = null,
+                tint = Colors.White,
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .size(16.dp)
+            )
+            HorizontalSpacer(4.dp)
+            SelectionContainer(modifier = Modifier.weight(1f)) {
+                BodySSB(text = relayUrl.asLiteralRequestText(), modifier = Modifier.testTag("PubkyAuthRelayOrigin"))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionDivider() {
+    HorizontalDivider(color = Colors.White10, modifier = Modifier.padding(vertical = 12.dp))
 }
 
 @Composable
@@ -824,6 +854,7 @@ private fun AuthorizePreview() {
                     permissions = persistentListOf(
                         PubkyAuthPermission(path = "/pub/paykit/", accessLevel = "rw"),
                     ),
+                    relayUrl = "https://httprelay.pubky.app/inbox/",
                     bitkitClaim = PubkyAuthClaim(Item.PAYKIT_ACCESS_V1, Item.WATCH_ONLY_ACCOUNT_V1),
                     profile = PubkyProfile(
                         publicKey = "pk8e3qm5f4kgczagxhertyuiop1gxag",

@@ -583,6 +583,8 @@
     <string name="profile__add_link_note">Nota: Qualsevol enllaç que afegiu serà visible públicament.</string>
     <string name="profile__add_tag">Afegeix etiqueta</string>
     <string name="profile__auth_approval_details">Detalls</string>
+    <string name="profile__auth_approval_relay">Relé</string>
+    <string name="profile__auth_error_other_pubky">Aquesta sol·licitud és per a %1$s, no per al pubky d\'aquesta cartera.</string>
     <string name="profile__create_nav_title">Crear perfil</string>
     <string name="profile__edit_nav_title">Editar perfil</string>
     <string name="profile__nav_title">Perfil</string>
@@ -1213,6 +1215,7 @@
     <string name="wallet__send_paykit_no_route__description">Aquest contacte no té cap mètode de pagament que Bitkit pugui fer servir ara.</string>
     <string name="wallet__send_paykit_no_route__title">No es pot pagar aquest contacte</string>
     <string name="wallet__send_paykit_withdrawal_settling__description">Una retirada anterior del teu saldo de despesa encara s\'està liquidant. Torna-ho a provar quan es completi.</string>
+    <string name="wallet__send_pending__abandon_exit_note">Aquesta transferència forçosa ja no necessita aquest pagament. Bitkit primer comprova la xarxa i després retorna les seves monedes a la teva cartera perquè no es pugui confirmar mai. Això té una comissió de xarxa.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Les transferències al saldo de despesa ja no estan disponibles. Bitkit primer comprova la xarxa i després retorna les monedes d\'aquesta transferència a la teva cartera perquè la transferència original no es pugui confirmar mai. Això té una comissió de xarxa.</string>
     <string name="wallet__send_pending__nav_title">Pagament pendent</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
@@ -1356,7 +1359,11 @@
     <string name="contacts__edit_public_note">Tingues en compte que la informació dels contactes es desa en fitxers públics. Els canvis que facis a un contacte a Bitkit no actualitzaran el seu perfil.</string>
     <string name="contacts__edit_save_error">No s\'ha pogut desar el contacte</string>
     <string name="contacts__import_all">Importar-ho tot</string>
-    <string name="contacts__import_friends_count">%1$d amics</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d amic</item>
+        <item quantity="many">%1$d amics</item>
+        <item quantity="other">%1$d amics</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Perfil i contactes\n&lt;accent&gt;trobats&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit ha trobat dades de perfil i contactes vinculades al pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Seleccionar</string>
@@ -1799,6 +1806,7 @@
     <string name="wallet__payment_request_queued_description">La teva sol·licitud de pagament està a la cua i s\'enviarà automàticament</string>
     <string name="wallet__payment_request_rate_unavailable">Els tipus de canvi del pagament no estan disponibles o han caducat. Torna-ho a provar quan tinguis connexió.</string>
     <string name="wallet__payment_request_recipient">DESTINATARI</string>
+    <string name="wallet__payment_request_recipient_failed">No s\'ha pogut comprovar quins contactes poden rebre una sol·licitud de pagament. Comprova la connexió.</string>
     <string name="wallet__payment_request_recipient_no_match">Cap contacte desat coincident amb una connexió privada.</string>
     <string name="wallet__payment_request_recipient_unavailable">Les sol·licituds de pagament només es poden enviar a un contacte desat amb una connexió privada.</string>
     <string name="wallet__payment_request_request">Sol·licitar</string>
