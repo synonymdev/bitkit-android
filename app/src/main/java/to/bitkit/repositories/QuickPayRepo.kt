@@ -668,7 +668,7 @@ class QuickPayRepo @Inject constructor(
      * handled before it was tracked, which no later event resolves.
      */
     private suspend fun resolveSettledEarlierSend(invoiceHash: String) {
-        // Settled only when confirmed: a node send once it succeeded, a Spark send once no attempt of it is live.
+        // Settled only when confirmed: once it succeeded, or once it failed with no attempt of it live on either rail.
         val event = runSuspendCatching { lightningRepo.settledSparkSendEvent(invoiceHash) }.getOrNull()
         val resolution = when (event) {
             is Event.PaymentSuccessful if event.paymentHash == invoiceHash ->
