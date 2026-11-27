@@ -402,20 +402,20 @@ androidComponents {
         }
         buildConfigFields.put(
             "USDT_BUNDLER_URL",
-            localProp("USDT_BUNDLER_URL").orElse("https://bitkit.to/v1/usdt/rpc").stringField(),
+            localProp("USDT_BUNDLER_URL").orElse("https://api.bitkit.to/v1/usdt/rpc").stringField(),
         )
         buildConfigFields.put(
             "USDT_BRIDGES_URL",
-            localProp("USDT_BRIDGES_URL").orElse("https://bitkit.to/v1/usdt/bridges").stringField(),
+            localProp("USDT_BRIDGES_URL").orElse("https://api.bitkit.to/v1/usdt/bridges").stringField(),
         )
         buildConfigFields.put(
             "USDT_DEPOSITS_URL",
-            localProp("USDT_DEPOSITS_URL").orElse("https://bitkit.to/v1/usdt/deposits").stringField(),
+            localProp("USDT_DEPOSITS_URL").orElse("https://api.bitkit.to/v1/usdt/deposits").stringField(),
         )
         buildConfigFields.put("USDT_BRIDGE_NETWORKS", localProp("USDT_BRIDGE_NETWORKS").orElse("").stringField())
         buildConfigFields.put(
             "USDT_RPC_URL",
-            localProp("USDT_RPC_URL").orElse("https://bitkit.to/v1/usdt/chain-rpc").stringField(),
+            localProp("USDT_RPC_URL").orElse("https://api.bitkit.to/v1/usdt/chain-rpc").stringField(),
         )
         buildConfigFields.put("BREEZ_API_KEY", breezApiKey().stringField())
         buildConfigFields.put("ESPLORA_URL", localProp("ESPLORA_URL").orElse("").stringField())

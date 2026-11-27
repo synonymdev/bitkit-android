@@ -144,7 +144,7 @@ internal object Env {
 
     val vssServerUrl
         get() = backupTestEndpoints?.vss ?: when (network) {
-            Network.BITCOIN -> "https://bitkit.to/vss_rs_auth"
+            Network.BITCOIN -> "https://api.bitkit.to/vss_rs_auth"
             else -> "https://bitkit.stag0.blocktank.to/vss_rs_auth"
         }
 
@@ -237,7 +237,7 @@ internal object Env {
     const val chatwootUrl = "https://synonym.to/api/chatwoot"
     const val newsBaseUrl = "https://feeds.synonym.to/news-feed/api"
     const val mempoolBaseUrl = "https://mempool.space/api"
-    const val bitkitEsploraUrl = "https://bitkit.to/electrs"
+    const val bitkitEsploraUrl = "https://api.bitkit.to/electrs"
     const val pricesWidgetBaseUrl = "https://feeds.synonym.to/price-feed/api"
 
     const val APP_STORE_URL = "https://apps.apple.com/app/bitkit-wallet/id6502440655"

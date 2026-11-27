@@ -22,7 +22,7 @@ class SparkChainServiceTest {
 
     @Test
     fun `spark reads the chain from bitkit electrs on mainnet`() {
-        assertEquals("https://bitkit.to/electrs", Env.sparkChainServiceUrl(Network.BITCOIN))
+        assertEquals("https://api.bitkit.to/electrs", Env.sparkChainServiceUrl(Network.BITCOIN))
     }
 
     @Test

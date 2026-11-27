@@ -6,10 +6,10 @@ USDT uses Arbitrum One regardless of the Bitcoin network setting. Builds use the
 
 | Setting | Default |
 | --- | --- |
-| `USDT_BRIDGES_URL` | `https://bitkit.to/v1/usdt/bridges` |
-| `USDT_BUNDLER_URL` | `https://bitkit.to/v1/usdt/rpc` |
-| `USDT_DEPOSITS_URL` | `https://bitkit.to/v1/usdt/deposits` |
-| `USDT_RPC_URL` | `https://bitkit.to/v1/usdt/chain-rpc` |
+| `USDT_BRIDGES_URL` | `https://api.bitkit.to/v1/usdt/bridges` |
+| `USDT_BUNDLER_URL` | `https://api.bitkit.to/v1/usdt/rpc` |
+| `USDT_DEPOSITS_URL` | `https://api.bitkit.to/v1/usdt/deposits` |
+| `USDT_RPC_URL` | `https://api.bitkit.to/v1/usdt/chain-rpc` |
 
 Gradle properties, environment variables or `local.properties` override these defaults. For local E2E testing, override all four URLs with the matching local service routes. Clearing the RPC or bundler build setting disables USDT network operations; local recovery-data backup and restore remain available. Clearing the deposits or bridges setting disables that provider API.
 
