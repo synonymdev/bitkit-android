@@ -124,6 +124,8 @@ This PR adds support for...
   PR's body and diff. Read the candidate PR to verify repository, number, scope and status. Branch
   names or similar titles alone do not prove a relationship. If pairing is ambiguous, report it
   and ask for the missing reference rather than guessing; do not block an unrelated standalone PR.
+- When the PR closes no issue, end this block with a `Source:` line (see Source line in
+  `AGENTS.md`); a PR that closes an issue inherits the issue's source and adds none.
 - For an existing `Counterpart:` line, classify the actual relationship and replace it with the
   appropriate label when updating relationships. Do not duplicate the same link under equivalent
   labels or edit the other PR automatically without authorization.

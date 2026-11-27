@@ -3,6 +3,7 @@
 Twin: owner/other-native-app#number
 Companion: owner/related-repo#number
 Dependency: owner/prerequisite-repo#number
+Source: <kind>, <origin> (review, qa, user, team or self; only when no issue is closed; see Source line in AGENTS.md)
 Twin = same Android/iOS change; Companion = coordinated non-prerequisite work (e.g. E2E coverage); Dependency = prerequisite (e.g. bitkit-core or another library). Describe dependency merge/release order when needed. Omit absent labels. -->
 <!-- Changelog: For user-facing changes, add one fragment in changelog.d/next/ or changelog.d/hotfix/. Do not edit CHANGELOG.md in normal PRs. -->
 <!-- Brief summary of the PR changes, linking to the related resources (issue/design/bug/etc) if applicable. -->
