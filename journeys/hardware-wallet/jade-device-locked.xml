@@ -24,7 +24,7 @@
       Tap "Connect" (testTag "HardwareWalletFoundConnect"), run `./scripts/jade-emulator pin 012345` in `bitkit-docker`, verify the "Device Connected" step (testTag "HardwareWalletPairedScreen") appears within 30 seconds and tap "Finish" (testTag "HardwareWalletPairedFinish")
     </action>
     <action>
-      Tap Receive (testTag "Receive"), select the Jade tab, tap "Show Details" if the address is hidden behind it, read the address without tapping "Verify on Device", close the receive sheet and fund it: `./bitcoin-cli sendtoaddress JADE_ADDRESS 0.001; ./bitcoin-cli -generate 1` in `bitkit-docker`. Wait for the "Received Bitcoin" sheet and tap "Nice!" (testTag "ReceivedTransactionButton")
+      Tap Receive (testTag "Receive"), select the Jade tab, tap "Show Details" if the address is hidden behind it, read the address without tapping "Verify on Device", close the receive sheet and fund it: `./bitcoin-cli sendtoaddress JADE_ADDRESS 0.001; ./bitcoin-cli -generate 1` in `bitkit-docker`. Wait for the "Received Bitcoin" sheet and tap its button (testTag "ReceivedTransactionButton")
     </action>
     <action>
       Run `./scripts/jade-emulator press front right front` in `bitkit-docker` to choose Session, then Log Out, on the device
