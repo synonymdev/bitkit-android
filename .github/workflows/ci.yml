@@ -68,7 +68,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: unit_test_report_${{ github.run_number }}
-          path: app/build/reports/tests/testDevDebugUnitTest/
+          path: |
+            app/build/reports/tests/testDevDebugUnitTest/
+            wear/build/reports/tests/testDevDebugUnitTest/
           retention-days: 30
 
       - name: Upload APK

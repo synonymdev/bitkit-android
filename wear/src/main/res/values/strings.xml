@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="about__network">Network</string>
+    <string name="about__title">About</string>
+    <string name="about__version">Version</string>
+    <string name="common__coming_soon">Coming soon</string>
+    <string name="common__retry">Retry</string>
+    <string name="home__balance_hidden">Balance hidden</string>
+    <string name="home__error">Couldn\'t load your wallet</string>
+    <string name="home__receive">Receive</string>
+    <string name="home__send">Send</string>
+    <string name="home__settings">Settings</string>
+    <string name="onboarding__restore">Restore with recovery phrase</string>
+    <string name="onboarding__set_up_phone">Set up from phone</string>
+    <string name="onboarding__text">Pay and get paid from your wrist.</string>
+    <string name="restore__title">Restore wallet</string>
+    <string name="settings__primary_fiat">Show fiat first</string>
+    <string name="settings__remove_wallet">Remove wallet</string>
+    <string name="settings__remove_wallet_confirm_text">This deletes the wallet from this watch. You can restore it with its recovery phrase.</string>
+    <string name="settings__remove_wallet_confirm_title">Remove wallet?</string>
+    <string name="settings__remove_wallet_failed">Couldn\'t remove the wallet. Try again.</string>
+    <string name="settings__title">Settings</string>
+    <string name="unsupported__text">Bitkit on Wear OS doesn\'t support this network yet.</string>
+    <string name="unsupported__title">Not supported</string>
+</resources>

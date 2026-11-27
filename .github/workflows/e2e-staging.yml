@@ -61,7 +61,7 @@ jobs:
           E2E_BACKEND: network
           TREZOR_BRIDGE: true
           TREZOR_BRIDGE_URL: http://10.0.2.2:21325
-        run: ./gradlew assembleDevDebug
+        run: ./gradlew :app:assembleDevDebug
 
       - name: Rename APK
         run: |

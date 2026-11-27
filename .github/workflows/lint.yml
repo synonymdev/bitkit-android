@@ -63,4 +63,6 @@ jobs:
           path: |
             app/build/reports/detekt/
             app/build/reports/lint-results-devDebug.*
+            wear/build/reports/detekt/
+            wear/build/reports/lint-results-devDebug.*
           retention-days: 30

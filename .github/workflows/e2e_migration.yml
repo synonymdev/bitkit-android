@@ -71,7 +71,7 @@ jobs:
           CHATWOOT_API: ${{ secrets.CHATWOOT_API }}
           E2E: true
           E2E_BACKEND: network
-        run: ./gradlew assembleDevDebug
+        run: ./gradlew :app:assembleDevDebug
 
       - name: Rename APK
         run: |
