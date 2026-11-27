@@ -1021,20 +1021,23 @@ class LightningRepo @Inject constructor(
         configChangeMutex.withLock {
             waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
 
+            var stopRequests: Long? = null
             recoverOnCancellation {
                 stop().onFailure {
                     Logger.error("Failed to stop node during electrum server change", it, context = TAG)
                     return@withContext Result.failure(it)
                 }
+                // A stop requested from here on, during the change's first build included, wins over every start.
+                stopRequests = stopRequestCount.get()
 
                 Logger.debug("Starting node with new electrum server: '$newServerUrl'", context = TAG)
 
-                startConfigChange(customServerUrl = newServerUrl)
+                startConfigChange(stopRequests = stopRequests, customServerUrl = newServerUrl)
             }.onFailure {
                 // Recover in the background: a wedged node's release can gate the rebuild for tens of
                 // seconds, and the caller must surface this failure now rather than block on recovery.
                 Logger.warn("Failed ldk-node config change, recovering in background…", context = TAG)
-                scope.launch { restartWithPreviousConfig() }
+                scope.launch { restartWithPreviousConfig(stopRequests) }
             }.onSuccess {
                 runSuspendCatching { settingsStore.update { it.copy(electrumServer = newServerUrl) } }
                     .onFailure {
@@ -1058,20 +1061,23 @@ class LightningRepo @Inject constructor(
         configChangeMutex.withLock {
             waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
 
+            var stopRequests: Long? = null
             recoverOnCancellation {
                 stop().onFailure {
                     Logger.error("Failed to stop node during RGS server change", it, context = TAG)
                     return@withContext Result.failure(it)
                 }
+                // A stop requested from here on, during the change's first build included, wins over every start.
+                stopRequests = stopRequestCount.get()
 
                 Logger.debug("Starting node with new RGS server: '$newRgsUrl'", context = TAG)
 
-                startConfigChange(customRgsServerUrl = newRgsUrl)
+                startConfigChange(stopRequests = stopRequests, customRgsServerUrl = newRgsUrl)
             }.onFailure {
                 // Recover in the background: a wedged node's release can gate the rebuild for tens of
                 // seconds, and the caller must surface this failure now rather than block on recovery.
                 Logger.warn("Failed ldk-node config change, recovering in background…", context = TAG)
-                scope.launch { restartWithPreviousConfig() }
+                scope.launch { restartWithPreviousConfig(stopRequests) }
             }.onSuccess {
                 settingsStore.update { it.copy(rgsServerUrl = newRgsUrl) }
 
@@ -1085,15 +1091,16 @@ class LightningRepo @Inject constructor(
      * writes keep the store busy, which has nothing to do with the new server. A stop requested meanwhile wins.
      */
     private suspend fun startConfigChange(
+        stopRequests: Long?,
         customServerUrl: String? = null,
         customRgsServerUrl: String? = null,
     ): Result<Unit> {
-        var result = start(
+        var result = startNode(
             shouldRetry = false,
             customServerUrl = customServerUrl,
             customRgsServerUrl = customRgsServerUrl,
+            stopRequestsSeen = stopRequests,
         )
-        val stopRequests = stopRequestCount.get()
         var attempt = 1
         // The stopped node's VSS writes can keep retrying for minutes, past one build's wait for them.
         while (result.exceptionOrNull().isKvStoreSetupFailure() && attempt < BUSY_STORE_START_ATTEMPTS) {
@@ -1103,7 +1110,6 @@ class LightningRepo @Inject constructor(
             }
             attempt++
             Logger.warn("Retrying server change start '$attempt/$BUSY_STORE_START_ATTEMPTS'", context = TAG)
-            // A direct stop since the first attempt wins over every retry.
             result = startNode(
                 shouldRetry = false,
                 customServerUrl = customServerUrl,
@@ -1332,10 +1338,17 @@ class LightningRepo @Inject constructor(
         return remaining.isEmpty()
     }
 
-    private suspend fun restartWithPreviousConfig(): Result<Unit> = withContext(bgDispatcher) {
+    /** [stopRequestsSeen] is the failed change's reading: a stop requested since then wins over recovery. */
+    private suspend fun restartWithPreviousConfig(
+        stopRequestsSeen: Long? = null,
+    ): Result<Unit> = withContext(bgDispatcher) {
         // Runs detached from the failed change, so it takes the same transaction lock: without it
         // this recovery can restart the previous config between a later change's stop and start.
         configChangeMutex.withLock {
+            if (stopRequestsSeen != null && stopRequestCount.get() != stopRequestsSeen) {
+                Logger.info("Skipped recovery because a stop was requested", context = TAG)
+                return@withContext Result.failure(NodeStartYieldedToStopError(null))
+            }
             Logger.debug("Stopping node for recovery attempt", context = TAG)
 
             stop().onFailure { e ->

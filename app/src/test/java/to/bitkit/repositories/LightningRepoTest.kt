@@ -4899,6 +4899,53 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
 
+    // Regression: a direct stop (e.g. from LightningNodeService) during the change's first build sets no
+    // pending stop, so the change's own stop reading is what keeps the retry and the recovery from restarting.
+    @Test
+    fun `restartWithElectrumServer keeps a stop requested during its first build`() = test {
+        startNodeForTesting()
+        val testScope = this
+        val newUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        whenever { lightningService.setup(any(), eq(newUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                testScope.launch { sut.stop() }
+                delay(1)
+                throw busy
+            }
+
+        assertTrue(sut.restartWithElectrumServer(newUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(1)).setup(any(), eq(newUrl), anyOrNull(), anyOrNull())
+        verify(lightningService, never()).setup(any(), isNull(), isNull(), anyOrNull())
+        assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `restartWithRgsServer retries its own start while the vss store is busy`() = test {
+        startNodeForTesting()
+        val newRgsUrl = "https://rgs.example.com/snapshot"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        var changeAttempts = 0
+        whenever { lightningService.setup(any(), isNull(), eq(newRgsUrl), anyOrNull()) }
+            .doSuspendableAnswer {
+                changeAttempts++
+                if (changeAttempts < 3) throw busy
+            }
+
+        assertTrue(sut.restartWithRgsServer(newRgsUrl).isSuccess)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(3, changeAttempts)
+        verify(lightningService, never()).setup(any(), isNull(), isNull(), anyOrNull())
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
     // Regression: a stopped node's VSS writes can keep retrying past one build's wait for them, so the
     // recovery start retries while the build fails on the busy store instead of leaving the node offline.
     @Test
