@@ -1087,6 +1087,38 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         }
 
     @Test
+    fun `update to send moves nothing when only a quote above the fee shown covers the payment`() = test {
+        sendable(5_000uL)
+        sparkState.value = SparkState(isReady = true)
+        whenever(sparkRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
+        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(eq(INVOICE), any())).thenReturn(Result.success(5uL))
+        val maxSats = MoveToSparkMath.combinedSendableSats(lightningState.value.channels, sparkState.value)
+        whenever(sparkRepo.estimateFeeSats(INVOICE, maxSats)).thenReturn(Result.success(0uL))
+        val shown = MoveToSparkQuote(INVOICE, amountSats = 4_000uL, feeSats = 6uL)
+
+        val result = sut.updateToSend(shown, INVOICE, maxSats)
+
+        assertIs<MoveToSparkError.UpdateFallsShort>(result.exceptionOrNull())
+        verify(lightningRepo, never()).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `update to send moves nothing when even the quote without headroom falls short of the payment`() = test {
+        sendable(5_000uL)
+        sparkState.value = SparkState(isReady = true)
+        whenever(sparkRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
+        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(eq(INVOICE), any())).thenReturn(Result.success(5uL))
+        val amountSats = 6_000uL
+        whenever(sparkRepo.estimateFeeSats(INVOICE, amountSats)).thenReturn(Result.success(0uL))
+        val shown = MoveToSparkQuote(INVOICE, amountSats = 4_000uL, feeSats = 60uL)
+
+        val result = sut.updateToSend(shown, INVOICE, amountSats)
+
+        assertIs<MoveToSparkError.UpdateFallsShort>(result.exceptionOrNull())
+        verify(lightningRepo, never()).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
     fun `update to send moves nothing once another move took the channels and Spark covers the payment`() = test {
         sendable(50_100uL)
         sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
