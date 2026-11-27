@@ -149,6 +149,25 @@ Use optional `Twin:`, `Companion:`, and `Dependency:` lines for confirmed relate
 is related coordinated work such as E2E coverage; a dependency is a prerequisite. Omit absent
 relationships and use repository-qualified PR references so cross-repository numbers are unambiguous.
 
+### Source line
+
+Record where each issue and PR came from, so the team can count how work is found. Every issue,
+and every PR that closes no issue, ends its reference block at the top of the body with one line:
+`Source: <kind>, <origin>`. It comes after any `Twin:`, `Companion:` and `Dependency:` lines. A PR that closes an issue inherits that issue's source and adds no line.
+
+- `<kind>` is one of:
+  - `review`: a finding in a PR review
+  - `qa`: a QA run or report
+  - `user`: a user report (Telegram, support, a store review)
+  - `team`: a Slack thread or a teammate's request
+  - `self`: found while working on something else
+- `<origin>` is exactly one item: the URL of the review comment, QA report, user message, Slack
+  thread, or the PR or issue it was found in. Use `@handle` only for a teammate's request with no
+  thread to link. Who wrote the linked comment shows whether a person or an AI reviewer found it,
+  so add no separate flag.
+- Example: `Source: review, https://github.com/synonymdev/bitkit-ios/pull/1438#discussion_r4706928853`
+- Keep it neutral: no private tool, machine or session names.
+
 ### Models used
 
 Include `### Models used` in the PR body with `Planning/scoping`, `Implementation`, and a single
