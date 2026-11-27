@@ -132,6 +132,7 @@ class SparkExitRepo @Inject constructor(
                         .onFailure { e -> Logger.warn("Failed to delete the wiped exit addresses", e, context = TAG) }
                     work.cancelAll()
                     _state.update { SparkExitState() }
+                    lastFundingRead = null
                     isLoaded = false
                     // A later exit, of a new or restored wallet, writes again.
                     isWriteClosed = false
@@ -788,6 +789,7 @@ class SparkExitRepo @Inject constructor(
             val chain = requireNotNull(chain) { "No chain host for this network" }
             val address = requireNotNull(_state.value.fundingAddress) { "No Spark exit funding address" }
             val utxos = chain.utxos(address)
+            lastFundingRead = address to utxos
             val seen = utxos.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
             _state.update { it.copy(fundingSeenSats = seen, fundingSeenCount = utxos.size) }
             seen
@@ -1160,8 +1162,9 @@ class SparkExitRepo @Inject constructor(
     private suspend fun keepAcceptedSavingsSend(record: SparkExitRecord): SparkExitRecord {
         if (!canKeepAcceptedSavingsSend(record)) return record
         // The journal's attempt to any address: one elsewhere says the journal moved on, not that nothing went out.
+        val journalWallet = lightningRepo.currentWalletIndex
         val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrElse { return record }
-        if (attempt == null && isStartedSendNeverSent(record)) {
+        if (attempt == null && journalWallet == walletIndex && isStartedSendNeverSent(record)) {
             Logger.info("Forgetting the started Spark exit savings payment the journal never sent", context = TAG)
             clearSavingsSend()
             return _state.value.record ?: record

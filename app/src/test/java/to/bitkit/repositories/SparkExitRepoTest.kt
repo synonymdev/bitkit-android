@@ -2031,6 +2031,14 @@ class SparkExitRepoTest : BaseUnitTest() {
         used.onAppBackgrounded()
         assertNotNull(assertNotNull(store.load()).savingsSendStarted, "a transaction reached the address")
 
+        whenever(lightning.currentWalletIndex).thenReturn(1)
+        val elsewhere = quotedSut(FakeSparkExitRecovering(), fundingChain())
+        elsewhere.load().getOrThrow()
+        elsewhere.tick().getOrThrow()
+        elsewhere.onAppBackgrounded()
+        assertNotNull(assertNotNull(store.load()).savingsSendStarted, "the journal read is another wallet's")
+
+        whenever(lightning.currentWalletIndex).thenReturn(0)
         val sut = quotedSut(FakeSparkExitRecovering(), fundingChain())
         sut.load().getOrThrow()
         sut.tick().getOrThrow()
