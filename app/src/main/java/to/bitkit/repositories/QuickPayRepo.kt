@@ -612,7 +612,8 @@ class QuickPayRepo @Inject constructor(
         val op = opsByKey[invoiceHash]
         if (!duplicate && op != null && !op.dispatched) {
             spend.release(invoiceHash)
-            emitErrorLocked(op, error, paymentRequest)
+            // Refused for an earlier send of the invoice still in flight, which QuickPay didn't make: it is tracked.
+            if (error is PaymentPendingException) emitPendingLocked(op) else emitErrorLocked(op, error, paymentRequest)
             removeOpLocked(op)
             return
         }

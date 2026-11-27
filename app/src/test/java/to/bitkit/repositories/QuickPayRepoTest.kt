@@ -897,6 +897,27 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pending return without a dispatch refunds a fresh reserve and emits pending`() = test {
+        val (bolt11, hash) = testInvoice()
+        // An earlier send of the invoice is still in flight: refused without authorizing or dispatching.
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { Result.failure(PaymentPendingException(hash)) }
+        val session = QuickPaySession()
+
+        sut.attach(session).test {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            val pending = assertIs<QuickPaySessionEvent.Pending>(awaitItem())
+            assertEquals(hash, pending.paymentHash)
+            assertEquals(bolt11, pending.paymentRequest)
+        }
+        assertEquals(0L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+        verify(pendingPaymentRepo).track(hash)
+        assertFalse(sut.hasOpen(hash))
+    }
+
+    @Test
     fun `re-pay of a settled hash does not double-count`() = test {
         val (bolt11, hash) = testInvoice()
         assertNotNull(sut.reserveBound(hash, 500u).getOrThrow())
