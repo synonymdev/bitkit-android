@@ -4929,22 +4929,174 @@ class LightningRepoTest : BaseUnitTest() {
         startNodeForTesting()
         val testScope = this
         val newUrl = "ssl://10.0.2.2:60001"
-        whenever(lightningService.node).thenReturn(null)
-        whenever(lightningService.stop()).thenReturn(Unit)
+        val node = mock<Node>()
+        var hasNode = false
+        whenever(lightningService.node).thenAnswer { if (hasNode) node else null }
+        whenever(lightningService.stop()).thenAnswer { hasNode = false }
         clearInvocations(lightningService, settingsStore)
         whenever { lightningService.setup(any(), eq(newUrl), anyOrNull(), anyOrNull()) }
             .doSuspendableAnswer {
                 testScope.launch { sut.stop() }
                 delay(1)
+                hasNode = true
             }
 
         assertTrue(sut.restartWithElectrumServer(newUrl).isFailure)
         testScheduler.advanceUntilIdle()
 
+        verify(lightningService, times(1)).setup(any(), eq(newUrl), anyOrNull(), anyOrNull())
         verify(lightningService, never()).start(anyOrNull(), any())
         verify(lightningService, never()).setup(any(), isNull(), isNull(), anyOrNull())
         verify(settingsStore, never()).update(any())
+        assertFalse(hasNode)
         assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    // A background stop that the user's return cancelled before it ran stopped nothing, so it must not
+    // keep the node on the server the change rejected.
+    @Test
+    fun `restartWithElectrumServer leaves no node on the rejected server after a cancelled background stop`() =
+        test {
+            startNodeForTesting()
+            val newUrl = "ssl://10.0.2.2:60001"
+            val node = mock<Node>()
+            var builtWith: String? = null
+            var hasNode = false
+            whenever(lightningService.node).thenAnswer { if (hasNode) node else null }
+            whenever(lightningService.stop()).thenAnswer { hasNode = false }
+            whenever { lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull()) }
+                .doSuspendableAnswer {
+                    builtWith = it.getArgument(1)
+                    hasNode = true
+                }
+            var newServerStarts = 0
+            whenever { lightningService.start(anyOrNull(), any()) }
+                .doSuspendableAnswer {
+                    if (builtWith == newUrl && ++newServerStarts == 1) {
+                        delay(10.seconds)
+                        throw AppError("Feerate estimation update timeout")
+                    }
+                }
+
+            val change = async { sut.restartWithElectrumServer(newUrl) }
+            runCurrent()
+            sut.stopDebounced()
+            testScheduler.advanceTimeBy(BACKGROUND_STOP_DELAY_MS + 1)
+            runCurrent()
+            sut.cancelPendingStop()
+            val foreground = async { sut.start() }
+            val changeResult = change.await()
+            foreground.await()
+            testScheduler.advanceUntilIdle()
+
+            assertTrue(changeResult.isFailure)
+            assertNull(builtWith, "Node left on '$builtWith', the server the change rejected and never persisted")
+        }
+
+    @Test
+    fun `restartWithElectrumServer releases its node when a cancelled background stop arrived during setup`() =
+        test {
+            startNodeForTesting()
+            val newUrl = "ssl://10.0.2.2:60001"
+            val node = mock<Node>()
+            var builtWith: String? = null
+            var hasNode = false
+            whenever(lightningService.node).thenAnswer { if (hasNode) node else null }
+            whenever(lightningService.stop()).thenAnswer { hasNode = false }
+            whenever { lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull()) }
+                .doSuspendableAnswer {
+                    if (it.getArgument<String?>(1) == newUrl) delay(10.seconds)
+                    builtWith = it.getArgument(1)
+                    hasNode = true
+                }
+
+            val change = async { sut.restartWithElectrumServer(newUrl) }
+            runCurrent()
+            sut.stopDebounced()
+            testScheduler.advanceTimeBy(BACKGROUND_STOP_DELAY_MS + 1)
+            runCurrent()
+            sut.cancelPendingStop()
+            val foreground = async { sut.start() }
+            val changeResult = change.await()
+            foreground.await()
+            testScheduler.advanceUntilIdle()
+
+            assertTrue(changeResult.isFailure)
+            assertNull(builtWith, "Node left on '$builtWith', the server the change rejected and never persisted")
+        }
+
+    @Test
+    fun `restartWithRgsServer leaves no node on the rejected server after a cancelled background stop`() = test {
+        startNodeForTesting()
+        val newRgsUrl = "https://rgs.example.com/snapshot"
+        val node = mock<Node>()
+        var builtWith: String? = null
+        var hasNode = false
+        whenever(lightningService.node).thenAnswer { if (hasNode) node else null }
+        whenever(lightningService.stop()).thenAnswer { hasNode = false }
+        whenever { lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                builtWith = it.getArgument(2)
+                hasNode = true
+            }
+        var newServerStarts = 0
+        whenever { lightningService.start(anyOrNull(), any()) }
+            .doSuspendableAnswer {
+                if (builtWith == newRgsUrl && ++newServerStarts == 1) {
+                    delay(10.seconds)
+                    throw AppError("Feerate estimation update timeout")
+                }
+            }
+
+        val change = async { sut.restartWithRgsServer(newRgsUrl) }
+        runCurrent()
+        sut.stopDebounced()
+        testScheduler.advanceTimeBy(BACKGROUND_STOP_DELAY_MS + 1)
+        runCurrent()
+        sut.cancelPendingStop()
+        val foreground = async { sut.start() }
+        val changeResult = change.await()
+        foreground.await()
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(changeResult.isFailure)
+        assertNull(builtWith, "Node left on '$builtWith', the RGS server the change rejected and never persisted")
+    }
+
+    @Test
+    fun `restartWithElectrumServer cancelled after setup releases its node`() = test {
+        startNodeForTesting()
+        val newUrl = "ssl://10.0.2.2:60001"
+        val node = mock<Node>()
+        var builtWith: String? = null
+        var hasNode = false
+        whenever(lightningService.node).thenAnswer { if (hasNode) node else null }
+        whenever(lightningService.stop()).thenAnswer { hasNode = false }
+        whenever { lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                builtWith = it.getArgument(1)
+                hasNode = true
+            }
+        val startReached = CompletableDeferred<Unit>()
+        whenever { lightningService.start(anyOrNull(), any()) }
+            .doSuspendableAnswer {
+                if (builtWith == newUrl) {
+                    startReached.complete(Unit)
+                    awaitCancellation()
+                }
+            }
+
+        val change = launch { sut.restartWithElectrumServer(newUrl) }
+        startReached.await()
+        sut.stopDebounced()
+        testScheduler.advanceTimeBy(BACKGROUND_STOP_DELAY_MS + 1)
+        runCurrent()
+        sut.cancelPendingStop()
+        change.cancelAndJoin()
+        sut.start()
+        testScheduler.advanceUntilIdle()
+
+        assertNull(builtWith, "Node left on '$builtWith', the server of the cancelled change")
     }
 
     @Test

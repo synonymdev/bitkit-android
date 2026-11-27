@@ -457,10 +457,12 @@ class LightningRepo @Inject constructor(
                     }
                 }
 
-                // A stop requested during the build waits on this lock; it wins and releases the built node.
+                // A stop requested during the build wins. A foreground start can cancel that stop before it runs,
+                // so release the built node here, or that start would reuse it with the change's server.
                 if (stopRequestsSeen != null && stopRequestCount.get() != stopRequestsSeen) {
                     Logger.info("Skipped start because a stop was requested during setup", context = TAG)
-                    _lightningState.update { it.copy(nodeLifecycleState = initialLifecycleState) }
+                    releaseUnsavedConfigNode()
+                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
                     return@withLock Result.failure(NodeStartYieldedToStopError(null))
                 }
 
@@ -506,7 +508,15 @@ class LightningRepo @Inject constructor(
                 Result.success(Unit)
             }.getOrElse { e ->
                 if (e is CancellationException) {
-                    withContext(NonCancellable) { reconcileCancelledStart(initialLifecycleState) }
+                    withContext(NonCancellable) {
+                        if (customServerUrl != null || customRgsServerUrl != null) {
+                            // The change was never saved, so neither keep nor adopt a node built with its server.
+                            releaseUnsavedConfigNode()
+                            _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
+                        } else {
+                            reconcileCancelledStart(initialLifecycleState)
+                        }
+                    }
                     throw e
                 }
 
@@ -527,6 +537,9 @@ class LightningRepo @Inject constructor(
                     shouldRetryStart = true
                     Result.failure(e)
                 } else {
+                    // A node built with a changed server must not outlive its failed start: the next start would
+                    // reuse it although the change was never saved.
+                    if (customServerUrl != null || customRgsServerUrl != null) releaseUnsavedConfigNode()
                     _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e)) }
                     Result.failure(e)
                 }
@@ -578,6 +591,11 @@ class LightningRepo @Inject constructor(
         return lightningService.startEventListener(::onEvent).onFailure {
             Logger.warn("Failed to start event listener", it, context = TAG)
         }
+    }
+
+    private suspend fun releaseUnsavedConfigNode() {
+        runSuspendCatching { lightningService.stop() }
+            .onFailure { Logger.warn("Failed to release node built with an unsaved config", it, context = TAG) }
     }
 
     private suspend fun reconcileCancelledStart(initialLifecycleState: NodeLifecycleState) {
