@@ -10201,13 +10201,16 @@ class AppViewModel @Inject constructor(
     }
 
     /**
-     * Settles the recipient picker on open: no profile means no saved contacts, a profile still signing in cannot be
-     * checked yet, and saved contacts that are not loaded and not loading are loaded again, which retries a failed
-     * load.
+     * Settles the recipient picker on open: no profile means no saved contacts, a stored profile that is not signed in
+     * (restoring, or its restore failed) cannot be checked, and saved contacts that are not loaded and not loading are
+     * loaded again, which retries a failed load.
      */
     private suspend fun refreshPaymentRequestTargetsForPicker() {
         if (pubkyRepo.publicKey.value == null) {
-            if (pubkyRepo.isRestoringSession.value) {
+            // A stored profile whose session failed to restore is not "no profile": its contacts cannot be checked.
+            val hasStoredProfile = pubkyRepo.isRestoringSession.value ||
+                runSuspendCatching { pubkyRepo.hasIdentity() }.getOrDefault(true)
+            if (hasStoredProfile) {
                 paykitPaymentRequestRepo.markEligibleTargetsUnknown()
             } else {
                 paykitPaymentRequestRepo.markNoEligibleTargets()

@@ -20932,6 +20932,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `recipient picker for a profile whose session failed to restore fails instead of showing no contacts`() = test {
+        enablePaykitUi()
+        isRestoringPubkySession.update { false }
+        whenever(pubkyRepo.hasIdentity()).thenReturn(true)
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo)
+
+        sut.showSubscriptionCreator()
+        runCurrent()
+
+        verify(paykitPaymentRequestRepo).markEligibleTargetsUnknown()
+        verify(paykitPaymentRequestRepo, never()).markNoEligibleTargets()
+    }
+
+    @Test
     fun `reopening the recipient picker retries a failed contacts load`() = test {
         enablePaykitUi()
         pubkyPublicKey.update { testPublicKey }
