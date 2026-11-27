@@ -37,6 +37,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.models.Suggestion
@@ -44,10 +45,23 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
+import kotlin.math.ceil
 
 private const val GLOW_ANIMATION_MILLIS = 1100
 private const val MIN_ALPHA_GRADIENT = 0.24f
 private const val MAX_ALPHA_GRADIENT = 0.9f
+
+/** Widest a suggestion card grows before the grid adds a column, so tablets keep phone-sized cards */
+private val SUGGESTION_CARD_MAX_WIDTH = 240.dp
+
+/** Gap between suggestion cards in a grid */
+val SUGGESTION_GRID_SPACING = 16.dp
+
+/** Columns of a suggestion grid as wide as [width]: two on phones, more as the screen widens */
+fun suggestionGridColumns(width: Dp): Int =
+    ceil(
+        (width + SUGGESTION_GRID_SPACING) / (SUGGESTION_CARD_MAX_WIDTH + SUGGESTION_GRID_SPACING)
+    ).toInt().coerceAtLeast(2)
 
 @Composable
 fun SuggestionCard(
