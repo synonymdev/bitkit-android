@@ -216,13 +216,14 @@ The watch holds the full recovery phrase and passphrase, because Breez needs the
   with a retry and no wallet opens. A launch, and every restore, also deletes what no stored seed owns: Spark
   storage, a seed key and a half-written seed file.
   - The note is an empty file, `wipe.pending`, beside the seed in the no-backup directory; the file existing is the
-    note. It and its directory are synced to disk. It is not in the settings file, which is reset when it cannot be
+    note. It and its directory are synced to disk, and a new note that cannot be synced is deleted again, so a note
+    that failed to be written never starts a wipe. It is not in the settings file, which is reset when it cannot be
     read: a reset neither loses a wipe under way nor starts one.
   - The wallet counts as wiped once the seed file and the Spark storage are gone. A seed key that cannot be
     deleted, after a second try, does not fail the wipe: without its ciphertext it protects nothing, and each launch
-    without a wallet tries the delete again. A Spark instance that cannot be disconnected, after a second try, fails the wipe
-    before its storage is deleted: the storage is never deleted under a live instance, the note stays, and the wipe
-    is finished later as after any failed step.
+    without a wallet tries the delete again. A Spark instance that cannot be disconnected, after a second try, fails
+    the wipe before its storage is deleted: the storage is never deleted under a live instance, the note stays, and
+    the wipe is finished later as after any failed step.
   - The note is written twice at most. When it still cannot be written, Remove wallet fails and deletes nothing, so
     a removal the wearer asked for can never be left half done without a note to finish it. A lost-key wipe goes on
     without the note: its seed is unreadable either way.
@@ -231,7 +232,8 @@ The watch holds the full recovery phrase and passphrase, because Breez needs the
   - While a wipe runs nothing connects to Spark. A wallet start takes a token before it reads the seed; no token is
     handed out during a wipe, and a token stops being valid when a wipe begins and again when it ends. So a start
     begun before or during a wipe is refused, and a balance that arrives is dropped. The token is checked again once
-    Spark is built: an instance built while a wipe began is disconnected and never used.
+    Spark is built: an instance built while a wipe began is disconnected and never used. When it cannot be
+    disconnected, the app keeps hold of it, so the wipe fails before its storage is deleted.
 
 ### Key loss or a passing error
 

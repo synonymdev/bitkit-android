@@ -11,9 +11,13 @@ import java.nio.file.StandardOpenOption
  * The note that a wallet wipe started and did not finish: an empty file whose existence is the note. It lives in
  * the seed's no-backup directory, apart from the settings file, so a settings file that is reset as corrupted
  * neither loses a wipe under way nor starts one. The file and its directory are synced, so the note survives a
- * power cut. The directory is resolved on first use, off the main thread.
+ * power cut. A new file that cannot be synced is deleted again, so a note that failed to be written never starts a
+ * wipe. The directory is resolved on first use, off the main thread.
  */
-class WipeMarker(directory: Lazy<File>) {
+class WipeMarker(
+    directory: Lazy<File>,
+    private val sync: (FileOutputStream) -> Unit = { it.fd.sync() },
+) {
     companion object {
         private const val TAG = "WipeMarker"
         private const val FILE_NAME = "wipe.pending"
@@ -26,7 +30,11 @@ class WipeMarker(directory: Lazy<File>) {
 
     fun create() {
         directory.mkdirs()
-        FileOutputStream(file).use { it.fd.sync() }
+        val isNew = !file.exists()
+        runCatching { FileOutputStream(file).use(sync) }.onFailure {
+            if (isNew && file.delete()) syncDirectory()
+            throw it
+        }
         syncDirectory()
     }
 

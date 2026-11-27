@@ -459,7 +459,7 @@ class WalletRepoTest : BaseUnitTest() {
 
         foregroundMonitor.isForeground.update { true }
 
-        verify(sparkService, atLeastOnce()).disconnect()
+        verify(sparkService, times(2)).disconnect()
         assertEquals(WalletStatus.Locked, sut.walletState.value.status)
     }
 
@@ -990,7 +990,7 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a start that a lock stops after a removal leaves the wallet missing`() = test {
+    fun `the defensive lock guard leaves a removed wallet missing when a start outlives its removal`() = test {
         whenever(seedStore.load()).thenReturn(Result.success(seed))
         whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
         whenever(sparkService.syncWallet()).doSuspendableAnswer {

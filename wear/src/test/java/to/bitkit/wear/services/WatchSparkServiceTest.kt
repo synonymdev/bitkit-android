@@ -169,6 +169,58 @@ class WatchSparkServiceTest {
     }
 
     @Test
+    fun `an sdk that gets no listener and cannot be disconnected is kept for the next disconnect`() = runTest {
+        val sut = WatchSparkService(mock<Context>())
+        val sdk = mock<BreezSdkInterface>()
+        var failures = 1
+        whenever(sdk.addEventListener(any())).thenAnswer { throw SparkError.NotConnected() }
+        whenever(sdk.disconnect()).thenAnswer { if (failures-- > 0) throw SparkError.WipeFailed("disconnect") }
+        val token = assertNotNull(sut.wipeToken())
+
+        assertFailsWith<SparkError.NotConnected> { sut.connectWith(token) { sdk } }
+        sut.disconnect()
+
+        verify(sdk, times(2)).disconnect()
+        verify(sdk, never()).removeEventListener(any())
+        assertFailsWith<SparkError.NotConnected> { sut.getInfo() }
+    }
+
+    @Test
+    fun `an sdk built during a wipe that cannot be disconnected fails the wipe, which keeps the storage`() = runTest {
+        val sut = WatchSparkService(context())
+        val sdk = mock<BreezSdkInterface>()
+        val storage = storage()
+        whenever(sdk.disconnect()).thenAnswer { throw SparkError.NotConnected() }
+        val token = assertNotNull(sut.wipeToken())
+
+        assertFailsWith<SparkError.WipeInProgress> {
+            sut.connectWith(token) {
+                sut.beginWipe()
+                sdk
+            }
+        }
+        assertFailsWith<SparkError.NotConnected> { sut.wipeStorage() }
+
+        verify(sdk, times(3)).disconnect()
+        verify(sdk, never()).addEventListener(any())
+        assertTrue(storage.exists())
+    }
+
+    @Test
+    fun `a stale token is refused over an sdk kept by a disconnect that failed, which gets no listener`() = runTest {
+        val sut = WatchSparkService(mock<Context>())
+        val sdk = connected(sut)
+        whenever(sdk.disconnect()).thenAnswer { throw SparkError.NotConnected() }
+        val token = assertNotNull(sut.wipeToken())
+        sut.beginWipe()
+        assertFailsWith<SparkError.NotConnected> { sut.disconnect() }
+
+        assertFailsWith<SparkError.WipeInProgress> { sut.connectWith(token) { error("built during a wipe") } }
+
+        verify(sdk, times(1)).addEventListener(any())
+    }
+
+    @Test
     fun `a listener that cannot be removed does not stop the disconnect`() = runTest {
         val sut = WatchSparkService(mock<Context>())
         val sdk = connected(sut)

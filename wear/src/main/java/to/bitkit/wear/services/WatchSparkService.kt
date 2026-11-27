@@ -144,23 +144,27 @@ class WatchSparkService @Inject constructor(
 
     /**
      * Connects the Spark wallet of [seed]. Returns true, or false when it was already connected. It fails when
-     * [wipeToken] is no longer current. An SDK kept by a [disconnect] that failed after it removed the listener gets
-     * the listener back.
+     * [wipeToken] is no longer current, also over an SDK already connected. An SDK kept by a [disconnect] that failed
+     * after it removed the listener gets the listener back. An SDK that was built and then cannot be used, and
+     * cannot be disconnected either, stays referenced without a listener, so the next [disconnect] reaches it and a
+     * wipe never deletes the storage under it.
      */
     suspend fun connect(seed: WalletSeed, wipeToken: Int): Boolean = connectWith(wipeToken) { build(seed) }
 
     internal suspend fun connectWith(wipeToken: Int, build: suspend () -> BreezSdkInterface): Boolean = mutex.withLock {
+        if (!isCurrent(wipeToken)) throw SparkError.WipeInProgress()
         sdk?.let {
             if (listenerId == null) listenerId = it.addEventListener(listener)
             return@withLock false
         }
-        if (!isCurrent(wipeToken)) throw SparkError.WipeInProgress()
         val connected = build()
         // A caller that gives up from here on, as on a timeout, must not leave a built SDK that nothing disconnects.
         withContext(NonCancellable) {
             if (!isCurrent(wipeToken)) {
-                runSuspendCatching { connected.disconnect() }
-                    .onFailure { Logger.warn("Failed to disconnect Spark built during a wipe", it, context = TAG) }
+                runSuspendCatching { connected.disconnect() }.onFailure {
+                    Logger.warn("Failed to disconnect Spark built during a wipe", it, context = TAG)
+                    sdk = connected
+                }
                 throw SparkError.WipeInProgress()
             }
             attach(connected)
@@ -187,7 +191,7 @@ class WatchSparkService @Inject constructor(
         runSuspendCatching {
             listenerId = connected.addEventListener(listener)
         }.onFailure {
-            runSuspendCatching { connected.disconnect() }
+            runSuspendCatching { connected.disconnect() }.onFailure { sdk = connected }
             throw it
         }
         sdk = connected

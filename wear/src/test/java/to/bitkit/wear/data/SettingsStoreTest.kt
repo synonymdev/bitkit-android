@@ -15,7 +15,9 @@ import to.bitkit.wear.security.KeystoreSeedStore
 import to.bitkit.wear.security.WalletSeed
 import to.bitkit.wear.test.BaseUnitTest
 import java.io.File
+import java.io.IOException
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -104,13 +106,48 @@ class SettingsStoreTest : BaseUnitTest() {
         close()
     }
 
+    @Test
+    fun `a wipe note that cannot be synced is deleted again, so no wipe is pending`() = test {
+        var isWritten = false
+        val sut = open { isWritten = markerFile.exists() }
+
+        assertFailsWith<IOException> { sut.beginWipe(showsRemovedNotice = true) }
+
+        assertTrue(isWritten)
+        assertFalse(sut.isWipePending())
+        assertFalse(markerFile.exists())
+        assertFalse(sut.isRemovedNoticePending())
+        close()
+    }
+
+    @Test
+    fun `a wipe note written again that cannot be synced stays`() = test {
+        open().beginWipe(showsRemovedNotice = false)
+        close()
+        val sut = open {}
+
+        assertFailsWith<IOException> { sut.beginWipe(showsRemovedNotice = false) }
+
+        assertTrue(sut.isWipePending())
+        close()
+    }
+
     private var scope: CoroutineScope? = null
 
     private fun scope() = CoroutineScope(testDispatcher + Job())
 
-    private fun open(): SettingsStore {
+    private fun open(): SettingsStore = open(WipeMarker(lazy { seedDirectory }))
+
+    private fun open(onSyncFailure: () -> Unit): SettingsStore = open(
+        WipeMarker(lazy { seedDirectory }) {
+            onSyncFailure()
+            throw IOException("sync")
+        },
+    )
+
+    private fun open(wipeMarker: WipeMarker): SettingsStore {
         val opened = scope().also { scope = it }
-        return SettingsStore(settingsDataStore(opened) { settingsFile }, WipeMarker(lazy { seedDirectory }))
+        return SettingsStore(settingsDataStore(opened) { settingsFile }, wipeMarker)
     }
 
     private suspend fun close() {
