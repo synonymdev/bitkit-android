@@ -8,7 +8,9 @@
     Receive after Verify on Device ends the session, and so does leaving Send without a sent payment,
     so the journey funds from the address Receive shows, signs first and verifies last. The device
     answers the next request with HW_LOCKED, and the app asks for the PIN on the device again and
-    retries, on Sign With Jade and on Verify on Device.
+    retries, on Sign With Jade and on Verify on Device. A dropped connection also ends in the PIN pad
+    (the app reconnects and unlocks), so each leg checks the app log for the lock line, which only the
+    HW_LOCKED path writes.
   </description>
   <actions>
     <action>
@@ -24,7 +26,10 @@
       Tap "Connect" (testTag "HardwareWalletFoundConnect"), run `./scripts/jade-emulator pin 012345` in `bitkit-docker`, verify the "Device Connected" step (testTag "HardwareWalletPairedScreen") appears within 30 seconds and tap "Finish" (testTag "HardwareWalletPairedFinish")
     </action>
     <action>
-      Tap Receive (testTag "Receive"), select the Jade tab, tap "Show Details" if the address is hidden behind it, read the address without tapping "Verify on Device", close the receive sheet and fund it: `./bitcoin-cli sendtoaddress JADE_ADDRESS 0.01; ./bitcoin-cli -generate 1` in `bitkit-docker`. Wait for the "Received Bitcoin" sheet and tap its button (testTag "ReceivedTransactionButton")
+      Tap Receive (testTag "Receive"), select the Jade tab, tap "Show Details" if the address is hidden behind it, read the address without tapping "Verify on Device", close the receive sheet and fund it: `./bitcoin-cli sendtoaddress JADE_ADDRESS 0.01; ./bitcoin-cli -generate 1` in `bitkit-docker`
+    </action>
+    <action>
+      Wait up to 60 seconds for a blue hardware received row of 1 000 000 sats stamped with the minute of the funding command, or the next one, in the home activity list (tap "Show All" if it is not among the rows shown; the Jade's seed is shared, so other runs' rows can be newer). If the "Received Bitcoin" sheet appears, tap its button (testTag "ReceivedTransactionButton") first; it may not appear when the deposit arrives with the app's first view of the Jade's history
     </action>
     <action>
       Run `./scripts/jade-emulator press front right front` in `bitkit-docker` to choose Session, then Log Out, on the device
@@ -33,7 +38,7 @@
       Tap Send (testTag "Send"), enter a regtest address of the bitkit-docker node manually, select the Jade as the funding source on the amount screen (testTag "AssetButton-switch"), enter 50 000 sats, tap Continue (testTag "ContinueAmount"), swipe to confirm and tap "Sign With Jade" (testTag "HardwareSendOpenTrezorConnect")
     </action>
     <action>
-      Verify the Jade shows its PIN pad, then run `./scripts/jade-emulator pin 012345`
+      Verify the app log shows "Marked Jade '…' locked after it logged out on the device" for this tap, then verify the Jade shows its PIN pad and run `./scripts/jade-emulator pin 012345`
     </action>
     <action>
       Run `./scripts/jade-emulator press front` to pass the Output screen, then `./scripts/jade-emulator press right front` to sign on Send Transaction, and verify the success screen (testTag "SendSuccess") headed "Bitcoin Sent" appears within 30 seconds, with one payment sent
@@ -42,7 +47,7 @@
       Close the success screen and run `./scripts/jade-emulator press front right front` to log out on the device again
     </action>
     <action>
-      Tap Receive, select the Jade tab, tap "Show Details" if needed, then tap "Verify on Device" (testTag "HardwareVerifyAddress") and verify the Jade shows its PIN pad again
+      Tap Receive, select the Jade tab, tap "Show Details" if needed, then tap "Verify on Device" (testTag "HardwareVerifyAddress"). Verify the app log shows "Marked Jade '…' locked after it logged out on the device" again for this tap, and the Jade shows its PIN pad again
     </action>
     <action>
       Run `./scripts/jade-emulator pin 012345`, then `./scripts/jade-emulator press right front` once the device shows Verify Address, and verify the button returns to "Verify on Device" with no error
