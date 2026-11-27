@@ -1022,7 +1022,7 @@ class LightningRepo @Inject constructor(
             waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
 
             var stopRequests: Long? = null
-            recoverOnCancellation {
+            recoverOnCancellation(stopRequestsSeen = { stopRequests }) {
                 stop().onFailure {
                     Logger.error("Failed to stop node during electrum server change", it, context = TAG)
                     return@withContext Result.failure(it)
@@ -1062,7 +1062,7 @@ class LightningRepo @Inject constructor(
             waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
 
             var stopRequests: Long? = null
-            recoverOnCancellation {
+            recoverOnCancellation(stopRequestsSeen = { stopRequests }) {
                 stop().onFailure {
                     Logger.error("Failed to stop node during RGS server change", it, context = TAG)
                     return@withContext Result.failure(it)
@@ -1121,7 +1121,7 @@ class LightningRepo @Inject constructor(
         return result
     }
 
-    private inline fun <T> recoverOnCancellation(block: () -> T): T {
+    private inline fun <T> recoverOnCancellation(stopRequestsSeen: () -> Long?, block: () -> T): T {
         try {
             return block()
         } catch (e: CancellationException) {
@@ -1129,8 +1129,10 @@ class LightningRepo @Inject constructor(
             // and start() rethrow the cancellation instead of reporting a failure, so the onFailure
             // recovery never runs and the node would stay down until the next ON_START. Hand the
             // recovery to the repo scope, which outlives the caller, then preserve the cancellation.
+            // A stop requested since the change's own stop still wins over that recovery.
             Logger.warn("Cancelled ldk-node config change, recovering in background…", context = TAG)
-            scope.launch { restartWithPreviousConfig() }
+            val stopRequests = stopRequestsSeen()
+            scope.launch { restartWithPreviousConfig(stopRequests) }
             throw e
         }
     }

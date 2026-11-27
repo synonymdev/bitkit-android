@@ -4925,6 +4925,32 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restartWithElectrumServer cancelled after a stop does not recover the previous config`() = test {
+        startNodeForTesting()
+        val newUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val buildStarted = CompletableDeferred<Unit>()
+        whenever { lightningService.setup(any(), eq(newUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                buildStarted.complete(Unit)
+                awaitCancellation()
+            }
+
+        val change = launch { sut.restartWithElectrumServer(newUrl) }
+        buildStarted.await()
+        val directStop = launch { sut.stop() }
+        testScheduler.runCurrent()
+        change.cancelAndJoin()
+        directStop.join()
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(change.isCancelled)
+        verify(lightningService, never()).setup(any(), isNull(), isNull(), anyOrNull())
+        assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
     fun `restartWithRgsServer retries its own start while the vss store is busy`() = test {
         startNodeForTesting()
         val newRgsUrl = "https://rgs.example.com/snapshot"
