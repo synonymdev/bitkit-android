@@ -100,6 +100,10 @@ class SparkExitRepo @Inject constructor(
     @Volatile
     private var walletIndex = 0
 
+    /** The last read of a funding address and what it held, so an ask a held payment hid can show again. */
+    @Volatile
+    private var lastFundingRead: Pair<String, List<EsploraUtxo>>? = null
+
     @Volatile
     private var isLoaded = false
 
@@ -128,6 +132,7 @@ class SparkExitRepo @Inject constructor(
                         .onFailure { e -> Logger.warn("Failed to delete the wiped exit addresses", e, context = TAG) }
                     work.cancelAll()
                     _state.update { SparkExitState() }
+                    lastFundingRead = null
                     isLoaded = false
                     // A later exit, of a new or restored wallet, writes again.
                     isWriteClosed = false
@@ -456,6 +461,8 @@ class SparkExitRepo @Inject constructor(
         val seen = utxos?.let { SparkExitMath.newFunding(it, record) }?.fold(0uL) { sum, utxo ->
             sum.safe() + utxo.value.safe()
         }
+        val address = record.funding.firstOrNull()?.address
+        if (utxos != null && address != null) lastFundingRead = address to utxos
         _state.update {
             it.copy(
                 fundingSeenSats = seen ?: it.fundingSeenSats,
@@ -495,7 +502,9 @@ class SparkExitRepo @Inject constructor(
                 deadlineAtMillis = clock.nowMs() + deadline.deadlineIn.inWholeMilliseconds
             )
         }
-        if (SparkExitAlerts.isFundingAskBack(record, previous)) work.notify(SparkExitAlert.Funding)
+        // Funding at the address that covers the fees only waits to confirm: there is nothing to ask for.
+        val isCovered = _state.value.fundingState == SparkExitFundingState.Seen
+        if (SparkExitAlerts.isFundingAskBack(record, previous) && !isCovered) work.notify(SparkExitAlert.Funding)
         if (SparkExitAlerts.isFundingAskWithdrawn(record, previous)) work.dismissFundingAsk()
         when (record.phase) {
             // Waiting on the operators for a week needs nothing from the user, so nothing reminds them.
@@ -780,6 +789,7 @@ class SparkExitRepo @Inject constructor(
             val chain = requireNotNull(chain) { "No chain host for this network" }
             val address = requireNotNull(_state.value.fundingAddress) { "No Spark exit funding address" }
             val utxos = chain.utxos(address)
+            lastFundingRead = address to utxos
             val seen = utxos.fold(0uL) { sum, utxo -> sum.safe() + utxo.value.safe() }
             _state.update { it.copy(fundingSeenSats = seen, fundingSeenCount = utxos.size) }
             seen
@@ -1008,8 +1018,11 @@ class SparkExitRepo @Inject constructor(
         val started = SparkExitRecord.SavingsSendStarted(address, atHeight = null, earlierAttemptId)
         val marked = record.copy(savingsSendStarted = started)
         saveRecord(marked)
-        _state.update { it.copy(record = marked, fundingState = SparkExitMath.fundingState(marked, utxos = null)) }
+        _state.update { it.copy(record = marked, fundingState = SparkExitMath.fundingState(marked, lastRead(marked))) }
     }
+
+    private fun lastRead(record: SparkExitRecord): List<EsploraUtxo>? =
+        lastFundingRead?.takeIf { it.first == record.funding.firstOrNull()?.address }?.second
 
     private fun clearSavingsSend() {
         val record = _state.value.record?.takeIf { it.savingsSendStarted != null } ?: return
@@ -1017,9 +1030,11 @@ class SparkExitRepo @Inject constructor(
         // Kept in memory even when the save fails; a later tick saves it.
         runCatching { saveRecord(cleared) }
             .onFailure { Logger.warn("Failed to clear the started Spark exit savings payment", it, context = TAG) }
-        // The hold ends: the ask shows until the next read of the address.
+        // The hold ends: the ask the last read of the address found shows again, reduced by a partial payment, or the
+        // full ask until the next read when there was none.
         val isHeld = _state.value.fundingState == SparkExitFundingState.Paid && !cleared.isAwaitingOwnPayment
-        _state.update { it.copy(record = cleared, fundingState = it.fundingState.takeUnless { isHeld }) }
+        val asked = lastRead(cleared)?.let { SparkExitMath.fundingState(cleared, it) }
+        _state.update { it.copy(record = cleared, fundingState = if (isHeld) asked else it.fundingState) }
     }
 
     /**
@@ -1147,8 +1162,28 @@ class SparkExitRepo @Inject constructor(
     private suspend fun keepAcceptedSavingsSend(record: SparkExitRecord): SparkExitRecord {
         if (!canKeepAcceptedSavingsSend(record)) return record
         // The journal's attempt to any address: one elsewhere says the journal moved on, not that nothing went out.
+        val journalWallet = lightningRepo.currentWalletIndex
         val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrElse { return record }
+        if (attempt == null && journalWallet == walletIndex && isStartedSendNeverSent(record)) {
+            Logger.info("Forgetting the started Spark exit savings payment the journal never sent", context = TAG)
+            clearSavingsSend()
+            return _state.value.record ?: record
+        }
         return keepAcceptedSavingsSend(record, attempt)
+    }
+
+    /**
+     * Whether the started savings payment of [record] never went out, once the send journal holds no attempt: the
+     * journal is the exit wallet's, which saves a send before it goes out, and no transaction ever reached the started
+     * payment's address. The address read covers a payment the journal no longer holds: one a later send replaced
+     * before that send was dropped, or one from a journal a restore did not bring back. Called under the tick lock,
+     * so it never runs between marking a payment and its admission to the journal.
+     */
+    private suspend fun isStartedSendNeverSent(record: SparkExitRecord): Boolean {
+        val address = record.savingsSendStarted?.address ?: return false
+        if (lightningRepo.currentWalletIndex != walletIndex) return false
+        val chain = chain ?: return false
+        return runSuspendCatching { !chain.isAddressUsed(address) }.getOrDefault(false)
     }
 
     private fun canKeepAcceptedSavingsSend(record: SparkExitRecord): Boolean =
@@ -1165,7 +1200,8 @@ class SparkExitRepo @Inject constructor(
         val txid = own?.takeIf { it.hasPositiveEvidence || (started != null && isNoAnswer) }?.txid
         if (txid == null) {
             // Only the earlier attempt: nothing was admitted, so nothing went out. One a node refused is paid again by
-            // its own retry. No attempt at all proves nothing: the journal may be another wallet's.
+            // its own retry. No attempt at all proves nothing here: the journal may be another wallet's, which only
+            // the journal's wallet and an unused address rule out.
             val isNotSent = (attempt != null && attempt.attemptId == started?.earlierAttemptId) ||
                 own?.evidence == OnchainSendEvidence.Rejected
             if (started != null && isNotSent) {

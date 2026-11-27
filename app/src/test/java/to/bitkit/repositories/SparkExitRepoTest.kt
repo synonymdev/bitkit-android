@@ -747,14 +747,18 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     // On the test's own dispatcher, so no tick a start or payment launches runs on after the test.
-    private fun fundingChain(utxos: String? = "[]", readUtxos: () -> String? = { utxos }) = HttpClient(
+    private fun fundingChain(
+        utxos: String? = "[]",
+        txCount: Int = 0,
+        readUtxos: () -> String? = { utxos },
+    ) = HttpClient(
         MockEngine.create {
             dispatcher = testDispatcher
             addHandler { request ->
                 val url = request.url.toString()
                 when {
                     url.endsWith("/address/$funding/utxo") && readUtxos() != null -> respond(readUtxos().orEmpty())
-                    url.endsWith("/address/$funding") -> respond(addressStats(txCount = 0))
+                    url.endsWith("/address/$funding") -> respond(addressStats(txCount))
                     url.endsWith("/blocks/tip/height") -> respond("1000")
                     url.endsWith("/fee-estimates") -> respond("""{"1":9,"3":6,"144":1}""")
                     else -> throw IOException("unreachable '$url'")
@@ -2013,6 +2017,84 @@ class SparkExitRepoTest : BaseUnitTest() {
 
         assertNull(assertNotNull(store.load()).savingsSendStarted)
         assertIs<SparkExitFundingState.Ask>(sut.state.value.fundingState)
+    }
+
+    @Test
+    fun `a started savings payment the journal never sent frees the ask once its address shows nothing`() = test {
+        // Stopped before the payment was admitted, or restart dropped an attempt that never went out: no attempt.
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(startedRecord(earlierAttemptId = null))
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(null)
+        val used = quotedSut(FakeSparkExitRecovering(), fundingChain(txCount = 1))
+        used.load().getOrThrow()
+        used.tick().getOrThrow()
+        used.onAppBackgrounded()
+        assertNotNull(assertNotNull(store.load()).savingsSendStarted, "a transaction reached the address")
+
+        whenever(lightning.currentWalletIndex).thenReturn(1)
+        val elsewhere = quotedSut(FakeSparkExitRecovering(), fundingChain())
+        elsewhere.load().getOrThrow()
+        elsewhere.tick().getOrThrow()
+        elsewhere.onAppBackgrounded()
+        assertNotNull(assertNotNull(store.load()).savingsSendStarted, "the journal read is another wallet's")
+
+        whenever(lightning.currentWalletIndex).thenReturn(0)
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain())
+        sut.load().getOrThrow()
+        sut.tick().getOrThrow()
+        sut.onAppBackgrounded()
+
+        assertNull(assertNotNull(store.load()).savingsSendStarted)
+        assertIs<SparkExitFundingState.Ask>(sut.state.value.fundingState)
+        assertTrue(sut.canCancel)
+    }
+
+    @Test
+    fun `a started savings payment that expires sends no fee request while covering funding confirms`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        val elsewhere = refusedSavingsPayment().copy(
+            address = "bcrt1qelsewhere",
+            evidence = OnchainSendEvidence.Accepted,
+        )
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(elsewhere)
+        // The chain's tip is 1000.
+        store.save(startedRecord(atHeight = 1000u - SparkExitRecord.OWN_PAYMENT_TIMEOUT_BLOCKS))
+        val covering = """[{"txid":"${"e1".repeat(32)}","vout":0,"value":100000,"status":{"confirmed":false}}]"""
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain(utxos = covering))
+        sut.load().getOrThrow()
+        sut.tick().getOrThrow()
+        sut.onAppBackgrounded()
+
+        assertNull(assertNotNull(store.load()).savingsSendStarted)
+        assertIs<SparkExitFundingState.Seen>(sut.state.value.fundingState)
+        verify(work, never()).notify(eq(SparkExitAlert.Funding), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `a savings payment that fails keeps the fee request another wallet's payment reduced`() = test {
+        var heldAtSend: SparkExitFundingState? = null
+        lateinit var sut: SparkExitRepo
+        stubFunding {
+            heldAtSend = sut.state.value.fundingState
+            Result.failure(OnchainSendNotDispatchedError(IOException("journal write failed")))
+        }
+        val paid = """[{"txid":"${"e1".repeat(32)}","vout":0,"value":8000,"status":{"confirmed":false}}]"""
+        sut = quotedSut(FakeSparkExitRecovering(), fundingChain(utxos = paid))
+        sut.loadQuote().getOrThrow()
+        sut.refreshFundingAddress().getOrThrow()
+        whenever(lightning.getFeeRates()).thenReturn(Result.success(FeeRates(fast = 7u, mid = 4u, slow = 1u)))
+        whenever(lightning.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success(300uL))
+        whenever(lightning.getBalancesAsync()).thenReturn(Result.success(balances(100_000uL)))
+        sut.savingsFundingFee().getOrThrow()
+
+        assertTrue(sut.start(fundFromSavings = true).isFailure)
+        sut.onAppBackgrounded()
+
+        assertIs<SparkExitFundingState.Paid>(heldAtSend, "the ask is held while the payment goes out")
+        assertNull(sut.state.value.record?.savingsSendStarted)
+        val ask = assertIs<SparkExitFundingState.Ask>(sut.state.value.fundingState)
+        assertEquals(8000uL, ask.receivedSats, "the partial payment still counts")
     }
 
     @Test

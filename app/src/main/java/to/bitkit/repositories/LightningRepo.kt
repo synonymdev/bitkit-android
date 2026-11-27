@@ -2585,6 +2585,9 @@ class LightningRepo @Inject constructor(
 
     suspend fun currentOnchainSendAttempt(): OnchainSendAttempt? = onchainSendAttemptStore.current()
 
+    /** The wallet whose send journal [currentOnchainSendAttempt] reads. */
+    val currentWalletIndex: Int get() = lightningService.currentWalletIndex
+
     /** Syncs the on-chain wallet, then checks that none of the attempt's candidates reached the mempool or chain. */
     override suspend fun onchainCandidatesNeverReachedNetwork(attempt: OnchainSendAttempt): Boolean =
         onchainCandidatesNeverReachedNetwork(attempt, ABANDON_SYNC_TIMEOUT)
