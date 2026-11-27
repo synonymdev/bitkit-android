@@ -219,6 +219,18 @@ private val QR_SIDE_INSET = 32.dp
 /** Smallest QR code edge; below it the block scrolls instead of shrinking the code further */
 private val QR_MIN_SIZE = 200.dp
 
+/** White circle behind the avatar over the profile QR code */
+private val AVATAR_SIZE = 68.dp
+
+/** Avatar image inside the white circle */
+private val AVATAR_IMAGE_SIZE = 50.dp
+
+/** Largest share of the QR width the avatar may cover, the cap QrCodeImage puts on its logo */
+private const val AVATAR_MAX_QR_FRACTION = 0.2f
+
+/** Avatar size over a QR code shrunk to fit a tablet's height, kept small enough for the code to stay readable */
+internal fun fittedAvatarSize(qrWidth: Dp): Dp = minOf(AVATAR_SIZE, qrWidth * AVATAR_MAX_QR_FRACTION)
+
 @Composable
 private fun ProfileBody(
     profile: PubkyProfile,
@@ -234,7 +246,8 @@ private fun ProfileBody(
     needsUpdate: Boolean,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val qrBlockMaxHeight = if (maxWidth >= TABLET_MIN_WIDTH) {
+        val isTablet = maxWidth >= TABLET_MIN_WIDTH
+        val qrBlockMaxHeight = if (isTablet) {
             maxHeight - TopBarHeight - QR_BLOCK_TOP_GAP - QR_BLOCK_BOTTOM_GAP
         } else {
             Dp.Infinity
@@ -262,12 +275,13 @@ private fun ProfileBody(
                     )
                 },
                 qr = {
-                    Box(
+                    BoxWithConstraints(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickableAlpha(onClick = onClickCopy)
                     ) {
+                        val avatarSize = if (isTablet) fittedAvatarSize(maxWidth) else AVATAR_SIZE
                         QrCodeImage(
                             content = profile.publicKey,
                             modifier = Modifier.fillMaxWidth(),
@@ -277,12 +291,12 @@ private fun ProfileBody(
                             Box(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier
-                                    .size(68.dp)
+                                    .size(avatarSize)
                                     .background(Color.White, CircleShape)
                             ) {
                                 PubkyImage(
                                     uri = profile.imageUrl,
-                                    size = 50.dp,
+                                    size = avatarSize * (AVATAR_IMAGE_SIZE / AVATAR_SIZE),
                                 )
                             }
                         }
