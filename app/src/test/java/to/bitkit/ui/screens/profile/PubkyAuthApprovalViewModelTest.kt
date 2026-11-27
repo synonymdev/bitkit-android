@@ -9,6 +9,7 @@ import com.synonym.paykit.PubkyAuthCompanionClaimApprovalException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.serialization.json.Json
@@ -38,6 +39,7 @@ import to.bitkit.models.PubkyAuthClaim.Item
 import to.bitkit.models.PubkyAuthPermission
 import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
+import to.bitkit.models.Toast
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.repositories.Endpoint
@@ -48,6 +50,7 @@ import to.bitkit.repositories.UsdtRepo
 import to.bitkit.repositories.WatchOnlyAccountAuthorizationStartError
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -315,6 +318,32 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `confirmAuthorize fails closed when the relay differs from the one shown`() = test {
+        val authUrl = "pubkyauth://signin?caps=/pub/current/:rw"
+        val capabilities = "/pub/current/:rw"
+        val shown = authRequest(authUrl, capabilities)
+        whenever(context.getString(R.string.profile__auth_error_invalid_url)).thenReturn("Invalid link")
+        whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
+            Result.success(shown),
+            Result.success(shown.copy(relay = "https://evil.example/inbox/")),
+        )
+        val sut = createSut()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        sut.load(authUrl)
+        advanceUntilIdle()
+        assertEquals("https://httprelay.pubky.app/inbox/", sut.uiState.value.relayUrl)
+        sut.confirmAuthorize(authUrl)
+        advanceUntilIdle()
+
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        assertEquals("Invalid link", toasts.single().description)
+        verifyBlocking(pubkyRepo, never()) { approveAuth(any(), any(), any()) }
+        toastJob.cancel()
+    }
+
+    @Test
     fun `ordinary authorization uses the requested capabilities`() = test {
         val authUrl = "pubkyauth://signin?caps=/pub/example/:rw"
         val capabilities = "/pub/example/:rw"
@@ -331,6 +360,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
         assertEquals(ApprovalState.Success, sut.uiState.value.state)
         assertEquals(clientId, sut.uiState.value.clientId)
+        assertEquals("https://httprelay.pubky.app/inbox/", sut.uiState.value.relayUrl)
         verifyBlocking(pubkyRepo) { approveAuth(authUrl, capabilities, clientId) }
         verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any(), any()) }
         verifyBlocking(watchOnlyAccountRepo, never()) { prepareUnsignedClaim(any(), any()) }

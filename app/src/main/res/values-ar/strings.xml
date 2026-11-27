@@ -577,6 +577,7 @@
     <string name="profile__add_tag">إضافة علامة</string>
     <string name="profile__auth_approval_details">التفاصيل</string>
     <string name="profile__auth_approval_ok">حسنًا</string>
+    <string name="profile__auth_approval_relay">المُرحّل</string>
     <string name="profile__create_nav_title">إنشاء ملف شخصي</string>
     <string name="profile__nav_title">الملف الشخصي</string>
     <string name="profile__retry_load">حاول مرة أخرى</string>
