@@ -589,7 +589,7 @@ class QuickPayRepo @Inject constructor(
             QuickPayDispatchClass.AMBIGUOUS,
             -> {
                 val rows = loadPaymentRows()
-                mutex.withLock {
+                val isEarlierSendTracked = mutex.withLock {
                     settleAmbiguousLocked(
                         invoiceHash = invoiceHash,
                         paymentRequest = paymentRequest,
@@ -598,24 +598,40 @@ class QuickPayRepo @Inject constructor(
                         duplicate = kind == QuickPayDispatchClass.DUPLICATE_PAYMENT,
                     )
                 }
+                if (isEarlierSendTracked) resolveSettledEarlierSend(invoiceHash)
             }
         }
     }
 
+    /** Settles a dispatch error, true when it tracked an earlier send of the invoice that QuickPay didn't make. */
     private suspend fun settleAmbiguousLocked(
         invoiceHash: String,
         paymentRequest: String,
         error: Throwable,
         rows: List<QuickPayReconcileRow>?,
         duplicate: Boolean,
-    ) {
+    ): Boolean {
         val op = opsByKey[invoiceHash]
         if (!duplicate && op != null && !op.dispatched) {
             spend.release(invoiceHash)
-            // Refused for an earlier send of the invoice still in flight, which QuickPay didn't make: it is tracked.
-            if (error is PaymentPendingException) emitPendingLocked(op) else emitErrorLocked(op, error, paymentRequest)
             removeOpLocked(op)
-            return
+            if (error !is PaymentPendingException) {
+                emitErrorLocked(op, error, paymentRequest)
+                return false
+            }
+            // Refused for an earlier send of the invoice, which may have ended since it was refused.
+            when (rows?.let { earlierSendStatus(invoiceHash, it) }) {
+                QuickPayReconcileRow.Status.SUCCEEDED -> emitErrorLocked(op, QuickPayAlreadyPaidError(), paymentRequest)
+                // Nothing of the invoice is live, so the payer reviews a new send of it.
+                QuickPayReconcileRow.Status.FAILED -> {
+                    emitToSession(op.sessionId, QuickPaySessionEvent.FallBackToConfirm)
+                }
+                QuickPayReconcileRow.Status.PENDING, null -> {
+                    emitPendingLocked(op)
+                    return true
+                }
+            }
+            return false
         }
         val record = spend.matching(invoiceHash)
         val applied = if (record != null && rows != null) {
@@ -627,9 +643,9 @@ class QuickPayRepo @Inject constructor(
         if (remaining != null) {
             op?.dispatched = true
             op?.let { emitPendingLocked(it) }
-            return
+            return false
         }
-        if (op == null) return
+        if (op == null) return false
         when (applied) {
             AmbiguousApply.SUCCEEDED -> emitSuccessLocked(op, feePaidMsat = null)
             AmbiguousApply.ALREADY_PAID -> emitErrorLocked(op, QuickPayAlreadyPaidError(), paymentRequest)
@@ -638,6 +654,32 @@ class QuickPayRepo @Inject constructor(
             -> emitErrorLocked(op, error, paymentRequest)
         }
         removeOpLocked(op)
+        return false
+    }
+
+    /**
+     * Resolves the tracked earlier send of [invoiceHash] when its rows show it ended, as its event may have been
+     * handled before it was tracked, which no later event resolves.
+     */
+    private suspend fun resolveSettledEarlierSend(invoiceHash: String) {
+        val rows = loadPaymentRows() ?: return
+        val resolution = when (earlierSendStatus(invoiceHash, rows)) {
+            QuickPayReconcileRow.Status.SUCCEEDED -> PendingPaymentResolution.Success(invoiceHash)
+            QuickPayReconcileRow.Status.FAILED -> PendingPaymentResolution.Failure(invoiceHash)
+            QuickPayReconcileRow.Status.PENDING, null -> return
+        }
+        if (pendingPaymentRepo.isPending(invoiceHash)) pendingPaymentRepo.resolve(resolution)
+    }
+
+    /** An earlier send's status from its rows on either rail: paid by any, else live while any is, else failed. */
+    private fun earlierSendStatus(invoiceHash: String, rows: List<QuickPayReconcileRow>): QuickPayReconcileRow.Status? {
+        val sends = rows.filter { it.isOutboundBolt11 && it.invoicePaymentHash.equals(invoiceHash, ignoreCase = true) }
+        return when {
+            sends.isEmpty() -> null
+            sends.any { it.status == QuickPayReconcileRow.Status.SUCCEEDED } -> QuickPayReconcileRow.Status.SUCCEEDED
+            sends.any { it.status == QuickPayReconcileRow.Status.PENDING } -> QuickPayReconcileRow.Status.PENDING
+            else -> QuickPayReconcileRow.Status.FAILED
+        }
     }
 
     private suspend fun detachSession(sessionId: String) {

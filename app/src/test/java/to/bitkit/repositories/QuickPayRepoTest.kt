@@ -918,6 +918,52 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pending return for an earlier send that failed since falls back to confirm`() = test {
+        val (bolt11, hash) = testInvoice()
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { Result.failure(PaymentPendingException(hash)) }
+        paymentRows = listOf(failedRow(hash))
+        val session = QuickPaySession()
+
+        sut.attach(session).test {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertEquals(QuickPaySessionEvent.FallBackToConfirm, awaitItem())
+        }
+        assertEquals(0L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+        verify(pendingPaymentRepo, never()).track(any())
+        assertFalse(sut.hasOpen(hash))
+    }
+
+    @Test
+    fun `pending return for an earlier send resolved before it was tracked resolves it again`() = test {
+        val (bolt11, hash) = testInvoice()
+        val pendingPayments = PendingPaymentRepo()
+        // The earlier send's screen tracked it, and its success resolved it before QuickPay tracked it.
+        pendingPayments.track(hash)
+        pendingPayments.resolve(PendingPaymentResolution.Success(hash))
+        var rowLoads = 0
+        val lookup = QuickPayPaymentLookup {
+            // Read at the refusal, before the row showed the success, then after it.
+            if (rowLoads++ == 0) listOf(pendingRow(hash)) else listOf(succeededRow(hash))
+        }
+        sut = repo(pendingPaymentRepo = pendingPayments, paymentLookup = lookup)
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { Result.failure(PaymentPendingException(hash)) }
+        val session = QuickPaySession()
+
+        sut.attach(session).test {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertIs<QuickPaySessionEvent.Pending>(awaitItem())
+        }
+        assertFalse(pendingPayments.isPending(hash))
+        assertIs<PendingPaymentResolution.Success>(pendingPayments.consumeResolution(hash))
+        assertEquals(0L, spentCents())
+    }
+
+    @Test
     fun `re-pay of a settled hash does not double-count`() = test {
         val (bolt11, hash) = testInvoice()
         assertNotNull(sut.reserveBound(hash, 500u).getOrThrow())
@@ -1772,7 +1818,12 @@ class QuickPayRepoTest : BaseUnitTest() {
         quickPayDailyLimitMultiplier = 5,
     )
 
-    private fun repo(): QuickPayRepo {
+    private fun repo(
+        pendingPaymentRepo: PendingPaymentRepo = this.pendingPaymentRepo,
+        paymentLookup: QuickPayPaymentLookup = QuickPayPaymentLookup {
+            paymentRows ?: lightningRepo.listPaymentsOrNull()?.map { QuickPayReconcileRow(it) }
+        },
+    ): QuickPayRepo {
         return QuickPayRepo(
             cacheStore = cacheStore,
             settingsStore = settingsStore,
@@ -1782,9 +1833,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             invoiceParser = QuickPayInvoiceParser { bolt11 ->
                 bolt11.takeIf { it == TEST_BOLT11 }?.let { TEST_HASH }
             },
-            paymentLookup = QuickPayPaymentLookup {
-                paymentRows ?: lightningRepo.listPaymentsOrNull()?.map { QuickPayReconcileRow(it) }
-            },
+            paymentLookup = paymentLookup,
             ioDispatcher = testDispatcher,
             clock = clock,
         )
