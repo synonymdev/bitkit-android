@@ -10,6 +10,8 @@ import breez_sdk_spark.RecoveryTxKind
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
+import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.mock
 import to.bitkit.models.FeeRate
 import to.bitkit.utils.SignedTransactionId
 import kotlin.random.Random
@@ -47,6 +49,27 @@ class SparkExitFundingTest {
         assertFalse(expensive.isWorthExiting)
         assertEquals(0uL, expensive.receiveSats)
         assertFalse(SparkExitQuote(SparkExitFixtures.prepared(leaves = emptyList())).isWorthExiting)
+    }
+
+    @Test
+    fun `a started savings payment whose txid was never kept holds the ask and the offer to pay again`() {
+        val started = SparkExitFixtures.record().copy(
+            savingsRefusal = SparkExitRecord.SavingsRefusal(20_000uL, 650uL),
+            savingsSendStarted = SparkExitRecord.SavingsSendStarted(SparkExitFixtures.FUNDING_ADDRESS, 990u, null),
+        )
+        val partial = listOf(EsploraUtxo("e1".repeat(32), 0u, 5_000uL, EsploraTxStatus(false)))
+
+        assertTrue(started.isAwaitingOwnPayment)
+        assertIs<SparkExitFundingState.Paid>(SparkExitMath.fundingState(started, emptyList()))
+        // It may pay the rest of another wallet's partial payment.
+        assertIs<SparkExitFundingState.Paid>(SparkExitMath.fundingState(started, partial))
+        assertNull(SparkExitMath.savingsRefusal(started, funding = null, hasSavingsSend = false))
+        assertFalse(SparkExitAlerts.isAwaitingFirstFunding(started), "no reminder to fund it")
+
+        val expired = started.withSavingsSendLooked(990u + SparkExitRecord.OWN_PAYMENT_TIMEOUT_BLOCKS)
+        assertNull(expired.savingsSendStarted)
+        assertIs<SparkExitFundingState.Ask>(SparkExitMath.fundingState(expired, emptyList()))
+        assertEquals(started.savingsRefusal, SparkExitMath.savingsRefusal(expired, null, hasSavingsSend = false))
     }
 
     @Test
@@ -519,6 +542,19 @@ class SparkExitFundingTest {
             funding = listOf(record.funding.single().copy(txid = "paid", vout = 0u, valueSats = 20_000uL)),
         )
         assertEquals(SparkExitFundingState.Ask(10_000uL), SparkExitMath.fundingState(topUp, emptyList()))
+    }
+
+    @Test
+    fun `a node-refused savings payment is no longer refused once the exit holds funding`() {
+        val record = SparkExitFixtures.record()
+        val refused = mock<OnchainSendAttempt> {
+            on { address } doReturn SparkExitFixtures.FUNDING_ADDRESS
+            on { evidence } doReturn OnchainSendEvidence.Rejected
+        }
+        assertTrue(SparkExitMath.isSavingsPaymentRefused(record, refused))
+        val adopted = record.funding.single().copy(txid = "f0", vout = 0u, valueSats = 20_000uL)
+        val funded = record.copy(funding = listOf(adopted))
+        assertFalse(SparkExitMath.isSavingsPaymentRefused(funded, refused))
     }
 
     @Test

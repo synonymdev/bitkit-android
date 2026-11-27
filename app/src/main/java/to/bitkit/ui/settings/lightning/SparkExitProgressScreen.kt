@@ -64,7 +64,10 @@ fun SparkExitProgressScreen(
         viewModel.startSavingsRetryPricing()
         onDispose { viewModel.stopSavingsRetryPricing() }
     }
-    LaunchedEffect(uiState.record?.savingsRefusal) { viewModel.loadSavingsRetry() }
+    // Priced again too once an unsaved savings payment stops holding the offer.
+    LaunchedEffect(uiState.record?.savingsRefusal, uiState.record?.isSavingsSendUnsaved) {
+        viewModel.loadSavingsRetry()
+    }
     LaunchedEffect(isEnded) { if (isEnded) viewModel.onResultShown() }
     LifecycleResumeEffect(Unit) {
         viewModel.refreshBackgroundLimits()

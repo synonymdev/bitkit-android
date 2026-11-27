@@ -518,10 +518,11 @@ class SparkExitDriver(
     }
 
     private suspend fun lookForOwnPayment(record: SparkExitRecord): SparkExitRecord {
-        val txid = record.fundingPaymentTxid?.takeIf { record.isAwaitingOwnPayment } ?: return record
         val height = tip ?: return record
+        val looked = record.withSavingsSendLooked(height)
+        val txid = looked.fundingPaymentTxid?.takeIf { looked.isAwaitingOwnPayment } ?: return looked
         val isKnown = runSuspendCatching { chain.isTxKnown(txid) }.getOrDefault(true)
-        return record.withOwnPaymentLooked(height, isKnown)
+        return looked.withOwnPaymentLooked(height, isKnown)
     }
 
     /** Checks and sends the generation out there while its top-up confirms; null when no check ran this tick. */

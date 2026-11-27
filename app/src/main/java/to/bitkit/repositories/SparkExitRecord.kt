@@ -89,6 +89,11 @@ data class SparkExitRecord(
      * confirmed: progress offers to pay it from savings at the new fee.
      */
     val savingsRefusal: SavingsRefusal? = null,
+    /**
+     * A savings payment to the funding address, saved before it goes out: until its txid is kept as
+     * [fundingPaymentTxid], it may still land, so nothing is asked for and the exit cannot be cancelled.
+     */
+    val savingsSendStarted: SavingsSendStarted? = null,
     /** Leaves an older state of this wallet claimed on-chain; builds leave them out. */
     val lostLeaves: List<LostLeaf> = emptyList(),
     /** The user opened the result of an exit that failed or lost leaves, so Emergency exit may start a new one. */
@@ -268,6 +273,12 @@ data class SparkExitRecord(
     /** [sats] the user confirmed savings pays to the funding address, refused at a fee of [feeSats]. */
     data class SavingsRefusal(val sats: ULong, val feeSats: ULong)
 
+    /**
+     * A savings payment to [address] started at [atHeight], null until a tick read the tip. [earlierAttemptId] is the
+     * send journal's attempt before it, which the journal keeps once finished: never this payment.
+     */
+    data class SavingsSendStarted(val address: String, val atHeight: UInt?, val earlierAttemptId: String?)
+
     data class SweptLeftover(val txid: String, val valueSats: ULong)
 
     data class AcceptedSweep(val txid: String, val txHex: String, val valueSats: ULong)
@@ -287,8 +298,24 @@ data class SparkExitRecord(
 
     /** Savings paid funding the exit has not taken yet, such as a higher fee: nothing is asked while it confirms. */
     val isAwaitingOwnPayment: Boolean
-        get() = fundingPaymentTxid != null && fundingShortfallSats != null &&
-            funding.none { it.txid == fundingPaymentTxid }
+        get() = fundingShortfallSats != null && (
+            isSavingsSendUnsaved || (fundingPaymentTxid != null && funding.none { it.txid == fundingPaymentTxid })
+            )
+
+    /** A savings payment started before the exit was funded, whose txid was never kept: it may still land. */
+    val isSavingsSendUnsaved: Boolean
+        get() = savingsSendStarted != null && fundingPaymentTxid == null && isActive && phase is Phase.AwaitingFunding
+
+    /**
+     * The started savings payment at [tip]: forgotten [OWN_PAYMENT_TIMEOUT_BLOCKS] blocks after it started, as an
+     * unadopted own payment is, so the ask comes back.
+     */
+    fun withSavingsSendLooked(tip: UInt): SparkExitRecord {
+        val started = savingsSendStarted?.takeIf { isSavingsSendUnsaved } ?: return this
+        val atHeight = started.atHeight ?: tip
+        if (tip >= atHeight + OWN_PAYMENT_TIMEOUT_BLOCKS) return copy(savingsSendStarted = null)
+        return copy(savingsSendStarted = started.copy(atHeight = atHeight))
+    }
 
     /** The exit ended while a payment from savings to its address was unresolved: it is watched until it is. */
     val isEndedPaymentPending: Boolean
@@ -313,7 +340,7 @@ data class SparkExitRecord(
      * its reminder come back.
      */
     fun withOwnPaymentLooked(tip: UInt, isKnown: Boolean): SparkExitRecord {
-        if (!isAwaitingOwnPayment && !isEndedPaymentPending) return this
+        if (fundingPaymentTxid == null || (!isAwaitingOwnPayment && !isEndedPaymentPending)) return this
         val seenAt = fundingPaymentSeenAtHeight ?: tip
         val missingSince = if (isKnown) null else fundingPaymentMissingSince ?: tip
         val isMissing = missingSince != null && tip >= missingSince + OWN_PAYMENT_MISSING_BLOCKS
@@ -918,6 +945,16 @@ object SparkExitJson {
                 },
             )
         }
+        r.savingsSendStarted?.let {
+            put(
+                "savingsSendStarted",
+                buildJsonObject {
+                    put("address", it.address)
+                    it.atHeight?.let { height -> put("atHeight", height.toLong()) }
+                    it.earlierAttemptId?.let { id -> put("earlierAttemptId", id) }
+                },
+            )
+        }
         if (r.isResultSeen) put("isResultSeen", true)
         if (r.spentStepStrikes.isNotEmpty()) {
             put(
@@ -1130,6 +1167,13 @@ object SparkExitJson {
         fundingPaymentTxid = o.stringOrNull("fundingPaymentTxid"),
         savingsRefusal = o.objectOrNull("savingsRefusal")?.let {
             SparkExitRecord.SavingsRefusal(it.ulong("sats"), it.ulong("feeSats"))
+        },
+        savingsSendStarted = o.objectOrNull("savingsSendStarted")?.let {
+            SparkExitRecord.SavingsSendStarted(
+                it.string("address"),
+                it.ulongOrNull("atHeight")?.toUInt(),
+                it.stringOrNull("earlierAttemptId"),
+            )
         },
         isResultSeen = o.booleanOrNull("isResultSeen") ?: false,
         spentStepStrikes = o.objectOrNull("spentStepStrikes")
