@@ -84,7 +84,7 @@ the other three rely on, and `passphrase-settings-remove.xml` removes it again.
 | `jade-uninitialized.xml` | Jade emulator with no wallet: Found shows the not-set-up message |
 | `jade-wrong-pin.xml` | Interactive Jade emulator: wrong PIN on the device → Found shows the wrong-PIN message, retry pairs |
 | `jade-network-mismatch.xml` | Jade emulator restricted to mainnet: Found shows the network message |
-| `jade-device-locked.xml` | Interactive Jade logged out on the device after pairing: Verify on Device and Sign With Jade ask for the PIN on the device and retry |
+| `jade-device-locked.xml` | Interactive Jade logged out on the device during an open session: Sign With Jade and Verify on Device ask for the PIN on the device and retry |
 | `jade-psbt-too-large.xml` | Jade with about 200 small inputs: sending all of it shows the too-large message |
 | `jade-sign-on-device.xml` | Interactive Jade: decline on the device keeps the payment unsent, approve sends it |
 | `jade-wallet-mismatch.xml` | Paired Jade reseeded: Verify on Device shows the different-wallet message |
@@ -178,7 +178,7 @@ uninitialised. USB and Bluetooth transports still need a physical Jade; unit tes
 The error journeys start the emulator in another state first: `jade-uninitialized.xml`
 (`JADE_MNEMONIC=`), `jade-wrong-pin.xml` (`JADE_MODE=interactive`, where the device shows its
 own PIN pad and `./scripts/jade-emulator pin` types on it) and `jade-network-mismatch.xml`
-(`JADE_NETWORK=mainnet`), and `jade-device-locked.xml` logs the interactive device out after
-pairing, so Verify on Device and then Sign With Jade ask for the PIN on the device again and retry (the send steps need the app on the bitkit-docker Electrum and funds on the Jade); `jade-psbt-too-large.xml` needs the app on the bitkit-docker Electrum and about 200 small
+(`JADE_NETWORK=mainnet`), and `jade-device-locked.xml` logs the interactive device out during an open session
+twice, so Sign With Jade and then Verify on Device ask for the PIN on the device again and retry (the send steps need the app on the bitkit-docker Electrum); `jade-psbt-too-large.xml` needs the app on the bitkit-docker Electrum and about 200 small
 inputs on the Jade. `jade-sign-on-device.xml` declines and then approves a payment on the interactive
 device's own screens. `jade-wallet-mismatch.xml` restarts the emulator with another seed after pairing. `jade-passphrase.xml` starts it with `JADE_PASSPHRASE=always` and pairs the wallet a passphrase typed on the device opens (`./scripts/jade-emulator passphrase`). The bitkit-docker `docs/jade-emulator.md` lists the modes and recipes.
