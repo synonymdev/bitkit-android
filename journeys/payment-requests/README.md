@@ -144,7 +144,7 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 - Send failure: `SendFailure` and retry action `Retry`
 - Swipe confirmation control: `GRAB`
 - Contact Detail pay action: `ContactPay`
-- Request or Pay sheet: `RequestOrPaySheet` (its Pay and Request buttons carry no tag; find them by text)
+- Request or Pay sheet: `RequestOrPaySheet`, with its Pay button `RequestOrPayPay` and Request button `RequestOrPayRequest`
 - Payment Request amount screen: `PaymentRequestAmount`
 - Below-minimum on-chain request toast: `PaymentRequestAmountTooLowToast`
 
