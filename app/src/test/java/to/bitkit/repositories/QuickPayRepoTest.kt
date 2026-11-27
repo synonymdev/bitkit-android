@@ -20,6 +20,7 @@ import kotlinx.coroutines.yield
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -918,21 +919,24 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `pending return for an earlier send that failed since falls back to confirm`() = test {
+    fun `pending return with a failed row and a live retry tracks pending`() = test {
         val (bolt11, hash) = testInvoice()
+        // Refused for a retry of the invoice in flight, whose earlier attempt is listed failed.
         whenever {
             lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
         }.doSuspendableAnswer { Result.failure(PaymentPendingException(hash)) }
+        whenever { lightningRepo.settledSparkSendEvent(hash) }.thenReturn(null)
         paymentRows = listOf(failedRow(hash))
         val session = QuickPaySession()
 
         sut.attach(session).test {
             sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
-            assertEquals(QuickPaySessionEvent.FallBackToConfirm, awaitItem())
+            assertIs<QuickPaySessionEvent.Pending>(awaitItem())
         }
         assertEquals(0L, spentCents())
         assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
-        verify(pendingPaymentRepo, never()).track(any())
+        verify(pendingPaymentRepo).track(hash)
+        verify(pendingPaymentRepo, never()).resolve(any())
         assertFalse(sut.hasOpen(hash))
     }
 
@@ -943,15 +947,13 @@ class QuickPayRepoTest : BaseUnitTest() {
         // The earlier send's screen tracked it, and its success resolved it before QuickPay tracked it.
         pendingPayments.track(hash)
         pendingPayments.resolve(PendingPaymentResolution.Success(hash))
-        var rowLoads = 0
-        val lookup = QuickPayPaymentLookup {
-            // Read at the refusal, before the row showed the success, then after it.
-            if (rowLoads++ == 0) listOf(pendingRow(hash)) else listOf(succeededRow(hash))
-        }
-        sut = repo(pendingPaymentRepo = pendingPayments, paymentLookup = lookup)
+        // Read at the refusal, before the row showed the success.
+        sut = repo(pendingPaymentRepo = pendingPayments, paymentLookup = { listOf(pendingRow(hash)) })
         whenever {
             lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
         }.doSuspendableAnswer { Result.failure(PaymentPendingException(hash)) }
+        whenever { lightningRepo.settledSparkSendEvent(hash) }
+            .thenReturn(Event.PaymentSuccessful("pid", hash, null, null))
         val session = QuickPaySession()
 
         sut.attach(session).test {
