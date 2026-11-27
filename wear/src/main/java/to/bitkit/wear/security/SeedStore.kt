@@ -8,12 +8,12 @@ interface SeedStore {
     suspend fun exists(): Boolean
 
     /**
-     * Reads the seed. Fails with [SeedStoreError.KeyInvalidated] when its key is gone or can never be used again,
-     * after deleting what is left of the seed.
+     * Reads the seed. Fails with [SeedStoreError.KeyInvalidated] when its key is gone or can never be used again. It
+     * never deletes anything: the caller decides what a lost key means.
      */
     suspend fun load(): Result<WalletSeed>
 
-    /** Stores [seed] under a new key, replacing any seed stored before. */
+    /** Stores [seed] under a new key. Fails with [SeedStoreError.AlreadyExists] while a seed is stored. */
     suspend fun save(seed: WalletSeed): Result<Unit>
 
     /** Deletes the seed and the key that protects it. */
@@ -30,6 +30,9 @@ data class WalletSeed(
 
 sealed class SeedStoreError(message: String, cause: Throwable? = null) : AppError(message, cause) {
     class NotFound : SeedStoreError("No wallet seed is stored")
+
+    /** A seed is stored already; it has to be wiped before another one is saved. */
+    class AlreadyExists : SeedStoreError("A wallet seed is stored already")
 
     /** The seed key only works while the watch is unlocked, and the watch is locked. */
     class DeviceLocked(cause: Throwable? = null) : SeedStoreError("The watch is locked", cause)

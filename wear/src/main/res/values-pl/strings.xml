@@ -35,5 +35,6 @@
     <string name="settings__remove_wallet_failed">Nie udało się usunąć portfela</string>
     <string name="settings__title">Ustawienia</string>
     <string name="unsupported__text">Brak Spark w tej sieci</string>
+    <string name="unsupported__text_mainnet">Jeszcze nie w mainnecie</string>
     <string name="unsupported__title">Nieobsługiwane</string>
 </resources>

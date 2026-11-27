@@ -34,5 +34,6 @@
     <string name="settings__remove_wallet_failed">Impossible de supprimer le wallet</string>
     <string name="settings__title">Paramètres</string>
     <string name="unsupported__text">Pas de Spark sur ce réseau</string>
+    <string name="unsupported__text_mainnet">Pas encore sur le mainnet</string>
     <string name="unsupported__title">Non pris en charge</string>
 </resources>

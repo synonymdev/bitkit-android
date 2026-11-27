@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.wear.repositories.WalletRepo
 import javax.inject.Inject
 
-/** Picks the first screen while the splash screen shows. */
+/** Picks the first screen while the splash screen shows, after the wallet storage is recovered. */
 @HiltViewModel
 class StartViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
@@ -22,13 +22,17 @@ class StartViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val route = when {
-                !walletRepo.isSupported -> Routes.UNSUPPORTED
-                walletRepo.isRemovedNoticePending() -> Routes.WALLET_REMOVED
-                walletRepo.hasWallet() -> Routes.HOME
-                else -> Routes.ONBOARDING
-            }
-            _uiState.update { it.copy(startRoute = route) }
+            _uiState.update { it.copy(startRoute = startRoute()) }
+        }
+    }
+
+    private suspend fun startRoute(): String {
+        if (!walletRepo.isSupported) return Routes.UNSUPPORTED
+        walletRepo.recover()
+        return when {
+            walletRepo.isRemovedNoticePending() -> Routes.WALLET_REMOVED
+            walletRepo.hasWallet() -> Routes.HOME
+            else -> Routes.ONBOARDING
         }
     }
 

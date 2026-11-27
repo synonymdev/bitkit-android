@@ -37,5 +37,6 @@
     <string name="settings__remove_wallet_failed">تعذّرت إزالة المحفظة</string>
     <string name="settings__title">الإعدادات</string>
     <string name="unsupported__text">لا يتوفر Spark على هذه الشبكة</string>
+    <string name="unsupported__text_mainnet">غير متاح على الشبكة الرئيسية بعد</string>
     <string name="unsupported__title">غير مدعوم</string>
 </resources>

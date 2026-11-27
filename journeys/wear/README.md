@@ -13,7 +13,9 @@ What `android layout` misses on the watch, verified on the API 37 emulator:
   `adb shell uiautomator dump` lists it as a `ProgressBar`. Check the ring from a screenshot. What is under it stays
   listed (the balance, for one), but wait for the ring to stop before asserting on a balance that is still loading.
 - **The pending and hidden marks.** `WatchHomeBalancePending` has no text either, so `android layout` leaves it out;
-  `uiautomator dump` lists it.
+  `uiautomator dump` lists it. The same goes for `RestoreHidden`, the empty screen the restore shows in ambient mode.
+- **Suggestion chips.** A chip's tag (`RestoreSuggestion-0`, counted from 0) is on the button and its word is a
+  text node at the same `center`. A chip below the screen edge is not listed until the screen scrolls.
 - **The keyboard.** The Wear OS keyboard is a full-screen window that `android layout` does not show. It lists the
   app's screen underneath, so a tap you aim at a tag lands on a key instead. See [Typing](#typing).
 - **Screens with `FLAG_SECURE`.** The word and passphrase screens come out black in a screenshot and a screen
@@ -88,7 +90,8 @@ the first sync of the test wallet, which the [Restored wallet](#restored-wallet)
 
 | Journey | Backend | Needs funds |
 | --- | --- | --- |
-| `restore-12-words.xml` | hosted | yes, the test wallet's balance |
+| `restore-12-words.xml` | hosted | yes, any balance above 0 |
+| `restore-ambient-hides-word.xml` | none (stops before the wallet connects) | no |
 | `restore-invalid-checksum.xml` | none (stops before the wallet connects) | no |
 | `restore-passphrase.xml` | hosted | no, it expects an empty wallet |
 | `balance-unit-swap.xml` | hosted | yes |
@@ -131,7 +134,8 @@ keep both open.
 - **Local stack:** `../bitkit-docker/spark send <deposit address> <sats>` (it mines a block), or create a Spending
   invoice in the phone app and pay it with `../bitkit-docker/spark pay <invoice>`.
 
-On hosted regtest, as of 2026-11-27, the test wallet already holds 1 000 sats, so it needs no funding.
+On hosted regtest the public test wallet held 1 000 sats on 2026-11-27. Anyone can move them, so the journeys
+only expect a balance above 0; fund the wallet again when it is empty.
 
 ## The test wallet
 
@@ -141,8 +145,14 @@ The journeys restore the BIP39 test vector phrase, eleven times `abandon` follow
 abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
 ```
 
-It is a public test phrase: anyone can spend what it holds, so fund it only with regtest coins. With the passphrase
-`watchtest` it is a different, empty wallet.
+It is a public test phrase: anyone can spend what it holds, so fund it only with regtest coins, and its balance on
+hosted regtest changes without notice. The journeys therefore never expect a fixed amount, only a balance above 0.
+With the passphrase `watchtest` it is a different, empty wallet.
+
+**Recommendation:** for a balance nobody else can move, restore a private 12-word phrase of your own instead and
+fund it once (see [Funding the test wallet](#funding-the-test-wallet)), or run the journeys on the
+[local `./spark` stack](#local-spark-stack), where the public phrase is yours alone. The journeys work with any
+funded 12-word wallet: type your words where they type the test phrase. Never use a phrase that holds real funds.
 
 ## Preconditions
 

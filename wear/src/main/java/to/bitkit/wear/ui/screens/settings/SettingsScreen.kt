@@ -27,11 +27,11 @@ import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.SurfaceTransformation
 import androidx.wear.compose.material3.Text
 import androidx.wear.compose.material3.lazy.transformedHeight
-import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import to.bitkit.wear.R
 import to.bitkit.wear.ui.components.BezelLoading
 import to.bitkit.wear.ui.components.ListScreen
 import to.bitkit.wear.ui.components.WearPreview
+import to.bitkit.wear.ui.components.WearPreviewDevices
 
 @Composable
 fun SettingsScreen(
@@ -55,7 +55,7 @@ fun SettingsScreen(
         onRemoveClick = viewModel::onRemoveClick,
         onRemoveConfirm = viewModel::onRemoveConfirm,
         onRemoveDismiss = viewModel::onRemoveDismiss,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -140,7 +140,6 @@ private fun Content(
                 modifier = Modifier.testTag("WatchSettingsRemoveCancel")
             )
         },
-        // The dialog is its own window, outside the root that exposes test tags as resource ids.
         modifier = Modifier.semantics { testTagsAsResourceId = true }
     )
 }

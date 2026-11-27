@@ -35,5 +35,6 @@
     <string name="settings__remove_wallet_failed">Peněženku nelze odebrat</string>
     <string name="settings__title">Nastavení</string>
     <string name="unsupported__text">Spark v této síti není</string>
+    <string name="unsupported__text_mainnet">Na mainnetu zatím ne</string>
     <string name="unsupported__title">Nepodporováno</string>
 </resources>

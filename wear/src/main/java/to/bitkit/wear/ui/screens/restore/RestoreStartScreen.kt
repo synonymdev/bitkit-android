@@ -16,11 +16,11 @@ import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 import androidx.wear.compose.material3.TextButton
 import androidx.wear.compose.material3.TextButtonDefaults
-import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import kotlinx.collections.immutable.ImmutableList
 import to.bitkit.wear.R
 import to.bitkit.wear.ui.components.CenteredScreen
 import to.bitkit.wear.ui.components.WearPreview
+import to.bitkit.wear.ui.components.WearPreviewDevices
 
 /** Asks how many words the recovery phrase has: one tap on a length starts typing. */
 @Composable
@@ -31,7 +31,7 @@ fun RestoreStartScreen(
     Content(
         wordCounts = RestoreViewModel.WORD_COUNTS,
         onWordCountSelect = viewModel::onWordCountSelect,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 

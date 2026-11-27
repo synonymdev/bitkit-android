@@ -2,12 +2,15 @@ package to.bitkit.wear.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.wear.data.NetworkMonitor
@@ -49,6 +52,10 @@ class WalletRepo @Inject constructor(
 
     private val scope = CoroutineScope(ioDispatcher + SupervisorJob())
 
+    private val startMutex = Mutex()
+
+    private val walletMutex = Mutex()
+
     @Volatile
     private var isForeground = false
 
@@ -76,18 +83,37 @@ class WalletRepo @Inject constructor(
         runSuspendCatching { settingsStore.isRemovedNoticePending() }.getOrDefault(false)
     }
 
-    suspend fun acknowledgeRemoval(): Result<Unit> = withContext(ioDispatcher) {
+    /** Runs to the end even when the caller is cancelled, so the notice never shows twice. */
+    suspend fun acknowledgeRemoval(): Result<Unit> = withContext(ioDispatcher + NonCancellable) {
         runSuspendCatching { settingsStore.setRemovedNoticePending(false) }
+            .onFailure { Logger.warn("Failed to acknowledge wallet removal", it, context = TAG) }
     }
 
-    /** Stores [seed] as this watch's wallet. The caller validates the recovery phrase first. */
-    suspend fun restore(seed: WalletSeed): Result<Unit> = withContext(ioDispatcher) {
-        runSuspendCatching {
-            if (!isSupported) throw SparkError.Unsupported()
-            seedStore.save(seed).getOrThrow()
-        }.onFailure {
-            Logger.error("Failed to restore wallet", it, context = TAG)
+    /**
+     * Run at every launch before the wallet is used: finishes a wipe that the last process did not complete, and
+     * deletes Spark storage that no stored seed owns.
+     */
+    suspend fun recover(): Result<Unit> = withContext(ioDispatcher + NonCancellable) {
+        walletMutex.withLock { recoverLocked() }
+    }.onFailure {
+        Logger.error("Failed to recover wallet storage", it, context = TAG)
+    }
+
+    /**
+     * Stores [seed] as this watch's wallet, after [recover]ing what an earlier wallet left. The caller validates the
+     * recovery phrase first.
+     */
+    suspend fun restore(seed: WalletSeed): Result<Unit> = withContext(ioDispatcher + NonCancellable) {
+        walletMutex.withLock {
+            runSuspendCatching {
+                if (!isSupported) throw SparkError.Unsupported()
+                recoverLocked().getOrThrow()
+                seedStore.save(seed).getOrThrow()
+                _walletState.update { WalletState() }
+            }
         }
+    }.onFailure {
+        Logger.error("Failed to restore wallet", it, context = TAG)
     }
 
     /**
@@ -101,61 +127,78 @@ class WalletRepo @Inject constructor(
     }
 
     /**
-     * Connects the stored wallet, syncs it and loads its balance; a wallet already connected only syncs it. It stays
-     * disconnected while the watch is locked, which only a watch with a screen lock ever is. When the seed key is
-     * gone or permanently unusable, the wallet is wiped and [WalletStatus.Removed] reported. A sync that does not
-     * reach Spark fails the start: [WalletStatus.Offline] once this session has synced, [WalletStatus.Error] before.
+     * Connects the stored wallet, syncs it and loads its balance; a wallet already connected only syncs it. Starts
+     * run one at a time. It stays disconnected while the watch is locked, which only a watch with a screen lock ever
+     * is. When the seed key is certainly lost, the wallet is wiped and [WalletStatus.Removed] reported. A sync that
+     * does not reach Spark fails the start: [WalletStatus.Offline] once this session has synced,
+     * [WalletStatus.Error] before. A start that a wipe overtook connects nothing and leaves the state alone.
      */
     suspend fun start(): Result<Unit> = withContext(ioDispatcher) {
-        deviceLock.refresh()
-        if (deviceLock.isLocked.value) {
-            _walletState.update { it.copy(status = WalletStatus.Locked) }
-            return@withContext Result.failure(WalletError.DeviceLocked())
-        }
-        _walletState.update { it.copy(status = WalletStatus.Connecting) }
-        runSuspendCatching {
-            val seed = seedStore.load().getOrThrow()
-            val connectStart = TimeSource.Monotonic.markNow()
-            withTimeoutOrNull(CONNECT_TIMEOUT) {
-                sparkService.connect(seed)
-                true
-            } ?: throw WalletError.Timeout("connect")
-            Logger.info("Connected wallet in '${connectStart.elapsedNow()}'", context = TAG)
-            // A lock that landed while connecting found nothing to disconnect.
+        startMutex.withLock {
+            deviceLock.refresh()
             if (deviceLock.isLocked.value) {
-                sparkService.disconnect()
-                throw WalletError.DeviceLocked()
+                _walletState.update { it.copy(status = WalletStatus.Locked) }
+                return@withLock Result.failure(WalletError.DeviceLocked())
             }
-            val syncStart = TimeSource.Monotonic.markNow()
-            val sync = withTimeoutOrNull(SYNC_TIMEOUT) { sparkService.syncWallet() }
-                ?: throw WalletError.Timeout("sync")
-            if (!sync.hasReachedSpark) throw WalletError.NotSynced(sync.error)
-            Logger.info("Synced wallet in '${syncStart.elapsedNow()}'", context = TAG)
-            refreshBalance().getOrThrow()
-        }.onSuccess {
-            _walletState.update { it.copy(status = WalletStatus.Ready, hasSynced = true) }
-        }.onFailure {
-            Logger.error("Failed to start wallet", it, context = TAG)
-            onStartFailure(it)
+            val wipeCount = sparkService.wipeCount
+            _walletState.update { it.copy(status = WalletStatus.Connecting) }
+            runSuspendCatching {
+                val seed = seedStore.load().getOrThrow()
+                val connectStart = TimeSource.Monotonic.markNow()
+                withTimeoutOrNull(CONNECT_TIMEOUT) {
+                    sparkService.connect(seed, wipeCount)
+                    true
+                } ?: throw WalletError.Timeout("connect")
+                Logger.info("Connected wallet in '${connectStart.elapsedNow()}'", context = TAG)
+                // A lock that landed while connecting found nothing to disconnect.
+                if (deviceLock.isLocked.value) {
+                    sparkService.disconnect()
+                    throw WalletError.DeviceLocked()
+                }
+                val syncStart = TimeSource.Monotonic.markNow()
+                val sync = withTimeoutOrNull(SYNC_TIMEOUT) { sparkService.syncWallet() }
+                    ?: throw WalletError.Timeout("sync")
+                if (!sync.hasReachedSpark) throw WalletError.NotSynced(sync.error)
+                Logger.info("Synced wallet in '${syncStart.elapsedNow()}'", context = TAG)
+                refreshBalance().getOrThrow()
+            }.onSuccess {
+                if (sparkService.wipeCount != wipeCount) return@onSuccess
+                _walletState.update { it.copy(status = WalletStatus.Ready, hasSynced = true) }
+            }.onFailure {
+                if (sparkService.wipeCount != wipeCount) {
+                    Logger.info("Dropped wallet start that a wipe overtook", context = TAG)
+                    return@onFailure
+                }
+                onStartFailure(it)
+            }
         }
     }
 
     private suspend fun onStartFailure(error: Throwable) {
         if (deviceLock.isLocked.value) {
+            Logger.info("Stopped wallet start because the watch locked", context = TAG)
             _walletState.update { it.copy(status = WalletStatus.Locked) }
             return
         }
         when (error) {
             is SeedStoreError.KeyInvalidated -> {
-                wipe()
-                runSuspendCatching { settingsStore.setRemovedNoticePending(true) }
+                Logger.error("Failed to start wallet", error, context = TAG)
+                wipe(isKeyLost = true)
                 _walletState.update { it.copy(status = WalletStatus.Removed) }
             }
-            is SeedStoreError.NotFound -> _walletState.update { it.copy(status = WalletStatus.Missing) }
-            is SeedStoreError.DeviceLocked, is WalletError.DeviceLocked ->
+            is SeedStoreError.NotFound -> {
+                Logger.warn("Failed to start wallet", error, context = TAG)
+                _walletState.update { it.copy(status = WalletStatus.Missing) }
+            }
+            is SeedStoreError.DeviceLocked, is WalletError.DeviceLocked -> {
+                Logger.info("Stopped wallet start because the watch locked", context = TAG)
                 _walletState.update { it.copy(status = WalletStatus.Locked) }
-            else -> _walletState.update {
-                it.copy(status = if (it.hasSynced) WalletStatus.Offline else WalletStatus.Error)
+            }
+            else -> {
+                Logger.error("Failed to start wallet", error, context = TAG)
+                _walletState.update {
+                    it.copy(status = if (it.hasSynced) WalletStatus.Offline else WalletStatus.Error)
+                }
             }
         }
     }
@@ -181,30 +224,52 @@ class WalletRepo @Inject constructor(
         }
     }
 
+    /** Loads the balance from Spark. A balance read while the wallet is wiped is dropped. */
     suspend fun refreshBalance(): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
+            if (sparkService.isWiping) return@runSuspendCatching
             val balance = sparkService.getInfo().balanceSats
-            _walletState.update { it.copy(balanceSats = balance) }
+            _walletState.update { if (sparkService.isWiping) it else it.copy(balanceSats = balance) }
         }
     }
 
     /**
-     * Removes the wallet from the watch: disconnects Spark, deletes its storage, then deletes the seed and the
-     * settings. Every step runs even when an earlier one fails; the first failure is returned.
+     * Removes the wallet from the watch as one operation that the caller cannot cancel: it notes that a wipe is under
+     * way, deletes the seed, then Spark's storage, then the settings together with the note. Every step runs even
+     * when an earlier one fails, and the first failure is returned. When the process dies or a step fails, the note
+     * stays and [recover] finishes the wipe at the next launch.
      */
-    suspend fun wipe(): Result<Unit> = withContext(ioDispatcher) {
-        sparkService.isWiping = true
-        try {
-            val spark = runSuspendCatching { sparkService.wipeStorage() }
-            val seed = seedStore.wipe()
-            val settings = runSuspendCatching { settingsStore.reset() }
-            _walletState.update { WalletState() }
-            listOf(spark, seed, settings).firstOrNull { it.isFailure } ?: Result.success(Unit)
-        } finally {
-            sparkService.isWiping = false
-        }
+    suspend fun wipe(): Result<Unit> = wipe(isKeyLost = false)
+
+    private suspend fun wipe(isKeyLost: Boolean): Result<Unit> = withContext(ioDispatcher + NonCancellable) {
+        walletMutex.withLock { wipeLocked(isKeyLost) }
     }.onFailure {
         Logger.error("Failed to wipe wallet", it, context = TAG)
+    }
+
+    private suspend fun wipeLocked(isKeyLost: Boolean): Result<Unit> {
+        sparkService.beginWipe()
+        try {
+            runSuspendCatching { settingsStore.beginWipe(isKeyLost) }
+                .onFailure { Logger.warn("Failed to note the wallet wipe", it, context = TAG) }
+            val seed = seedStore.wipe()
+            val spark = runSuspendCatching { sparkService.wipeStorage() }
+            val isWiped = seed.isSuccess && spark.isSuccess
+            val settings = if (isWiped) runSuspendCatching { settingsStore.finishWipe() } else Result.success(Unit)
+            _walletState.update { WalletState() }
+            return listOf(seed, spark, settings).firstOrNull { it.isFailure } ?: Result.success(Unit)
+        } finally {
+            sparkService.endWipe()
+        }
+    }
+
+    private suspend fun recoverLocked(): Result<Unit> = runSuspendCatching {
+        if (settingsStore.isWipePending()) {
+            Logger.warn("Finishing a wallet wipe that did not complete", context = TAG)
+            wipeLocked(isKeyLost = false).getOrThrow()
+            return@runSuspendCatching
+        }
+        if (!seedStore.exists()) sparkService.wipeStorage()
     }
 }
 

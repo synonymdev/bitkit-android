@@ -38,6 +38,21 @@ apply(from = rootProject.file("gradle/bitkit-env.gradle.kts"))
 @Suppress("UNCHECKED_CAST")
 val sparkBuildConfig = extra["bitkitSparkBuildConfig"] as (String?) -> Map<String, Pair<String, Provider<String>>>
 
+// The watch app shares the phone app's application id, so the two must never use the same version code. The watch
+// takes the phone's version code plus this offset, and the phone's version name; docs/wear.md has the scheme.
+val wearVersionCodeOffset = 1_000_000_000
+val phoneBuildScript = providers
+    .fileContents(rootProject.layout.projectDirectory.file("app/build.gradle.kts"))
+    .asText
+    .get()
+
+fun phoneVersion(name: String, value: String): String {
+    val match = Regex("""^\s*$name\s*=\s*$value\s*$""", RegexOption.MULTILINE).find(phoneBuildScript)
+    return requireNotNull(match) { "Unable to read '$name' from app/build.gradle.kts." }.groupValues[1]
+}
+
+val isBuildingBundle = gradle.startParameter.taskNames.any { it.substringAfterLast(':').startsWith("bundle") }
+
 val requestedNdkVersion = providers.environmentVariable("NDK_VERSION").orNull?.takeIf { it.isNotBlank() }
 
 android {
@@ -48,8 +63,8 @@ android {
         applicationId = "to.bitkit"
         minSdk = 34
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = wearVersionCodeOffset + phoneVersion("versionCode", """(\d+)""").toInt()
+        versionName = phoneVersion("versionName", """"([^"]+)"""")
     }
 
     flavorDimensions += "network"
@@ -130,7 +145,9 @@ android {
     }
     splits {
         abi {
-            isEnable = true
+            // AGP cannot shrink resources for an app bundle while it also builds split APKs
+            // (https://issuetracker.google.com/402800800), and a bundle is split by Play anyway.
+            isEnable = !isBuildingBundle
             reset()
             // x86_64 only for the emulator
             include("armeabi-v7a", "arm64-v8a", "x86_64")
@@ -212,7 +229,7 @@ dependencies {
     implementation(libs.wear.compose.foundation)
     implementation(libs.wear.compose.material3)
     implementation(libs.wear.compose.navigation)
-    implementation(libs.wear.compose.ui.tooling)
+    implementation(libs.wear.tooling.preview)
     // Hilt - DI
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)

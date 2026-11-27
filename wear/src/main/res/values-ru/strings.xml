@@ -35,5 +35,6 @@
     <string name="settings__remove_wallet_failed">Не удалось удалить кошелёк</string>
     <string name="settings__title">Настройки</string>
     <string name="unsupported__text">Нет Spark в этой сети</string>
+    <string name="unsupported__text_mainnet">Пока нет в основной сети</string>
     <string name="unsupported__title">Не поддерживается</string>
 </resources>

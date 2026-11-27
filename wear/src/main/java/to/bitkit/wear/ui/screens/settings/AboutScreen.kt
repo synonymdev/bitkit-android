@@ -9,18 +9,18 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
-import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import to.bitkit.wear.R
 import to.bitkit.wear.env.Env
 import to.bitkit.wear.ui.components.CenteredScreen
 import to.bitkit.wear.ui.components.WearPreview
+import to.bitkit.wear.ui.components.WearPreviewDevices
 
 @Composable
 fun AboutScreen(modifier: Modifier = Modifier) {
     Content(
         version = Env.version,
         network = Env.network.name.lowercase(),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 

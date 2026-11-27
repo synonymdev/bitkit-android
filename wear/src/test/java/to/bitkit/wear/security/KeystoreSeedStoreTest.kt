@@ -27,6 +27,7 @@ class KeystoreSeedStoreTest : BaseUnitTest() {
     @Test
     fun `a saved seed loads back with and without a passphrase`() = test {
         for (stored in listOf(seed, seed.copy(passphrase = null), seed.copy(passphrase = ""))) {
+            sut.wipe().getOrThrow()
             assertTrue(sut.save(stored).isSuccess)
 
             assertTrue(sut.exists())
@@ -58,6 +59,7 @@ class KeystoreSeedStoreTest : BaseUnitTest() {
         assertEquals(true, key.isUnlockedDeviceRequired)
 
         deviceLock.isSecure = false
+        sut.wipe().getOrThrow()
         sut.save(seed).getOrThrow()
         assertEquals(false, key.isUnlockedDeviceRequired)
         assertEquals(seed, sut.load().getOrThrow())
@@ -73,11 +75,23 @@ class KeystoreSeedStoreTest : BaseUnitTest() {
     }
 
     @Test
-    fun `each save uses a new key`() = test {
+    fun `each save after a wipe uses a new key`() = test {
         sut.save(seed).getOrThrow()
+        sut.wipe().getOrThrow()
         sut.save(seed).getOrThrow()
 
         assertEquals(2, key.createCount)
+    }
+
+    @Test
+    fun `save refuses to replace a stored seed and leaves it readable`() = test {
+        sut.save(seed).getOrThrow()
+
+        val result = sut.save(seed.copy(mnemonic = "zoo zoo zoo"))
+
+        assertIs<SeedStoreError.AlreadyExists>(result.exceptionOrNull())
+        assertEquals(1, key.createCount)
+        assertEquals(seed, sut.load().getOrThrow())
     }
 
     @Test
@@ -86,23 +100,43 @@ class KeystoreSeedStoreTest : BaseUnitTest() {
     }
 
     @Test
-    fun `load deletes the seed when its key is missing`() = test {
+    fun `load reports a missing key and deletes nothing`() = test {
         sut.save(seed).getOrThrow()
         key.invalidate()
 
         assertIs<SeedStoreError.KeyInvalidated>(sut.load().exceptionOrNull())
-        assertFalse(sut.exists())
-        assertIs<SeedStoreError.NotFound>(sut.load().exceptionOrNull())
+        assertTrue(sut.exists())
+        assertIs<SeedStoreError.KeyInvalidated>(sut.load().exceptionOrNull())
     }
 
     @Test
-    fun `load deletes the seed when the keystore reports the key permanently invalidated`() = test {
+    fun `load reports a lost key only after reading it twice`() = test {
         sut.save(seed).getOrThrow()
         key.failure = SeedStoreError.KeyInvalidated()
 
         assertIs<SeedStoreError.KeyInvalidated>(sut.load().exceptionOrNull())
-        assertFalse(sut.exists())
-        assertFalse(key.exists())
+        assertEquals(2, key.decryptCount)
+        assertTrue(sut.exists())
+        assertTrue(key.exists())
+    }
+
+    @Test
+    fun `load returns the seed when the key only looked lost once`() = test {
+        sut.save(seed).getOrThrow()
+        key.lostKeyReads = 1
+
+        assertEquals(seed, sut.load().getOrThrow())
+        assertEquals(2, key.decryptCount)
+    }
+
+    @Test
+    fun `load does not read the key again after any other failure`() = test {
+        sut.save(seed).getOrThrow()
+        key.failure = SeedStoreError.Failed()
+
+        assertIs<SeedStoreError.Failed>(sut.load().exceptionOrNull())
+        assertEquals(1, key.decryptCount)
+        assertTrue(sut.exists())
     }
 
     @Test
@@ -154,6 +188,16 @@ class KeystoreSeedStoreTest : BaseUnitTest() {
         assertFalse(sut.exists())
         assertTrue(directory.listFiles().orEmpty().isEmpty())
         assertTrue(sut.wipe().isSuccess)
+    }
+
+    @Test
+    fun `wipe also deletes a seed file left half written`() = test {
+        sut.save(seed).getOrThrow()
+        File(directory, "seed.bin.tmp").writeBytes(byteArrayOf(1, 2, 3))
+
+        assertTrue(sut.wipe().isSuccess)
+
+        assertTrue(directory.listFiles().orEmpty().isEmpty())
     }
 
     @Test

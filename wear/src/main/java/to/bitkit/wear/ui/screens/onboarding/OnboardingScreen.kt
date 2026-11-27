@@ -13,10 +13,10 @@ import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.EdgeButtonSize
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.Text
-import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import to.bitkit.wear.R
 import to.bitkit.wear.ui.components.CenteredScreen
 import to.bitkit.wear.ui.components.WearPreview
+import to.bitkit.wear.ui.components.WearPreviewDevices
 
 /** The Bitkit mark and the one way in for now: restoring a recovery phrase. */
 @Composable
@@ -39,7 +39,7 @@ fun OnboardingScreen(
                 Text(stringResource(R.string.onboarding__restore))
             }
         },
-        modifier = modifier,
+        modifier = modifier
     ) {
         Image(
             painter = painterResource(R.drawable.bitkit_logo),

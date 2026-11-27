@@ -3,8 +3,12 @@ package to.bitkit.wear.repositories
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.SdkEvent
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -46,6 +50,8 @@ class WalletRepoTest : BaseUnitTest() {
     fun setUp() {
         whenever(sparkService.events).thenReturn(MutableSharedFlow<SdkEvent>())
         whenever { sparkService.syncWallet() }.thenReturn(synced)
+        whenever { seedStore.exists() }.thenReturn(false)
+        whenever { settingsStore.isWipePending() }.thenReturn(false)
         sut = WalletRepo(testDispatcher, seedStore, sparkService, settingsStore, deviceLock, networkMonitor)
     }
 
@@ -57,7 +63,7 @@ class WalletRepoTest : BaseUnitTest() {
         val result = sut.start()
 
         assertTrue(result.isSuccess)
-        verify(sparkService).connect(seed)
+        verify(sparkService).connect(seed, 0)
         verify(sparkService).syncWallet()
         assertEquals(WalletState(WalletStatus.Ready, 21_000uL, hasSynced = true), sut.walletState.value)
     }
@@ -69,7 +75,7 @@ class WalletRepoTest : BaseUnitTest() {
         val result = sut.start()
 
         assertIs<SeedStoreError.NotFound>(result.exceptionOrNull())
-        verify(sparkService, never()).connect(any())
+        verify(sparkService, never()).connect(any(), any())
         assertEquals(WalletStatus.Missing, sut.walletState.value.status)
         assertNull(sut.walletState.value.balanceSats)
     }
@@ -88,7 +94,7 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `a connect that never finishes times out as an error`() = test {
         whenever(seedStore.load()).thenReturn(Result.success(seed))
-        whenever(sparkService.connect(seed)).doSuspendableAnswer { awaitCancellation() }
+        whenever(sparkService.connect(seed, 0)).doSuspendableAnswer { awaitCancellation() }
 
         val result = sut.start()
 
@@ -98,23 +104,37 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `wipe deletes spark storage, then the seed and the settings`() = test {
+    fun `wipe notes itself, then deletes the seed, spark storage and the settings`() = test {
         whenever(seedStore.wipe()).thenReturn(Result.success(Unit))
 
         val result = sut.wipe()
 
         assertTrue(result.isSuccess)
         inOrder(sparkService, seedStore, settingsStore) {
-            verify(sparkService).wipeStorage()
+            verify(sparkService).beginWipe()
+            verify(settingsStore).beginWipe(false)
             verify(seedStore).wipe()
-            verify(settingsStore).reset()
+            verify(sparkService).wipeStorage()
+            verify(settingsStore).finishWipe()
+            verify(sparkService).endWipe()
         }
-        assertFalse(sparkService.isWiping)
         assertEquals(WalletState(), sut.walletState.value)
     }
 
     @Test
-    fun `wipe still deletes the seed when spark storage fails, and reports the failure`() = test {
+    fun `wipe still deletes spark storage when the seed fails, reports it and keeps its note`() = test {
+        whenever(seedStore.wipe()).thenReturn(Result.failure(SeedStoreError.Failed()))
+
+        val result = sut.wipe()
+
+        assertIs<SeedStoreError.Failed>(result.exceptionOrNull())
+        verify(sparkService).wipeStorage()
+        verify(settingsStore, never()).finishWipe()
+        verify(sparkService).endWipe()
+    }
+
+    @Test
+    fun `wipe reports a spark storage failure and keeps its note`() = test {
         whenever(sparkService.wipeStorage()).thenAnswer { throw SparkError.WipeFailed("dir") }
         whenever(seedStore.wipe()).thenReturn(Result.success(Unit))
 
@@ -122,6 +142,31 @@ class WalletRepoTest : BaseUnitTest() {
 
         assertIs<SparkError.WipeFailed>(result.exceptionOrNull())
         verify(seedStore).wipe()
+        verify(settingsStore, never()).finishWipe()
+    }
+
+    @Test
+    fun `wipe still deletes everything when its note cannot be written`() = test {
+        whenever(settingsStore.beginWipe(any())).thenAnswer { throw SeedStoreError.Failed() }
+        whenever(seedStore.wipe()).thenReturn(Result.success(Unit))
+
+        assertTrue(sut.wipe().isSuccess)
+
+        verify(seedStore).wipe()
+        verify(sparkService).wipeStorage()
+        verify(settingsStore).finishWipe()
+    }
+
+    @Test
+    fun `a cancelled caller does not stop the wipe`() = test {
+        whenever(seedStore.wipe()).thenReturn(Result.success(Unit))
+        whenever(sparkService.wipeStorage()).doSuspendableAnswer { yield() }
+
+        val caller = launch { sut.wipe() }
+        caller.cancelAndJoin()
+
+        verify(settingsStore).finishWipe()
+        verify(sparkService).endWipe()
     }
 
     @Test
@@ -132,14 +177,73 @@ class WalletRepoTest : BaseUnitTest() {
         val result = sut.start()
 
         assertIs<SeedStoreError.KeyInvalidated>(result.exceptionOrNull())
-        verify(sparkService, never()).connect(any())
+        verify(sparkService, never()).connect(any(), any())
         inOrder(sparkService, seedStore, settingsStore) {
-            verify(sparkService).wipeStorage()
+            verify(settingsStore).beginWipe(true)
             verify(seedStore).wipe()
-            verify(settingsStore).reset()
-            verify(settingsStore).setRemovedNoticePending(true)
+            verify(sparkService).wipeStorage()
+            verify(settingsStore).finishWipe()
         }
         assertEquals(WalletState(WalletStatus.Removed), sut.walletState.value)
+    }
+
+    @Test
+    fun `start keeps the wallet for every seed error but a lost key`() = test {
+        for (error in listOf(SeedStoreError.Failed(), SeedStoreError.Corrupted(), SeedStoreError.DeviceLocked())) {
+            whenever(seedStore.load()).thenReturn(Result.failure(error))
+
+            sut.start()
+        }
+
+        verify(seedStore, never()).wipe()
+        verify(sparkService, never()).wipeStorage()
+        verify(settingsStore, never()).beginWipe(any())
+    }
+
+    @Test
+    fun `a start that a wipe overtook leaves the wiped state alone`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(seedStore.wipe()).thenReturn(Result.success(Unit))
+        whenever(sparkService.connect(seed, 0)).thenAnswer {
+            whenever(sparkService.wipeCount).thenReturn(1)
+            throw SparkError.WipeInProgress()
+        }
+
+        val result = sut.start()
+
+        assertIs<SparkError.WipeInProgress>(result.exceptionOrNull())
+        assertEquals(WalletStatus.Connecting, sut.walletState.value.status)
+        sut.wipe()
+        assertEquals(WalletState(), sut.walletState.value)
+    }
+
+    @Test
+    fun `starts run one at a time`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        var running = 0
+        var maxRunning = 0
+        whenever(sparkService.syncWallet()).doSuspendableAnswer {
+            maxRunning = maxOf(maxRunning, ++running)
+            yield()
+            running--
+            synced
+        }
+
+        listOf(launch { sut.start() }, launch { sut.start() }).joinAll()
+
+        assertEquals(1, maxRunning)
+        verify(sparkService, times(2)).syncWallet()
+    }
+
+    @Test
+    fun `a balance read while the wallet is wiped is dropped`() = test {
+        whenever(sparkService.isWiping).thenReturn(true)
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+
+        sut.refreshBalance()
+
+        assertNull(sut.walletState.value.balanceSats)
     }
 
     @Test
@@ -177,7 +281,7 @@ class WalletRepoTest : BaseUnitTest() {
 
         deviceLock.isLocked.update { false }
 
-        verify(sparkService, times(2)).connect(seed)
+        verify(sparkService, times(2)).connect(seed, 0)
         assertEquals(WalletStatus.Ready, sut.walletState.value.status)
     }
 
@@ -189,11 +293,11 @@ class WalletRepoTest : BaseUnitTest() {
         deviceLock.isLocked.update { true }
 
         deviceLock.isLocked.update { false }
-        verify(sparkService, times(1)).connect(seed)
+        verify(sparkService, times(1)).connect(seed, 0)
         assertEquals(WalletStatus.Locked, sut.walletState.value.status)
 
         sut.setForeground(true)
-        verify(sparkService, times(2)).connect(seed)
+        verify(sparkService, times(2)).connect(seed, 0)
     }
 
     @Test
@@ -212,7 +316,7 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `a lock that lands while connecting disconnects before syncing`() = test {
         whenever(seedStore.load()).thenReturn(Result.success(seed))
-        whenever(sparkService.connect(seed)).thenAnswer {
+        whenever(sparkService.connect(seed, 0)).thenAnswer {
             deviceLock.pendingIsLocked = true
             deviceLock.refresh()
             true
@@ -238,6 +342,52 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(sparkService.isSupported).thenReturn(false)
         assertIs<SparkError.Unsupported>(sut.restore(seed).exceptionOrNull())
         verify(seedStore, times(2)).save(seed)
+    }
+
+    @Test
+    fun `restore forgets the state of the wallet before it`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        whenever(seedStore.save(seed)).thenReturn(Result.success(Unit))
+        sut.start()
+
+        sut.restore(seed).getOrThrow()
+
+        assertEquals(WalletState(), sut.walletState.value)
+    }
+
+    @Test
+    fun `restore deletes spark storage left without a seed before it saves`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(seedStore.save(seed)).thenReturn(Result.success(Unit))
+
+        sut.restore(seed).getOrThrow()
+
+        inOrder(sparkService, seedStore) {
+            verify(sparkService).wipeStorage()
+            verify(seedStore).save(seed)
+        }
+    }
+
+    @Test
+    fun `restore saves nothing when the storage left before it cannot be deleted`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.wipeStorage()).thenAnswer { throw SparkError.WipeFailed("dir") }
+
+        assertIs<SparkError.WipeFailed>(sut.restore(seed).exceptionOrNull())
+
+        verify(seedStore, never()).save(any())
+    }
+
+    @Test
+    fun `acknowledging the removal finishes when its caller is cancelled`() = test {
+        whenever(settingsStore.setRemovedNoticePending(false)).doSuspendableAnswer { yield() }
+
+        val caller = launch { sut.acknowledgeRemoval() }
+        caller.cancelAndJoin()
+
+        verify(settingsStore).setRemovedNoticePending(false)
     }
 
     @Test

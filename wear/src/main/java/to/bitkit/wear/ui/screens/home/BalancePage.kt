@@ -9,9 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -45,7 +43,6 @@ import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.IconButtonDefaults
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
-import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import to.bitkit.wear.R
 import to.bitkit.wear.ext.openNfcSettings
 import to.bitkit.wear.ui.animations.BalanceAnimations
@@ -55,7 +52,9 @@ import to.bitkit.wear.ui.components.BezelLoading
 import to.bitkit.wear.ui.components.CenteredScreen
 import to.bitkit.wear.ui.components.NfcHint
 import to.bitkit.wear.ui.components.NfcHintState
+import to.bitkit.wear.ui.components.VerticalSpacer
 import to.bitkit.wear.ui.components.WearPreview
+import to.bitkit.wear.ui.components.WearPreviewDevices
 import to.bitkit.wear.ui.components.isAmbient
 import to.bitkit.wear.ui.components.nfcHintState
 import to.bitkit.wear.ui.components.rememberNfcState
@@ -105,10 +104,6 @@ private fun screenProgress(): Float {
     return ((widthDp - SMALL_SCREEN_DP) / (LARGE_SCREEN_DP - SMALL_SCREEN_DP)).coerceIn(0f, 1f)
 }
 
-/**
- * The share of the phone's text sizes the balance uses on this screen: the large amount is about 26sp on a 192dp
- * screen and 30sp on a 227dp screen, with the phone's proportions between the rows.
- */
 @Composable
 private fun balanceScale(): Float {
     val largeSp = LARGE_SP_SMALL_SCREEN + (LARGE_SP_LARGE_SCREEN - LARGE_SP_SMALL_SCREEN) * screenProgress()
@@ -145,7 +140,7 @@ fun BalancePage(
         onBalanceClick = viewModel::onUnitToggle,
         onRetryClick = viewModel::onRetryClick,
         onNfcSettingsClick = context::openNfcSettings,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -178,7 +173,7 @@ private fun Content(
             }
             if (uiState.isLoading) BezelLoading()
         },
-        modifier = modifier,
+        modifier = modifier
     ) {
         if (uiState.isError && !isAmbient) {
             Error(onRetryClick = onRetryClick)
@@ -218,7 +213,7 @@ private fun Balance(
         large = large,
         small = uiState.secondaryAmount,
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -257,7 +252,7 @@ private fun BalanceHeader(
                     SmallRow(amount = it, modifier = Modifier.swapScale(SMALL_ROW_ORIGIN) { scale })
                 }
             }
-            Spacer(modifier = Modifier.height(rowGap()))
+            VerticalSpacer(rowGap())
             AnimatedContent(
                 targetState = largeRowState,
                 transitionSpec = { BalanceAnimations.swapLargeRowTransition using SizeTransform(clip = false) },
@@ -335,7 +330,6 @@ private fun LargeSymbol(
     )
 }
 
-/** The phone's large balance style at this screen's size, scaled down further only if [amount] would not fit. */
 @Composable
 private fun rememberFittedDisplayStyle(amount: DisplayAmount, maxWidth: Dp): TextStyle {
     val measurer = rememberTextMeasurer()
@@ -399,7 +393,6 @@ private data class RowState(
     val amount: DisplayAmount?,
 )
 
-/** A small dimmed Bitkit mark, shown instead of a balance that is hidden or not known yet. */
 @Composable
 private fun Mark(modifier: Modifier = Modifier) {
     Image(

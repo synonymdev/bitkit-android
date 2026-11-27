@@ -36,7 +36,7 @@ fun WearNavHost(
     SwipeDismissableNavHost(
         navController = navController,
         startDestination = startRoute,
-        modifier = modifier,
+        modifier = modifier
     ) {
         composable(Routes.ONBOARDING) {
             OnboardingScreen(onRestoreClick = { navController.navigateTo(Routes.RESTORE) })
@@ -87,10 +87,6 @@ private fun NavGraphBuilder.restore(navController: NavController) {
     }
 }
 
-/**
- * The view model the restore screens share, scoped to their graph so the typed words are dropped when the wearer
- * leaves it. Each screen also runs the view model's navigation.
- */
 @Composable
 private fun restoreViewModel(navController: NavController, entry: NavBackStackEntry): RestoreViewModel {
     val graphEntry = remember(entry) { navController.getBackStackEntry(Routes.RESTORE) }
@@ -98,6 +94,7 @@ private fun restoreViewModel(navController: NavController, entry: NavBackStackEn
     LaunchedEffect(viewModel, navController) {
         viewModel.effects.collect {
             when (it) {
+                RestoreEffect.ShowStart -> navController.popBackStack(Routes.RESTORE_START, inclusive = false)
                 is RestoreEffect.ShowWord -> navController.showRestoreWord(it.index)
                 RestoreEffect.ShowChecksumError -> navController.navigateTo(Routes.RESTORE_CHECKSUM)
                 RestoreEffect.ShowPassphrase -> navController.navigateTo(Routes.RESTORE_PASSPHRASE)
@@ -108,11 +105,6 @@ private fun restoreViewModel(navController: NavController, entry: NavBackStackEn
     return viewModel
 }
 
-/**
- * Opens the restore screen of the word at [index] as a new back stack entry, so that swiping back returns to the word
- * before it; `navigateTo` would reuse the entry of the word on screen. The first word restarts the walk through the
- * words.
- */
 private fun NavController.showRestoreWord(index: Int) {
     val current = currentBackStackEntry
     val isShown = current?.destination?.route == Routes.RESTORE_WORD &&

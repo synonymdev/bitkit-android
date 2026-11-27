@@ -72,6 +72,11 @@ class RestoreViewModel @Inject constructor(
         _effects.trySend(effectFor(validate()))
     }
 
+    /** Returns to the start of the flow when the words are gone, as after the process was recreated. */
+    fun onEntriesMissing() {
+        _effects.trySend(RestoreEffect.ShowStart)
+    }
+
     fun onPassphraseAdd() {
         _uiState.update { it.copy(isPassphraseEditing = true, isSaveFailed = false) }
     }
@@ -87,6 +92,10 @@ class RestoreViewModel @Inject constructor(
 
     private fun save(passphrase: String?) {
         if (_uiState.value.isSaving) return
+        if (_uiState.value.entries.isEmpty()) {
+            onEntriesMissing()
+            return
+        }
         val validation = validate()
         if (validation != Bip39Validation.Valid) {
             _effects.trySend(effectFor(validation))
@@ -152,6 +161,7 @@ data class WordEntry(
 }
 
 sealed interface RestoreEffect {
+    data object ShowStart : RestoreEffect
     data class ShowWord(val index: Int) : RestoreEffect
     data object ShowChecksumError : RestoreEffect
     data object ShowPassphrase : RestoreEffect

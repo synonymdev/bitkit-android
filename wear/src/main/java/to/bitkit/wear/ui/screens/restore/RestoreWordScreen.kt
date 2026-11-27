@@ -1,7 +1,9 @@
 package to.bitkit.wear.ui.screens.restore
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,7 +32,6 @@ import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.SurfaceTransformation
 import androidx.wear.compose.material3.Text
 import androidx.wear.compose.material3.lazy.transformedHeight
-import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.wear.R
@@ -39,13 +40,15 @@ import to.bitkit.wear.ui.components.BlockScreenshots
 import to.bitkit.wear.ui.components.ListScreen
 import to.bitkit.wear.ui.components.SecretTextField
 import to.bitkit.wear.ui.components.WearPreview
+import to.bitkit.wear.ui.components.WearPreviewDevices
+import to.bitkit.wear.ui.components.isAmbient
 
 /** The most wordlist words offered at once; typing another letter narrows them. */
 private const val MAX_SUGGESTION_CHIPS = 6
 
 /**
  * Types the word at [index], counted from 0, of the recovery phrase. It shows this one word only: the phrase is
- * never on screen as a whole, and the screen blocks screenshots.
+ * never on screen as a whole, the screen blocks screenshots, and ambient mode shows [RestoreHidden] instead.
  */
 @Composable
 fun RestoreWordScreen(
@@ -55,7 +58,15 @@ fun RestoreWordScreen(
 ) {
     BlockScreenshots()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val entry = uiState.entries.getOrNull(index) ?: return
+    val entry = uiState.entries.getOrNull(index)
+    if (entry == null) {
+        LaunchedEffect(viewModel) { viewModel.onEntriesMissing() }
+        return
+    }
+    if (isAmbient()) {
+        RestoreHidden(modifier = modifier)
+        return
+    }
     Content(
         index = index,
         wordCount = uiState.entries.size,
@@ -63,7 +74,7 @@ fun RestoreWordScreen(
         onWordChange = { viewModel.onWordChange(index, it) },
         onSuggestionClick = { viewModel.onSuggestionSelect(index, it) },
         onNextClick = { viewModel.onWordConfirm(index) },
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -80,7 +91,6 @@ private fun Content(
     val keyboard = LocalSoftwareKeyboardController.current
     val inputFocus = remember { FocusRequester() }
     val listFocus = remember { FocusRequester() }
-    // Typing shows at once from this copy; the view model's sanitized state follows a frame later.
     var text by remember(index) { mutableStateOf(entry.input) }
     LaunchedEffect(index) {
         if (entry.input.isEmpty()) inputFocus.requestFocus() else listFocus.requestFocus()
@@ -100,7 +110,7 @@ private fun Content(
                 )
             }
         },
-        modifier = modifier,
+        modifier = modifier
     ) { spec ->
         item {
             ListHeader(
@@ -172,15 +182,25 @@ private fun Suggestions(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier
     ) {
-        words.take(MAX_SUGGESTION_CHIPS).forEach { word ->
+        words.take(MAX_SUGGESTION_CHIPS).forEachIndexed { index, word ->
             CompactButton(
                 onClick = { onClick(word) },
                 colors = ButtonDefaults.filledTonalButtonColors(),
                 label = { Text(word) },
-                modifier = Modifier.testTag("RestoreSuggestion-$word")
+                modifier = Modifier.testTag("RestoreSuggestion-$index")
             )
         }
     }
+}
+
+/** What the word and passphrase screens show in ambient mode: nothing, so no secret stays on a dimmed screen. */
+@Composable
+fun RestoreHidden(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .testTag("RestoreHidden")
+    )
 }
 
 @WearPreviewDevices

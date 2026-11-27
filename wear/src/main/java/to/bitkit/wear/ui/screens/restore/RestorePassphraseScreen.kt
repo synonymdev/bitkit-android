@@ -22,7 +22,6 @@ import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.SurfaceTransformation
 import androidx.wear.compose.material3.Text
 import androidx.wear.compose.material3.lazy.transformedHeight
-import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import to.bitkit.wear.R
 import to.bitkit.wear.ui.components.BezelLoading
 import to.bitkit.wear.ui.components.BlockScreenshots
@@ -30,10 +29,12 @@ import to.bitkit.wear.ui.components.CenteredScreen
 import to.bitkit.wear.ui.components.ListScreen
 import to.bitkit.wear.ui.components.SecretTextField
 import to.bitkit.wear.ui.components.WearPreview
+import to.bitkit.wear.ui.components.WearPreviewDevices
+import to.bitkit.wear.ui.components.isAmbient
 
 /**
  * Offers to add the wallet's optional BIP39 passphrase, skipped by default, then saves the wallet. The screen blocks
- * screenshots.
+ * screenshots, and ambient mode shows [RestoreHidden] instead.
  */
 @Composable
 fun RestorePassphraseScreen(
@@ -42,13 +43,17 @@ fun RestorePassphraseScreen(
 ) {
     BlockScreenshots()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    if (isAmbient()) {
+        RestoreHidden(modifier = modifier)
+        return
+    }
     Content(
         uiState = uiState,
         onSkipClick = viewModel::onPassphraseSkip,
         onAddClick = viewModel::onPassphraseAdd,
         onPassphraseChange = viewModel::onPassphraseChange,
         onConfirmClick = viewModel::onPassphraseConfirm,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -66,7 +71,7 @@ private fun Content(
             uiState = uiState,
             onPassphraseChange = onPassphraseChange,
             onConfirmClick = onConfirmClick,
-            modifier = modifier,
+            modifier = modifier
         )
         return
     }
@@ -82,7 +87,7 @@ private fun Content(
             }
         },
         overlay = { if (uiState.isSaving) Saving() },
-        modifier = modifier,
+        modifier = modifier
     ) {
         Text(
             text = stringResource(R.string.restore__passphrase_title),

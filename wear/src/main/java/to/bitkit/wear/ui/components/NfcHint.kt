@@ -39,7 +39,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.wear.compose.material3.Icon
-import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import to.bitkit.wear.R
 import to.bitkit.wear.ext.areAnimationsDisabled
 import to.bitkit.wear.ext.nfcAdapter
@@ -221,7 +220,6 @@ private fun InfiniteTransition.arcAlpha(startMillis: Int, label: String): State<
     label = label,
 )
 
-/** The path data of `res/drawable/ic_broadcast.xml`, copied unchanged from the phone, one path per group. */
 private class BroadcastPaths {
     val halo = path(
         "M8,10C9.105,10 10,9.105 10,8C10,6.895 9.105,6 8,6C6.895,6 6,6.895 6,8C6,9.105 6.895,10 " +

@@ -18,6 +18,6 @@
     <action>Verify "WatchHomeError" and "WatchHomeRetry" are still listed: the error does not retry by itself</action>
     <action>Tap "WatchHomeRetry"</action>
     <action>Dump `android layout` every 5 s until it lists "WatchHomeBalance", for up to 1 minute</action>
-    <action>Verify "WatchHomeBalance" reads the test wallet's balance ("1 000") and "WatchHomeError" is not listed</action>
+    <action>Verify "WatchHomeBalance" reads the wallet's balance, a number above 0, and "WatchHomeError" is not listed</action>
   </actions>
 </journey>

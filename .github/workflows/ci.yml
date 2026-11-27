@@ -60,6 +60,14 @@ jobs:
           CHATWOOT_API: ${{ secrets.CHATWOOT_API }}
         run: ./gradlew assembleDevDebug
 
+      # The watch app only ships minified, so R8 runs here on its release code. The task stops before packaging,
+      # so it needs no release signing.
+      - name: Shrink watch release app with R8
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew :wear:minifyDevReleaseWithR8
+
       - name: Run tests
         run: ./gradlew testDevDebugUnitTest
 

@@ -5,25 +5,13 @@ import breez_sdk_spark.BreezSdk
 import breez_sdk_spark.ChainApiType
 import breez_sdk_spark.Config
 import breez_sdk_spark.EventListener
-import breez_sdk_spark.FeePolicy
 import breez_sdk_spark.GetInfoRequest
 import breez_sdk_spark.GetInfoResponse
-import breez_sdk_spark.ListPaymentsRequest
 import breez_sdk_spark.MaxFee
 import breez_sdk_spark.MaxOnchainFee
-import breez_sdk_spark.OnchainConfirmationSpeed
-import breez_sdk_spark.Payment
-import breez_sdk_spark.PaymentRequest
-import breez_sdk_spark.PrepareSendPaymentRequest
-import breez_sdk_spark.PrepareSendPaymentResponse
-import breez_sdk_spark.ReceivePaymentMethod
-import breez_sdk_spark.ReceivePaymentRequest
 import breez_sdk_spark.SdkBuilder
 import breez_sdk_spark.SdkEvent
 import breez_sdk_spark.Seed
-import breez_sdk_spark.SendPaymentMethod
-import breez_sdk_spark.SendPaymentOptions
-import breez_sdk_spark.SendPaymentRequest
 import breez_sdk_spark.SyncWalletRequest
 import breez_sdk_spark.defaultConfig
 import breez_sdk_spark.parseSparkConfig
@@ -37,12 +25,10 @@ import to.bitkit.wear.env.Env
 import to.bitkit.wear.env.LocalSparkSettings
 import to.bitkit.wear.env.WalletNetwork
 import to.bitkit.wear.ext.runSuspendCatching
-import to.bitkit.wear.security.Bip39
 import to.bitkit.wear.security.WalletSeed
 import to.bitkit.wear.utils.AppError
 import to.bitkit.wear.utils.Logger
 import java.io.File
-import java.math.BigInteger
 import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -55,7 +41,6 @@ import breez_sdk_spark.Network as SparkNetwork
 @Singleton
 class WatchSparkService @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val bip39: Bip39,
 ) {
     companion object {
         private const val TAG = "WatchSparkService"
@@ -92,13 +77,16 @@ class WatchSparkService @Inject constructor(
             return ChainApiType.MEMPOOL_SPACE
         }
 
-        /** Returns as soon as the payment starts, so its completion reaches callers as an event, as on the phone. */
-        internal fun bolt11SendOptions(prefersSpark: Boolean): SendPaymentOptions =
-            SendPaymentOptions.Bolt11Invoice(preferSpark = prefersSpark, completionTimeoutSecs = null)
-
-        /** Spark runs on mainnet with a Breez API key, and on Lightspark's hosted regtest, which needs none. */
-        internal fun sparkNetwork(network: WalletNetwork, breezApiKey: String?): SparkNetwork? = when (network) {
-            WalletNetwork.BITCOIN if breezApiKey != null -> SparkNetwork.MAINNET
+        /**
+         * Spark runs on Lightspark's hosted regtest, which needs no API key, and on mainnet with a Breez API key
+         * once [isMainnetEnabled].
+         */
+        internal fun sparkNetwork(
+            network: WalletNetwork,
+            breezApiKey: String?,
+            isMainnetEnabled: Boolean = Env.IS_MAINNET_ENABLED,
+        ): SparkNetwork? = when (network) {
+            WalletNetwork.BITCOIN if isMainnetEnabled && breezApiKey != null -> SparkNetwork.MAINNET
             WalletNetwork.REGTEST -> SparkNetwork.REGTEST
             else -> null
         }
@@ -110,36 +98,41 @@ class WatchSparkService @Inject constructor(
     private var sdk: BreezSdk? = null
     private var listenerId: String? = null
 
-    /** The connected wallet's [SparkSendKey.secret], derived once at connect. */
-    @Volatile
-    private var sendKeySecret: ByteArray? = null
-
     private val _events = MutableSharedFlow<SdkEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<SdkEvent> = _events.asSharedFlow()
 
     val isSupported: Boolean get() = sparkNetwork(Env.network, Env.breezApiKey) != null
 
-    /** Set for the whole wallet wipe, so a start that races it cannot connect and recreate the deleted storage. */
+    /** Whether a wallet wipe is running: nothing connects during it. */
     @Volatile
     var isWiping: Boolean = false
+        private set
 
-    /** On regtest, an invoice that carries a Spark address is paid as a Spark transfer, as on the phone. */
-    private val prefersSpark: Boolean get() = Env.network == WalletNetwork.REGTEST
+    /** How many wallet wipes have begun. A [connect] names the count it saw before it read the seed. */
+    @Volatile
+    var wipeCount: Int = 0
+        private set
 
     private val storageDir: File
         get() = File(context.filesDir, "${Env.network.name.lowercase()}/wallet$WALLET_INDEX/spark")
 
-    /** Connects the Spark wallet of [seed]. Returns true, or false when it was already connected. */
-    suspend fun connect(seed: WalletSeed): Boolean = mutex.withLock {
+    /** Marks the start of a wallet wipe; [endWipe] must follow. */
+    fun beginWipe() = synchronized(this) {
+        wipeCount++
+        isWiping = true
+    }
+
+    fun endWipe() = run { isWiping = false }
+
+    /**
+     * Connects the Spark wallet of [seed]. Returns true, or false when it was already connected. It fails when a
+     * wipe is running or has begun since [wipeCount] was read, so a seed read before a wipe never reconnects the
+     * wiped wallet.
+     */
+    suspend fun connect(seed: WalletSeed, wipeCount: Int): Boolean = mutex.withLock {
         if (sdk != null) return@withLock false
-        if (isWiping) throw SparkError.WipeInProgress()
+        if (isWiping || wipeCount != this.wipeCount) throw SparkError.WipeInProgress()
         val network = sparkNetwork(Env.network, Env.breezApiKey) ?: throw SparkError.Unsupported()
-        val seedBytes = bip39.seed(seed.mnemonic, seed.passphrase)
-        val secret = try {
-            SparkSendKey.secret(seedBytes)
-        } finally {
-            seedBytes.fill(0)
-        }
         val config = configure(defaultConfig(network), Env.breezApiKey)
         val storagePath = storageDir.apply { mkdirs() }.path
         val apiType = configureLocalSpark(config, Env.localSparkSettings)
@@ -156,8 +149,6 @@ class WatchSparkService @Inject constructor(
                 }
             },
         )
-        // The secret comes first, so a send that sees the wallet connected can derive its key.
-        sendKeySecret = secret
         sdk = connected
         Logger.info("Connected Spark wallet on '$network' with chain '${chainServiceUrl ?: "default"}'", context = TAG)
         true
@@ -172,7 +163,6 @@ class WatchSparkService @Inject constructor(
         } finally {
             sdk = null
             listenerId = null
-            sendKeySecret = null
         }
     }
 
@@ -194,51 +184,6 @@ class WatchSparkService @Inject constructor(
     }
 
     suspend fun getInfo(): GetInfoResponse = requireSdk().getInfo(GetInfoRequest(ensureSynced = false))
-
-    suspend fun listPayments(): List<Payment> = requireSdk().listPayments(ListPaymentsRequest()).payments
-
-    suspend fun receiveBolt11(amountSats: ULong?, description: String, expirySecs: UInt): String {
-        val method = ReceivePaymentMethod.Bolt11Invoice(
-            description = description,
-            amountSats = amountSats,
-            expirySecs = expirySecs,
-            paymentHash = null,
-            receiverIdentityPublicKey = null,
-            preimage = null,
-        )
-        return requireSdk().receivePayment(ReceivePaymentRequest(method)).paymentRequest
-    }
-
-    suspend fun prepareSend(
-        paymentRequest: String,
-        amountSats: ULong?,
-        feePolicy: FeePolicy? = null,
-    ): PrepareSendPaymentResponse =
-        requireSdk().prepareSendPayment(
-            PrepareSendPaymentRequest(
-                paymentRequest = PaymentRequest.Input(input = paymentRequest),
-                amount = amountSats?.let { BigInteger.valueOf(it.toLong()) },
-                tokenIdentifier = null,
-                conversionOptions = null,
-                feePolicy = feePolicy,
-            ),
-        )
-
-    /** The idempotency key of attempt [attempt] at paying the invoice with [paymentHash], see [SparkSendKey]. */
-    fun sendKey(paymentHash: String, attempt: Int): String {
-        val secret = checkNotNull(sendKeySecret) { "Spark is not connected" }
-        return SparkSendKey.key(secret, paymentHash, attempt)
-    }
-
-    /** Sends [prepared]; Spark makes one payment per [idempotencyKey], a UUID that becomes the payment's id. */
-    suspend fun send(prepared: PrepareSendPaymentResponse, idempotencyKey: String? = null): Payment {
-        val options = when (prepared.paymentMethod) {
-            is SendPaymentMethod.Bolt11Invoice -> bolt11SendOptions(prefersSpark)
-            is SendPaymentMethod.BitcoinAddress -> SendPaymentOptions.BitcoinAddress(OnchainConfirmationSpeed.MEDIUM)
-            else -> null
-        }
-        return requireSdk().sendPayment(SendPaymentRequest(prepared, options, idempotencyKey)).payment
-    }
 
     private fun requireSdk(): BreezSdk = sdk ?: throw SparkError.NotConnected()
 }

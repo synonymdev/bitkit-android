@@ -2,6 +2,9 @@ package to.bitkit.wear.ui.screens.removed
 
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -16,13 +19,17 @@ import androidx.wear.compose.material3.EdgeButtonSize
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
-import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import to.bitkit.wear.R
 import to.bitkit.wear.repositories.WalletRepo
 import to.bitkit.wear.ui.components.CenteredScreen
 import to.bitkit.wear.ui.components.WearPreview
+import to.bitkit.wear.ui.components.WearPreviewDevices
 import javax.inject.Inject
 
 /** Tells the wearer that the wallet was deleted from the watch, after its seed key was lost. */
@@ -32,12 +39,13 @@ fun WalletRemovedScreen(
     modifier: Modifier = Modifier,
     viewModel: WalletRemovedViewModel = hiltViewModel(),
 ) {
+    val currentOnConfirm by rememberUpdatedState(onConfirm)
+    LaunchedEffect(viewModel) {
+        viewModel.effects.collect { currentOnConfirm() }
+    }
     Content(
-        onConfirmClick = {
-            viewModel.onConfirm()
-            onConfirm()
-        },
-        modifier = modifier,
+        onConfirmClick = viewModel::onConfirm,
+        modifier = modifier
     )
 }
 
@@ -59,7 +67,7 @@ private fun Content(
                 )
             }
         },
-        modifier = modifier,
+        modifier = modifier
     ) {
         Icon(
             painter = painterResource(R.drawable.ic_delete),
@@ -80,9 +88,23 @@ private fun Content(
 class WalletRemovedViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
 ) : ViewModel() {
+    private val _effects = MutableSharedFlow<WalletRemovedEffect>(extraBufferCapacity = 1)
+    val effects: SharedFlow<WalletRemovedEffect> = _effects.asSharedFlow()
+
+    private var confirmJob: Job? = null
+
+    /** Leaves the screen once the acknowledgement is stored, so the notice does not show again. */
     fun onConfirm() {
-        viewModelScope.launch { walletRepo.acknowledgeRemoval() }
+        if (confirmJob?.isActive == true) return
+        confirmJob = viewModelScope.launch {
+            walletRepo.acknowledgeRemoval()
+            _effects.emit(WalletRemovedEffect.Acknowledged)
+        }
     }
+}
+
+sealed interface WalletRemovedEffect {
+    data object Acknowledged : WalletRemovedEffect
 }
 
 @WearPreviewDevices

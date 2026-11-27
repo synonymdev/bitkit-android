@@ -33,5 +33,6 @@
     <string name="settings__remove_wallet_failed">Αδυναμία αφαίρεσης πορτοφολιού</string>
     <string name="settings__title">Ρυθμίσεις</string>
     <string name="unsupported__text">Δεν υπάρχει Spark σε αυτό το δίκτυο</string>
+    <string name="unsupported__text_mainnet">Όχι ακόμη στο mainnet</string>
     <string name="unsupported__title">Δεν υποστηρίζεται</string>
 </resources>

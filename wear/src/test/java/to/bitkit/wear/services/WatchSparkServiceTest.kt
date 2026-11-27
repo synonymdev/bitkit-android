@@ -4,15 +4,14 @@ import breez_sdk_spark.ChainApiType
 import breez_sdk_spark.Config
 import breez_sdk_spark.LeafOptimizationConfig
 import breez_sdk_spark.Network
-import breez_sdk_spark.SendPaymentOptions
 import breez_sdk_spark.TokenOptimizationConfig
 import org.junit.Test
+import to.bitkit.wear.env.Env
 import to.bitkit.wear.env.LocalSparkSettings
 import to.bitkit.wear.env.WalletNetwork
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -51,21 +50,22 @@ class WatchSparkServiceTest {
     }
 
     @Test
-    fun `spark runs on regtest and on mainnet with an api key only`() {
+    fun `spark runs on regtest, and on mainnet only when enabled with an api key`() {
         assertEquals(Network.REGTEST, WatchSparkService.sparkNetwork(WalletNetwork.REGTEST, null))
-        assertEquals(Network.MAINNET, WatchSparkService.sparkNetwork(WalletNetwork.BITCOIN, "key"))
-        assertNull(WatchSparkService.sparkNetwork(WalletNetwork.BITCOIN, null))
-        assertNull(WatchSparkService.sparkNetwork(WalletNetwork.TESTNET, "key"))
+        assertEquals(Network.MAINNET, mainnet("key", isMainnetEnabled = true))
+        assertNull(mainnet(null, isMainnetEnabled = true))
+        assertNull(mainnet("key", isMainnetEnabled = false))
+        assertNull(WatchSparkService.sparkNetwork(WalletNetwork.TESTNET, "key", isMainnetEnabled = true))
     }
 
     @Test
-    fun `lightning sends return before completion`() {
-        val options = WatchSparkService.bolt11SendOptions(prefersSpark = true)
-
-        assertIs<SendPaymentOptions.Bolt11Invoice>(options)
-        assertNull(options.completionTimeoutSecs)
-        assertTrue(options.preferSpark)
+    fun `mainnet is off on the watch`() {
+        assertFalse(Env.IS_MAINNET_ENABLED)
+        assertNull(WatchSparkService.sparkNetwork(WalletNetwork.BITCOIN, "key"))
     }
+
+    private fun mainnet(apiKey: String?, isMainnetEnabled: Boolean) =
+        WatchSparkService.sparkNetwork(WalletNetwork.BITCOIN, apiKey, isMainnetEnabled)
 
     private fun defaults(network: Network) = Config(
         apiKey = null,

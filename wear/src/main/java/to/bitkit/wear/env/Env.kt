@@ -29,6 +29,9 @@ internal object Env {
         null
     }
 
+    /** Mainnet stays off on the watch until two live Spark instances on one seed are safe (#2152). */
+    const val IS_MAINNET_ENABLED = false
+
     const val version = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
     /** Bitkit's Esplora, the Spark SDK's chain source on mainnet. */

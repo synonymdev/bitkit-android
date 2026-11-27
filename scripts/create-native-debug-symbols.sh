@@ -172,7 +172,7 @@ validate_symbols_match_shipped_libs() {
 
     if [ "$checked" -eq 0 ]; then
         echo "No '$variant' APK or AAB with native libraries found in '$shipped_dir'." >&2
-        echo "Run './gradlew assembleMainnetRelease bundleMainnetRelease' before creating release symbols." >&2
+        echo "Run './gradlew :app:assembleMainnetRelease :app:bundleMainnetRelease' before creating release symbols." >&2
         exit 1
     fi
 }

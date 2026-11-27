@@ -183,6 +183,27 @@ class RestoreViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `saving without words returns to the start instead of saving`() = test {
+        sut.effects.test {
+            sut.onPassphraseSkip()
+            assertEquals(RestoreEffect.ShowStart, awaitItem())
+
+            sut.onPassphraseConfirm()
+            assertEquals(RestoreEffect.ShowStart, awaitItem())
+        }
+        verify(walletRepo, never()).restore(any())
+        assertFalse(sut.uiState.value.isSaving)
+    }
+
+    @Test
+    fun `a word screen without words returns to the start`() = test {
+        sut.effects.test {
+            sut.onEntriesMissing()
+            assertEquals(RestoreEffect.ShowStart, awaitItem())
+        }
+    }
+
+    @Test
     fun `the state never prints the words or the passphrase`() = test {
         enter(valid)
         sut.onPassphraseChange("hunter")

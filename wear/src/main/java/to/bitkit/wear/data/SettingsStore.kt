@@ -18,7 +18,7 @@ import javax.inject.Singleton
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-/** The watch's display preferences. It holds nothing secret. */
+/** The watch's display preferences and the wallet wipe's progress notes. It holds nothing secret. */
 @Singleton
 class SettingsStore @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -26,6 +26,7 @@ class SettingsStore @Inject constructor(
     private val primaryDisplayKey = stringPreferencesKey("primary_display")
     private val selectedCurrencyKey = stringPreferencesKey("selected_currency")
     private val removedNoticeKey = booleanPreferencesKey("wallet_removed_notice")
+    private val wipePendingKey = booleanPreferencesKey("wallet_wipe_pending")
 
     val data: Flow<WatchSettings> = context.settingsDataStore.data.map { prefs ->
         WatchSettings(
@@ -48,8 +49,24 @@ class SettingsStore @Inject constructor(
         context.settingsDataStore.edit { it[removedNoticeKey] = isPending }
     }
 
-    suspend fun reset() {
-        context.settingsDataStore.edit { it.clear() }
+    /** Whether a wallet wipe started and was not finished, as when the process died during it. */
+    suspend fun isWipePending(): Boolean = context.settingsDataStore.data.first()[wipePendingKey] == true
+
+    /** Notes that a wallet wipe is under way; [showsRemovedNotice] also leaves the removed notice for the wearer. */
+    suspend fun beginWipe(showsRemovedNotice: Boolean) {
+        context.settingsDataStore.edit {
+            it[wipePendingKey] = true
+            if (showsRemovedNotice) it[removedNoticeKey] = true
+        }
+    }
+
+    /** Clears every setting and the wipe note in one write, keeping only a pending removed notice. */
+    suspend fun finishWipe() {
+        context.settingsDataStore.edit {
+            val isRemovedNoticePending = it[removedNoticeKey] == true
+            it.clear()
+            if (isRemovedNoticePending) it[removedNoticeKey] = true
+        }
     }
 }
 

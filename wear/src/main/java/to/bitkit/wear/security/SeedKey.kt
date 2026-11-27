@@ -6,7 +6,6 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyInfo
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
-import android.security.keystore.StrongBoxUnavailableException
 import android.security.keystore.UserNotAuthenticatedException
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.security.KeyStore
@@ -26,8 +25,6 @@ import android.security.KeyStoreException as AndroidKeyStoreException
  * cannot run. Every method fails with a [SeedStoreError].
  */
 interface SeedKey {
-    fun exists(): Boolean
-
     /**
      * Creates the key, replacing any earlier one, and returns where it lives. With [isUnlockedDeviceRequired] the key
      * only works while the watch is unlocked, which needs a screen lock to be set.
@@ -46,8 +43,9 @@ interface SeedKey {
 enum class KeyBacking { StrongBox, TrustedEnvironment, Software, Unknown }
 
 /**
- * An AES-256-GCM key in AndroidKeyStore that never leaves secure hardware: StrongBox when the watch has one, else the
- * trusted execution environment. It is not bound to user authentication. `docs/wear.md` explains the choices.
+ * An AES-256-GCM key in AndroidKeyStore that never leaves secure hardware: StrongBox when the watch has one and it
+ * can make the key, else the trusted execution environment. It is not bound to user authentication. `docs/wear.md`
+ * explains the choices.
  */
 @Singleton
 class AndroidKeystoreSeedKey @Inject constructor(
@@ -61,15 +59,20 @@ class AndroidKeystoreSeedKey @Inject constructor(
         private const val IV_BYTES = 12
         private const val TAG_BITS = 128
 
-        /** Maps what the platform Keystore throws to the store's errors. */
+        /**
+         * Maps what the platform Keystore throws to the store's errors. Only certain key loss is reported as
+         * [SeedStoreError.KeyInvalidated], because that verdict deletes the wallet: a permanently invalidated key, or
+         * an unrecoverable key whose cause is a permanent "key does not exist". A lock wins over both, and every
+         * other error, transient ones included, is the retryable [SeedStoreError.Failed]. `docs/wear.md` lists the
+         * platform behaviour this follows.
+         */
         internal fun mapError(error: Throwable): SeedStoreError {
             if (error is SeedStoreError) return error
             val chain = generateSequence(error) { it.cause }.take(MAX_CAUSE_DEPTH).toList()
             return when {
-                chain.any { it is KeyPermanentlyInvalidatedException || it is UnrecoverableKeyException } ->
-                    SeedStoreError.KeyInvalidated(error)
                 chain.any { it is UserNotAuthenticatedException || it.isLockedError() } ->
                     SeedStoreError.DeviceLocked(error)
+                chain.any { it.isKeyLoss() } -> SeedStoreError.KeyInvalidated(error)
                 chain.any { it is AEADBadTagException } -> SeedStoreError.Corrupted(error)
                 else -> SeedStoreError.Failed(error)
             }
@@ -79,18 +82,25 @@ class AndroidKeystoreSeedKey @Inject constructor(
 
         private fun Throwable.isLockedError(): Boolean = this is AndroidKeyStoreException &&
             numericErrorCode == AndroidKeyStoreException.ERROR_USER_AUTHENTICATION_REQUIRED
+
+        private fun Throwable.isKeyLoss(): Boolean = when (this) {
+            is KeyPermanentlyInvalidatedException -> true
+            is UnrecoverableKeyException -> (cause as? AndroidKeyStoreException)?.isMissingKey() == true
+            else -> false
+        }
+
+        private fun AndroidKeyStoreException.isMissingKey(): Boolean =
+            numericErrorCode == AndroidKeyStoreException.ERROR_KEY_DOES_NOT_EXIST && !isTransientFailure
     }
 
     private val keyStore: KeyStore by lazy { KeyStore.getInstance(KEYSTORE).apply { load(null) } }
 
-    override fun exists(): Boolean = guarded { keyStore.containsAlias(ALIAS) }
-
     override fun create(isUnlockedDeviceRequired: Boolean): KeyBacking = guarded {
-        deleteEntry()
+        keyStore.deleteEntry(ALIAS)
         val hasStrongBox = context.packageManager.hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE)
         val key = if (hasStrongBox) {
             runCatching { generate(isStrongBox = true, isUnlockedDeviceRequired) }.getOrElse {
-                if (it !is StrongBoxUnavailableException) throw it
+                keyStore.deleteEntry(ALIAS)
                 generate(isStrongBox = false, isUnlockedDeviceRequired)
             }
         } else {
@@ -116,11 +126,7 @@ class AndroidKeystoreSeedKey @Inject constructor(
         cipher.doFinal(blob, IV_BYTES, blob.size - IV_BYTES)
     }
 
-    override fun delete() = guarded { deleteEntry() }
-
-    private fun deleteEntry() {
-        if (keyStore.containsAlias(ALIAS)) keyStore.deleteEntry(ALIAS)
-    }
+    override fun delete() = guarded { keyStore.deleteEntry(ALIAS) }
 
     private fun requireKey(): SecretKey =
         keyStore.getKey(ALIAS, null) as? SecretKey ?: throw SeedStoreError.KeyInvalidated()

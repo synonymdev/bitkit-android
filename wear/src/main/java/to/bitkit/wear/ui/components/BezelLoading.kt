@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.CircularProgressIndicator
 import androidx.wear.compose.material3.CircularProgressIndicatorDefaults
-import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 
 /** The gap between the screen edge and a ring drawn around it, such as the loading bezel or the hold-to-pay ring. */
 val BezelPadding: Dp = CircularProgressIndicatorDefaults.FullScreenPadding

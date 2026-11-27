@@ -1,0 +1,20 @@
+<journey name="wear restore ambient hides word">
+  <description>
+    In ambient mode the word screen of the restore shows nothing: the field and the suggestion chips are replaced by
+    an empty screen, and waking the watch brings the typed letters back. Emulator and physical watch (on a watch,
+    lowering the wrist or covering the screen with a palm does the same as `KEYCODE_SLEEP`).
+
+    Precondition: Fresh app, see journeys/wear/README.md › Fresh app, and the always-on screen on (README › Watch
+    gestures). Backend: none, the journey stops before the wallet connects. The word screens block screenshots, so
+    check them with `android layout` only.
+  </description>
+  <actions>
+    <action>Tap Restore (tag "WatchOnboardingRestore"), then 12 (tag "RestoreWords12")</action>
+    <action>Type `ab` into "RestoreWordInput" without pressing Enter (README › Typing, steps 2 and 3)</action>
+    <action>Verify "RestoreWordInput" reads "ab" and the chip "RestoreSuggestion-0" is listed</action>
+    <action>Run `adb shell input keyevent KEYCODE_SLEEP` and wait 3 s</action>
+    <action>Verify "RestoreWordInput", "RestoreProgress" and "RestoreSuggestion-0" are not listed, and `adb shell uiautomator dump` lists "RestoreHidden" (README: `android layout` leaves out a node with no text)</action>
+    <action>Run `adb shell input keyevent KEYCODE_WAKEUP` and wait 2 s</action>
+    <action>Verify "RestoreWordInput" reads "ab" again, "RestoreSuggestion-0" is listed and "RestoreHidden" is not</action>
+  </actions>
+</journey>

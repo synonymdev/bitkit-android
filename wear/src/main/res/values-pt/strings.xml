@@ -34,5 +34,6 @@
     <string name="settings__remove_wallet_failed">Não foi possível remover a carteira</string>
     <string name="settings__title">Ajustes</string>
     <string name="unsupported__text">Sem Spark nesta rede</string>
+    <string name="unsupported__text_mainnet">Ainda não na mainnet</string>
     <string name="unsupported__title">Não suportado</string>
 </resources>

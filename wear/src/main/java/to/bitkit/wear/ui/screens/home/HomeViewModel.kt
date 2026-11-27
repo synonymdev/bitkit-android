@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
@@ -27,6 +28,7 @@ import to.bitkit.wear.repositories.rateFor
 import to.bitkit.wear.utils.Logger
 import java.util.Locale
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -36,7 +38,7 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val TAG = "HomeViewModel"
-        private const val STOP_TIMEOUT_MS = 5_000L
+        private val STOP_TIMEOUT = 5.seconds
     }
 
     val uiState: StateFlow<HomeUiState> = combine(
@@ -45,7 +47,7 @@ class HomeViewModel @Inject constructor(
         settingsStore.data,
     ) { wallet, rates, settings ->
         homeUiState(wallet, rates, settings)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), HomeUiState())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT), HomeUiState())
 
     init {
         start()

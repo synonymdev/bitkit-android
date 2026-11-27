@@ -34,5 +34,6 @@
     <string name="settings__remove_wallet_failed">Impossibile rimuovere il portafoglio</string>
     <string name="settings__title">Impostazioni</string>
     <string name="unsupported__text">Spark non disponibile su questa rete</string>
+    <string name="unsupported__text_mainnet">Non ancora su mainnet</string>
     <string name="unsupported__title">Non supportato</string>
 </resources>

@@ -3,6 +3,7 @@ package to.bitkit.wear.security
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import to.bitkit.wear.data.NetworkMonitor
+import to.bitkit.wear.ext.runSuspendCatching
 
 /** A [Bip39] over a few words, whose phrases are valid when they end in "about". */
 class FakeBip39 : Bip39 {
@@ -41,11 +42,36 @@ class FakeDeviceLock(
     }
 }
 
+/** A [SeedStore] that keeps the seed in memory; [onWipe] runs before each wipe, to fail it or stop it. */
+class FakeSeedStore(var seed: WalletSeed? = null) : SeedStore {
+    var onWipe: () -> Unit = {}
+
+    override suspend fun exists(): Boolean = seed != null
+
+    override suspend fun load(): Result<WalletSeed> =
+        seed?.let { Result.success(it) } ?: Result.failure(SeedStoreError.NotFound())
+
+    override suspend fun save(seed: WalletSeed): Result<Unit> {
+        if (this.seed != null) return Result.failure(SeedStoreError.AlreadyExists())
+        this.seed = seed
+        return Result.success(Unit)
+    }
+
+    override suspend fun wipe(): Result<Unit> = runSuspendCatching {
+        onWipe()
+        seed = null
+    }
+}
+
 /** A [SeedKey] that keeps its key in memory and can be told to fail the way the platform Keystore does. */
 class FakeSeedKey : SeedKey {
     private var key: Byte? = null
     private var counter = 0
     var failure: SeedStoreError? = null
+
+    /** How many of the next decrypts report a lost key before the key works again. */
+    var lostKeyReads = 0
+    var decryptCount = 0
     var createCount = 0
     var isUnlockedDeviceRequired: Boolean? = null
     val plaintexts = mutableListOf<ByteArray>()
@@ -55,7 +81,7 @@ class FakeSeedKey : SeedKey {
         key = null
     }
 
-    override fun exists(): Boolean = key != null
+    fun exists(): Boolean = key != null
 
     override fun create(isUnlockedDeviceRequired: Boolean): KeyBacking {
         failure?.let { throw it }
@@ -72,6 +98,8 @@ class FakeSeedKey : SeedKey {
     }
 
     override fun decrypt(blob: ByteArray, aad: ByteArray): ByteArray {
+        decryptCount++
+        if (lostKeyReads-- > 0) throw SeedStoreError.KeyInvalidated()
         failure?.let { throw it }
         if (!blob.copyOf(aad.size).contentEquals(aad)) throw SeedStoreError.Corrupted()
         return xor(blob.copyOfRange(aad.size, blob.size))

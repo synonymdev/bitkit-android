@@ -9,7 +9,8 @@ import java.util.concurrent.Executors
 
 /**
  * Logs to logcat under the tag `BitkitWear`, with the caller's TAG as a `[context]` prefix. Debug builds also write
- * the log to `files/logs/`, as the phone does; see [init]. Never log the recovery phrase or the passphrase.
+ * the log to `files/logs/`, as the phone does; see [init]. Never log the recovery phrase or the passphrase. Release
+ * builds log only the class of a `Throwable`, never its message, which a third-party library may have written.
  */
 object Logger {
     private const val APP = "BitkitWear"
@@ -17,7 +18,10 @@ object Logger {
     @Volatile
     private var saver: LogFileSaver? = null
 
-    /** Starts writing this process's log to a new file in [filesDir]/logs; only debug builds call it. */
+    /**
+     * Starts writing this process's log to a new file in [filesDir]/logs and logging the messages of errors; only
+     * debug builds call it.
+     */
     fun init(filesDir: File) {
         saver = LogFileSaver(File(filesDir, "logs"))
     }
@@ -38,12 +42,14 @@ object Logger {
 
     private fun format(msg: String, context: String, e: Throwable? = null): String {
         val prefix = if (context.isEmpty()) "" else "[$context] "
-        val suffix = e?.let { ": ${it::class.simpleName}: ${it.message}" }.orEmpty()
+        val suffix = e?.let { describe(it, hasMessage = saver != null) }.orEmpty()
         return "$prefix$msg$suffix"
     }
+
+    internal fun describe(e: Throwable, hasMessage: Boolean): String =
+        if (hasMessage) ": ${e::class.simpleName}: ${e.message}" else ": ${e::class.simpleName}"
 }
 
-/** Appends log lines to one file per process on a background thread, keeping the newest [MAX_FILES] files. */
 private class LogFileSaver(private val directory: File) {
     companion object {
         /** How many log files are kept, this process's included. */

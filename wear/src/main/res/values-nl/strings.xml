@@ -33,5 +33,6 @@
     <string name="settings__remove_wallet_failed">Wallet verwijderen mislukt</string>
     <string name="settings__title">Instellingen</string>
     <string name="unsupported__text">Geen Spark op dit netwerk</string>
+    <string name="unsupported__text_mainnet">Nog niet op mainnet</string>
     <string name="unsupported__title">Niet ondersteund</string>
 </resources>

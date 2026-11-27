@@ -8,12 +8,15 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.nio.file.StandardOpenOption
 
 /**
  * Stores the seed encrypted by [key] in one file under [directory], which must be app-private and outside every
  * backup. The file holds a format version and the [SeedKey.encrypt] output; nothing else on the watch persists the
  * seed. On a watch with a screen lock the key only works while the watch is unlocked; without one the key has no such
- * limit. Plaintext lives in byte arrays that are zeroed after use; the [WalletSeed] strings handed in and out are the
+ * limit. A key that looks lost is read a second time before [load] reports it, and [load] never deletes the seed.
+ * Plaintext lives in byte arrays that are zeroed after use; the [WalletSeed] strings handed in and out are the
  * caller's to drop.
  */
 class KeystoreSeedStore(
@@ -68,34 +71,28 @@ class KeystoreSeedStore(
 
     private val mutex = Mutex()
     private val file get() = File(directory, FILE_NAME)
+    private val tempFile get() = File(directory, "$FILE_NAME.tmp")
 
     override suspend fun exists(): Boolean = mutex.withLock { file.exists() }
 
     override suspend fun load(): Result<WalletSeed> = mutex.withLock {
         runSuspendCatching {
             if (!file.exists()) throw SeedStoreError.NotFound()
-            if (!key.exists()) throw SeedStoreError.KeyInvalidated()
             val stored = file.readBytes()
             if (stored.isEmpty() || stored[0] != FORMAT_VERSION) throw SeedStoreError.Corrupted()
-            val plaintext = key.decrypt(stored.copyOfRange(1, stored.size), aad)
+            val blob = stored.copyOfRange(1, stored.size)
+            val plaintext = decrypt(blob)
             try {
                 decode(plaintext)
             } finally {
                 plaintext.fill(0)
             }
-        }.recoverCatching {
-            // A locked watch may refuse its key in ways that look like a lost key; never delete the seed for that.
-            if (it is SeedStoreError.KeyInvalidated && isLocked()) throw SeedStoreError.DeviceLocked(it)
-            throw it
-        }.onFailure {
-            if (it !is SeedStoreError.KeyInvalidated) return@onFailure
-            Logger.warn("Deleting the seed because its key was invalidated", context = TAG)
-            delete()
         }
     }
 
     override suspend fun save(seed: WalletSeed): Result<Unit> = mutex.withLock {
         runSuspendCatching {
+            if (file.exists()) throw SeedStoreError.AlreadyExists()
             val plaintext = encode(seed)
             try {
                 runCatching {
@@ -116,6 +113,15 @@ class KeystoreSeedStore(
 
     override suspend fun wipe(): Result<Unit> = mutex.withLock { delete() }
 
+    private fun decrypt(blob: ByteArray): ByteArray {
+        val first = runCatching { key.decrypt(blob, aad) }
+        if (first.exceptionOrNull() !is SeedStoreError.KeyInvalidated) return first.getOrThrow()
+        val second = runCatching { key.decrypt(blob, aad) }
+        val error = second.exceptionOrNull()
+        if (error is SeedStoreError.KeyInvalidated && isLocked()) throw SeedStoreError.DeviceLocked(error)
+        return second.getOrThrow()
+    }
+
     private fun isLocked(): Boolean {
         deviceLock.refresh()
         return deviceLock.isLocked.value
@@ -124,8 +130,10 @@ class KeystoreSeedStore(
     private fun delete(): Result<Unit> {
         val keyResult = runCatching { key.delete() }
         val fileResult = runCatching {
-            val target = file
-            if (!target.delete() && target.exists()) throw SeedStoreError.Failed()
+            for (target in listOf(file, tempFile)) {
+                if (!target.delete() && target.exists()) throw SeedStoreError.Failed()
+            }
+            if (directory.exists()) syncDirectory()
         }
         return if (keyResult.isFailure) keyResult else fileResult
     }
@@ -136,7 +144,7 @@ class KeystoreSeedStore(
             write(FORMAT_VERSION.toInt())
             write(blob)
         }.toByteArray()
-        val temp = File(directory, "$FILE_NAME.tmp")
+        val temp = tempFile
         FileOutputStream(temp).use {
             it.write(bytes)
             it.fd.sync()
@@ -145,5 +153,11 @@ class KeystoreSeedStore(
             temp.delete()
             throw SeedStoreError.Failed()
         }
+        syncDirectory()
+    }
+
+    private fun syncDirectory() {
+        runCatching { FileChannel.open(directory.toPath(), StandardOpenOption.READ).use { it.force(true) } }
+            .onFailure { Logger.warn("Failed to sync the seed directory", it, context = TAG) }
     }
 }
