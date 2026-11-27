@@ -1,7 +1,7 @@
 <journey name="Jade Locked On Device">
   <description>
-    Logs the paired Jade out on the device itself and checks the message the app shows when it
-    next needs the Jade. Requires `JADE_MODE=interactive ./scripts/jade-emulator start` in
+    Logs the paired Jade out on the device itself and checks that the app asks for the PIN on the
+    device and retries when it next needs the Jade. Requires `JADE_MODE=interactive ./scripts/jade-emulator start` in
     `bitkit-docker`, a regtest debug build with the Jade emulator enabled (see the README) and no
     Jade paired. For the send steps, Settings, Advanced, Electrum Server must point at the
     `bitkit-docker` Electrum. Each log-out happens while the app holds an open Jade session: closing
@@ -24,7 +24,7 @@
       Tap "Connect" (testTag "HardwareWalletFoundConnect"), run `./scripts/jade-emulator pin 012345` in `bitkit-docker`, verify the "Device Connected" step (testTag "HardwareWalletPairedScreen") appears within 30 seconds and tap "Finish" (testTag "HardwareWalletPairedFinish")
     </action>
     <action>
-      Tap Receive (testTag "Receive"), select the Jade tab, tap "Show Details" if the address is hidden behind it, read the address without tapping "Verify on Device", close the receive sheet and fund it: `./bitcoin-cli sendtoaddress JADE_ADDRESS 0.001; ./bitcoin-cli -generate 1` in `bitkit-docker`. Wait for the "Received Bitcoin" sheet and tap its button (testTag "ReceivedTransactionButton")
+      Tap Receive (testTag "Receive"), select the Jade tab, tap "Show Details" if the address is hidden behind it, read the address without tapping "Verify on Device", close the receive sheet and fund it: `./bitcoin-cli sendtoaddress JADE_ADDRESS 0.01; ./bitcoin-cli -generate 1` in `bitkit-docker`. Wait for the "Received Bitcoin" sheet and tap its button (testTag "ReceivedTransactionButton")
     </action>
     <action>
       Run `./scripts/jade-emulator press front right front` in `bitkit-docker` to choose Session, then Log Out, on the device
