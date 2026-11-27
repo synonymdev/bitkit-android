@@ -160,6 +160,7 @@ import to.bitkit.models.PaykitAmountError
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPayment
 import to.bitkit.models.PubkyAuthRequest
+import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyContactLink
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -10913,6 +10914,20 @@ class AppViewModel @Inject constructor(
         if (pubkyRepo.publicKey.value == null) {
             if (pubkyRepo.localIdentityPublicKey() == null) return showPubkyIdentityUnavailableToast()
             showSheet(Sheet.PubkyAuth(authUrl))
+            return
+        }
+
+        val expectedSigner = pubkyRepo.validExpectedSigner(authUrl)
+        val publicKey = pubkyRepo.publicKey.value
+        if (expectedSigner != null && publicKey != null &&
+            !PubkyAuthRequest.isExpectedSigner(expectedSigner, publicKey)
+        ) {
+            Logger.warn("Refused auth request for another pubky", context = TAG)
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.profile__auth_error_title),
+                description = PubkyAuthRequestError.SignerMismatch(expectedSigner).localizedPubkyAuthMessage(context),
+            )
             return
         }
 

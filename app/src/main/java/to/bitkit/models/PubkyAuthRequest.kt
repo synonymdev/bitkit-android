@@ -99,6 +99,7 @@ sealed class PubkyAuthRequestError(cause: Throwable? = null) : AppError(cause = 
     data object DuplicateBitkitClaim : PubkyAuthRequestError()
     data class UnsupportedBitkitClaim(val value: String) : PubkyAuthRequestError()
     data object InvalidBitkitClaimCapabilities : PubkyAuthRequestError()
+    data class SignerMismatch(val expectedSigner: String) : PubkyAuthRequestError()
 }
 
 @Immutable
@@ -130,6 +131,7 @@ data class PubkyAuthRequest(
     val homeserverPublicKey: String? = null,
     val signupToken: String? = null,
     val authorizationUrl: String? = rawUrl,
+    val expectedSigner: String? = null,
 ) {
     val isSignup: Boolean
         get() = isSignupUrl(rawUrl)
@@ -146,6 +148,48 @@ data class PubkyAuthRequest(
     val relayDisplayUrl: String? get() = displayRelay(relay)
 
     companion object {
+        /** Query parameter naming the only pubky that may approve a grant sign-in. */
+        private const val EXPECTED_SIGNER_PARAMETER = "spk"
+
+        /** A 32-byte key in canonical z-base-32: 52 symbols, the last one carrying a single bit. */
+        private val CANONICAL_Z32_KEY = Regex("[ybndrfg8ejkmcpqxot1uwisza345h769]{51}[yo]")
+
+        /** Length of a z-base-32 key carrying the `pubky` prefix. */
+        private const val PREFIXED_KEY_LENGTH = 57
+
+        /**
+         * Reads the pubky a sign-in request must be approved with. Absent is fine; a repeated value or anything other
+         * than a bare canonical z-base-32 key makes the request invalid, as in the Pubky SDK parser for `signin_grant`.
+         * Only signup requests ignore the parameter, so a sign-in this parser reads differently from the SDK is still
+         * held to it. Upstream reads `spk` for `signin_grant` alone (pubky/pubky-homeserver at d95161af3e:
+         * `pubky-sdk/src/actors/auth/deep_links/signin_grant.rs:106` is the only caller of `parse_expected_signer`,
+         * `deep_link.rs:211` tests that `signin` and `signup_grant` ignore it, `docs/AUTH.md:81`).
+         */
+        fun parseExpectedSigner(rawUrl: String): Result<String?> = runCatching {
+            val uri = URI(rawUrl)
+            if (uri.isSignupRequest()) return@runCatching null
+            val values = uri.rawQuery.orEmpty()
+                .split("&")
+                .filter { it.isNotEmpty() }
+                .map { it.split("=", limit = 2) }
+                .filter { decodeQueryComponent(it.first()) == EXPECTED_SIGNER_PARAMETER }
+                .map { decodeQueryComponent(it.getOrElse(1) { "" }) }
+            require(values.size <= 1) { "Duplicate Pubky auth parameter: $EXPECTED_SIGNER_PARAMETER" }
+            values.singleOrNull()?.also {
+                require(CANONICAL_Z32_KEY.matches(it)) { "Malformed Pubky auth parameter: $EXPECTED_SIGNER_PARAMETER" }
+            }
+        }.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { Result.failure(PubkyAuthRequestError.InvalidUrl(it)) },
+        )
+
+        /** Whether [publicKey], bare or with the `pubky` prefix, may approve a request naming [expectedSigner]. */
+        fun isExpectedSigner(expectedSigner: String?, publicKey: String): Boolean {
+            if (expectedSigner == null) return true
+            val isPrefixed = publicKey.length == PREFIXED_KEY_LENGTH && publicKey.startsWith("pubky")
+            return expectedSigner == if (isPrefixed) publicKey.removePrefix("pubky") else publicKey
+        }
+
         private val RELAY_SCHEMES = setOf("http", "https")
 
         /** A relay host as the Pubky SDK's URL parser would keep it, with an optional port. */
@@ -259,6 +303,7 @@ data class PubkyAuthRequest(
             signupToken: String? = null,
             authorizationUrl: String? = rawUrl,
         ): Result<PubkyAuthRequest> = parseBitkitClaim(rawUrl, capabilities).mapCatching { bitkitClaim ->
+            val expectedSigner = parseExpectedSigner(rawUrl).getOrThrow()
             if (relay.isNotEmpty() && displayRelay(relay) == null) {
                 throw PubkyAuthRequestError.InvalidUrl(IllegalArgumentException("Unreadable Pubky auth relay"))
             }
@@ -274,6 +319,7 @@ data class PubkyAuthRequest(
                 homeserverPublicKey = homeserverPublicKey,
                 signupToken = signupToken,
                 authorizationUrl = authorizationUrl,
+                expectedSigner = expectedSigner,
             )
         }
 

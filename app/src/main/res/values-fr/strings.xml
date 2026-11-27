@@ -570,6 +570,7 @@
     <string name="profile__auth_approval_details">Détails</string>
     <string name="profile__auth_approval_relay">Relais</string>
     <string name="profile__auth_approval_title">Autoriser</string>
+    <string name="profile__auth_error_other_pubky">Cette demande est destinée à %1$s, pas au pubky de ce portefeuille.</string>
     <string name="profile__create_nav_title">Créer un profil</string>
     <string name="profile__edit_nav_title">Modifier le profil</string>
     <string name="profile__nav_title">Profil</string>

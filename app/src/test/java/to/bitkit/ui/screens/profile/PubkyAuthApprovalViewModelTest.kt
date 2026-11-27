@@ -28,6 +28,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.same
 import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
@@ -38,6 +39,7 @@ import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthClaim.Item
 import to.bitkit.models.PubkyAuthPermission
 import to.bitkit.models.PubkyAuthRequest
+import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
 import to.bitkit.models.WatchOnlyAccountRecord
@@ -54,6 +56,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -364,6 +367,167 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         verifyBlocking(pubkyRepo) { approveAuth(authUrl, capabilities, clientId) }
         verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any(), any()) }
         verifyBlocking(watchOnlyAccountRepo, never()) { prepareUnsignedClaim(any(), any()) }
+    }
+
+    @Test
+    fun `request naming another pubky is refused before consent and never signed`() = test {
+        val signer = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        val other = "5jsjx1o6fzu6aeeo697r3i5rx15zq41kikcye8wtwdqm4nb4tryo"
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/example/:rw&spk=$other"
+        val capabilities = "/pub/example/:rw"
+        publicKeyFlow.value = "pubky$signer"
+        whenever(context.getString(R.string.profile__auth_error_other_pubky, "5jsj...tryo"))
+            .thenReturn("This request is for 5jsj...tryo, not this wallet's pubky.")
+        whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
+            Result.success(authRequest(authUrl, capabilities).copy(expectedSigner = other)),
+        )
+        val sut = createSut()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        sut.effects.test {
+            sut.load(authUrl)
+            advanceUntilIdle()
+            assertEquals(PubkyAuthApprovalEffect.Dismiss, awaitItem())
+
+            sut.requestAuthorize(authUrl)
+            sut.confirmAuthorize(authUrl)
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+
+        assertEquals(ApprovalState.Loading, sut.uiState.value.state)
+        assertEquals("This request is for 5jsj...tryo, not this wallet's pubky.", toasts.single().description)
+        verifyBlocking(pubkyRepo, never()) { approveAuth(any(), any(), any()) }
+        verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any(), any()) }
+        verifyBlocking(pubkyRepo, never()) { approveSignupAuth(any()) }
+        toastJob.cancel()
+    }
+
+    @Test
+    fun `request for another pubky prepares nothing when this pubky was unknown at load`() = test {
+        val other = "5jsjx1o6fzu6aeeo697r3i5rx15zq41kikcye8wtwdqm4nb4tryo"
+        val authUrl = "pubkyauth://signin_grant?x-bitkit-claim=paykit-access-v1.watch-only-account-v1&spk=$other"
+        val request = authRequest(
+            authUrl,
+            PubkyAuthClaim.REQUIRED_CAPABILITIES,
+            PubkyAuthClaim(Item.PAYKIT_ACCESS_V1, Item.WATCH_ONLY_ACCOUNT_V1),
+        ).copy(expectedSigner = other)
+        whenever(context.getString(R.string.profile__auth_error_other_pubky, "5jsj...tryo"))
+            .thenReturn("This request is for 5jsj...tryo, not this wallet's pubky.")
+        whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(Result.success(request))
+        whenever { pubkyRepo.checkExpectedSigner(authUrl) }
+            .thenReturn(Result.failure(PubkyAuthRequestError.SignerMismatch(other)))
+        val sut = createSut()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        sut.load(authUrl)
+        advanceUntilIdle()
+        assertEquals(ApprovalState.WatchOnlyConsent, sut.uiState.value.state)
+        sut.approveWatchOnlyConsent(authUrl)
+        sut.confirmAuthorize(authUrl)
+        advanceUntilIdle()
+
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        assertEquals("This request is for 5jsj...tryo, not this wallet's pubky.", toasts.single().description)
+        verifyNoInteractions(watchOnlyAccountRepo)
+        verifyBlocking(pubkyRepo, never()) { approveAuth(any(), any(), any()) }
+        verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any(), any()) }
+        toastJob.cancel()
+    }
+
+    @Test
+    fun `expected signer and relay rules hold together`() = test {
+        val signer = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        val other = "5jsjx1o6fzu6aeeo697r3i5rx15zq41kikcye8wtwdqm4nb4tryo"
+        val relay = "https://httprelay.pubky.app/inbox/o'connor?token={abc}"
+        val capabilities = "/pub/example/:rw"
+        val matchingUrl = "pubkyauth://signin_grant?caps=/pub/example/:rw&spk=$signer"
+        val otherUrl = "pubkyauth://signin_grant?caps=/pub/example/:rw&spk=$other"
+        publicKeyFlow.value = "pubky$signer"
+        whenever(context.getString(R.string.profile__auth_error_other_pubky, "5jsj...tryo"))
+            .thenReturn("This request is for 5jsj...tryo, not this wallet's pubky.")
+        listOf(matchingUrl to signer, otherUrl to other).forEach { (url, expectedSigner) ->
+            val request = PubkyAuthRequest.parse(
+                rawUrl = url,
+                clientId = clientId,
+                relay = relay,
+                capabilities = capabilities,
+            ).getOrThrow()
+            assertEquals(expectedSigner, request.expectedSigner)
+            assertEquals(relay, request.relayDisplayUrl)
+            whenever { pubkyRepo.parseAuthUrl(url) }.thenReturn(Result.success(request))
+        }
+        val sut = createSut()
+
+        sut.load(matchingUrl)
+        advanceUntilIdle()
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        assertEquals(relay, sut.uiState.value.relayUrl)
+
+        sut.effects.test {
+            sut.load(otherUrl)
+            advanceUntilIdle()
+            assertEquals(PubkyAuthApprovalEffect.Dismiss, awaitItem())
+            sut.confirmAuthorize(otherUrl)
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        assertEquals(ApprovalState.Loading, sut.uiState.value.state)
+        verifyBlocking(pubkyRepo, never()) { approveAuth(any(), any(), any()) }
+    }
+
+    @Test
+    fun `invalid link naming another pubky shows the invalid link message`() = test {
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/example/:rw&relay=ftp%3A%2F%2Frelay.example%2Finbox%2F" +
+            "&spk=5jsjx1o6fzu6aeeo697r3i5rx15zq41kikcye8wtwdqm4nb4tryo"
+        publicKeyFlow.value = "pubky8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        val invalidRelay = PubkyAuthRequest.parse(
+            rawUrl = authUrl,
+            clientId = clientId,
+            relay = "ftp://relay.example/inbox/",
+            capabilities = "/pub/example/:rw",
+        )
+        assertIs<PubkyAuthRequestError.InvalidUrl>(invalidRelay.exceptionOrNull())
+        whenever(context.getString(R.string.profile__auth_error_invalid_url)).thenReturn("Invalid link")
+        whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(invalidRelay)
+        val sut = createSut()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        sut.effects.test {
+            sut.load(authUrl)
+            advanceUntilIdle()
+            assertEquals(PubkyAuthApprovalEffect.Dismiss, awaitItem())
+        }
+
+        assertEquals("Invalid link", toasts.single().description)
+        verify(context, never()).getString(eq(R.string.profile__auth_error_other_pubky), any())
+        toastJob.cancel()
+    }
+
+    @Test
+    fun `request naming this pubky reaches consent and is approved`() = test {
+        val signer = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/example/:rw&spk=$signer"
+        val capabilities = "/pub/example/:rw"
+        publicKeyFlow.value = "pubky$signer"
+        whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
+            Result.success(authRequest(authUrl, capabilities).copy(expectedSigner = signer)),
+        )
+        whenever { pubkyRepo.approveAuth(authUrl, capabilities, clientId) }.thenReturn(Result.success(Unit))
+        whenever { pubkyRepo.checkExpectedSigner(authUrl) }.thenReturn(Result.success(Unit))
+        val sut = createSut()
+
+        sut.load(authUrl)
+        advanceUntilIdle()
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        sut.confirmAuthorize(authUrl)
+        advanceUntilIdle()
+
+        assertEquals(ApprovalState.Success, sut.uiState.value.state)
+        verifyBlocking(pubkyRepo) { approveAuth(authUrl, capabilities, clientId) }
     }
 
     @Test

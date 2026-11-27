@@ -590,6 +590,7 @@
     <string name="profile__auth_approval_details">Detalhes</string>
     <string name="profile__auth_approval_relay">Relay</string>
     <string name="profile__auth_approval_title">Autorizar</string>
+    <string name="profile__auth_error_other_pubky">Esta solicitação é para %1$s, não para o pubky desta carteira.</string>
     <string name="profile__create_nav_title">Criar Perfil</string>
     <string name="profile__edit_nav_title">Editar perfil</string>
     <string name="profile__nav_title">Perfil</string>

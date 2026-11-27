@@ -2054,6 +2054,7 @@ class PubkyRepo @Inject constructor(
 
     suspend fun parseAuthUrl(authUrl: String): Result<PubkyAuthRequest> = runSuspendCatching {
         withContext(ioDispatcher) {
+            validatedExpectedSigner(authUrl)
             if (PubkyAuthRequest.isSignupUrl(authUrl) && !PubkyAuthRequest.isGrantSignupUrl(authUrl)) {
                 val request = PubkyAuthRequest.parseSignup(authUrl).getOrThrow()
                 pubkyService.validateSignupRequest(
@@ -2148,6 +2149,7 @@ class PubkyRepo @Inject constructor(
             val secretKeyHex = requireNotNull(activeSecretKeyHex()) {
                 "No secret key available — use Ring to manage authorizations"
             }
+            requireExpectedSigner(authUrl, secretKeyHex)
             pubkyService.approveAuth(authUrl, expectedCapabilities, approvedClientId, secretKeyHex)
         }
     }
@@ -2165,6 +2167,7 @@ class PubkyRepo @Inject constructor(
             val secretKeyHex = requireNotNull(activeSecretKeyHex()) {
                 "No secret key available — use Ring to manage authorizations"
             }
+            requireExpectedSigner(authUrl, secretKeyHex)
             pubkyService.approveAuthWithCompanionClaim(
                 authUrl = authUrl,
                 expectedCapabilities = PubkyAuthClaim.REQUIRED_CAPABILITIES,
@@ -2176,6 +2179,37 @@ class PubkyRepo @Inject constructor(
                     unsignedPayload = unsignedPayload,
                 ),
             )
+        }
+    }
+
+    /** Fails when [authUrl] names a pubky other than the one that would sign it, before anything is prepared. */
+    suspend fun checkExpectedSigner(authUrl: String): Result<Unit> = runSuspendCatching {
+        withContext(ioDispatcher) {
+            val secretKeyHex = requireNotNull(activeSecretKeyHex()) {
+                "No secret key available — use Ring to manage authorizations"
+            }
+            requireExpectedSigner(authUrl, secretKeyHex)
+        }
+    }
+
+    /**
+     * The pubky [authUrl] must be approved with, or null when it names none or any part of the request is invalid,
+     * so an unusable link is never reported as meant for another pubky.
+     */
+    suspend fun validExpectedSigner(authUrl: String): String? = parseAuthUrl(authUrl).getOrNull()?.expectedSigner
+
+    private suspend fun validatedExpectedSigner(authUrl: String): String? {
+        val expectedSigner = PubkyAuthRequest.parseExpectedSigner(authUrl).getOrThrow() ?: return null
+        runSuspendCatching { pubkyService.validatePublicKey(expectedSigner) }
+            .onFailure { throw PubkyAuthRequestError.InvalidUrl(it) }
+        return expectedSigner
+    }
+
+    private suspend fun requireExpectedSigner(authUrl: String, secretKeyHex: String) {
+        val expectedSigner = validatedExpectedSigner(authUrl) ?: return
+        val signer = pubkyService.publicKeyFromSecret(secretKeyHex)
+        if (!PubkyAuthRequest.isExpectedSigner(expectedSigner, signer)) {
+            throw PubkyAuthRequestError.SignerMismatch(expectedSigner)
         }
     }
 

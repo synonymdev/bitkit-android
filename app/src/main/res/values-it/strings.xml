@@ -585,6 +585,7 @@
     <string name="profile__add_tag">Aggiungi Tag</string>
     <string name="profile__auth_approval_details">Dettagli</string>
     <string name="profile__auth_approval_relay">Relay</string>
+    <string name="profile__auth_error_other_pubky">Questa richiesta è per %1$s, non per il pubky di questo portafoglio.</string>
     <string name="profile__create_nav_title">Crea Profilo</string>
     <string name="profile__edit_nav_title">Modifica Profilo</string>
     <string name="profile__nav_title">Profilo</string>

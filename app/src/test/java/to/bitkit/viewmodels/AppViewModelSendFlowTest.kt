@@ -5962,6 +5962,48 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pubky auth deeplink for another pubky is refused before the Ring hint`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(false)
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw" +
+            "&spk=8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        whenever(pubkyRepo.validExpectedSigner(authUrl))
+            .thenReturn("8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty")
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(context).getString(R.string.profile__auth_error_other_pubky, "8um7...1dty")
+        verify(context, never()).getString(R.string.pubky_auth__use_ring)
+    }
+
+    @Test
+    fun `pubky auth deeplink that is invalid is not reported as meant for another pubky`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        val invalidLinks = listOf(
+            "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw&spk=ye${"y".repeat(50)}",
+            "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw&relay=ftp%3A%2F%2Frelay.example%2Finbox%2F" +
+                "&spk=8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty",
+        )
+
+        invalidLinks.forEach { authUrl ->
+            whenever(pubkyRepo.validExpectedSigner(authUrl)).thenReturn(null)
+
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+            advanceUntilIdle()
+
+            assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+            sut.hideSheet()
+            advanceUntilIdle()
+        }
+        verify(context, never()).getString(eq(R.string.profile__auth_error_other_pubky), any())
+    }
+
+    @Test
     fun `cold pubky auth deeplink waits for settings identity and wallet unlock`() = test {
         val initialized = CompletableDeferred<Unit>()
         whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { initialized.await() }

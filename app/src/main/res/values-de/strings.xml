@@ -570,6 +570,7 @@
     <string name="profile__auth_approval_authorize">Autorisieren Sie</string>
     <string name="profile__auth_approval_relay">Relay</string>
     <string name="profile__auth_approval_title">Autorisieren Sie</string>
+    <string name="profile__auth_error_other_pubky">Diese Anfrage ist für %1$s bestimmt, nicht für den Pubky dieses Wallets.</string>
     <string name="profile__create_nav_title">Profil erstellen</string>
     <string name="profile__edit_nav_title">Profil bearbeiten</string>
     <string name="profile__nav_title">Profil</string>

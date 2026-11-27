@@ -548,6 +548,7 @@
     <string name="profile__add_tag">Adicionar Tag</string>
     <string name="profile__auth_approval_details">Detalhes</string>
     <string name="profile__auth_approval_relay">Relay</string>
+    <string name="profile__auth_error_other_pubky">Este pedido destina-se a %1$s, não ao pubky desta carteira.</string>
     <string name="profile__create_nav_title">Criar Perfil</string>
     <string name="profile__nav_title">Perfil</string>
     <string name="profile__retry_load">Tente novamente</string>

@@ -589,6 +589,7 @@
     <string name="profile__auth_approval_details">Detalles</string>
     <string name="profile__auth_approval_relay">Relay</string>
     <string name="profile__auth_approval_title">Autorizar</string>
+    <string name="profile__auth_error_other_pubky">Esta solicitud es para %1$s, no para el pubky de esta billetera.</string>
     <string name="profile__create_nav_title">Crear perfil</string>
     <string name="profile__edit_nav_title">Editar Perfil</string>
     <string name="profile__nav_title">Perfil</string>

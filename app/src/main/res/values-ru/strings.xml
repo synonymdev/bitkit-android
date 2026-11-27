@@ -601,6 +601,7 @@
     <string name="profile__auth_approval_ok">Ок</string>
     <string name="profile__auth_approval_relay">Ретранслятор</string>
     <string name="profile__auth_approval_title">Авторизовать</string>
+    <string name="profile__auth_error_other_pubky">Этот запрос предназначен для %1$s, а не для pubky этого кошелька.</string>
     <string name="profile__create_nav_title">Создать Профиль</string>
     <string name="profile__edit_nav_title">Редактировать Профиль</string>
     <string name="profile__nav_title">Профиль</string>

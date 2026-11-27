@@ -114,6 +114,20 @@ class PubkyAuthApprovalViewModel @Inject constructor(
             }?.joinToString(context.getString(R.string.profile__auth_approval_services_separator)) ?: unknownService
             val usdtEnabled = usdtPreferences.enabled.first()
             val identityPublicKey = pubkyRepo.publicKey.value ?: pubkyRepo.localIdentityPublicKey()
+            val expectedSigner = request.expectedSigner
+            if (expectedSigner != null && identityPublicKey != null &&
+                !PubkyAuthRequest.isExpectedSigner(expectedSigner, identityPublicKey)
+            ) {
+                Logger.warn("Refused auth request for another pubky", context = TAG)
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.profile__auth_error_title),
+                    description = PubkyAuthRequestError.SignerMismatch(expectedSigner)
+                        .localizedPubkyAuthMessage(context),
+                )
+                _effects.emit(PubkyAuthApprovalEffect.Dismiss)
+                return@launch
+            }
             val profile = approvalProfile(identityPublicKey)
             _uiState.update {
                 it.copy(
@@ -279,6 +293,12 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         request: PubkyAuthRequest,
         authUrl: String,
     ): Boolean {
+        if (request.expectedSigner != null) {
+            pubkyRepo.checkExpectedSigner(authUrl).onFailure {
+                handleApprovalFailure(it, authUrl)
+                return false
+            }
+        }
         val endpoint = runSuspendCatching {
             validatedUsdtEndpoint(request)
         }.getOrElse {

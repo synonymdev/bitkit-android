@@ -13,6 +13,10 @@
 - `signin-with-second-link.xml` checks that a payment link opened while a sign-in link is pending,
   on the PIN screen in either order or over the open authorization sheet, opens only after the
   authorization sheet closes, and never drops the sign-in.
+- `signin-expected-pubky.xml` checks a `pubkyauth://signin_grant` link that names the pubky it must be
+  approved with (`spk`): this wallet's pubky opens the authorization sheet, another pubky is refused
+  with a message naming it, and a repeated or malformed `spk` is an invalid request. Nothing is
+  authorized.
 
 ## Grant signup
 

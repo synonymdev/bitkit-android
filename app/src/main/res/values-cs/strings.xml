@@ -589,6 +589,7 @@
     <string name="profile__auth_approval_details">Podrobnosti</string>
     <string name="profile__auth_approval_relay">Relay</string>
     <string name="profile__auth_approval_title">Autorizovat</string>
+    <string name="profile__auth_error_other_pubky">Tento požadavek je určen pro %1$s, ne pro pubky této peněženky.</string>
     <string name="profile__create_nav_title">Vytvořit profil</string>
     <string name="profile__edit_nav_title">Upravit profil</string>
     <string name="profile__nav_title">Profil</string>
