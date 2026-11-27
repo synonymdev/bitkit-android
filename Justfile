@@ -167,7 +167,7 @@ run mode="" logs="":
     echo "Streaming logs for $app_id (pid $pid). Press Ctrl-C to stop."
     adb -s "$device_id" logcat --pid "$pid"
 
-build task="assembleDevDebug":
+build task=":app:assembleDevDebug":
     {{ gradle }} {{ task }}
 
 release:

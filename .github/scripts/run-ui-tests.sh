@@ -39,7 +39,7 @@ sleep 10
 echo "Emulator ABI:"
 adb shell getprop ro.product.cpu.abi
 
-./gradlew installDevDebug
+./gradlew :app:installDevDebug
 
 run_instrumented_tests() {
   local selection="$1"
@@ -48,7 +48,7 @@ run_instrumented_tests() {
   if [[ -d "$results_dir" ]]; then
     find "$results_dir" -type f -name 'TEST-*.xml' -delete
   fi
-  ./gradlew connectedDevDebugAndroidTest "$@"
+  ./gradlew :app:connectedDevDebugAndroidTest "$@"
   python3 .github/scripts/assert-android-tests-ran.py "$selection"
 }
 

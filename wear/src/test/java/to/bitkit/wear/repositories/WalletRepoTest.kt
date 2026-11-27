@@ -2,8 +2,10 @@ package to.bitkit.wear.repositories
 
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.SdkEvent
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.joinAll
@@ -22,6 +24,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.wear.data.SettingsStore
 import to.bitkit.wear.security.FakeDeviceLock
+import to.bitkit.wear.security.FakeForegroundMonitor
 import to.bitkit.wear.security.FakeNetworkMonitor
 import to.bitkit.wear.security.SeedStore
 import to.bitkit.wear.security.SeedStoreError
@@ -35,13 +38,16 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class WalletRepoTest : BaseUnitTest() {
     private val seedStore = mock<SeedStore>()
     private val sparkService = mock<WatchSparkService>()
     private val settingsStore = mock<SettingsStore>()
     private val deviceLock = FakeDeviceLock()
     private val networkMonitor = FakeNetworkMonitor()
+    private val foregroundMonitor = FakeForegroundMonitor()
     private val seed = WalletSeed(mnemonic = "words", passphrase = null)
 
     private lateinit var sut: WalletRepo
@@ -52,7 +58,17 @@ class WalletRepoTest : BaseUnitTest() {
         whenever { sparkService.syncWallet() }.thenReturn(synced)
         whenever { seedStore.exists() }.thenReturn(false)
         whenever { settingsStore.isWipePending() }.thenReturn(false)
-        sut = WalletRepo(testDispatcher, seedStore, sparkService, settingsStore, deviceLock, networkMonitor)
+        whenever(sparkService.wipeToken()).thenReturn(0)
+        whenever(sparkService.isCurrent(any())).thenReturn(true)
+        sut = WalletRepo(
+            testDispatcher,
+            seedStore,
+            sparkService,
+            settingsStore,
+            deviceLock,
+            networkMonitor,
+            foregroundMonitor,
+        )
     }
 
     @Test
@@ -111,14 +127,14 @@ class WalletRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         inOrder(sparkService, seedStore, settingsStore) {
-            verify(sparkService).beginWipe()
             verify(settingsStore).beginWipe(false)
+            verify(sparkService).beginWipe()
             verify(seedStore).wipe()
             verify(sparkService).wipeStorage()
             verify(settingsStore).finishWipe()
             verify(sparkService).endWipe()
         }
-        assertEquals(WalletState(), sut.walletState.value)
+        assertEquals(WalletState(WalletStatus.Missing), sut.walletState.value)
     }
 
     @Test
@@ -131,6 +147,7 @@ class WalletRepoTest : BaseUnitTest() {
         verify(sparkService).wipeStorage()
         verify(settingsStore, never()).finishWipe()
         verify(sparkService).endWipe()
+        assertEquals(WalletState(WalletStatus.Error), sut.walletState.value)
     }
 
     @Test
@@ -146,15 +163,46 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `wipe still deletes everything when its note cannot be written`() = test {
-        whenever(settingsStore.beginWipe(any())).thenAnswer { throw SeedStoreError.Failed() }
+    fun `wipe writes its note again when the first write fails`() = test {
+        var writes = 0
+        whenever(settingsStore.beginWipe(any())).thenAnswer { if (++writes == 1) throw SeedStoreError.Failed() }
         whenever(seedStore.wipe()).thenReturn(Result.success(Unit))
 
         assertTrue(sut.wipe().isSuccess)
 
+        verify(settingsStore, times(2)).beginWipe(false)
+        verify(seedStore).wipe()
+        verify(settingsStore).finishWipe()
+    }
+
+    @Test
+    fun `a removal whose note cannot be written deletes nothing and fails`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        whenever(settingsStore.beginWipe(any())).thenAnswer { throw SeedStoreError.Failed() }
+        sut.start()
+
+        assertIs<SeedStoreError.Failed>(sut.wipe().exceptionOrNull())
+
+        verify(settingsStore, times(2)).beginWipe(false)
+        verify(sparkService, never()).beginWipe()
+        verify(seedStore, never()).wipe()
+        verify(sparkService, never()).wipeStorage()
+        assertEquals(WalletStatus.Ready, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `a lost key wipes the wallet even when the note cannot be written`() = test {
+        whenever(seedStore.load()).thenReturn(Result.failure(SeedStoreError.KeyInvalidated()))
+        whenever(seedStore.wipe()).thenReturn(Result.success(Unit))
+        whenever(settingsStore.beginWipe(any())).thenAnswer { throw SeedStoreError.Failed() }
+
+        sut.start()
+
+        verify(settingsStore, times(2)).beginWipe(true)
         verify(seedStore).wipe()
         verify(sparkService).wipeStorage()
-        verify(settingsStore).finishWipe()
+        assertEquals(WalletStatus.Removed, sut.walletState.value.status)
     }
 
     @Test
@@ -205,7 +253,7 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(seedStore.load()).thenReturn(Result.success(seed))
         whenever(seedStore.wipe()).thenReturn(Result.success(Unit))
         whenever(sparkService.connect(seed, 0)).thenAnswer {
-            whenever(sparkService.wipeCount).thenReturn(1)
+            whenever(sparkService.isCurrent(0)).thenReturn(false)
             throw SparkError.WipeInProgress()
         }
 
@@ -214,7 +262,78 @@ class WalletRepoTest : BaseUnitTest() {
         assertIs<SparkError.WipeInProgress>(result.exceptionOrNull())
         assertEquals(WalletStatus.Connecting, sut.walletState.value.status)
         sut.wipe()
+        assertEquals(WalletState(WalletStatus.Missing), sut.walletState.value)
+    }
+
+    @Test
+    fun `a start begun while a wipe runs reads no seed, connects nothing and leaves the state alone`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.wipeToken()).thenReturn(null)
+
+        val result = sut.start()
+
+        assertIs<SparkError.WipeInProgress>(result.exceptionOrNull())
+        verify(seedStore, never()).load()
+        verify(sparkService, never()).connect(any(), any())
         assertEquals(WalletState(), sut.walletState.value)
+    }
+
+    @Test
+    fun `a start that finished after a wipe ended is dropped and never ready`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        whenever(sparkService.syncWallet()).thenAnswer {
+            whenever(sparkService.isCurrent(0)).thenReturn(false)
+            synced
+        }
+
+        val result = sut.start()
+
+        assertIs<SparkError.WipeInProgress>(result.exceptionOrNull())
+        assertEquals(WalletStatus.Connecting, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `start finishes a wipe that did not complete instead of connecting`() = test {
+        whenever(settingsStore.isWipePending()).thenReturn(true)
+        whenever(seedStore.wipe()).thenReturn(Result.success(Unit))
+        whenever(seedStore.load()).thenReturn(Result.failure(SeedStoreError.NotFound()))
+
+        sut.start()
+
+        inOrder(seedStore) {
+            verify(seedStore).wipe()
+            verify(seedStore).load()
+        }
+        verify(sparkService).wipeStorage()
+        verify(sparkService, never()).connect(any(), any())
+        assertEquals(WalletStatus.Missing, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `start refuses while a wipe that did not complete cannot be finished`() = test {
+        whenever(settingsStore.isWipePending()).thenReturn(true)
+        whenever(seedStore.wipe()).thenReturn(Result.failure(SeedStoreError.Failed()))
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+
+        val result = sut.start()
+
+        assertIs<SeedStoreError.Failed>(result.exceptionOrNull())
+        verify(seedStore, never()).load()
+        verify(sparkService, never()).connect(any(), any())
+        assertEquals(WalletStatus.Error, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `start refuses when the wipe note cannot be read`() = test {
+        whenever(settingsStore.isWipePending()).thenAnswer { throw SeedStoreError.Failed() }
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+
+        val result = sut.start()
+
+        assertIs<SeedStoreError.Failed>(result.exceptionOrNull())
+        verify(sparkService, never()).connect(any(), any())
+        assertEquals(WalletStatus.Error, sut.walletState.value.status)
     }
 
     @Test
@@ -271,7 +390,6 @@ class WalletRepoTest : BaseUnitTest() {
     fun `locking the watch disconnects spark and unlocking reconnects it while the app is on screen`() = test {
         whenever(seedStore.load()).thenReturn(Result.success(seed))
         whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
-        sut.setForeground(true)
         sut.start()
 
         deviceLock.isLocked.update { true }
@@ -290,13 +408,14 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(seedStore.load()).thenReturn(Result.success(seed))
         whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
         sut.start()
+        foregroundMonitor.isForeground.update { false }
         deviceLock.isLocked.update { true }
 
         deviceLock.isLocked.update { false }
         verify(sparkService, times(1)).connect(seed, 0)
         assertEquals(WalletStatus.Locked, sut.walletState.value.status)
 
-        sut.setForeground(true)
+        foregroundMonitor.isForeground.update { true }
         verify(sparkService, times(2)).connect(seed, 0)
     }
 
@@ -305,12 +424,67 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(seedStore.load()).thenReturn(Result.success(seed))
         whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
         sut.start()
+        foregroundMonitor.isForeground.update { false }
         deviceLock.pendingIsLocked = true
 
-        sut.setForeground(true)
+        foregroundMonitor.isForeground.update { true }
 
         verify(sparkService).disconnect()
         assertEquals(WalletStatus.Locked, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `the window regaining focus reads the lock state and reconnects after an unlock`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.start()
+        deviceLock.pendingIsLocked = true
+        sut.refreshLock()
+        assertEquals(WalletStatus.Locked, sut.walletState.value.status)
+
+        deviceLock.pendingIsLocked = false
+        sut.refreshLock()
+
+        verify(sparkService, times(2)).connect(seed, 0)
+        assertEquals(WalletStatus.Ready, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `a lock that lands while syncing leaves the wallet locked and disconnected, never ready`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        whenever(sparkService.syncWallet()).thenAnswer {
+            deviceLock.isLocked.update { true }
+            synced
+        }
+
+        val result = sut.start()
+
+        assertIs<WalletError.DeviceLocked>(result.exceptionOrNull())
+        verify(sparkService, atLeastOnce()).disconnect()
+        assertEquals(WalletStatus.Locked, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `a lock and unlock that land while the balance loads reconnect, never ready when disconnected`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        var reads = 0
+        whenever(sparkService.getInfo()).thenAnswer {
+            if (++reads == 1) {
+                deviceLock.isLocked.update { true }
+                deviceLock.isLocked.update { false }
+            }
+            info(21_000uL)
+        }
+
+        sut.start()
+
+        inOrder(sparkService) {
+            verify(sparkService).connect(seed, 0)
+            verify(sparkService, atLeastOnce()).disconnect()
+            verify(sparkService).connect(seed, 0)
+        }
+        assertEquals(WalletStatus.Ready, sut.walletState.value.status)
     }
 
     @Test
@@ -419,7 +593,6 @@ class WalletRepoTest : BaseUnitTest() {
     fun `losing the network turns a ready wallet offline, and its return syncs it again`() = test {
         whenever(seedStore.load()).thenReturn(Result.success(seed))
         whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
-        sut.setForeground(true)
         sut.start()
 
         networkMonitor.isOnline.update { false }
@@ -438,13 +611,14 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(seedStore.load()).thenReturn(Result.success(seed))
         whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
         sut.start()
+        foregroundMonitor.isForeground.update { false }
         networkMonitor.isOnline.update { false }
 
         networkMonitor.isOnline.update { true }
         verify(sparkService, times(1)).syncWallet()
         assertEquals(WalletStatus.Offline, sut.walletState.value.status)
 
-        sut.setForeground(true)
+        foregroundMonitor.isForeground.update { true }
         verify(sparkService, times(2)).syncWallet()
         assertEquals(WalletStatus.Ready, sut.walletState.value.status)
     }
@@ -454,9 +628,10 @@ class WalletRepoTest : BaseUnitTest() {
         whenever(seedStore.load()).thenReturn(Result.success(seed))
         whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
         sut.start()
+        foregroundMonitor.isForeground.update { false }
         networkMonitor.isOnline.update { false }
 
-        sut.setForeground(true)
+        foregroundMonitor.isForeground.update { true }
 
         verify(sparkService, times(1)).syncWallet()
         assertEquals(WalletStatus.Offline, sut.walletState.value.status)
@@ -466,7 +641,6 @@ class WalletRepoTest : BaseUnitTest() {
     fun `the network returning leaves an error for the wearer to retry`() = test {
         whenever(seedStore.load()).thenReturn(Result.success(seed))
         whenever(sparkService.syncWallet()).thenReturn(offline)
-        sut.setForeground(true)
         networkMonitor.isOnline.update { false }
         sut.start()
 
@@ -474,6 +648,166 @@ class WalletRepoTest : BaseUnitTest() {
 
         verify(sparkService, times(1)).syncWallet()
         assertEquals(WalletStatus.Error, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `the network returning while a start fails offline starts once more`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.start()
+        networkMonitor.isOnline.update { false }
+        var syncs = 0
+        whenever(sparkService.syncWallet()).thenAnswer {
+            if (++syncs > 1) return@thenAnswer synced
+            networkMonitor.isOnline.update { true }
+            offline
+        }
+
+        val result = sut.start()
+
+        assertTrue(result.isSuccess)
+        assertEquals(2, syncs)
+        assertEquals(WalletStatus.Ready, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `the network returning while the first start fails starts once more`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        networkMonitor.isOnline.update { false }
+        var syncs = 0
+        whenever(sparkService.syncWallet()).thenAnswer {
+            if (++syncs > 1) return@thenAnswer synced
+            networkMonitor.isOnline.update { true }
+            offline
+        }
+
+        sut.start()
+
+        assertEquals(2, syncs)
+        assertEquals(WalletStatus.Ready, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `a failed start is not repeated when the network returned in the background or not at all`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.start()
+        networkMonitor.isOnline.update { false }
+        whenever(sparkService.syncWallet()).thenReturn(offline)
+
+        sut.start()
+        verify(sparkService, times(2)).syncWallet()
+
+        whenever(sparkService.syncWallet()).thenAnswer {
+            foregroundMonitor.isForeground.update { false }
+            networkMonitor.isOnline.update { true }
+            offline
+        }
+        sut.start()
+
+        verify(sparkService, times(3)).syncWallet()
+        assertEquals(WalletStatus.Offline, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `the app leaving the screen disconnects spark after the grace period`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.start()
+
+        foregroundMonitor.isForeground.update { false }
+        testScheduler.advanceTimeBy(WalletRepo.BACKGROUND_GRACE - 1.seconds)
+        verify(sparkService, never()).disconnect()
+        assertEquals(WalletStatus.Ready, sut.walletState.value.status)
+
+        testScheduler.advanceTimeBy(2.seconds)
+
+        verify(sparkService).disconnect()
+        assertEquals(WalletState(WalletStatus.Paused, 21_000uL, hasSynced = true), sut.walletState.value)
+    }
+
+    @Test
+    fun `the app returning within the grace period keeps spark connected`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.start()
+
+        foregroundMonitor.isForeground.update { false }
+        testScheduler.advanceTimeBy(WalletRepo.BACKGROUND_GRACE - 1.seconds)
+        foregroundMonitor.isForeground.update { true }
+        testScheduler.advanceTimeBy(WalletRepo.BACKGROUND_GRACE)
+
+        verify(sparkService, never()).disconnect()
+        verify(sparkService, times(1)).connect(seed, 0)
+        assertEquals(WalletStatus.Ready, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `the app returning after spark was disconnected in the background connects again`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.start()
+        foregroundMonitor.isForeground.update { false }
+        testScheduler.advanceTimeBy(WalletRepo.BACKGROUND_GRACE + 1.seconds)
+
+        foregroundMonitor.isForeground.update { true }
+
+        verify(sparkService, times(2)).connect(seed, 0)
+        assertEquals(WalletStatus.Ready, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `nothing starts in the background, and the start runs once the app is on screen`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        foregroundMonitor.isForeground.update { false }
+
+        val result = sut.start()
+
+        assertIs<WalletError.Backgrounded>(result.exceptionOrNull())
+        verify(seedStore, never()).load()
+        verify(sparkService, never()).connect(any(), any())
+        assertEquals(WalletStatus.Paused, sut.walletState.value.status)
+
+        foregroundMonitor.isForeground.update { true }
+
+        verify(sparkService).connect(seed, 0)
+        assertEquals(WalletStatus.Ready, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `the network or an unlock never starts the wallet in the background`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.start()
+        foregroundMonitor.isForeground.update { false }
+        testScheduler.advanceTimeBy(WalletRepo.BACKGROUND_GRACE + 1.seconds)
+
+        networkMonitor.isOnline.update { false }
+        networkMonitor.isOnline.update { true }
+        deviceLock.isLocked.update { true }
+        deviceLock.isLocked.update { false }
+
+        verify(sparkService, times(1)).connect(seed, 0)
+        assertEquals(WalletStatus.Paused, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `a start the background overtook disconnects and stays paused`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        whenever(sparkService.syncWallet()).doSuspendableAnswer {
+            foregroundMonitor.isForeground.update { false }
+            delay(WalletRepo.BACKGROUND_GRACE + 1.seconds)
+            synced
+        }
+
+        val result = sut.start()
+
+        assertIs<WalletError.Overtaken>(result.exceptionOrNull())
+        verify(sparkService, atLeastOnce()).disconnect()
+        assertEquals(WalletStatus.Paused, sut.walletState.value.status)
     }
 
     @Test

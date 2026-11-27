@@ -64,7 +64,7 @@ electrs 0.10.2 and LND 0.18.0-beta. Follow the
 [fixture startup steps](https://github.com/synonymdev/bitkit-android/actions/runs/42573552198/job/129017856857)
 to make the LND bind mount writable, wait for Bitcoin and Electrum, and make the generated LND TLS
 certificate and admin macaroon readable by the host test process. Boot an Android emulator with a
-fresh dev wallet and build the Android checkout with `E2E=true E2E_BACKEND=local ./gradlew assembleDevDebug`.
+fresh dev wallet and build the Android checkout with `E2E=true E2E_BACKEND=local ./gradlew :app:assembleDevDebug`.
 Copy its universal APK to the E2E checkout's `aut/bitkit_e2e.apk`, install the locked dependencies
 with Node 22, and run `BACKEND=local ./ci_run_android.sh --mochaOpts.grep '@send_2 '`.
 

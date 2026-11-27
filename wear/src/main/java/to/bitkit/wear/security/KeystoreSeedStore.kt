@@ -1,5 +1,6 @@
 package to.bitkit.wear.security
 
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import to.bitkit.wear.ext.runSuspendCatching
@@ -10,14 +11,15 @@ import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.StandardOpenOption
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Stores the seed encrypted by [key] in one file under [directory], which must be app-private and outside every
  * backup. The file holds a format version and the [SeedKey.encrypt] output; nothing else on the watch persists the
  * seed. On a watch with a screen lock the key only works while the watch is unlocked; without one the key has no such
- * limit. A key that looks lost is read a second time before [load] reports it, and [load] never deletes the seed.
- * Plaintext lives in byte arrays that are zeroed after use; the [WalletSeed] strings handed in and out are the
- * caller's to drop.
+ * limit. A key that looks lost is read a second time, a moment later, before [load] reports it, and [load] never
+ * deletes the seed. Plaintext lives in byte arrays that are zeroed after use; the [WalletSeed] strings handed in and
+ * out are the caller's to drop.
  */
 class KeystoreSeedStore(
     private val directory: File,
@@ -29,6 +31,9 @@ class KeystoreSeedStore(
         private const val FILE_NAME = "seed.bin"
         private const val FORMAT_VERSION: Byte = 1
         private const val NO_PASSPHRASE = -1
+
+        /** How long a key that looks lost is left alone before it is read again, so a passing Keystore hiccup ends. */
+        val KEY_LOSS_RECHECK_DELAY = 500.milliseconds
 
         /** Binds a ciphertext to this use and format, so it cannot be mistaken for another blob of the same key. */
         private val aad = "to.bitkit.wear.seed.v1".toByteArray(Charsets.UTF_8)
@@ -113,9 +118,10 @@ class KeystoreSeedStore(
 
     override suspend fun wipe(): Result<Unit> = mutex.withLock { delete() }
 
-    private fun decrypt(blob: ByteArray): ByteArray {
+    private suspend fun decrypt(blob: ByteArray): ByteArray {
         val first = runCatching { key.decrypt(blob, aad) }
         if (first.exceptionOrNull() !is SeedStoreError.KeyInvalidated) return first.getOrThrow()
+        delay(KEY_LOSS_RECHECK_DELAY)
         val second = runCatching { key.decrypt(blob, aad) }
         val error = second.exceptionOrNull()
         if (error is SeedStoreError.KeyInvalidated && isLocked()) throw SeedStoreError.DeviceLocked(error)

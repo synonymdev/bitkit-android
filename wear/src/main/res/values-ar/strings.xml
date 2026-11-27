@@ -28,6 +28,7 @@
     <string name="restore__passphrase_placeholder">عبارة المرور</string>
     <string name="restore__passphrase_skip">متابعة</string>
     <string name="restore__passphrase_title">عبارة مرور؟</string>
+    <string name="restore__passphrase_too_long">طويل جدًا</string>
     <string name="restore__title">كم عدد الكلمات؟</string>
     <string name="restore__word_no_match">لا تطابق</string>
     <string name="restore__word_placeholder">الكلمة %1$d</string>

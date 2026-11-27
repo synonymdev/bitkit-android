@@ -1,11 +1,22 @@
 package to.bitkit.wear.services
 
+import android.content.Context
+import breez_sdk_spark.BreezSdkInterface
 import breez_sdk_spark.ChainApiType
 import breez_sdk_spark.Config
 import breez_sdk_spark.LeafOptimizationConfig
 import breez_sdk_spark.Network
 import breez_sdk_spark.TokenOptimizationConfig
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
 import to.bitkit.wear.env.Env
 import to.bitkit.wear.env.LocalSparkSettings
 import to.bitkit.wear.env.WalletNetwork
@@ -62,6 +73,73 @@ class WatchSparkServiceTest {
     fun `mainnet is off on the watch`() {
         assertFalse(Env.IS_MAINNET_ENABLED)
         assertNull(WatchSparkService.sparkNetwork(WalletNetwork.BITCOIN, "key"))
+    }
+
+    @Test
+    fun `no wipe token is handed out while a wipe runs, and one read before a wipe is refused after it`() = runTest {
+        val sut = WatchSparkService(mock<Context>())
+        val before = assertNotNull(sut.wipeToken())
+        assertTrue(sut.isCurrent(before))
+
+        sut.beginWipe()
+        assertNull(sut.wipeToken())
+        assertFalse(sut.isCurrent(before))
+        assertFailsWith<SparkError.WipeInProgress> { sut.connectWith(before) { error("built during a wipe") } }
+
+        sut.endWipe()
+        assertFalse(sut.isCurrent(before))
+        assertFailsWith<SparkError.WipeInProgress> { sut.connectWith(before) { error("built after a wipe") } }
+        assertTrue(sut.isCurrent(assertNotNull(sut.wipeToken())))
+    }
+
+    @Test
+    fun `a current token connects once`() = runTest {
+        val sut = WatchSparkService(mock<Context>())
+        val sdk = mock<BreezSdkInterface>()
+        whenever(sdk.addEventListener(any())).thenReturn("listener")
+        whenever(sdk.removeEventListener(any())).thenReturn(true)
+        val token = assertNotNull(sut.wipeToken())
+
+        assertTrue(sut.connectWith(token) { sdk })
+        assertFalse(sut.connectWith(token) { error("built twice") })
+
+        sut.disconnect()
+        verify(sdk).removeEventListener("listener")
+        verify(sdk).disconnect()
+    }
+
+    @Test
+    fun `a connect whose caller gives up after the sdk is built keeps it, so it is disconnected later`() = runTest {
+        val sut = WatchSparkService(mock<Context>())
+        val sdk = mock<BreezSdkInterface>()
+        lateinit var caller: Job
+        whenever(sdk.addEventListener(any())).doSuspendableAnswer {
+            caller.cancel()
+            yield()
+            "listener"
+        }
+        whenever(sdk.removeEventListener(any())).thenReturn(true)
+        val token = assertNotNull(sut.wipeToken())
+
+        caller = launch { sut.connectWith(token) { sdk } }
+        caller.join()
+
+        assertTrue(caller.isCancelled)
+        sut.disconnect()
+        verify(sdk).disconnect()
+    }
+
+    @Test
+    fun `an sdk whose listener cannot be added is disconnected at once`() = runTest {
+        val sut = WatchSparkService(mock<Context>())
+        val sdk = mock<BreezSdkInterface>()
+        whenever(sdk.addEventListener(any())).thenAnswer { throw SparkError.NotConnected() }
+        val token = assertNotNull(sut.wipeToken())
+
+        assertFailsWith<SparkError.NotConnected> { sut.connectWith(token) { sdk } }
+
+        verify(sdk).disconnect()
+        assertFailsWith<SparkError.NotConnected> { sut.getInfo() }
     }
 
     private fun mainnet(apiKey: String?, isMainnetEnabled: Boolean) =

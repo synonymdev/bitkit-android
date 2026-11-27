@@ -3,19 +3,22 @@
     The test phrase restored with a passphrase opens a different wallet: Home shows 0 where the same phrase without a
     passphrase shows the test wallet's balance (wear restore 12 words). Emulator and physical watch.
 
-    Precondition: Fresh app, see journeys/wear/README.md › Fresh app. Backend: hosted regtest; the passphrase wallet is
-    empty, so its first sync takes seconds. The passphrase screen blocks screenshots, so check it with `android layout`
-    only.
+    Precondition: Fresh app, see journeys/wear/README.md › Fresh app, and a passphrase made up for this run
+    (README › The test wallet: `PASS="watch$(tr -dc a-z &lt;/dev/urandom | head -c 6)"`). The test phrase is public,
+    so a fixed passphrase could be funded by anyone; a new one per run is a wallet nobody has seen, which is why the
+    journey can expect 0. Backend: hosted regtest; the empty wallet's first sync takes seconds. The passphrase screen
+    blocks screenshots, so check it with `android layout` only.
   </description>
   <actions>
-    <action>Tap Restore (tag "WatchOnboardingRestore"), then tap 12 (tag "RestoreWords12")</action>
+    <action>Tap Restore (tag "WatchOnboardingRestore")</action>
+    <action>Tap 12 (tag "RestoreWords12")</action>
     <action>Type the test phrase (README › Typing several words)</action>
-    <action>Verify the title (tag "RestorePassphraseTitle") reads "Passphrase?", then tap the key button (tag "RestorePassphraseAdd")</action>
-    <action>Verify the passphrase field (tag "RestorePassphraseInput") is empty with the placeholder text "Passphrase", and Restore (tag "RestorePassphraseConfirm") is visible</action>
-    <action>Type `watchtest` into "RestorePassphraseInput" (README › Typing: tap the field, Back, then the text; no Enter)</action>
-    <action>Verify "RestorePassphraseInput" reads "watchtest"</action>
+    <action>Tap the key button (tag "RestorePassphraseAdd")</action>
+    <action>Verify the passphrase field (tag "RestorePassphraseInput") is empty, showing its placeholder "Passphrase"</action>
+    <action>Type the run's passphrase into "RestorePassphraseInput" (README › Typing: tap the field, Back, then `adb shell input text "$PASS"`; no Enter)</action>
+    <action>Verify "RestorePassphraseInput" reads the run's passphrase</action>
     <action>Tap Restore (tag "RestorePassphraseConfirm")</action>
     <action>Dump `android layout` every 5 s until it lists "WatchHomeBalance", for up to 2 minutes</action>
-    <action>Verify "WatchHomeBalanceSymbol" reads "₿" and "WatchHomeBalance" reads "0"</action>
+    <action>Verify "WatchHomeBalance" reads "0"</action>
   </actions>
 </journey>

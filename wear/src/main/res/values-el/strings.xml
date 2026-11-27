@@ -24,6 +24,7 @@
     <string name="restore__passphrase_placeholder">Κωδική φράση</string>
     <string name="restore__passphrase_skip">Συνέχεια</string>
     <string name="restore__passphrase_title">Κωδική φράση;</string>
+    <string name="restore__passphrase_too_long">Πολύ μεγάλο</string>
     <string name="restore__title">Πόσες λέξεις;</string>
     <string name="restore__word_no_match">Καμία αντιστοιχία</string>
     <string name="restore__word_placeholder">Λέξη %1$d</string>

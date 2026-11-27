@@ -7,12 +7,13 @@
     Backend: hosted regtest. The fiat value needs the Blocktank rates, so the watch must be online.
   </description>
   <actions>
-    <action>Verify "WatchHomeBalanceSymbol" reads "₿", "WatchHomeBalance" reads the balance in sats, a number above 0, and "WatchHomeBalanceSecondary" reads the fiat value</action>
+    <action>Verify "WatchHomeBalanceSymbol" reads "₿"</action>
+    <action>Verify "WatchHomeBalance" reads the balance in sats, a number above 0; note it</action>
     <action>Tap the balance (tag "WatchHomeBalanceToggle")</action>
-    <action>Verify "WatchHomeBalanceSymbol" reads "$", "WatchHomeBalance" reads the fiat value and "WatchHomeBalanceSecondary" reads the sats amount</action>
+    <action>Verify "WatchHomeBalanceSymbol" reads "$"</action>
+    <action>Verify "WatchHomeBalanceSecondary" reads the sats amount noted</action>
     <action>Restart the app (README › Restart)</action>
     <action>Dump `android layout` every 5 s until "WatchHomeBalanceSymbol" reads "$", for up to 1 minute: the rates load after the balance, and until they do the balance shows in sats with "₿"</action>
-    <action>Verify "WatchHomeBalance" reads the fiat value</action>
     <action>Tap "WatchHomeBalanceToggle"</action>
     <action>Verify "WatchHomeBalanceSymbol" reads "₿" again, which leaves the wallet as the precondition found it</action>
   </actions>

@@ -12,7 +12,10 @@ import kotlinx.coroutines.launch
 import to.bitkit.wear.repositories.WalletRepo
 import javax.inject.Inject
 
-/** Picks the first screen while the splash screen shows, after the wallet storage is recovered. */
+/**
+ * Picks the first screen while the splash screen shows, after the wallet storage is recovered. When the recovery
+ * fails, as when a wipe that did not complete cannot be finished, no screen is picked and the wearer retries.
+ */
 @HiltViewModel
 class StartViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
@@ -21,28 +24,44 @@ class StartViewModel @Inject constructor(
     val uiState: StateFlow<StartUiState> = _uiState.asStateFlow()
 
     init {
+        load()
+    }
+
+    fun onRetryClick() {
+        if (_uiState.value.isLoading) return
+        load()
+    }
+
+    /** Reads the lock state when the app's window regains focus, which is how an unlock shows. */
+    fun onFocusGain() {
+        viewModelScope.launch { walletRepo.refreshLock() }
+    }
+
+    private fun load() {
+        _uiState.update { it.copy(isLoading = true) }
         viewModelScope.launch {
-            _uiState.update { it.copy(startRoute = startRoute()) }
+            val route = startRoute()
+            _uiState.update { it.copy(startRoute = route, isRecoveryFailed = route == null, isLoading = false) }
         }
     }
 
-    private suspend fun startRoute(): String {
+    private suspend fun startRoute(): String? {
         if (!walletRepo.isSupported) return Routes.UNSUPPORTED
-        walletRepo.recover()
+        if (walletRepo.recover().isFailure) return null
         return when {
             walletRepo.isRemovedNoticePending() -> Routes.WALLET_REMOVED
             walletRepo.hasWallet() -> Routes.HOME
             else -> Routes.ONBOARDING
         }
     }
-
-    /** Tells the wallet whether the app is on screen, so it reconnects after the watch unlocks. */
-    fun onForegroundChange(isForeground: Boolean) {
-        viewModelScope.launch { walletRepo.setForeground(isForeground) }
-    }
 }
 
 @Immutable
 data class StartUiState(
     val startRoute: String? = null,
-)
+    val isRecoveryFailed: Boolean = false,
+    val isLoading: Boolean = true,
+) {
+    /** Whether the first screen is still being picked, which keeps the splash screen up. */
+    val isStarting: Boolean get() = startRoute == null && !isRecoveryFailed
+}

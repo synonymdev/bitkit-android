@@ -25,6 +25,7 @@
     <string name="restore__passphrase_placeholder">Frase de pas</string>
     <string name="restore__passphrase_skip">Continua</string>
     <string name="restore__passphrase_title">Frase de pas?</string>
+    <string name="restore__passphrase_too_long">Massa llarga</string>
     <string name="restore__title">Quantes paraules?</string>
     <string name="restore__word_no_match">Cap coincidència</string>
     <string name="restore__word_placeholder">Paraula %1$d</string>

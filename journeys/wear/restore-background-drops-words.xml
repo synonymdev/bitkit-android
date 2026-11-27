@@ -1,0 +1,23 @@
+<journey name="wear restore background drops words">
+  <description>
+    Leaving the app in the middle of a restore drops the words typed so far, so they do not linger in memory behind
+    another app: coming back shows the start of the restore, and the word screens are empty again. Emulator and
+    physical watch (on a watch, press the crown to leave the app and open it again from the launcher).
+
+    Precondition: Fresh app, see journeys/wear/README.md › Fresh app. Backend: none, the journey stops before the
+    wallet is saved. The word screens block screenshots, so check them with `android layout` only.
+  </description>
+  <actions>
+    <action>Tap Restore (tag "WatchOnboardingRestore")</action>
+    <action>Tap 12 (tag "RestoreWords12")</action>
+    <action>Type `abandon` three times (README › Typing several words, with the list cut to three times `abandon`)</action>
+    <action>Verify the progress (tag "RestoreProgress") reads "4/12"</action>
+    <action>Run `adb shell input keyevent KEYCODE_HOME` and wait 3 s</action>
+    <action>Run `adb shell am start -n to.bitkit.dev/to.bitkit.wear.ui.MainActivity` and wait 2 s</action>
+    <action>Verify the title (tag "RestoreTitle") reads "How many words?"</action>
+    <action>Tap 12 (tag "RestoreWords12")</action>
+    <action>Verify "RestoreProgress" reads "1/12"</action>
+    <action>Run `adb shell input keyevent KEYCODE_BACK` to close the keyboard</action>
+    <action>Verify the word field (tag "RestoreWordInput") is empty, showing its placeholder "Word 1"</action>
+  </actions>
+</journey>

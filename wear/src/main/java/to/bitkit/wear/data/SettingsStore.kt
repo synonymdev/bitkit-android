@@ -2,9 +2,11 @@ package to.bitkit.wear.data
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -16,7 +18,14 @@ import to.bitkit.wear.models.USD
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+/**
+ * A settings file that cannot be read is replaced by an empty one, so a corrupted file never blocks the launch or a
+ * wallet removal. A wipe note lost this way is covered at launch, which deletes Spark storage no seed owns.
+ */
+private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "settings",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+)
 
 /** The watch's display preferences and the wallet wipe's progress notes. It holds nothing secret. */
 @Singleton

@@ -1,15 +1,19 @@
 package to.bitkit.wear.ui.screens.restore
 
 import app.cash.turbine.test
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.update
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.wear.repositories.WalletRepo
 import to.bitkit.wear.security.FakeBip39
+import to.bitkit.wear.security.FakeForegroundMonitor
 import to.bitkit.wear.security.SeedStoreError
 import to.bitkit.wear.security.WalletSeed
 import to.bitkit.wear.test.BaseUnitTest
@@ -19,13 +23,14 @@ import kotlin.test.assertTrue
 
 class RestoreViewModelTest : BaseUnitTest() {
     private val walletRepo = mock<WalletRepo>()
+    private val foregroundMonitor = FakeForegroundMonitor()
     private val valid = List(11) { "abandon" } + "about"
 
     private lateinit var sut: RestoreViewModel
 
     @Before
     fun setUp() {
-        sut = RestoreViewModel(FakeBip39(), walletRepo)
+        sut = RestoreViewModel(FakeBip39(), walletRepo, foregroundMonitor)
     }
 
     @Test
@@ -200,6 +205,70 @@ class RestoreViewModelTest : BaseUnitTest() {
         sut.effects.test {
             sut.onEntriesMissing()
             assertEquals(RestoreEffect.ShowStart, awaitItem())
+        }
+    }
+
+    @Test
+    fun `a passphrase over the limit is refused with an error and never cut short`() = test {
+        val longest = "a".repeat(RestoreViewModel.MAX_PASSPHRASE_LENGTH)
+        enter(valid)
+        sut.onPassphraseAdd()
+        sut.onPassphraseChange(longest)
+        assertFalse(sut.uiState.value.isPassphraseTooLong)
+
+        sut.onPassphraseChange(longest + "b")
+
+        assertTrue(sut.uiState.value.isPassphraseTooLong)
+        assertEquals(longest, sut.uiState.value.passphrase)
+
+        sut.onPassphraseChange("short")
+        assertFalse(sut.uiState.value.isPassphraseTooLong)
+        assertEquals("short", sut.uiState.value.passphrase)
+    }
+
+    @Test
+    fun `the app leaving the screen drops the typed words and returns to the start`() = test {
+        sut.effects.test {
+            enter(valid)
+            sut.onPassphraseAdd()
+            sut.onPassphraseChange("hunter")
+            cancelAndConsumeRemainingEvents()
+        }
+
+        sut.effects.test {
+            foregroundMonitor.isForeground.update { false }
+
+            assertEquals(RestoreEffect.ShowStart, awaitItem())
+        }
+        assertEquals(RestoreUiState(), sut.uiState.value)
+    }
+
+    @Test
+    fun `the app leaving the screen before anything is typed changes nothing`() = test {
+        sut.effects.test {
+            foregroundMonitor.isForeground.update { false }
+
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun `the app leaving the screen while the wallet is saved does not stop the save`() = test {
+        val saved = CompletableDeferred<Result<Unit>>()
+        whenever(walletRepo.restore(any())).doSuspendableAnswer { saved.await() }
+        sut.effects.test {
+            enter(valid)
+            sut.onPassphraseSkip()
+            cancelAndConsumeRemainingEvents()
+        }
+
+        sut.effects.test {
+            foregroundMonitor.isForeground.update { false }
+            expectNoEvents()
+            assertTrue(sut.uiState.value.isSaving)
+
+            saved.complete(Result.success(Unit))
+            assertEquals(RestoreEffect.Restored, awaitItem())
         }
     }
 

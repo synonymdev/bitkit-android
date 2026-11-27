@@ -15,6 +15,7 @@ import androidx.wear.compose.foundation.LocalAmbientModeManager
 import androidx.wear.compose.foundation.rememberAmbientModeManager
 import androidx.wear.compose.material3.AppScaffold
 import dagger.hilt.android.AndroidEntryPoint
+import to.bitkit.wear.ui.screens.start.StartErrorScreen
 import to.bitkit.wear.ui.theme.BitkitWearTheme
 
 @AndroidEntryPoint
@@ -24,7 +25,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
-        splashScreen.setKeepOnScreenCondition { startViewModel.uiState.value.startRoute == null }
+        splashScreen.setKeepOnScreenCondition { startViewModel.uiState.value.isStarting }
         setContent {
             BitkitWearTheme {
                 CompositionLocalProvider(LocalAmbientModeManager provides rememberAmbientModeManager()) {
@@ -35,25 +36,21 @@ class MainActivity : ComponentActivity() {
                     ) {
                         val uiState by startViewModel.uiState.collectAsStateWithLifecycle()
                         uiState.startRoute?.let { WearNavHost(startRoute = it) }
+                        if (uiState.isRecoveryFailed) {
+                            StartErrorScreen(
+                                isLoading = uiState.isLoading,
+                                onRetryClick = startViewModel::onRetryClick,
+                            )
+                        }
                     }
                 }
             }
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        startViewModel.onForegroundChange(isForeground = true)
-    }
-
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         // The keyguard covers the window without stopping the activity, so regaining focus is how an unlock shows.
-        if (hasFocus) startViewModel.onForegroundChange(isForeground = true)
-    }
-
-    override fun onStop() {
-        startViewModel.onForegroundChange(isForeground = false)
-        super.onStop()
+        if (hasFocus) startViewModel.onFocusGain()
     }
 }

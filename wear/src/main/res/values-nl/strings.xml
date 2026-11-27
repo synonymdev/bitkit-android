@@ -24,6 +24,7 @@
     <string name="restore__passphrase_placeholder">Wachtwoordzin</string>
     <string name="restore__passphrase_skip">Doorgaan</string>
     <string name="restore__passphrase_title">Wachtwoordzin?</string>
+    <string name="restore__passphrase_too_long">Te lang</string>
     <string name="restore__title">Hoeveel woorden?</string>
     <string name="restore__word_no_match">Geen overeenkomst</string>
     <string name="restore__word_placeholder">Woord %1$d</string>

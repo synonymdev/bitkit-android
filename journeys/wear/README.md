@@ -91,9 +91,11 @@ the first sync of the test wallet, which the [Restored wallet](#restored-wallet)
 | Journey | Backend | Needs funds |
 | --- | --- | --- |
 | `restore-12-words.xml` | hosted | yes, any balance above 0 |
+| `restore-word-entry.xml` | none (stops before the wallet connects) | no |
 | `restore-ambient-hides-word.xml` | none (stops before the wallet connects) | no |
+| `restore-background-drops-words.xml` | none (stops before the wallet connects) | no |
 | `restore-invalid-checksum.xml` | none (stops before the wallet connects) | no |
-| `restore-passphrase.xml` | hosted | no, it expects an empty wallet |
+| `restore-passphrase.xml` | hosted | no, a new passphrase per run is an empty wallet |
 | `balance-unit-swap.xml` | hosted | yes |
 | `pager-settings-about.xml` | hosted | no |
 | `remove-wallet-cancel.xml` | hosted | yes |
@@ -103,6 +105,7 @@ the first sync of the test wallet, which the [Restored wallet](#restored-wallet)
 | `nfc-required.xml` | none | no |
 | `connect-error-retry.xml` | hosted | yes |
 | `offline-keeps-last-balance.xml` | hosted | yes |
+| `background-disconnects-spark.xml` | hosted | yes |
 | `nfc-hint-states.xml` | hosted, physical watch only | yes |
 | `screenshot-blocked.xml` | none | no |
 
@@ -134,8 +137,8 @@ keep both open.
 - **Local stack:** `../bitkit-docker/spark send <deposit address> <sats>` (it mines a block), or create a Spending
   invoice in the phone app and pay it with `../bitkit-docker/spark pay <invoice>`.
 
-On hosted regtest the public test wallet held 1 000 sats on 2026-11-27. Anyone can move them, so the journeys
-only expect a balance above 0; fund the wallet again when it is empty.
+Anyone can move the public test wallet's coins, so the journeys only expect a balance above 0; fund the wallet
+again when it is empty.
 
 ## The test wallet
 
@@ -147,7 +150,13 @@ abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon 
 
 It is a public test phrase: anyone can spend what it holds, so fund it only with regtest coins, and its balance on
 hosted regtest changes without notice. The journeys therefore never expect a fixed amount, only a balance above 0.
-With the passphrase `watchtest` it is a different, empty wallet.
+
+With a passphrase it is a different wallet. A fixed passphrase would be as public as the phrase, so
+`restore-passphrase.xml` makes one up for each run, which gives a wallet nobody has seen and so an empty one:
+
+```bash
+PASS="watch$(tr -dc a-z </dev/urandom | head -c 6)"; echo "$PASS"
+```
 
 **Recommendation:** for a balance nobody else can move, restore a private 12-word phrase of your own instead and
 fund it once (see [Funding the test wallet](#funding-the-test-wallet)), or run the journeys on the
@@ -257,12 +266,17 @@ Coordinates are pixels. The 227 dp screen is 454 px square (centre 227), the 192
 | Rotary crown, scroll up | `adb shell input rotaryencoder scroll --axis SCROLL,3` | same |
 | Ambient on | `adb shell input keyevent KEYCODE_SLEEP` | same |
 | Ambient off | `adb shell input keyevent KEYCODE_WAKEUP` | same |
+| Leave the app | `adb shell input keyevent KEYCODE_HOME` | same |
+| Return to the app | `adb shell am start -n to.bitkit.dev/to.bitkit.wear.ui.MainActivity` | same |
 
 - A pager swipe must start away from the left edge: a swipe from the edge is swipe-to-dismiss, which goes back, and
   on the Balance page leaves the app.
 - A negative rotary value scrolls the content up, revealing what is below.
 - `KEYCODE_SLEEP` puts the watch in ambient mode only when the always-on screen is on (Settings › Display ›
   Always-on screen; on by default on the emulators). With it off, the screen goes dark and the app stops instead.
+- Ambient mode keeps the app on screen. Leaving the app is different: a restore under way drops its words at once,
+  and the wallet disconnects from Spark 10 s later and reconnects on return (Background in
+  [docs/wear.md](../../docs/wear.md)).
 
 ## Media
 
@@ -334,4 +348,9 @@ The emulators have no NFC, so the NFC hint is hidden there in every state (no ad
 only on a ready wallet: `NfcHint` with NFC on, `NfcHintDisabled` with NFC off (`adb shell svc nfc disable` and
 `enable`). `nfc-hint-states.xml` checks both and is physical-only. The manifest requires `android.hardware.nfc`, a
 Play filter that `pm install` ignores, so `just wear-install` works on the emulators. `dumpsys package` does not list
-required features, so `nfc-required.xml` reads them from the installed APK with `aapt2`.
+required features, so `nfc-required.xml` reads them from the installed APK with `aapt2`, taken from the newest SDK
+build tools installed:
+
+```bash
+AAPT2="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)aapt2"
+```

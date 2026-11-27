@@ -154,6 +154,16 @@ private fun Editing(
                         .testTag("RestorePassphraseInput")
                 )
             }
+            if (uiState.isPassphraseTooLong) {
+                item {
+                    ErrorText(
+                        text = stringResource(R.string.restore__passphrase_too_long),
+                        modifier = Modifier
+                            .transformedHeight(this, spec)
+                            .testTag("RestorePassphraseTooLong")
+                    )
+                }
+            }
             if (uiState.isSaveFailed) {
                 item { SaveError(modifier = Modifier.transformedHeight(this, spec)) }
             }
@@ -171,14 +181,23 @@ private fun Saving(modifier: Modifier = Modifier) {
 
 @Composable
 private fun SaveError(modifier: Modifier = Modifier) {
-    Text(
+    ErrorText(
         text = stringResource(R.string.restore__error_failed),
+        modifier = modifier.testTag("RestoreError")
+    )
+}
+
+@Composable
+private fun ErrorText(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = text,
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.error,
         textAlign = TextAlign.Center,
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag("RestoreError")
+        modifier = modifier.fillMaxWidth()
     )
 }
 

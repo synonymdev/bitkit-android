@@ -8,7 +8,9 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import to.bitkit.wear.data.ConnectivityNetworkMonitor
+import to.bitkit.wear.data.ForegroundMonitor
 import to.bitkit.wear.data.NetworkMonitor
+import to.bitkit.wear.data.ProcessForegroundMonitor
 import to.bitkit.wear.security.AndroidKeystoreSeedKey
 import to.bitkit.wear.security.Bip39
 import to.bitkit.wear.security.CoreBip39
@@ -34,6 +36,10 @@ abstract class SecurityModule {
     @Binds
     @Singleton
     abstract fun bindNetworkMonitor(monitor: ConnectivityNetworkMonitor): NetworkMonitor
+
+    @Binds
+    @Singleton
+    abstract fun bindForegroundMonitor(monitor: ProcessForegroundMonitor): ForegroundMonitor
 
     @Binds
     @Singleton

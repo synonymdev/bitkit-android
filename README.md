@@ -159,8 +159,8 @@ Setup the signing config:
 
 Increment `versionCode` and `versionName` in `app/build.gradle.kts`, then run:
 ```sh
-just build assembleDevRelease
-# just build assembleRelease # for all flavors
+just build :app:assembleDevRelease
+# just build :app:assembleRelease # for all flavors
 ```
 
 AGP writes its own APKs to `app/build/outputs/apk/_flavor_/release`, and the build publishes deterministically named copies to `app/build/outputs/bitkit/_variant_`. (`_flavor_` can be any of 'dev', 'mainnet', 'tnet'; `_variant_` is the flavor and build type, e.g. `devRelease`).
@@ -211,11 +211,11 @@ Set `E2E_BACKEND=network` to use the network Electrum based on the build flavor:
 
 ```sh
 # regtest (dev flavor)
-just e2e network assembleDevRelease
+just e2e network :app:assembleDevRelease
 # testnet (tnet flavor)
-just e2e network assembleTnetRelease
+just e2e network :app:assembleTnetRelease
 # mainnet
-just e2e network assembleMainnetRelease
+just e2e network :app:assembleMainnetRelease
 ```
 
 ## Contributing

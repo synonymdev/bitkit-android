@@ -1,6 +1,5 @@
 package to.bitkit.wear.ui.screens.settings
 
-import app.cash.turbine.test
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
@@ -10,7 +9,6 @@ import org.mockito.kotlin.whenever
 import to.bitkit.wear.repositories.WalletRepo
 import to.bitkit.wear.services.SparkError
 import to.bitkit.wear.test.BaseUnitTest
-import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -32,12 +30,12 @@ class SettingsViewModelTest : BaseUnitTest() {
         assertTrue(sut.uiState.value.isRemoveDialogVisible)
         verify(walletRepo, never()).wipe()
 
-        sut.effects.test {
-            sut.onRemoveConfirm()
-            assertEquals(SettingsEffect.WalletRemoved, awaitItem())
-        }
+        sut.onRemoveConfirm()
+
+        verify(walletRepo).wipe()
         assertFalse(sut.uiState.value.isRemoveDialogVisible)
         assertFalse(sut.uiState.value.isRemoving)
+        assertFalse(sut.uiState.value.isRemoveFailed)
     }
 
     @Test

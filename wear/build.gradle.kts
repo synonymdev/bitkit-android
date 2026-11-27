@@ -51,6 +51,11 @@ fun phoneVersion(name: String, value: String): String {
     return requireNotNull(match) { "Unable to read '$name' from app/build.gradle.kts." }.groupValues[1]
 }
 
+// The locales :app ships, in the Android resource qualifier format for androidResources.localeFilters.
+val androidLocales = listOf(
+    "en", "ar", "b+es+419", "ca", "cs", "de", "el", "es", "es-rES", "fr", "it", "nl", "pl", "pt", "pt-rBR", "ru"
+)
+
 val isBuildingBundle = gradle.startParameter.taskNames.any { it.substringAfterLast(':').startsWith("bundle") }
 
 val requestedNdkVersion = providers.environmentVariable("NDK_VERSION").orNull?.takeIf { it.isNotBlank() }
@@ -137,6 +142,12 @@ android {
         compose = true
         resValues = true
     }
+    androidResources {
+        @Suppress("UnstableApiUsage")
+        localeFilters.addAll(androidLocales)
+        @Suppress("UnstableApiUsage")
+        generateLocaleConfig = true
+    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -199,7 +210,10 @@ androidComponents {
             "buildFeatures.buildConfig must stay enabled for '${variant.name}'."
         }
         sparkBuildConfig(variant.flavorName).forEach { (name, field) ->
-            buildConfigFields.put(name, field.second.map { BuildConfigField(type = field.first, value = it, comment = null) })
+            // Regtest needs no Breez API key and mainnet is off on the watch (#2152), so the key stays out of the
+            // watch app until Env.IS_MAINNET_ENABLED turns on.
+            val value = if (name == "BREEZ_API_KEY") provider { "\"\"" } else field.second
+            buildConfigFields.put(name, value.map { BuildConfigField(type = field.first, value = it, comment = null) })
         }
     }
 }
@@ -217,6 +231,7 @@ dependencies {
     // Lifecycle
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.lifecycle.process)
     // Compose
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
@@ -233,7 +248,6 @@ dependencies {
     // Hilt - DI
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)
-    ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
     // Ktor - Networking
     implementation(libs.ktor.client.core)

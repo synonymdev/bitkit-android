@@ -12,9 +12,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.wear.data.ForegroundMonitor
 import to.bitkit.wear.repositories.WalletRepo
 import to.bitkit.wear.security.Bip39
 import to.bitkit.wear.security.Bip39Validation
@@ -23,13 +25,14 @@ import javax.inject.Inject
 
 /**
  * Restores a wallet from a recovery phrase typed one word per screen. It is shared by the restore screens and holds
- * the words only in memory, until the wallet is saved or the wearer leaves the flow; they are never logged or saved
- * to instance state.
+ * the words only in memory, until the wallet is saved, the wearer leaves the flow or the app leaves the screen, which
+ * drops them and returns to the start of the flow; they are never logged or saved to instance state.
  */
 @HiltViewModel
 class RestoreViewModel @Inject constructor(
     private val bip39: Bip39,
     private val walletRepo: WalletRepo,
+    private val foregroundMonitor: ForegroundMonitor,
 ) : ViewModel() {
     companion object {
         /** The recovery phrase lengths Bitkit creates and the watch restores. */
@@ -43,6 +46,12 @@ class RestoreViewModel @Inject constructor(
 
     private val _effects = Channel<RestoreEffect>(Channel.BUFFERED)
     val effects: Flow<RestoreEffect> = _effects.receiveAsFlow()
+
+    init {
+        viewModelScope.launch {
+            foregroundMonitor.isForeground.collect { isForeground -> if (!isForeground) onBackground() }
+        }
+    }
 
     /** Starts typing a phrase of [count] words. Words typed earlier stay when the count is the same. */
     fun onWordCountSelect(count: Int) {
@@ -77,12 +86,23 @@ class RestoreViewModel @Inject constructor(
         _effects.trySend(RestoreEffect.ShowStart)
     }
 
+    private fun onBackground() {
+        val previous = _uiState.getAndUpdate { if (it.isSaving) it else RestoreUiState() }
+        if (previous.isSaving || previous == RestoreUiState()) return
+        _effects.trySend(RestoreEffect.ShowStart)
+    }
+
     fun onPassphraseAdd() {
         _uiState.update { it.copy(isPassphraseEditing = true, isSaveFailed = false) }
     }
 
+    /** A passphrase over [MAX_PASSPHRASE_LENGTH] is refused with an error, never cut short without a word. */
     fun onPassphraseChange(text: String) {
-        _uiState.update { it.copy(passphrase = text.take(MAX_PASSPHRASE_LENGTH)) }
+        if (text.length > MAX_PASSPHRASE_LENGTH) {
+            _uiState.update { it.copy(isPassphraseTooLong = true) }
+            return
+        }
+        _uiState.update { it.copy(passphrase = text, isPassphraseTooLong = false) }
     }
 
     fun onPassphraseSkip() = save(passphrase = null)
@@ -144,6 +164,7 @@ data class RestoreUiState(
     val entries: ImmutableList<WordEntry> = persistentListOf(),
     val passphrase: String = "",
     val isPassphraseEditing: Boolean = false,
+    val isPassphraseTooLong: Boolean = false,
     val isSaving: Boolean = false,
     val isSaveFailed: Boolean = false,
 ) {

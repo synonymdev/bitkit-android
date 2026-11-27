@@ -1,6 +1,8 @@
 package to.bitkit.wear.security
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.test.currentTime
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -11,6 +13,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class KeystoreSeedStoreTest : BaseUnitTest() {
     @get:Rule
     val folder = TemporaryFolder()
@@ -110,12 +113,13 @@ class KeystoreSeedStoreTest : BaseUnitTest() {
     }
 
     @Test
-    fun `load reports a lost key only after reading it twice`() = test {
+    fun `load reports a lost key only after reading it twice, a moment apart`() = test {
         sut.save(seed).getOrThrow()
         key.failure = SeedStoreError.KeyInvalidated()
 
         assertIs<SeedStoreError.KeyInvalidated>(sut.load().exceptionOrNull())
         assertEquals(2, key.decryptCount)
+        assertEquals(KeystoreSeedStore.KEY_LOSS_RECHECK_DELAY.inWholeMilliseconds, currentTime)
         assertTrue(sut.exists())
         assertTrue(key.exists())
     }
@@ -127,6 +131,15 @@ class KeystoreSeedStoreTest : BaseUnitTest() {
 
         assertEquals(seed, sut.load().getOrThrow())
         assertEquals(2, key.decryptCount)
+    }
+
+    @Test
+    fun `load of a working key does not wait`() = test {
+        sut.save(seed).getOrThrow()
+
+        sut.load().getOrThrow()
+
+        assertEquals(0, currentTime)
     }
 
     @Test

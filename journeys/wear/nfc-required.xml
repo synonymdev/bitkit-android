@@ -2,15 +2,16 @@
   <description>
     The watch app requires NFC hardware (`android.hardware.nfc`, required), so Play offers it only to watches with NFC.
     `uses-feature` is a store filter, not an install check, so the app still installs on the NFC-less emulators.
-    `dumpsys package` does not list required features, so the check reads the installed APK with `aapt2` from the SDK
-    build tools. Emulator and physical watch.
+    `dumpsys package` does not list required features, so the check reads the installed APK with `aapt2` from the
+    newest SDK build tools installed (journeys/wear/README.md › NFC sets `AAPT2`). Emulator and physical watch.
 
-    Precondition: the dev watch app installed (journeys/wear/README.md › Build and install); no wallet needed.
-    Backend: none.
+    Precondition: the dev watch app installed (README › Build and install) and `AAPT2` set (README › NFC); no wallet
+    needed. Backend: none.
   </description>
   <actions>
     <action>Run `adb pull "$(adb shell pm path to.bitkit.dev | grep base.apk | sed 's/package://')" base.apk`</action>
-    <action>Run `"$ANDROID_HOME"/build-tools/36.0.0/aapt2 dump badging base.apk | grep uses-feature` and verify it lists `android.hardware.nfc` and `android.hardware.type.watch`</action>
-    <action>Run `"$ANDROID_HOME"/build-tools/36.0.0/aapt2 dump badging base.apk | grep -c nfc.hce` and verify it prints 0: host card emulation is not required yet</action>
+    <action>Run `"$AAPT2" dump badging base.apk | grep uses-feature` and verify it lists `android.hardware.nfc`</action>
+    <action>Verify the same output lists `android.hardware.type.watch`</action>
+    <action>Run `"$AAPT2" dump badging base.apk | grep -c nfc.hce` and verify it prints 0: host card emulation is not required yet</action>
   </actions>
 </journey>

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -120,16 +119,10 @@ private const val MARK_ALPHA = 0.4f
 /** The balance, large and centered, with the other unit below. A tap swaps the units. */
 @Composable
 fun BalancePage(
-    onSeedKeyLoss: () -> Unit,
-    onWalletMissing: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    LaunchedEffect(uiState.isRemoved, uiState.isMissing) {
-        if (uiState.isRemoved) onSeedKeyLoss()
-        if (uiState.isMissing) onWalletMissing()
-    }
     val context = LocalContext.current
     val isAmbient = isAmbient()
     val nfcState = rememberNfcState()

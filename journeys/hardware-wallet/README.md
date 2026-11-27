@@ -51,7 +51,7 @@ instead of UI interactions.
 3. For a physical phone, reverse the Bridge port and install with Bridge enabled:
    ```sh
    ../bitkit-docker/scripts/trezor-emulator adb
-   TREZOR_BRIDGE=true TREZOR_BRIDGE_URL=http://127.0.0.1:21325 ./gradlew installDevDebug
+   TREZOR_BRIDGE=true TREZOR_BRIDGE_URL=http://127.0.0.1:21325 ./gradlew :app:installDevDebug
    ```
    For an Android emulator use `TREZOR_BRIDGE_URL=http://10.0.2.2:21325`.
 4. A wallet must exist in the app (onboarding completed) on regtest (dev flavor).

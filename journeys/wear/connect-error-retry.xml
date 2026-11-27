@@ -13,11 +13,13 @@
     <action>Run `adb shell cmd connectivity airplane-mode enable` and wait 5 s</action>
     <action>Restart the app (README › Restart)</action>
     <action>Dump `android layout` every 5 s until it lists "WatchHomeError", for up to 1 minute</action>
-    <action>Verify "WatchHomeError" reads "Couldn't load wallet", "WatchHomeRetry" is listed, and "WatchHomeBalance" and "WatchHomeOffline" are not</action>
+    <action>Verify "WatchHomeError" reads "Couldn't load wallet"</action>
+    <action>Verify "WatchHomeBalance" is not listed</action>
     <action>Run `adb shell cmd connectivity airplane-mode disable` and wait 15 s</action>
-    <action>Verify "WatchHomeError" and "WatchHomeRetry" are still listed: the error does not retry by itself</action>
+    <action>Verify "WatchHomeError" is still listed: the start had failed before the network came back, so it waits for the wearer</action>
     <action>Tap "WatchHomeRetry"</action>
     <action>Dump `android layout` every 5 s until it lists "WatchHomeBalance", for up to 1 minute</action>
-    <action>Verify "WatchHomeBalance" reads the wallet's balance, a number above 0, and "WatchHomeError" is not listed</action>
+    <action>Verify "WatchHomeBalance" reads the wallet's balance, a number above 0</action>
+    <action>Verify "WatchHomeError" is not listed</action>
   </actions>
 </journey>

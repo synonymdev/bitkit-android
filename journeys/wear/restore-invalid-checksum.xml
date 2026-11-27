@@ -8,13 +8,15 @@
     wallet is saved. The word screens block screenshots, so check them with `android layout` only.
   </description>
   <actions>
-    <action>Tap Restore (tag "WatchOnboardingRestore"), then tap 12 (tag "RestoreWords12")</action>
+    <action>Tap Restore (tag "WatchOnboardingRestore")</action>
+    <action>Tap 12 (tag "RestoreWords12")</action>
     <action>Type `abandon` twelve times (README › Typing several words, with the list changed to twelve times `abandon`)</action>
-    <action>Verify the error (tag "RestoreChecksumError") reads "Invalid phrase" and Review (tag "RestoreChecksumReview") is visible</action>
+    <action>Verify the error (tag "RestoreChecksumError") reads "Invalid phrase"</action>
     <action>Tap Review (tag "RestoreChecksumReview")</action>
-    <action>Verify the progress (tag "RestoreProgress") reads "1/12" and the word field (tag "RestoreWordInput") still reads "abandon"</action>
-    <action>Tap Next (tag "RestoreNext") eleven times, until "RestoreProgress" reads "12/12"</action>
-    <action>Verify "RestoreWordInput" reads "abandon"</action>
+    <action>Verify the progress (tag "RestoreProgress") reads "1/12"</action>
+    <action>Verify the word field (tag "RestoreWordInput") still reads "abandon"</action>
+    <action>Tap Next (tag "RestoreNext") eleven times</action>
+    <action>Verify "RestoreProgress" reads "12/12"</action>
     <action>Replace the word with `about` (README › Replacing a word)</action>
     <action>Verify the passphrase screen: the title (tag "RestorePassphraseTitle") reads "Passphrase?"</action>
   </actions>

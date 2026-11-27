@@ -8,13 +8,16 @@
     ring stopped, the watch online and NFC on. Backend: hosted regtest.
   </description>
   <actions>
-    <action>Verify "NfcHint" is listed with the content-desc "Tap to pay" and "NfcHintDisabled" is not</action>
+    <action>Verify "NfcHint" is listed with the content-desc "Tap to pay"</action>
     <action>Run `adb shell svc nfc disable` and wait 3 s</action>
-    <action>Verify "NfcHintDisabled" is listed with the content-desc "NFC off" and "NfcHint" is not</action>
+    <action>Verify "NfcHintDisabled" is listed with the content-desc "NFC off"</action>
+    <action>Verify "NfcHint" is not listed</action>
     <action>Verify from two screenshots 1 s apart that the icon is dimmed, slashed and still</action>
     <action>Tap "NfcHintDisabled"</action>
     <action>Run `adb shell dumpsys activity activities | grep -m1 topResumedActivity` and verify it names a settings activity, not `to.bitkit.dev`</action>
-    <action>Run `adb shell svc nfc enable`, then `adb shell am start -n to.bitkit.dev/to.bitkit.wear.ui.MainActivity`, and wait 3 s</action>
-    <action>Verify "NfcHint" is listed again and "NfcHintDisabled" is not</action>
+    <action>Run `adb shell svc nfc enable`</action>
+    <action>Run `adb shell am start -n to.bitkit.dev/to.bitkit.wear.ui.MainActivity` and wait 3 s</action>
+    <action>Verify "NfcHint" is listed again</action>
+    <action>Verify "NfcHintDisabled" is not listed</action>
   </actions>
 </journey>

@@ -1,7 +1,7 @@
 package to.bitkit.wear.services
 
 import android.content.Context
-import breez_sdk_spark.BreezSdk
+import breez_sdk_spark.BreezSdkInterface
 import breez_sdk_spark.ChainApiType
 import breez_sdk_spark.Config
 import breez_sdk_spark.EventListener
@@ -16,11 +16,13 @@ import breez_sdk_spark.SyncWalletRequest
 import breez_sdk_spark.defaultConfig
 import breez_sdk_spark.parseSparkConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import to.bitkit.wear.env.Env
 import to.bitkit.wear.env.LocalSparkSettings
 import to.bitkit.wear.env.WalletNetwork
@@ -35,8 +37,9 @@ import javax.inject.Singleton
 import breez_sdk_spark.Network as SparkNetwork
 
 /**
- * The watch's Spark wallet: a slim port of the phone's `SparkService` with the same SDK settings. It runs only while
- * the app is in use; nothing keeps it connected in the background.
+ * The watch's Spark wallet: a slim port of the phone's `SparkService` with the same SDK settings. It holds no
+ * lifecycle of its own: `WalletRepo` connects it only while the app is on screen and disconnects it a short while
+ * after the app leaves the screen, so closing the watch app stops its Spark instance.
  */
 @Singleton
 class WatchSparkService @Inject constructor(
@@ -95,7 +98,7 @@ class WatchSparkService @Inject constructor(
     private val mutex = Mutex()
 
     @Volatile
-    private var sdk: BreezSdk? = null
+    private var sdk: BreezSdkInterface? = null
     private var listenerId: String? = null
 
     private val _events = MutableSharedFlow<SdkEvent>(extraBufferCapacity = 64)
@@ -108,10 +111,7 @@ class WatchSparkService @Inject constructor(
     var isWiping: Boolean = false
         private set
 
-    /** How many wallet wipes have begun. A [connect] names the count it saw before it read the seed. */
-    @Volatile
-    var wipeCount: Int = 0
-        private set
+    private var wipeCount = 0
 
     private val storageDir: File
         get() = File(context.filesDir, "${Env.network.name.lowercase()}/wallet$WALLET_INDEX/spark")
@@ -122,16 +122,36 @@ class WatchSparkService @Inject constructor(
         isWiping = true
     }
 
-    fun endWipe() = run { isWiping = false }
+    fun endWipe() = synchronized(this) {
+        wipeCount++
+        isWiping = false
+    }
 
     /**
-     * Connects the Spark wallet of [seed]. Returns true, or false when it was already connected. It fails when a
-     * wipe is running or has begun since [wipeCount] was read, so a seed read before a wipe never reconnects the
-     * wiped wallet.
+     * The token a [connect] has to show, read before the seed is. It is null while a wipe runs, and it stops being
+     * current when a wipe begins or ends, so a seed read before or during a wipe never reconnects the wiped wallet.
      */
-    suspend fun connect(seed: WalletSeed, wipeCount: Int): Boolean = mutex.withLock {
+    fun wipeToken(): Int? = synchronized(this) { if (isWiping) null else wipeCount }
+
+    /** Whether no wipe has begun or ended since [token] was read. */
+    fun isCurrent(token: Int): Boolean = synchronized(this) { !isWiping && token == wipeCount }
+
+    /**
+     * Connects the Spark wallet of [seed]. Returns true, or false when it was already connected. It fails when
+     * [wipeToken] is no longer current.
+     */
+    suspend fun connect(seed: WalletSeed, wipeToken: Int): Boolean = connectWith(wipeToken) { build(seed) }
+
+    internal suspend fun connectWith(wipeToken: Int, build: suspend () -> BreezSdkInterface): Boolean = mutex.withLock {
         if (sdk != null) return@withLock false
-        if (isWiping || wipeCount != this.wipeCount) throw SparkError.WipeInProgress()
+        if (!isCurrent(wipeToken)) throw SparkError.WipeInProgress()
+        val connected = build()
+        // A caller that gives up from here on, as on a timeout, must not leave a built SDK that nothing disconnects.
+        withContext(NonCancellable) { attach(connected) }
+        true
+    }
+
+    private suspend fun build(seed: WalletSeed): BreezSdkInterface {
         val network = sparkNetwork(Env.network, Env.breezApiKey) ?: throw SparkError.Unsupported()
         val config = configure(defaultConfig(network), Env.breezApiKey)
         val storagePath = storageDir.apply { mkdirs() }.path
@@ -142,16 +162,24 @@ class WatchSparkService @Inject constructor(
             chainServiceUrl?.let { builder.withRestChainService(it, apiType, null) }
             builder.build()
         }
-        listenerId = connected.addEventListener(
-            object : EventListener {
-                override suspend fun onEvent(event: SdkEvent) {
-                    _events.emit(event)
-                }
-            },
-        )
-        sdk = connected
         Logger.info("Connected Spark wallet on '$network' with chain '${chainServiceUrl ?: "default"}'", context = TAG)
-        true
+        return connected
+    }
+
+    private suspend fun attach(connected: BreezSdkInterface) {
+        runSuspendCatching {
+            listenerId = connected.addEventListener(
+                object : EventListener {
+                    override suspend fun onEvent(event: SdkEvent) {
+                        _events.emit(event)
+                    }
+                },
+            )
+        }.onFailure {
+            runSuspendCatching { connected.disconnect() }
+            throw it
+        }
+        sdk = connected
     }
 
     suspend fun disconnect() = mutex.withLock {
@@ -185,7 +213,7 @@ class WatchSparkService @Inject constructor(
 
     suspend fun getInfo(): GetInfoResponse = requireSdk().getInfo(GetInfoRequest(ensureSynced = false))
 
-    private fun requireSdk(): BreezSdk = sdk ?: throw SparkError.NotConnected()
+    private fun requireSdk(): BreezSdkInterface = sdk ?: throw SparkError.NotConnected()
 }
 
 /**

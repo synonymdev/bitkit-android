@@ -5,9 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -36,19 +34,10 @@ import to.bitkit.wear.ui.components.WearPreviewDevices
 @Composable
 fun SettingsScreen(
     onAboutClick: () -> Unit,
-    onWalletRemove: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val currentOnWalletRemove by rememberUpdatedState(onWalletRemove)
-    LaunchedEffect(viewModel) {
-        viewModel.effects.collect {
-            when (it) {
-                SettingsEffect.WalletRemoved -> currentOnWalletRemove()
-            }
-        }
-    }
     Content(
         uiState = uiState,
         onAboutClick = onAboutClick,

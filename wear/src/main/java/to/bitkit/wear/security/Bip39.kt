@@ -2,7 +2,6 @@ package to.bitkit.wear.security
 
 import com.synonym.bitkitcore.getBip39Suggestions
 import com.synonym.bitkitcore.isValidBip39Word
-import com.synonym.bitkitcore.mnemonicToSeed
 import com.synonym.bitkitcore.validateMnemonic
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,9 +29,6 @@ interface Bip39 {
 
     /** Checks the words and the checksum of [words], which must already be lowercase. */
     fun validate(words: List<String>): Bip39Validation
-
-    /** The 64-byte BIP39 seed of [mnemonic] and [passphrase]. The caller should zero it after use. */
-    fun seed(mnemonic: String, passphrase: String?): ByteArray
 }
 
 sealed interface Bip39Validation {
@@ -66,6 +62,4 @@ class CoreBip39 @Inject constructor() : Bip39 {
         return runCatching { validateMnemonic(words.joinToString(" ")) }
             .fold(onSuccess = { Bip39Validation.Valid }, onFailure = { Bip39Validation.InvalidChecksum })
     }
-
-    override fun seed(mnemonic: String, passphrase: String?): ByteArray = mnemonicToSeed(mnemonic, passphrase)
 }

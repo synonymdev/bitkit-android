@@ -4,7 +4,7 @@ Every `*Screen.kt` under `app/src/main/java` and, in the [Wear OS](#wear-os) sec
 
 Columns:
 
-- Android: the Compose screen file. Every `*Screen.kt` in the phone and watch apps has exactly one row; a file name both apps use shares its row; `ScreensMapTest` fails when a screen is added or removed without updating this file. A row is the only requirement, a design is not.
+- Android: the Compose screen file. Every `*Screen.kt` has exactly one row per app: phone screens in the sections before [Wear OS](#wear-os), watch screens in that section, so a file name both apps use has a row in each. `ScreensMapTest` checks each app against its own sections and fails when a screen is added or removed without updating this file. A row is the only requirement, a design is not.
 - Figma: `Flow › Frame`, where Flow is the `SectionTitle` above the frame on the handoff page and Frame is the top-level frame name. `todo` when the screen shipped ahead of its design; `n/a` when no design is intended (dev tools, debug screens).
 
 Frame names are stable across handoff iterations; node ids are not, so the map lists names only. Sheets, dialogs, and composables without the `Screen` suffix are out of scope.
@@ -375,7 +375,7 @@ Amount entry stays in dollars with a BTC equivalent; QR and shared payment amoun
 
 ## Wear OS
 
-The watch app's screens, under `wear/src/main/java/to/bitkit/wear`. None has a design yet. `HomeScreen.kt` and `SettingsScreen.kt` share their file names with phone screens.
+The watch app's screens, under `wear/src/main/java/to/bitkit/wear`. None has a design yet. `HomeScreen.kt` and `SettingsScreen.kt` share their file names with phone screens and have their own rows here.
 
 ### ui/components
 
@@ -420,6 +420,12 @@ Layout scaffolds that other screens build on, not screens of their own.
 | - | - |
 | AboutScreen.kt | `todo` |
 | SettingsScreen.kt | `todo` |
+
+### ui/screens/start
+
+| Android | Figma |
+| - | - |
+| StartErrorScreen.kt | `todo` |
 
 ### ui/screens/unsupported
 

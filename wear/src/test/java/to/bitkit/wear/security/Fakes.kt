@@ -2,6 +2,7 @@ package to.bitkit.wear.security
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import to.bitkit.wear.data.ForegroundMonitor
 import to.bitkit.wear.data.NetworkMonitor
 import to.bitkit.wear.ext.runSuspendCatching
 
@@ -22,8 +23,10 @@ class FakeBip39 : Bip39 {
             else -> Bip39Validation.InvalidChecksum
         }
     }
+}
 
-    override fun seed(mnemonic: String, passphrase: String?): ByteArray = ByteArray(64)
+class FakeForegroundMonitor(isForeground: Boolean = true) : ForegroundMonitor {
+    override val isForeground = MutableStateFlow(isForeground)
 }
 
 class FakeNetworkMonitor(isOnline: Boolean = true) : NetworkMonitor {

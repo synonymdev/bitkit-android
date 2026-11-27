@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import to.bitkit.wear.data.SettingsStore
@@ -34,7 +33,7 @@ import kotlin.time.Duration.Companion.seconds
 class HomeViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
     private val currencyRepo: CurrencyRepo,
-    private val settingsStore: SettingsStore,
+    settingsStore: SettingsStore,
 ) : ViewModel() {
     companion object {
         private const val TAG = "HomeViewModel"
@@ -61,10 +60,7 @@ class HomeViewModel @Inject constructor(
 
     /** Swaps which unit the balance shows first. */
     fun onUnitToggle() {
-        viewModelScope.launch {
-            val current = settingsStore.data.first().primaryDisplay
-            settingsStore.setPrimaryDisplay(!current)
-        }
+        viewModelScope.launch { currencyRepo.togglePrimaryDisplay() }
     }
 
     private fun start() {
@@ -77,6 +73,8 @@ class HomeViewModel @Inject constructor(
         }
     }
 }
+
+private val loadingStatuses = setOf(WalletStatus.Idle, WalletStatus.Connecting, WalletStatus.Paused)
 
 /** The home screen's state for [wallet], showing amounts in [settings]' order with the matching rate in [rates]. */
 internal fun homeUiState(
@@ -97,7 +95,7 @@ internal fun homeUiState(
     }
     val showsFiatFirst = settings.primaryDisplay == PrimaryDisplay.FIAT && fiat != null
     return HomeUiState(
-        isLoading = wallet.status == WalletStatus.Idle || wallet.status == WalletStatus.Connecting,
+        isLoading = wallet.status in loadingStatuses,
         isError = wallet.status == WalletStatus.Error,
         isOffline = wallet.status == WalletStatus.Offline,
         isRemoved = wallet.status == WalletStatus.Removed,

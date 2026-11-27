@@ -110,7 +110,7 @@ private fun NavController.showRestoreWord(index: Int) {
     val isShown = current?.destination?.route == Routes.RESTORE_WORD &&
         current.arguments?.getInt(Routes.RESTORE_WORD_INDEX) == index
     if (isShown) return
-    navigate(Routes.restoreWord(index)) {
+    navigateTo(Routes.restoreWord(index)) {
         if (index == 0) popUpTo(Routes.RESTORE_START)
     }
 }

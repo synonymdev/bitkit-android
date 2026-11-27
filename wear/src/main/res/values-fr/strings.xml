@@ -25,6 +25,7 @@
     <string name="restore__passphrase_placeholder">Phrase secrète</string>
     <string name="restore__passphrase_skip">Continue</string>
     <string name="restore__passphrase_title">Phrase secrète ?</string>
+    <string name="restore__passphrase_too_long">Trop long</string>
     <string name="restore__title">Combien de mots ?</string>
     <string name="restore__word_no_match">Aucune correspondance</string>
     <string name="restore__word_placeholder">Mot %1$d</string>

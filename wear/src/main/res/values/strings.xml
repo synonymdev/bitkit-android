@@ -24,6 +24,7 @@
     <string name="restore__passphrase_placeholder">Passphrase</string>
     <string name="restore__passphrase_skip">Continue</string>
     <string name="restore__passphrase_title">Passphrase?</string>
+    <string name="restore__passphrase_too_long">Too long</string>
     <string name="restore__title">How many words?</string>
     <string name="restore__word_no_match">No match</string>
     <string name="restore__word_placeholder">Word %1$d</string>

@@ -12,6 +12,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.wear.data.SettingsStore
 import to.bitkit.wear.security.FakeDeviceLock
+import to.bitkit.wear.security.FakeForegroundMonitor
 import to.bitkit.wear.security.FakeNetworkMonitor
 import to.bitkit.wear.security.FakeSeedStore
 import to.bitkit.wear.security.SeedStoreError
@@ -49,6 +50,8 @@ class WalletWipeRecoveryTest : BaseUnitTest() {
     fun setUp() {
         whenever(sparkService.events).thenReturn(MutableSharedFlow<SdkEvent>())
         whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.wipeToken()).thenReturn(0)
+        whenever(sparkService.isCurrent(any())).thenReturn(true)
         whenever { sparkService.wipeStorage() }.thenAnswer {
             dieBefore(Step.Spark)
             sparkFailure?.let { throw it }
@@ -214,6 +217,7 @@ class WalletWipeRecoveryTest : BaseUnitTest() {
         settingsStore,
         FakeDeviceLock(),
         FakeNetworkMonitor(),
+        FakeForegroundMonitor(),
     )
 
     private fun assertWiped() {
