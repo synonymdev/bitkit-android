@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
@@ -15,9 +14,7 @@ import androidx.navigation.navigation
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
-import to.bitkit.wear.R
 import to.bitkit.wear.ext.navigateTo
-import to.bitkit.wear.ui.screens.comingsoon.ComingSoonScreen
 import to.bitkit.wear.ui.screens.home.HomeScreen
 import to.bitkit.wear.ui.screens.onboarding.OnboardingScreen
 import to.bitkit.wear.ui.screens.removed.WalletRemovedScreen
@@ -28,7 +25,6 @@ import to.bitkit.wear.ui.screens.restore.RestoreStartScreen
 import to.bitkit.wear.ui.screens.restore.RestoreViewModel
 import to.bitkit.wear.ui.screens.restore.RestoreWordScreen
 import to.bitkit.wear.ui.screens.settings.AboutScreen
-import to.bitkit.wear.ui.screens.settings.SettingsScreen
 import to.bitkit.wear.ui.screens.unsupported.UnsupportedScreen
 
 @Composable
@@ -51,22 +47,9 @@ fun WearNavHost(
         }
         composable(Routes.HOME) {
             HomeScreen(
-                onWalletRemove = { navController.navigateClearingBackStack(Routes.WALLET_REMOVED) },
-                onSendClick = { navController.navigateTo(Routes.SEND) },
-                onReceiveClick = { navController.navigateTo(Routes.RECEIVE) },
-                onSettingsClick = { navController.navigateTo(Routes.SETTINGS) },
-            )
-        }
-        composable(Routes.SEND) {
-            ComingSoonScreen(title = stringResource(R.string.home__send), testTag = "WatchSend")
-        }
-        composable(Routes.RECEIVE) {
-            ComingSoonScreen(title = stringResource(R.string.home__receive), testTag = "WatchReceive")
-        }
-        composable(Routes.SETTINGS) {
-            SettingsScreen(
                 onAboutClick = { navController.navigateTo(Routes.ABOUT) },
                 onWalletRemove = { navController.navigateClearingBackStack(Routes.ONBOARDING) },
+                onSeedKeyLoss = { navController.navigateClearingBackStack(Routes.WALLET_REMOVED) },
             )
         }
         composable(Routes.ABOUT) {

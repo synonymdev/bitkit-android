@@ -66,10 +66,27 @@ fun Long.formatToModernDisplay(locale: Locale = Locale.getDefault()): String {
     return formatter.format(this)
 }
 
-fun BigDecimal.formatCurrencyWithSymbol(
-    currencySymbol: String,
-    locale: Locale = Locale.getDefault(),
-): String {
+/** Whether [currencyCode]'s symbol follows the amount, as the phone shows it. */
+fun isSymbolSuffix(currencyCode: String): Boolean = currencyCode in SUFFIX_SYMBOL_CURRENCIES
+
+private val SUFFIX_SYMBOL_CURRENCIES = setOf(
+    "BGN",
+    "CHF",
+    "CZK",
+    "DKK",
+    "HRK",
+    "HUF",
+    "ISK",
+    "NOK",
+    "PLN",
+    "RON",
+    "RUB",
+    "SEK",
+    "TRY",
+)
+
+/** This fiat amount with two decimals and grouping, without its symbol, which the UI shows on its own. */
+fun BigDecimal.formatCurrency(locale: Locale = Locale.getDefault()): String {
     val symbols = DecimalFormatSymbols(locale).apply {
         decimalSeparator = DECIMAL_SEPARATOR
         groupingSeparator = FIAT_GROUPING_SEPARATOR
@@ -80,5 +97,5 @@ fun BigDecimal.formatCurrencyWithSymbol(
         roundingMode = RoundingMode.HALF_EVEN
         isGroupingUsed = true
     }
-    return "$currencySymbol${formatter.format(this)}"
+    return formatter.format(this)
 }

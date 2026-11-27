@@ -1,25 +1,27 @@
 package to.bitkit.wear.ui.screens.removed
 
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.wear.compose.material3.Button
-import androidx.wear.compose.material3.ListHeader
-import androidx.wear.compose.material3.SurfaceTransformation
+import androidx.wear.compose.material3.EdgeButton
+import androidx.wear.compose.material3.EdgeButtonSize
+import androidx.wear.compose.material3.Icon
+import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
-import androidx.wear.compose.material3.lazy.transformedHeight
 import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import to.bitkit.wear.R
 import to.bitkit.wear.repositories.WalletRepo
-import to.bitkit.wear.ui.components.ListScreen
+import to.bitkit.wear.ui.components.CenteredScreen
 import to.bitkit.wear.ui.components.WearPreview
 import javax.inject.Inject
 
@@ -44,30 +46,33 @@ private fun Content(
     onConfirmClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ListScreen(modifier = modifier) { spec ->
-        item {
-            ListHeader(
-                transformation = SurfaceTransformation(spec),
-                modifier = Modifier.transformedHeight(this, spec)
+    CenteredScreen(
+        edgeButton = {
+            EdgeButton(
+                onClick = onConfirmClick,
+                buttonSize = EdgeButtonSize.Medium,
+                modifier = Modifier.testTag("WalletRemovedConfirm")
             ) {
-                Text(
-                    text = stringResource(R.string.removed__title),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.testTag("WalletRemovedTitle")
+                Icon(
+                    painter = painterResource(R.drawable.ic_check),
+                    contentDescription = stringResource(R.string.common__ok),
                 )
             }
-        }
-        item {
-            Button(
-                onClick = onConfirmClick,
-                label = { Text(stringResource(R.string.common__ok)) },
-                transformation = SurfaceTransformation(spec),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .transformedHeight(this, spec)
-                    .testTag("WalletRemovedConfirm")
-            )
-        }
+        },
+        modifier = modifier,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_delete),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(32.dp)
+        )
+        Text(
+            text = stringResource(R.string.removed__title),
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.testTag("WalletRemovedTitle")
+        )
     }
 }
 

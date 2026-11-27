@@ -2,12 +2,14 @@ package to.bitkit.wear.repositories
 
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.SdkEvent
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.update
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -64,8 +66,31 @@ class WalletRepoTest : BaseUnitTest() {
 
         assertIs<SeedStoreError.NotFound>(result.exceptionOrNull())
         verify(sparkService, never()).connect(any())
-        assertEquals(WalletStatus.Error, sut.walletState.value.status)
+        assertEquals(WalletStatus.Missing, sut.walletState.value.status)
         assertNull(sut.walletState.value.balanceSats)
+    }
+
+    @Test
+    fun `a sync that never finishes times out as an error`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.syncWallet()).doSuspendableAnswer { awaitCancellation() }
+
+        val result = sut.start()
+
+        assertIs<WalletError.Timeout>(result.exceptionOrNull())
+        assertEquals(WalletStatus.Error, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `a connect that never finishes times out as an error`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.connect(seed)).doSuspendableAnswer { awaitCancellation() }
+
+        val result = sut.start()
+
+        assertIs<WalletError.Timeout>(result.exceptionOrNull())
+        verify(sparkService, never()).syncWallet()
+        assertEquals(WalletStatus.Error, sut.walletState.value.status)
     }
 
     @Test

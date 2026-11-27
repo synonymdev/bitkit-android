@@ -12,14 +12,11 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import to.bitkit.wear.data.SettingsStore
-import to.bitkit.wear.models.PrimaryDisplay
 import to.bitkit.wear.repositories.WalletRepo
 import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val settingsStore: SettingsStore,
     private val walletRepo: WalletRepo,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -27,20 +24,6 @@ class SettingsViewModel @Inject constructor(
 
     private val _effects = MutableSharedFlow<SettingsEffect>(extraBufferCapacity = 1)
     val effects: SharedFlow<SettingsEffect> = _effects.asSharedFlow()
-
-    init {
-        viewModelScope.launch {
-            settingsStore.data.collect { settings ->
-                _uiState.update { it.copy(isFiatPrimary = settings.primaryDisplay == PrimaryDisplay.FIAT) }
-            }
-        }
-    }
-
-    fun onFiatPrimaryChange(isFiatPrimary: Boolean) {
-        viewModelScope.launch {
-            settingsStore.setPrimaryDisplay(if (isFiatPrimary) PrimaryDisplay.FIAT else PrimaryDisplay.BITCOIN)
-        }
-    }
 
     fun onRemoveClick() {
         _uiState.update { it.copy(isRemoveDialogVisible = true, isRemoveFailed = false) }
@@ -64,7 +47,6 @@ class SettingsViewModel @Inject constructor(
 
 @Immutable
 data class SettingsUiState(
-    val isFiatPrimary: Boolean = false,
     val isRemoveDialogVisible: Boolean = false,
     val isRemoving: Boolean = false,
     val isRemoveFailed: Boolean = false,

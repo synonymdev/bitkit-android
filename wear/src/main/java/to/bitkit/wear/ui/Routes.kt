@@ -11,10 +11,9 @@ object Routes {
     const val RESTORE_CHECKSUM = "restore/checksum"
     const val RESTORE_PASSPHRASE = "restore/passphrase"
     const val WALLET_REMOVED = "wallet_removed"
+
+    /** The home pager, with the balance and settings pages. */
     const val HOME = "home"
-    const val SEND = "send"
-    const val RECEIVE = "receive"
-    const val SETTINGS = "settings"
     const val ABOUT = "about"
     const val UNSUPPORTED = "unsupported"
 

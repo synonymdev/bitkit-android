@@ -15,15 +15,18 @@ Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only
 - **SDK levels.** `minSdk` 34 (Wear OS 5), `targetSdk` 36, `compileSdk` 37. Wear OS 6+ keeps apps targeting 36
   always-on, so the home screen hides the balance and stops its animations in ambient mode.
 - **ABIs.** Debug builds split `arm64-v8a`, `armeabi-v7a` and `x86_64` (emulator); release builds ship the two ARM
-  ABIs. AGP strips the native libraries only when its default NDK (28.2.13676358) is installed, or the NDK that
-  `NDK_VERSION` names; otherwise the Breez library alone ships about 35 MB larger per ABI.
+  ABIs. AGP 9.3 strips the native libraries with its default NDK, 28.2.13676358, or with the NDK that `NDK_VERSION`
+  names (CI). Without an installed NDK the Breez library alone ships about 35 MB larger per ABI.
+- **R8.** The release build is minified and resource-shrunk. bitkit-core ships its own consumer rules for JNA and
+  uniffi; the Breez AAR ships none, so `wear/proguard-rules.pro` applies the same rules to `breez_sdk_spark`.
 - **Build settings.** `gradle/bitkit-env.gradle.kts` holds the BuildConfig fields `:app` and `:wear` share
   (`BREEZ_API_KEY` with its length check, `NETWORK`, `E2E`, `E2E_BACKEND`, `E2E_LOCAL_HOST`,
   `SPARK_LOCAL_CONFIG_B64`, `SPARK_LOCAL_CHAIN_URL`, `ESPLORA_URL`), read from the same sources as the phone build.
 - **Backups.** `allowBackup` is off and both backup rule files exclude every domain, so neither the seed nor the Spark
   state leaves the watch.
-- **Copied code.** `SparkSendKey`, the currency formatting and the colour tokens are copies of the phone's, each
-  naming its source file. Keep them in sync until a shared module replaces them.
+- **Copied code.** `SparkSendKey`, the currency formatting, the colour tokens and text styles, the balance swap
+  animations and `clickableAlpha` are copies of the phone's, each naming its source file. Keep them in sync until a
+  shared module replaces them.
 
 ### Packages
 
@@ -34,13 +37,45 @@ Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only
   settings, the local regtest fixture and the `SparkSendKey` idempotency keys.
 - `repositories`: `WalletRepo` (wallet state and balance, restore, start, lock handling, wipe) and `CurrencyRepo` (Blocktank rates).
 - `ui`: one `MainActivity` with `testTagsAsResourceId`, a `SwipeDismissableNavHost` with the routes Onboarding,
-  the Restore graph, Wallet removed, Home, Send, Receive, Settings, About and Not supported, and the M3 Expressive theme (black background,
+  the Restore graph, Wallet removed, Home, About and Not supported, and the M3 Expressive theme (black background,
   Brand orange, Inter Tight).
 
 Test tags are PascalCase. Tags of screens the phone also has start with `Watch`, so they never clash with the
 phone's; the restore screens use `Restore…` tags.
 
 On-screen copy stays short: a title or one line of at most about six words per screen. Explanations live here.
+
+## Screens and visual system
+
+- **Home pager.** Home is a horizontal pager (`HorizontalPagerScaffold` with a page indicator) that opens on the
+  Balance page; Settings is the next page. `HOME_PAGES` in `HomeScreen.kt` lists the pages in swipe order, so a page
+  is added in one line. The pager leaves the left edge of the first page to swipe-to-dismiss, which leaves the app.
+  There is no Send page or button: a send starts from outside the app (phone handoff, NFC or a `lightning:` link).
+- **Balance.** The phone's balance header: the other unit in a small row above, the amount large below, both
+  left-aligned within a block that is centered on the screen,
+  each with its currency symbol drawn apart in the phone's styles (`AppTextStyles.Display` and `CaptionM`, copied).
+  The large row scales down only as far as a small round screen needs. A tap anywhere on it swaps the units
+  (`WatchHomeBalanceToggle`) with the phone's spring swap animation and press fade (`BalanceAnimations` and
+  `clickableAlpha`, copied), scaling the rows from their top start as the phone does. Before the
+  first balance a small dimmed Bitkit mark stands in for it (`WatchHomeBalancePending`); a reconnect keeps the last
+  balance of the session on screen. A failed start shows a short error and a retry icon. In ambient mode the
+  balance is replaced by the dimmed mark (`WatchHomeBalanceHidden`) and nothing animates. The last balance is kept
+  in memory only, never written to disk.
+- **NFC hint.** The phone's broadcast icon (`ic_broadcast`, tinted white-64 as in the Send sheet's nearby pill)
+  sits at the bottom of the Balance page as `NfcHint`, above the page indicator: its dot stays on while the inner
+  and then the outer arc pair brighten in a slow loop, to say that a tap pays. It is the still icon when animations
+  are off and hidden in ambient mode. `NfcHint` takes `visible`, for gating on NFC hardware later.
+- **Settings.** A short list of icon rows: About and Remove wallet. The unit has no setting: tapping the balance is
+  the only way to switch it, and the choice is kept in the settings store across restarts. Remove wallet asks with a
+  one-line title and the two round ✕/✓ buttons.
+- **Loading.** Every wait shows `BezelLoading`: an indeterminate ring around the screen edge (test tag
+  `BezelLoading`), with the screen's content readable inside it. It covers connecting and syncing on Balance, saving
+  the restored wallet, and removing the wallet. It is hidden in ambient mode. `BezelPadding` and `BezelStrokeWidth`
+  hold the ring's padding and stroke for other edge rings, such as hold-to-pay.
+- **Style.** Black background; Brand orange only on the one primary action (an `EdgeButton`) and accents; Inter
+  Tight; content centered inside the round screen and clear of the time; icons rather than labels where the icon is
+  clear; no stacked button lists. Icon and text buttons morph their shape on press and the theme uses the expressive
+  (spring) motion scheme. Icons are vector drawables in `res/drawable`, with no icon library.
 
 ## Seed storage
 
@@ -70,7 +105,9 @@ The watch holds the full recovery phrase and passphrase, because Breez needs the
   Compose text input, bitkit-core and Breez all require; they cannot be zeroed and live until garbage collection. The
   restore screens keep the words only in their view model, never in saved instance state, and drop them when the
   wallet is saved or the flow is left.
-- **Logging.** Nothing logs the phrase or passphrase; the seed, restore state and word entry types print as redacted.
+- **Logging.** The app logs to logcat under the tag `BitkitWear`; debug builds also write each process's log to
+  `files/logs/` (the newest five files), as the phone does. Nothing logs the phrase or passphrase; the seed,
+  restore state and word entry types print as redacted.
 - **Wipe.** Remove wallet deletes the Spark storage, the key, the ciphertext and the settings.
 
 ## Restoring with a recovery phrase
@@ -78,14 +115,19 @@ The watch holds the full recovery phrase and passphrase, because Breez needs the
 Onboarding leads to the length choice (12 or 24 words), then one screen per word, the checksum check, the optional
 passphrase and Home.
 
-- Each word screen shows the progress and a text field. After two letters the wordlist words that start with them
-  appear below; the rotary input scrolls them and a tap accepts one. Next, or Done on the keyboard, accepts a typed
+- The length is one control: tapping 12 or 24 starts typing.
+- Each word screen shows the progress, such as 3/12, and a text field. After two letters up to six wordlist words
+  that start with them appear below as chips; a tap accepts one, and the rotary input scrolls the screen. Next, or Done on the keyboard, accepts a typed
   word that is in the wordlist. Each word is its own back stack entry, so swiping back returns to the previous word
   with its text in place.
 - The phrase is never on screen as a whole, only the word being typed.
-- After the last word the checksum is checked. A failure shows Checksum failed with Review, which walks through the
-  words again from the first.
-- The passphrase step is skipped by default. A typed passphrase is used exactly as typed.
+- After the last word the checksum is checked. A failure shows an error icon, Invalid phrase and Review, which walks
+  through the words again from the first.
+- The passphrase step continues without one by default; a small key button adds one. A typed passphrase is used
+  exactly as typed.
+- The word and passphrase screens set `FLAG_SECURE` while shown, in debug builds too (the phone's
+  `BlockScreenshots` exempts debug builds). Screenshots and screen recordings of them come out black, so journeys
+  check these screens with `android layout` only.
 - The text fields ask the keyboard for plain text without suggestions, personalized learning or dictation. A keyboard
   may ignore these hints: the Wear OS keyboard on the API 37 emulator still shows its own dictionary strip and
   microphone key. A password input type would silence it, but Wear OS apps must not show password fields (lint
@@ -104,8 +146,10 @@ The Wear OS keyboard swallows hardware key events while it is open, so close it 
 3. `RestoreProgress` shows the position, such as 3/12. `RestoreChecksumError` with `RestoreChecksumReview` appears
    when the checksum fails; on review, `RestoreNext` keeps a word.
 4. Tap `RestorePassphraseSkip`, or `RestorePassphraseAdd`, type into `RestorePassphraseInput` the same way and tap
-   `RestorePassphraseConfirm`. `RestoreSaving` shows while the wallet is saved, `RestoreError` when saving failed.
-5. Home shows `WatchHomeLoading` until the first sync, then `WatchHomeBalance`.
+   `RestorePassphraseConfirm`. `RestoreSaving` (holding `BezelLoading`) shows while the wallet is saved,
+   `RestoreError` when saving failed.
+5. Home shows `BezelLoading` with `WatchHomeBalancePending` until the first sync, then `WatchHomeBalance`. Swipe
+   left (`adb shell input swipe 400 227 60 227`) for Settings.
 
 ## Build and install
 
@@ -135,11 +179,12 @@ Measured on the emulator (Wear OS 7, API 37, 454×454 round, x86_64) unless note
 
 | Measure | Result | How |
 |---|---|---|
-| Debug APK size, `arm64-v8a` split | 115.8 MB with stripped native libraries: `libbitkitcore.so` 47.5 MB, `libbreez_sdk_spark_bindings.so` 11.3 MB (46.0 MB unstripped), unminified dex about 56 MB | A clean `:wear:assembleDevDebug` with `NDK_VERSION` set |
+| Debug APK size, `arm64-v8a` split | 127.1 MB: `libbitkitcore.so` 47.5 MB, `libbreez_sdk_spark_bindings.so` 11.3 MB (both stripped; Breez is 46.0 MB unstripped), `libjnidispatch.so` 0.2 MB, unminified dex about 54 MB | `:wear:assembleDevDebug`, AGP 9.3 with its default NDK 28.2.13676358 |
+| Release APK size, `arm64-v8a` split | 64.6 MB with R8 (dex 4.2 MB, `resources.arsc` 0.2 MB, the same native libraries); about 31.8 MB gzipped | `:wear:assembleDevRelease`, signed locally with the debug key |
 | Release AAB download size, arm64 | _TBD_ | Play Console or `bundletool get-size total` |
 | Memory after Spark sync (PSS) | _TBD_ | `dumpsys meminfo to.bitkit.dev` on Home |
-| First sync time after restore | _TBD_ | From connect to the first balance on Home, over Wi-Fi and over the phone's Bluetooth proxy |
-| Cold start to Home | _TBD_ | `am start -W` |
+| First sync time after restore | About 3.5 minutes against Lightspark's hosted regtest (API 34 emulator); later syncs 7–8 s. Connecting takes under 0.5 s. `WalletRepo` gives up after 30 s connecting or 5 minutes syncing and shows the retry | `Synced wallet in` in logcat; over the phone's Bluetooth proxy still _TBD_ |
+| Cold start to Home | 1.37 s release (API 37), 1.77 s debug (API 34) | `am start -W` |
 
 ## Open questions
 

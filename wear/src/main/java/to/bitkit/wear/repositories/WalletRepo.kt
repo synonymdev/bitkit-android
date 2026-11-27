@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.wear.data.SettingsStore
 import to.bitkit.wear.di.IoDispatcher
 import to.bitkit.wear.ext.runSuspendCatching
@@ -22,6 +23,9 @@ import to.bitkit.wear.utils.AppError
 import to.bitkit.wear.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 @Singleton
 class WalletRepo @Inject constructor(
@@ -33,6 +37,12 @@ class WalletRepo @Inject constructor(
 ) {
     companion object {
         private const val TAG = "WalletRepo"
+
+        /** How long connecting to Spark may take before the start counts as failed. */
+        val CONNECT_TIMEOUT = 30.seconds
+
+        /** How long the wallet sync may take before the start counts as failed; a first sync took about 3.5 minutes. */
+        val SYNC_TIMEOUT = 5.minutes
     }
 
     private val scope = CoroutineScope(ioDispatcher + SupervisorJob())
@@ -99,13 +109,23 @@ class WalletRepo @Inject constructor(
         _walletState.update { it.copy(status = WalletStatus.Connecting) }
         runSuspendCatching {
             val seed = seedStore.load().getOrThrow()
-            sparkService.connect(seed)
+            val connectStart = TimeSource.Monotonic.markNow()
+            withTimeoutOrNull(CONNECT_TIMEOUT) {
+                sparkService.connect(seed)
+                true
+            } ?: throw WalletError.Timeout("connect")
+            Logger.info("Connected wallet in '${connectStart.elapsedNow()}'", context = TAG)
             // A lock that landed while connecting found nothing to disconnect.
             if (deviceLock.isLocked.value) {
                 sparkService.disconnect()
                 throw WalletError.DeviceLocked()
             }
-            sparkService.syncWallet()
+            val syncStart = TimeSource.Monotonic.markNow()
+            withTimeoutOrNull(SYNC_TIMEOUT) {
+                sparkService.syncWallet()
+                true
+            } ?: throw WalletError.Timeout("sync")
+            Logger.info("Synced wallet in '${syncStart.elapsedNow()}'", context = TAG)
             refreshBalance().getOrThrow()
         }.onSuccess {
             _walletState.update { it.copy(status = WalletStatus.Ready) }
@@ -126,6 +146,7 @@ class WalletRepo @Inject constructor(
                 runSuspendCatching { settingsStore.setRemovedNoticePending(true) }
                 _walletState.update { it.copy(status = WalletStatus.Removed) }
             }
+            is SeedStoreError.NotFound -> _walletState.update { it.copy(status = WalletStatus.Missing) }
             is SeedStoreError.DeviceLocked, is WalletError.DeviceLocked ->
                 _walletState.update { it.copy(status = WalletStatus.Locked) }
             else -> _walletState.update { it.copy(status = WalletStatus.Error) }
@@ -172,7 +193,8 @@ class WalletRepo @Inject constructor(
     }
 }
 
-private val disconnectedStatuses = setOf(WalletStatus.Idle, WalletStatus.Locked, WalletStatus.Removed)
+private val disconnectedStatuses =
+    setOf(WalletStatus.Idle, WalletStatus.Locked, WalletStatus.Removed, WalletStatus.Missing)
 
 enum class WalletStatus {
     Idle,
@@ -185,10 +207,16 @@ enum class WalletStatus {
 
     /** The wallet was deleted from the watch because its seed key was lost. */
     Removed,
+
+    /** No seed is stored, so there is no wallet to open. */
+    Missing,
 }
 
 sealed class WalletError(message: String) : AppError(message) {
     class DeviceLocked : WalletError("The watch is locked")
+
+    /** Spark did not finish [step] in time. */
+    class Timeout(step: String) : WalletError("Timed out on '$step'")
 }
 
 data class WalletState(

@@ -1,5 +1,7 @@
 package to.bitkit.wear.ui.screens.restore
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -7,33 +9,43 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.wear.compose.material3.ButtonDefaults
+import androidx.wear.compose.material3.CompactButton
 import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.EdgeButtonSize
-import androidx.wear.compose.material3.FilledTonalButton
+import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.SurfaceTransformation
 import androidx.wear.compose.material3.Text
 import androidx.wear.compose.material3.lazy.transformedHeight
 import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.wear.R
 import to.bitkit.wear.security.Bip39
+import to.bitkit.wear.ui.components.BlockScreenshots
 import to.bitkit.wear.ui.components.ListScreen
 import to.bitkit.wear.ui.components.SecretTextField
 import to.bitkit.wear.ui.components.WearPreview
 
+/** The most wordlist words offered at once; typing another letter narrows them. */
+private const val MAX_SUGGESTION_CHIPS = 6
+
 /**
  * Types the word at [index], counted from 0, of the recovery phrase. It shows this one word only: the phrase is
- * never on screen as a whole.
+ * never on screen as a whole, and the screen blocks screenshots.
  */
 @Composable
 fun RestoreWordScreen(
@@ -41,6 +53,7 @@ fun RestoreWordScreen(
     viewModel: RestoreViewModel,
     modifier: Modifier = Modifier,
 ) {
+    BlockScreenshots()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val entry = uiState.entries.getOrNull(index) ?: return
     Content(
@@ -81,7 +94,10 @@ private fun Content(
                 buttonSize = EdgeButtonSize.Small,
                 modifier = Modifier.testTag("RestoreNext")
             ) {
-                Text(stringResource(R.string.common__next))
+                Icon(
+                    painter = painterResource(R.drawable.ic_arrow_forward),
+                    contentDescription = stringResource(R.string.common__next),
+                )
             }
         },
         modifier = modifier,
@@ -131,18 +147,37 @@ private fun Content(
                 )
             }
         }
-        items(entry.suggestions.size, key = { entry.suggestions[it] }) { position ->
-            val word = entry.suggestions[position]
-            FilledTonalButton(
-                onClick = { onSuggestionClick(word) },
-                label = {
-                    Text(text = word, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-                },
-                transformation = SurfaceTransformation(spec),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .transformedHeight(this, spec)
-                    .testTag("RestoreSuggestion-$word")
+        if (entry.suggestions.isNotEmpty()) {
+            item {
+                Suggestions(
+                    words = entry.suggestions,
+                    onClick = onSuggestionClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .transformedHeight(this, spec)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Suggestions(
+    words: ImmutableList<String>,
+    onClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier
+    ) {
+        words.take(MAX_SUGGESTION_CHIPS).forEach { word ->
+            CompactButton(
+                onClick = { onClick(word) },
+                colors = ButtonDefaults.filledTonalButtonColors(),
+                label = { Text(word) },
+                modifier = Modifier.testTag("RestoreSuggestion-$word")
             )
         }
     }

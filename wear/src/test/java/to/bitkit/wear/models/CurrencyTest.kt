@@ -10,13 +10,15 @@ class CurrencyTest {
     fun `sats group by thousands with spaces`() {
         assertEquals("1 234 567", 1_234_567L.formatToModernDisplay(Locale.US))
         assertEquals("0", 0L.formatToModernDisplay(Locale.US))
+        assertEquals("1 000", 1_000L.formatToModernDisplay(Locale.US))
+        assertEquals("21 000 000", 21_000_000L.formatToModernDisplay(Locale.US))
     }
 
     @Test
     fun `fiat value converts sats at the rate and formats with the symbol`() {
         val value = fiatValue(sats = 150_000, rate = rate("100000"))
 
-        assertEquals("$150.00", value?.formatCurrencyWithSymbol("$", Locale.US))
+        assertEquals("150.00", value?.formatCurrency(Locale.US))
     }
 
     @Test
