@@ -10219,7 +10219,16 @@ class AppViewModel @Inject constructor(
         }
         if (pubkyRepo.contactsLoadVersion.value == 0L) {
             paykitPaymentRequestRepo.markEligibleTargetsLoading()
-            if (!pubkyRepo.isLoadingContacts.value) pubkyRepo.loadContacts()
+            if (pubkyRepo.isLoadingContacts.value) {
+                pubkyRepo.isLoadingContacts.first { !it }
+            } else {
+                pubkyRepo.loadContacts()
+            }
+            // The load can also end cancelled, which marks no completion.
+            if (pubkyRepo.contactsLoadVersion.value == 0L) {
+                paykitPaymentRequestRepo.markEligibleTargetsUnknown()
+                return
+            }
         }
         refreshPaymentRequestTargets(force = true)
     }

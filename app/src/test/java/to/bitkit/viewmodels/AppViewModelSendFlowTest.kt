@@ -20884,6 +20884,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `payment request picker checks recipients only after saved contacts load`() = test {
         enablePaykitUi()
         pubkyPublicKey.update { testPublicKey }
+        pubkyIsLoadingContacts.update { true }
         runCurrent()
         clearInvocations(paykitPaymentRequestRepo)
 
@@ -20893,6 +20894,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(paykitPaymentRequestRepo, never()).markEligibleTargetsUnknown()
 
         pubkyContactsLoadCompletionVersion.update { 1L }
+        pubkyIsLoadingContacts.update { false }
         runCurrent()
         verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
         verify(paykitPaymentRequestRepo, atLeastOnce()).markEligibleTargetsUnknown()
@@ -20901,6 +20903,25 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.showPaymentRequestRecipient()
         runCurrent()
         verify(paykitPaymentRequestRepo, atLeastOnce()).refreshEligibleTargets(any(), eq(true))
+    }
+
+    @Test
+    fun `recipient picker fails when the contacts load it waits for is cancelled`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.update { testPublicKey }
+        pubkyIsLoadingContacts.update { true }
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo)
+
+        sut.showSubscriptionCreator()
+        runCurrent()
+        verify(paykitPaymentRequestRepo, never()).markEligibleTargetsUnknown()
+
+        pubkyIsLoadingContacts.update { false }
+        runCurrent()
+
+        verify(paykitPaymentRequestRepo).markEligibleTargetsUnknown()
+        verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
     }
 
     @Test
