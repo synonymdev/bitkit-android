@@ -48,8 +48,9 @@ object SparkExitFundingRelease {
 
     /**
      * Whether savings may pay [attempt] to the exit again now, over what its funding address holds ([utxos], null
-     * when it could not be read): only while the exit still asks for funding there and nothing reached it, or while it
-     * waits for this very payment, and never once its release was approved. A send to no exit's address is not this
+     * when it could not be read): while the exit still asks for funding there, waits for this very payment, or holds
+     * this payment's own coin, and never once its release was approved. A retry re-signs the same inputs, so it never
+     * pays twice, and what savings pays beyond the ask comes back as leftover. A send to no exit's address is not this
      * check's to refuse.
      */
     fun mayPayAgain(attempt: OnchainSendAttempt, exit: Exit, utxos: List<EsploraUtxo>?): Boolean {
@@ -58,11 +59,20 @@ object SparkExitFundingRelease {
         if (!isExitFunding(attempt, exit)) return true
         val record = exit.record?.takeIf { it.isActive && it.funding.firstOrNull()?.address == attempt.address }
         if (record == null || utxos == null) return false
-        return when (val state = SparkExitMath.fundingState(record, utxos)) {
-            is SparkExitFundingState.Ask -> state.receivedSats == 0uL
-            SparkExitFundingState.Paid ->
-                attempt.hasCandidate(record.fundingPaymentTxid) &&
-                    SparkExitMath.newFunding(utxos, record).all { attempt.hasCandidate(it.txid) }
+        // Other wallets' coins alone cover the funding: nothing is left to ask, and its release takes care of it.
+        val isOwnPaid = attempt.hasCandidate(record.fundingPaymentTxid)
+        val unpaid = if (isOwnPaid) record.copy(fundingPaymentTxid = null) else record
+        val others = utxos.filterNot { attempt.hasCandidate(it.txid) }
+        if (SparkExitMath.fundingState(unpaid, others) == SparkExitFundingState.Seen) return false
+        return when (SparkExitMath.fundingState(record, utxos)) {
+            // Partial payments from other wallets still leave an ask.
+            is SparkExitFundingState.Ask -> true
+            // Waiting for this very payment.
+            SparkExitFundingState.Paid -> isOwnPaid
+            // Covered with this payment's own unconfirmed coin: a retry only bumps it.
+            SparkExitFundingState.Seen -> SparkExitMath.newFunding(utxos, record).any {
+                !it.status.confirmed && attempt.hasCandidate(it.txid)
+            }
             else -> false
         }
     }
@@ -71,7 +81,9 @@ object SparkExitFundingRelease {
     fun storedExit(attempt: OnchainSendAttempt): Exit? = runCatching {
         Exit(
             record = SparkExitStore(File(Env.sparkExitRecordPath(attempt.walletIndex))).load(),
-            earlier = SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(attempt.walletIndex))).load(),
+            earlier = runCatching {
+                SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(attempt.walletIndex))).load()
+            }.getOrDefault(emptyList()),
         )
     }.getOrNull()
 }

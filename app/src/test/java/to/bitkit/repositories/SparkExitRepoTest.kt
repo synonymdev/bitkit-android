@@ -2050,7 +2050,7 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `an unresolved savings payment is paid again only while the exit asks and nothing arrived`() = test {
+    fun `an unresolved savings payment is paid again only while the exit asks`() = test {
         SparkExitStore(File(Env.sparkExitRecordPath(0))).save(awaitingRecord())
         var utxos = "[]"
         val sut = quotedSut(FakeSparkExitRecovering(), fundingChain { utxos })
@@ -2058,10 +2058,44 @@ class SparkExitRepoTest : BaseUnitTest() {
 
         sut.authorizePayAgain(unknown)
         assertTrue(runCatching { sut.authorizePayAgain(unknown.copy(releaseApproved = true)) }.isFailure)
-        utxos = """[{"txid":"${"f0".repeat(32)}","vout":0,"value":9000,"status":{"confirmed":false}}]"""
-        assertTrue(runCatching { sut.authorizePayAgain(unknown) }.isFailure, "another wallet funded it")
+        utxos = """[{"txid":"${"f0".repeat(32)}","vout":0,"value":21000,"status":{"confirmed":false}}]"""
+        assertTrue(runCatching { sut.authorizePayAgain(unknown) }.isFailure, "another wallet covered it")
         sut.authorizePayAgain(unknown.copy(address = "bcrt1qordinary"))
         sut.onAppBackgrounded()
+    }
+
+    @Test
+    fun `an unresolved savings payment keeps a way out once another wallet paid part of the funding`() = test {
+        // The exit asks 20_000 sats; another wallet paid 1_000, so it still asks for the rest.
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(awaitingRecord())
+        val partial = """[{"txid":"${"f0".repeat(32)}","vout":0,"value":1000,"status":{"confirmed":true}}]"""
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain { partial })
+        val unknown = refusedSavingsPayment().copy(evidence = OnchainSendEvidence.Unknown)
+
+        val retry = runCatching { sut.authorizePayAgain(unknown) }
+        // Its txid is kept on the exit, as for a send with no answer.
+        store.save(awaitingRecord(paidTxid = unknown.txid))
+        val kept = runCatching { sut.authorizePayAgain(unknown) }
+        sut.onAppBackgrounded()
+
+        assertTrue(retry.isSuccess, "Retry refused with '${retry.exceptionOrNull()?.message}'")
+        assertTrue(kept.isSuccess, "Retry of the kept payment refused with '${kept.exceptionOrNull()?.message}'")
+    }
+
+    @Test
+    fun `an ordinary savings send is paid again when the earlier exit addresses cannot be read`() = test {
+        File(Env.sparkExitEarlierAddressesPath(0)).apply { parentFile?.mkdirs() }.writeText("not json")
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain())
+        val ordinary = refusedSavingsPayment().copy(
+            address = "bcrt1qordinary",
+            evidence = OnchainSendEvidence.Unknown,
+        )
+
+        val retry = runCatching { sut.authorizePayAgain(ordinary) }
+        sut.onAppBackgrounded()
+
+        assertTrue(retry.isSuccess, "Ordinary send refused with '${retry.exceptionOrNull()?.message}'")
     }
 
     @Test
@@ -2075,7 +2109,7 @@ class SparkExitRepoTest : BaseUnitTest() {
             lightning.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
         ).doSuspendableAnswer {
             // Another wallet funded the address while the payment was prepared.
-            utxos = """[{"txid":"${"f0".repeat(32)}","vout":0,"value":9000,"status":{"confirmed":false}}]"""
+            utxos = """[{"txid":"${"f0".repeat(32)}","vout":0,"value":21000,"status":{"confirmed":false}}]"""
             val authorize = it.getArgument<suspend (OnchainSendAttempt) -> Unit>(5)
             runCatching { authorize(refused) }.map { OnchainSendOutcome.Accepted("again") }
         }

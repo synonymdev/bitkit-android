@@ -89,6 +89,7 @@ import java.io.FileOutputStream
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -3729,7 +3730,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `Spark exit funding is paid again only while the exit asks and nothing arrived`() {
+    fun `Spark exit funding is paid again only while the exit asks or waits for this payment`() {
         val attempt = exitFundingAttempt()
         val asking = SparkExitFundingRelease.Exit(
             exitRecord(SparkExitRecord.Phase.AwaitingFunding(5_000uL)),
@@ -3737,7 +3738,12 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         val arrived = EsploraUtxo("f1".repeat(32), 0u, 6_000uL, EsploraTxStatus(confirmed = false))
         assertTrue(SparkExitFundingRelease.mayPayAgain(attempt, asking, emptyList()))
-        assertFalse(SparkExitFundingRelease.mayPayAgain(attempt, asking, listOf(arrived)))
+        assertFalse(SparkExitFundingRelease.mayPayAgain(attempt, asking, listOf(arrived)), "Another wallet covered it")
+        val partial = arrived.copy(value = 1_000uL)
+        assertTrue(SparkExitFundingRelease.mayPayAgain(attempt, asking, listOf(partial)), "It still asks for the rest")
+        val own = arrived.copy(txid = assertNotNull(attempt.txid))
+        assertTrue(SparkExitFundingRelease.mayPayAgain(attempt, asking, listOf(own)), "Its own coin covers it: a bump")
+        assertFalse(SparkExitFundingRelease.mayPayAgain(attempt, asking, listOf(own, arrived)), "Others alone cover it")
         assertFalse(SparkExitFundingRelease.mayPayAgain(attempt, asking, null))
         val funded = SparkExitFundingRelease.Exit(
             exitRecord(SparkExitRecord.Phase.Running, fundingTxid = "f1".repeat(32)),
@@ -3750,7 +3756,26 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             emptyList(),
         )
         assertTrue(SparkExitFundingRelease.mayPayAgain(attempt, awaiting, emptyList()))
-        assertFalse(SparkExitFundingRelease.mayPayAgain(attempt, awaiting, listOf(arrived)), "Another wallet funded it")
+        assertTrue(SparkExitFundingRelease.mayPayAgain(attempt, awaiting, listOf(partial)), "It waits for this payment")
+        assertFalse(
+            SparkExitFundingRelease.mayPayAgain(attempt, awaiting, listOf(arrived)),
+            "Another wallet covered it",
+        )
+        val otherPayment = SparkExitFundingRelease.Exit(
+            exitRecord(SparkExitRecord.Phase.AwaitingFunding(5_000uL)).copy(fundingPaymentTxid = "f2".repeat(32)),
+            emptyList(),
+        )
+        assertFalse(
+            SparkExitFundingRelease.mayPayAgain(attempt, otherPayment, emptyList()),
+            "It waits for another payment",
+        )
+        val dust = own.copy(value = 100uL)
+        assertFalse(
+            SparkExitFundingRelease.mayPayAgain(attempt, asking, listOf(dust, arrived)),
+            "Others alone cover it",
+        )
+        val confirmed = own.copy(status = EsploraTxStatus(confirmed = true))
+        assertFalse(SparkExitFundingRelease.mayPayAgain(attempt, asking, listOf(confirmed)), "Its own coin confirmed")
     }
 
     private fun exitFundingAttempt() = unknownShopAttempt("ab".repeat(32))
