@@ -1806,6 +1806,7 @@
     <string name="wallet__payment_request_queued_description">Uw betaalverzoek staat in de wachtrij en wordt automatisch verzonden</string>
     <string name="wallet__payment_request_rate_unavailable">Wisselkoersen zijn niet beschikbaar of verlopen. Probeer het opnieuw wanneer u online bent.</string>
     <string name="wallet__payment_request_recipient">ONTVANGER</string>
+    <string name="wallet__payment_request_recipient_failed">Kon niet controleren welke contacten een betaalverzoek kunnen ontvangen. Controleer je verbinding.</string>
     <string name="wallet__payment_request_recipient_no_match">Geen overeenkomend opgeslagen contact met een privéverbinding.</string>
     <string name="wallet__payment_request_recipient_unavailable">Betaalverzoeken kunnen alleen worden verzonden naar een opgeslagen contact met een privéverbinding.</string>
     <string name="wallet__payment_request_request">Verzoeken</string>

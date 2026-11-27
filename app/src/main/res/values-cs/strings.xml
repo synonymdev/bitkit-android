@@ -1808,6 +1808,7 @@
     <string name="wallet__payment_request_queued_description">Vaše žádost o platbu je ve frontě a bude odeslána automaticky</string>
     <string name="wallet__payment_request_rate_unavailable">Platební kurzy nejsou k dispozici nebo vypršely. Zkuste to znovu, až budete online.</string>
     <string name="wallet__payment_request_recipient">PŘÍJEMCE</string>
+    <string name="wallet__payment_request_recipient_failed">Nepodařilo se ověřit, které kontakty mohou přijmout žádost o platbu. Zkontrolujte připojení.</string>
     <string name="wallet__payment_request_recipient_no_match">Žádný odpovídající uložený kontakt se soukromým spojením.</string>
     <string name="wallet__payment_request_recipient_unavailable">Žádosti o platbu lze posílat pouze uloženým kontaktům se soukromým spojením.</string>
     <string name="wallet__payment_request_request">Požádat</string>

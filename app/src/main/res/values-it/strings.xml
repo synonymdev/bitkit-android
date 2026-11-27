@@ -1807,6 +1807,7 @@
     <string name="wallet__payment_request_queued_description">La tua richiesta di pagamento è in coda e verrà inviata automaticamente</string>
     <string name="wallet__payment_request_rate_unavailable">I tassi di pagamento non sono disponibili o sono scaduti. Riprova quando sei online.</string>
     <string name="wallet__payment_request_recipient">DESTINATARIO</string>
+    <string name="wallet__payment_request_recipient_failed">Impossibile verificare quali contatti possono ricevere una richiesta di pagamento. Controlla la connessione.</string>
     <string name="wallet__payment_request_recipient_no_match">Nessun contatto salvato corrispondente con una connessione privata.</string>
     <string name="wallet__payment_request_recipient_unavailable">Le richieste di pagamento possono essere inviate solo a un contatto salvato con una connessione privata.</string>
     <string name="wallet__payment_request_request">Richiedi</string>

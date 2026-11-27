@@ -1807,6 +1807,7 @@
     <string name="wallet__payment_request_queued_description">Votre demande de paiement est en file d\'attente et sera envoyée automatiquement</string>
     <string name="wallet__payment_request_rate_unavailable">Les taux de paiement sont indisponibles ou ont expiré. Réessayez une fois en ligne.</string>
     <string name="wallet__payment_request_recipient">DESTINATAIRE</string>
+    <string name="wallet__payment_request_recipient_failed">Impossible de vérifier quels contacts peuvent recevoir une demande de paiement. Vérifiez votre connexion.</string>
     <string name="wallet__payment_request_recipient_no_match">Aucun contact enregistré correspondant avec une connexion privée.</string>
     <string name="wallet__payment_request_recipient_unavailable">Les demandes de paiement ne peuvent être envoyées qu\'à un contact enregistré disposant d\'une connexion privée.</string>
     <string name="wallet__payment_request_request">Demander</string>

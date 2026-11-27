@@ -1673,6 +1673,7 @@
     <string name="wallet__payment_request_queued_description">Your payment request is queued and will send automatically</string>
     <string name="wallet__payment_request_rate_unavailable">Payment rates are unavailable or expired. Try again when online.</string>
     <string name="wallet__payment_request_recipient">RECIPIENT</string>
+    <string name="wallet__payment_request_recipient_failed">Couldn\'t check which contacts can receive a payment request. Check your connection.</string>
     <string name="wallet__payment_request_recipient_no_match">No matching saved contact with a private connection.</string>
     <string name="wallet__payment_request_recipient_unavailable">Payment requests can only be sent to a saved contact with a private connection.</string>
     <string name="wallet__payment_request_request">Request</string>

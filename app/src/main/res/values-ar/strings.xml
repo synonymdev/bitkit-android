@@ -1803,6 +1803,7 @@
     <string name="wallet__payment_request_queued_description">طلب الدفع الخاص بك في قائمة الانتظار وسيُرسل تلقائيًا</string>
     <string name="wallet__payment_request_rate_unavailable">أسعار الدفع غير متاحة أو منتهية الصلاحية. حاول مرة أخرى عند الاتصال بالإنترنت.</string>
     <string name="wallet__payment_request_recipient">المستلم</string>
+    <string name="wallet__payment_request_recipient_failed">تعذّر التحقق من جهات الاتصال التي يمكنها استلام طلب دفع. تحقق من اتصالك.</string>
     <string name="wallet__payment_request_recipient_no_match">لا توجد جهة اتصال محفوظة مطابقة لديها اتصال خاص.</string>
     <string name="wallet__payment_request_recipient_unavailable">لا يمكن إرسال طلبات الدفع إلا إلى جهة اتصال محفوظة لديها اتصال خاص.</string>
     <string name="wallet__payment_request_request">طلب</string>

@@ -1805,6 +1805,7 @@
     <string name="wallet__payment_request_queued_description">Deine Zahlungsanforderung ist in der Warteschlange und wird automatisch gesendet</string>
     <string name="wallet__payment_request_rate_unavailable">Wechselkurse sind nicht verfügbar oder abgelaufen. Versuche es erneut, wenn du online bist.</string>
     <string name="wallet__payment_request_recipient">EMPFÄNGER</string>
+    <string name="wallet__payment_request_recipient_failed">Es konnte nicht geprüft werden, welche Kontakte eine Zahlungsanforderung empfangen können. Prüfe deine Verbindung.</string>
     <string name="wallet__payment_request_recipient_no_match">Kein passender gespeicherter Kontakt mit privater Verbindung.</string>
     <string name="wallet__payment_request_recipient_unavailable">Zahlungsanforderungen können nur an einen gespeicherten Kontakt mit privater Verbindung gesendet werden.</string>
     <string name="wallet__payment_request_request">Anfordern</string>

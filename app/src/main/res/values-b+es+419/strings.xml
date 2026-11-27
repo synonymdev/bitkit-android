@@ -1807,6 +1807,7 @@
     <string name="wallet__payment_request_queued_description">Su solicitud de pago está en cola y se enviará automáticamente</string>
     <string name="wallet__payment_request_rate_unavailable">Las tasas de cambio no están disponibles o vencieron. Vuelva a intentarlo cuando tenga conexión.</string>
     <string name="wallet__payment_request_recipient">DESTINATARIO</string>
+    <string name="wallet__payment_request_recipient_failed">No se pudo comprobar qué contactos pueden recibir una solicitud de pago. Revise su conexión.</string>
     <string name="wallet__payment_request_recipient_no_match">No hay ningún contacto guardado con una conexión privada que coincida.</string>
     <string name="wallet__payment_request_recipient_unavailable">Las solicitudes de pago solo se pueden enviar a un contacto guardado con una conexión privada.</string>
     <string name="wallet__payment_request_request">Solicitar</string>

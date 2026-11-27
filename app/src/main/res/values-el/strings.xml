@@ -1800,6 +1800,7 @@
     <string name="wallet__payment_request_queued_description">Το αίτημα πληρωμής σου είναι σε αναμονή και θα σταλεί αυτόματα</string>
     <string name="wallet__payment_request_rate_unavailable">Οι ισοτιμίες πληρωμής δεν είναι διαθέσιμες ή έχουν λήξει. Δοκίμασε ξανά όταν είσαι online.</string>
     <string name="wallet__payment_request_recipient">ΠΑΡΑΛΗΠΤΗΣ</string>
+    <string name="wallet__payment_request_recipient_failed">Δεν ήταν δυνατός ο έλεγχος των επαφών που μπορούν να λάβουν αίτημα πληρωμής. Έλεγξε τη σύνδεσή σου.</string>
     <string name="wallet__payment_request_recipient_no_match">Καμία αποθηκευμένη επαφή με ιδιωτική σύνδεση δεν ταιριάζει.</string>
     <string name="wallet__payment_request_recipient_unavailable">Τα αιτήματα πληρωμής μπορούν να σταλούν μόνο σε αποθηκευμένη επαφή με ιδιωτική σύνδεση.</string>
     <string name="wallet__payment_request_request">Αίτημα</string>
