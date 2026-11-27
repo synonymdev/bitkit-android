@@ -4875,6 +4875,30 @@ class LightningRepoTest : BaseUnitTest() {
         testScheduler.advanceUntilIdle()
     }
 
+    // Regression: a busy store has nothing to do with the requested server, so the change retries its own
+    // start instead of rejecting the server and falling back to the previous config.
+    @Test
+    fun `restartWithElectrumServer retries its own start while the vss store is busy`() = test {
+        startNodeForTesting()
+        val newUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        var changeAttempts = 0
+        whenever { lightningService.setup(any(), eq(newUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                changeAttempts++
+                if (changeAttempts < 3) throw busy
+            }
+
+        assertTrue(sut.restartWithElectrumServer(newUrl).isSuccess)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(3, changeAttempts)
+        verify(lightningService, never()).setup(any(), isNull(), isNull(), anyOrNull())
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
     // Regression: a stopped node's VSS writes can keep retrying past one build's wait for them, so the
     // recovery start retries while the build fails on the busy store instead of leaving the node offline.
     @Test

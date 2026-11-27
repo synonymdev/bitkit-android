@@ -219,7 +219,7 @@ class LightningRepo @Inject constructor(
      * `start()`, so without this a detached recovery can restart the previous config between a
      * request's stop and start, leaving the request to report and persist a config that never
      * started. Recovery skips the release gate, but while the stopped node's VSS writes keep the
-     * store busy it can take up to [RECOVERY_START_ATTEMPTS] builds of up to 60 s each.
+     * store busy it can take up to [BUSY_STORE_START_ATTEMPTS] builds of up to 60 s each.
      */
     private val configChangeMutex = Mutex()
     private val isChangingAddressType = AtomicBoolean(false)
@@ -1029,10 +1029,7 @@ class LightningRepo @Inject constructor(
 
                 Logger.debug("Starting node with new electrum server: '$newServerUrl'", context = TAG)
 
-                start(
-                    shouldRetry = false,
-                    customServerUrl = newServerUrl,
-                )
+                startConfigChange(customServerUrl = newServerUrl)
             }.onFailure {
                 // Recover in the background: a wedged node's release can gate the rebuild for tens of
                 // seconds, and the caller must surface this failure now rather than block on recovery.
@@ -1069,10 +1066,7 @@ class LightningRepo @Inject constructor(
 
                 Logger.debug("Starting node with new RGS server: '$newRgsUrl'", context = TAG)
 
-                start(
-                    shouldRetry = false,
-                    customRgsServerUrl = newRgsUrl,
-                )
+                startConfigChange(customRgsServerUrl = newRgsUrl)
             }.onFailure {
                 // Recover in the background: a wedged node's release can gate the rebuild for tens of
                 // seconds, and the caller must surface this failure now rather than block on recovery.
@@ -1084,6 +1078,41 @@ class LightningRepo @Inject constructor(
                 Logger.info("Successfully changed RGS server", context = TAG)
             }
         }
+    }
+
+    /**
+     * Starts the node with a changed server, retrying while the build fails because the stopped node's VSS
+     * writes keep the store busy, which has nothing to do with the new server. A stop requested meanwhile wins.
+     */
+    private suspend fun startConfigChange(
+        customServerUrl: String? = null,
+        customRgsServerUrl: String? = null,
+    ): Result<Unit> {
+        var result = start(
+            shouldRetry = false,
+            customServerUrl = customServerUrl,
+            customRgsServerUrl = customRgsServerUrl,
+        )
+        val stopRequests = stopRequestCount.get()
+        var attempt = 1
+        // The stopped node's VSS writes can keep retrying for minutes, past one build's wait for them.
+        while (result.exceptionOrNull().isKvStoreSetupFailure() && attempt < BUSY_STORE_START_ATTEMPTS) {
+            if (pendingStopJob.get() != null) {
+                Logger.info("Skipped server change retry because a stop was requested", context = TAG)
+                return result
+            }
+            attempt++
+            Logger.warn("Retrying server change start '$attempt/$BUSY_STORE_START_ATTEMPTS'", context = TAG)
+            // A direct stop since the first attempt wins over every retry.
+            result = startNode(
+                shouldRetry = false,
+                customServerUrl = customServerUrl,
+                customRgsServerUrl = customRgsServerUrl,
+                shouldCancelPendingStop = false,
+                stopRequestsSeen = stopRequests,
+            )
+        }
+        return result
     }
 
     private inline fun <T> recoverOnCancellation(block: () -> T): T {
@@ -1328,7 +1357,7 @@ class LightningRepo @Inject constructor(
                 }
                 attempt++
                 if (attempt > 1) {
-                    Logger.warn("Retrying recovery start '$attempt/$RECOVERY_START_ATTEMPTS'", context = TAG)
+                    Logger.warn("Retrying recovery start '$attempt/$BUSY_STORE_START_ATTEMPTS'", context = TAG)
                 }
                 // A direct stop since recovery's own stop wins over every attempt.
                 result = startNode(
@@ -1336,7 +1365,7 @@ class LightningRepo @Inject constructor(
                     shouldCancelPendingStop = false,
                     stopRequestsSeen = stopRequests,
                 )
-            } while (result.exceptionOrNull().isKvStoreSetupFailure() && attempt < RECOVERY_START_ATTEMPTS)
+            } while (result.exceptionOrNull().isKvStoreSetupFailure() && attempt < BUSY_STORE_START_ATTEMPTS)
             result.onSuccess {
                 Logger.debug("Successfully started node with previous config", context = TAG)
             }.onFailure {
@@ -3445,8 +3474,8 @@ class LightningRepo @Inject constructor(
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private const val MSATS_PER_SAT = 1_000uL
 
-        /** Recovery starts while a stopped node's VSS writes keep the store busy; each build waits up to 60 s. */
-        private const val RECOVERY_START_ATTEMPTS = 5
+        /** Starts while a stopped node's VSS writes keep the store busy; each build waits up to 60 s. */
+        private const val BUSY_STORE_START_ATTEMPTS = 5
 
         /** LDK's default routing fee limit is 1% of the amount, this divisor, plus [DEFAULT_ROUTING_FEE_BASE_MSAT]. */
         private const val DEFAULT_ROUTING_FEE_DIVISOR = 100uL
