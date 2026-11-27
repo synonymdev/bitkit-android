@@ -174,8 +174,8 @@ class MoveToSparkRepo internal constructor(
      * Spark does not show in time, fails with [MoveToSparkError.UpdateUnsettled]; the funds then reach Spark on their
      * own. [onMove] gets the move's outcome as soon as the move returns, before the wait. A quote whose amount, with
      * Spark's balance, would not cover the payment of [bolt11] and Spark's fee for it, or a fee nothing can price,
-     * fails with [MoveToSparkError.UpdateFallsShort] before any move; one that covers it only with the fee's headroom
-     * moved too moves that, capped at the fee without headroom. When another move, such as the modal's, took
+     * fails with [MoveToSparkError.UpdateFallsShort] before any move; one that covers it only without the fee's
+     * headroom is quoted again without it, at no more than the fee shown. When another move, such as the modal's, took
      * the channels' balance before this one could pay, it moves nothing and calls no [onMove]: it returns once Spark
      * covers the payment with its fee, or fails with [MoveToSparkError.UpdateFallsShort] when Spark does not in time.
      */
@@ -189,9 +189,12 @@ class MoveToSparkRepo internal constructor(
             runSuspendCatching {
                 val feeSats = feeAfterUpdateOrNull(bolt11, amountSats)
                     ?: throw MoveToSparkError.UpdateFallsShort(amountSats)
-                val sized = listOf(quote, quote.withoutHeadroom()).firstOrNull {
-                    MoveToSparkMath.coversPayment(it, sparkRepo.state.value, amountSats, feeSats)
-                } ?: throw MoveToSparkError.UpdateFallsShort(amountSats)
+                val covers = { candidate: MoveToSparkQuote ->
+                    MoveToSparkMath.coversPayment(candidate, sparkRepo.state.value, amountSats, feeSats)
+                }
+                val sized = quote.takeIf(covers)
+                    ?: quote(withHeadroom = false).getOrNull()?.takeIf { it.feeSats <= quote.feeSats && covers(it) }
+                    ?: throw MoveToSparkError.UpdateFallsShort(amountSats)
                 val outcome = moveUnlessCovered(sized, amountSats, feeSats)
                     ?: return@runSuspendCatching MoveToSparkOutcome.Moved(0uL, 0uL)
                 onMove(outcome)
@@ -254,9 +257,13 @@ class MoveToSparkRepo internal constructor(
 
     /**
      * Quotes moving [targetSats], or everything the channels can send, to a new Spark invoice.
-     * The amount leaves room for the routing fee, which the quote carries and the move caps the payment at.
+     * The amount leaves room for the routing fee, which the quote carries and the move caps the payment at; without
+     * [withHeadroom], that fee is the estimate and its margin alone.
      */
-    suspend fun quote(targetSats: ULong? = null): Result<MoveToSparkQuote> = withContext(bgDispatcher) {
+    suspend fun quote(
+        targetSats: ULong? = null,
+        withHeadroom: Boolean = true,
+    ): Result<MoveToSparkQuote> = withContext(bgDispatcher) {
         runSuspendCatching {
             val limitSats = movableSats()
             val wantedSats = targetSats?.coerceAtMost(limitSats) ?: limitSats
@@ -275,11 +282,14 @@ class MoveToSparkRepo internal constructor(
                     fitting?.let { quote -> return@runSuspendCatching quote }
                     throw if (it.isNoRoute()) MoveToSparkError.TooLarge(amountSats, it) else it
                 }
-                val feeSats = MoveToSparkMath.cappedFeeSats(estimateSats, limitSats)
-                val nextSats = minOf(wantedSats, MoveToSparkMath.amountAfterCappedFee(limitSats, estimateSats))
+                val feeSats = if (withHeadroom) {
+                    MoveToSparkMath.cappedFeeSats(estimateSats, limitSats)
+                } else {
+                    MoveToSparkMath.quotedFeeSats(estimateSats)
+                }
+                val nextSats = minOf(wantedSats, limitSats.safe() - feeSats.safe())
                 if (amountSats.safe() + feeSats.safe() <= limitSats) {
-                    val baseFeeSats = MoveToSparkMath.quotedFeeSats(estimateSats)
-                    fitting = MoveToSparkQuote(invoice, amountSats, feeSats, baseFeeSats)
+                    fitting = MoveToSparkQuote(invoice, amountSats, feeSats)
                     if (nextSats <= amountSats) return@runSuspendCatching checkNotNull(fitting)
                 }
                 amountSats = nextSats
@@ -828,19 +838,11 @@ object MoveToSparkMath {
         .toSet()
 }
 
-/** A move of [amountSats] capped at [feeSats]; [baseFeeSats] is the estimate and its margin, without headroom. */
 data class MoveToSparkQuote(
     val invoice: String,
     val amountSats: ULong,
     val feeSats: ULong,
-    val baseFeeSats: ULong = feeSats,
-) {
-    /** The same move with the fee's headroom moved too, for a payment that needs the whole balance. */
-    fun withoutHeadroom(): MoveToSparkQuote = copy(
-        amountSats = amountSats.safe() + (feeSats.safe() - baseFeeSats.safe()).safe(),
-        feeSats = baseFeeSats,
-    )
-}
+)
 
 /** A move of the whole balance: its [firstPart], and [feeSats], the sum of its parts' fees and the most it pays. */
 data class MoveToSparkPlan(

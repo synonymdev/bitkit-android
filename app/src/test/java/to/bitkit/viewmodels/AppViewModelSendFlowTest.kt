@@ -12626,7 +12626,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
             assertEquals(SendEffect.PaymentSuccess, awaitItem())
         }
-        verify(moveToSparkRepo, never()).quote(anyOrNull())
+        verify(moveToSparkRepo, never()).quote(anyOrNull(), any())
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), any())
     }
 
@@ -18405,7 +18405,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertTrue(sut.sendUiState.value.initialSubscriptionPaymentNeedsConfirmation)
         assertFalse(sut.sendUiState.value.shouldAutomaticallyPay)
         assertFalse(sut.sendUiState.value.shouldConfirmPay, "the update fee was paid without being seen")
-        verify(moveToSparkRepo, never()).quote(anyOrNull())
+        verify(moveToSparkRepo, never()).quote(anyOrNull(), any())
     }
 
     @Test

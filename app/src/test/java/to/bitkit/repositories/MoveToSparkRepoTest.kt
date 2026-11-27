@@ -1071,6 +1071,22 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `update to send of the most it can send prices the larger move on a fee that grows with the amount`() =
+        test {
+            channelsRouting(1_000_000uL, feeMsatOf = { it * 5uL })
+            sparkState.value = SparkState(isReady = true)
+            val maxSats = MoveToSparkMath.combinedSendableSats(lightningState.value.channels, sparkState.value)
+            whenever(sparkRepo.estimateFeeSats(INVOICE, maxSats)).thenReturn(Result.success(0uL))
+            whenever(sparkRepo.canSend(maxSats)).thenReturn(true)
+            val quote = sut.quote().getOrThrow()
+
+            val moved = sut.updateToSend(quote, INVOICE, maxSats).getOrThrow()
+
+            assertTrue(moved.amountSats >= maxSats, "moved '${moved.amountSats}'")
+            assertTrue(failedHashes.isEmpty(), "failed '$failedHashes'")
+        }
+
+    @Test
     fun `update to send moves nothing once another move took the channels and Spark covers the payment`() = test {
         sendable(50_100uL)
         sparkState.value = SparkState(isReady = true, balanceSats = 20_000uL)
