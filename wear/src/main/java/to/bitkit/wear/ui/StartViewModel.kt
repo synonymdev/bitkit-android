@@ -24,11 +24,17 @@ class StartViewModel @Inject constructor(
         viewModelScope.launch {
             val route = when {
                 !walletRepo.isSupported -> Routes.UNSUPPORTED
+                walletRepo.isRemovedNoticePending() -> Routes.WALLET_REMOVED
                 walletRepo.hasWallet() -> Routes.HOME
                 else -> Routes.ONBOARDING
             }
             _uiState.update { it.copy(startRoute = route) }
         }
+    }
+
+    /** Tells the wallet whether the app is on screen, so it reconnects after the watch unlocks. */
+    fun onForegroundChange(isForeground: Boolean) {
+        viewModelScope.launch { walletRepo.setForeground(isForeground) }
     }
 }
 

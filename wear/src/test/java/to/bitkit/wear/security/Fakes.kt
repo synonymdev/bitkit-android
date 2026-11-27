@@ -1,0 +1,83 @@
+package to.bitkit.wear.security
+
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
+
+/** A [Bip39] over a few words, whose phrases are valid when they end in "about". */
+class FakeBip39 : Bip39 {
+    private val words = listOf("abandon", "ability", "able", "about", "above", "act", "action", "zoo")
+
+    override fun isWord(word: String): Boolean = word in words
+
+    override fun suggestions(prefix: String): List<String> =
+        if (prefix.length < Bip39.MIN_PREFIX_LENGTH) emptyList() else words.filter { it.startsWith(prefix) }
+
+    override fun validate(words: List<String>): Bip39Validation {
+        val unknown = words.indexOfFirst { !isWord(it) }
+        return when {
+            unknown >= 0 -> Bip39Validation.UnknownWord(unknown)
+            words.lastOrNull() == "about" -> Bip39Validation.Valid
+            else -> Bip39Validation.InvalidChecksum
+        }
+    }
+
+    override fun seed(mnemonic: String, passphrase: String?): ByteArray = ByteArray(64)
+}
+
+class FakeDeviceLock(
+    override var isSecure: Boolean = true,
+    isLocked: Boolean = false,
+) : DeviceLock {
+    override val isLocked = MutableStateFlow(isLocked)
+    var pendingIsLocked: Boolean? = null
+
+    override fun refresh() {
+        pendingIsLocked?.let { pending -> isLocked.update { pending } }
+    }
+}
+
+/** A [SeedKey] that keeps its key in memory and can be told to fail the way the platform Keystore does. */
+class FakeSeedKey : SeedKey {
+    private var key: Byte? = null
+    private var counter = 0
+    var failure: SeedStoreError? = null
+    var createCount = 0
+    var isUnlockedDeviceRequired: Boolean? = null
+    val plaintexts = mutableListOf<ByteArray>()
+
+    /** The key disappears, as when the system deletes it. */
+    fun invalidate() {
+        key = null
+    }
+
+    override fun exists(): Boolean = key != null
+
+    override fun create(isUnlockedDeviceRequired: Boolean): KeyBacking {
+        failure?.let { throw it }
+        this.isUnlockedDeviceRequired = isUnlockedDeviceRequired
+        createCount++
+        key = (++counter).toByte()
+        return KeyBacking.TrustedEnvironment
+    }
+
+    override fun encrypt(plaintext: ByteArray, aad: ByteArray): ByteArray {
+        failure?.let { throw it }
+        plaintexts += plaintext
+        return aad + xor(plaintext)
+    }
+
+    override fun decrypt(blob: ByteArray, aad: ByteArray): ByteArray {
+        failure?.let { throw it }
+        if (!blob.copyOf(aad.size).contentEquals(aad)) throw SeedStoreError.Corrupted()
+        return xor(blob.copyOfRange(aad.size, blob.size))
+    }
+
+    override fun delete() {
+        key = null
+    }
+
+    private fun xor(bytes: ByteArray): ByteArray {
+        val mask = key ?: throw SeedStoreError.KeyInvalidated()
+        return ByteArray(bytes.size) { (bytes[it].toInt() xor mask.toInt() xor 0x5A).toByte() }
+    }
+}

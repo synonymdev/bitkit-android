@@ -7,11 +7,16 @@ interface SeedStore {
     /** Whether a seed is stored, without reading it. */
     suspend fun exists(): Boolean
 
+    /**
+     * Reads the seed. Fails with [SeedStoreError.KeyInvalidated] when its key is gone or can never be used again,
+     * after deleting what is left of the seed.
+     */
     suspend fun load(): Result<WalletSeed>
 
+    /** Stores [seed] under a new key, replacing any seed stored before. */
     suspend fun save(seed: WalletSeed): Result<Unit>
 
-    /** Deletes the seed and any key that protects it. */
+    /** Deletes the seed and the key that protects it. */
     suspend fun wipe(): Result<Unit>
 }
 
@@ -23,6 +28,16 @@ data class WalletSeed(
     override fun toString(): String = "WalletSeed(***)"
 }
 
-sealed class SeedStoreError(message: String) : AppError(message) {
-    class NotImplemented : SeedStoreError("Seed storage is not implemented yet")
+sealed class SeedStoreError(message: String, cause: Throwable? = null) : AppError(message, cause) {
+    class NotFound : SeedStoreError("No wallet seed is stored")
+
+    /** The seed key only works while the watch is unlocked, and the watch is locked. */
+    class DeviceLocked(cause: Throwable? = null) : SeedStoreError("The watch is locked", cause)
+
+    /** The seed key is missing or permanently unusable: the stored seed can never be read again. */
+    class KeyInvalidated(cause: Throwable? = null) : SeedStoreError("The seed key was invalidated", cause)
+
+    class Corrupted(cause: Throwable? = null) : SeedStoreError("The stored seed cannot be read", cause)
+
+    class Failed(cause: Throwable? = null) : SeedStoreError("The seed key operation failed", cause)
 }

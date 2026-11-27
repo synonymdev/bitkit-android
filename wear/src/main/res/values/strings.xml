@@ -4,6 +4,8 @@
     <string name="about__title">About</string>
     <string name="about__version">Version</string>
     <string name="common__coming_soon">Coming soon</string>
+    <string name="common__next">Next</string>
+    <string name="common__ok">OK</string>
     <string name="common__retry">Retry</string>
     <string name="home__balance_hidden">Balance hidden</string>
     <string name="home__error">Couldn\'t load your wallet</string>
@@ -12,14 +14,30 @@
     <string name="home__settings">Settings</string>
     <string name="onboarding__restore">Restore with recovery phrase</string>
     <string name="onboarding__set_up_phone">Set up from phone</string>
-    <string name="onboarding__text">Pay and get paid from your wrist.</string>
-    <string name="restore__title">Restore wallet</string>
+    <string name="onboarding__text">Pay from your wrist</string>
+    <string name="removed__title">Wallet removed</string>
+    <string name="restore__checksum_review">Review</string>
+    <string name="restore__checksum_title">Checksum failed</string>
+    <string name="restore__error_failed">Couldn\'t save wallet</string>
+    <plurals name="restore__length_words">
+        <item quantity="one">%1$d word</item>
+        <item quantity="other">%1$d words</item>
+    </plurals>
+    <string name="restore__passphrase_add">Add passphrase</string>
+    <string name="restore__passphrase_confirm">Restore</string>
+    <string name="restore__passphrase_placeholder">Passphrase</string>
+    <string name="restore__passphrase_skip">Skip</string>
+    <string name="restore__passphrase_title">Passphrase?</string>
+    <string name="restore__title">Recovery phrase</string>
+    <string name="restore__word_no_match">No match</string>
+    <string name="restore__word_placeholder">Word %1$d</string>
+    <string name="restore__word_progress">%1$d/%2$d</string>
     <string name="settings__primary_fiat">Show fiat first</string>
     <string name="settings__remove_wallet">Remove wallet</string>
-    <string name="settings__remove_wallet_confirm_text">This deletes the wallet from this watch. You can restore it with its recovery phrase.</string>
+    <string name="settings__remove_wallet_confirm_text">Deletes it from this watch</string>
     <string name="settings__remove_wallet_confirm_title">Remove wallet?</string>
-    <string name="settings__remove_wallet_failed">Couldn\'t remove the wallet. Try again.</string>
+    <string name="settings__remove_wallet_failed">Couldn\'t remove wallet</string>
     <string name="settings__title">Settings</string>
-    <string name="unsupported__text">Bitkit on Wear OS doesn\'t support this network yet.</string>
+    <string name="unsupported__text">No Spark on this network</string>
     <string name="unsupported__title">Not supported</string>
 </resources>

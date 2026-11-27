@@ -40,4 +40,20 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onStart() {
+        super.onStart()
+        startViewModel.onForegroundChange(isForeground = true)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // The keyguard covers the window without stopping the activity, so regaining focus is how an unlock shows.
+        if (hasFocus) startViewModel.onForegroundChange(isForeground = true)
+    }
+
+    override fun onStop() {
+        startViewModel.onForegroundChange(isForeground = false)
+        super.onStop()
+    }
 }

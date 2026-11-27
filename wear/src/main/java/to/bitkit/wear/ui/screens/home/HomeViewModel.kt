@@ -83,6 +83,7 @@ internal fun homeUiState(
     val showsFiatFirst = settings.primaryDisplay == PrimaryDisplay.FIAT && fiat != null
     return HomeUiState(
         isError = wallet.status == WalletStatus.Error && sats == null,
+        isRemoved = wallet.status == WalletStatus.Removed,
         primaryAmount = if (showsFiatFirst) fiat else bitcoin,
         secondaryAmount = if (showsFiatFirst) bitcoin else fiat,
     )
@@ -91,6 +92,7 @@ internal fun homeUiState(
 @Immutable
 data class HomeUiState(
     val isError: Boolean = false,
+    val isRemoved: Boolean = false,
     val primaryAmount: String? = null,
     val secondaryAmount: String? = null,
 )

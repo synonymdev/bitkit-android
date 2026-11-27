@@ -27,7 +27,6 @@ import breez_sdk_spark.SendPaymentRequest
 import breez_sdk_spark.SyncWalletRequest
 import breez_sdk_spark.defaultConfig
 import breez_sdk_spark.parseSparkConfig
-import com.synonym.bitkitcore.mnemonicToSeed
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -38,6 +37,7 @@ import to.bitkit.wear.env.Env
 import to.bitkit.wear.env.LocalSparkSettings
 import to.bitkit.wear.env.WalletNetwork
 import to.bitkit.wear.ext.runSuspendCatching
+import to.bitkit.wear.security.Bip39
 import to.bitkit.wear.security.WalletSeed
 import to.bitkit.wear.utils.AppError
 import to.bitkit.wear.utils.Logger
@@ -55,6 +55,7 @@ import breez_sdk_spark.Network as SparkNetwork
 @Singleton
 class WatchSparkService @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val bip39: Bip39,
 ) {
     companion object {
         private const val TAG = "WatchSparkService"
@@ -133,7 +134,12 @@ class WatchSparkService @Inject constructor(
         if (sdk != null) return@withLock false
         if (isWiping) throw SparkError.WipeInProgress()
         val network = sparkNetwork(Env.network, Env.breezApiKey) ?: throw SparkError.Unsupported()
-        val secret = SparkSendKey.secret(mnemonicToSeed(seed.mnemonic, seed.passphrase))
+        val seedBytes = bip39.seed(seed.mnemonic, seed.passphrase)
+        val secret = try {
+            SparkSendKey.secret(seedBytes)
+        } finally {
+            seedBytes.fill(0)
+        }
         val config = configure(defaultConfig(network), Env.breezApiKey)
         val storagePath = storageDir.apply { mkdirs() }.path
         val apiType = configureLocalSpark(config, Env.localSparkSettings)

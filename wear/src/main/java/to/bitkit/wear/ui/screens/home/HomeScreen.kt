@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,10 +37,14 @@ fun HomeScreen(
     onSendClick: () -> Unit,
     onReceiveClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onWalletRemove: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(uiState.isRemoved) {
+        if (uiState.isRemoved) onWalletRemove()
+    }
     Content(
         uiState = uiState,
         isAmbient = isAmbient(),
