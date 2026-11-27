@@ -4,6 +4,7 @@ import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.SdkEvent
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
@@ -281,8 +282,9 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `a start that a wipe overtook leaves the wiped state alone`() = test {
         whenever(seedStore.load()).thenReturn(Result.success(seed))
-        whenever(seedStore.wipe()).thenReturn(Result.success(Unit))
-        whenever(sparkService.connect(seed, 0)).thenAnswer {
+        whenever(sparkService.wipeStorage()).thenAnswer { throw SparkError.WipeFailed("dir") }
+        whenever(sparkService.connect(seed, 0)).doSuspendableAnswer {
+            sut.wipe()
             whenever(sparkService.isCurrent(0)).thenReturn(false)
             throw SparkError.WipeInProgress()
         }
@@ -290,37 +292,50 @@ class WalletRepoTest : BaseUnitTest() {
         val result = sut.start()
 
         assertIs<SparkError.WipeInProgress>(result.exceptionOrNull())
+        assertEquals(WalletState(WalletStatus.Error), sut.walletState.value)
+    }
+
+    @Test
+    fun `a start that fails while a wipe runs leaves the state for the wipe to set`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        val wipeStorage = CompletableDeferred<Unit>()
+        whenever(sparkService.wipeStorage()).doSuspendableAnswer {
+            wipeStorage.await()
+            throw SparkError.WipeFailed("dir")
+        }
+        var wipe: Job? = null
+        whenever(sparkService.connect(seed, 0)).doSuspendableAnswer {
+            wipe = launch { sut.wipe() }
+            whenever(sparkService.isCurrent(0)).thenReturn(false)
+            throw SparkError.WipeInProgress()
+        }
+
+        val result = sut.start()
+        val statusDuringWipe = sut.walletState.value.status
+        wipeStorage.complete(Unit)
+        wipe?.join()
+
+        assertIs<SparkError.WipeInProgress>(result.exceptionOrNull())
+        assertEquals(WalletStatus.Connecting, statusDuringWipe)
+        assertEquals(WalletState(WalletStatus.Error), sut.walletState.value)
+    }
+
+    @Test
+    fun `a wipe that ends before a start reports connecting keeps its status, and no seed is read`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.wipeStorage()).thenAnswer { throw SparkError.WipeFailed("dir") }
         sut.wipe()
-        assertEquals(WalletState(WalletStatus.Missing), sut.walletState.value)
-    }
-
-    @Test
-    fun `a start that a wipe overtook before it connected ends missing, never left connecting`() = test {
-        whenever(seedStore.load()).thenReturn(Result.success(seed))
-        whenever(sparkService.connect(seed, 0)).thenAnswer {
+        whenever(sparkService.wipeToken()).thenAnswer {
             whenever(sparkService.isCurrent(0)).thenReturn(false)
-            throw SparkError.WipeInProgress()
+            0
         }
 
         val result = sut.start()
 
         assertIs<SparkError.WipeInProgress>(result.exceptionOrNull())
-        assertEquals(WalletStatus.Missing, sut.walletState.value.status)
-    }
-
-    @Test
-    fun `a start that a wipe overtook ends as an error when the seed is still stored`() = test {
-        whenever(seedStore.exists()).thenReturn(true)
-        whenever(seedStore.load()).thenReturn(Result.success(seed))
-        whenever(sparkService.connect(seed, 0)).thenAnswer {
-            whenever(sparkService.isCurrent(0)).thenReturn(false)
-            throw SparkError.WipeInProgress()
-        }
-
-        val result = sut.start()
-
-        assertIs<SparkError.WipeInProgress>(result.exceptionOrNull())
-        assertEquals(WalletStatus.Error, sut.walletState.value.status)
+        verify(seedStore, never()).load()
+        verify(sparkService, never()).connect(any(), any())
+        assertEquals(WalletState(WalletStatus.Error), sut.walletState.value)
     }
 
     @Test
@@ -340,7 +355,8 @@ class WalletRepoTest : BaseUnitTest() {
     fun `a start that finished after a wipe ended is dropped and never ready`() = test {
         whenever(seedStore.load()).thenReturn(Result.success(seed))
         whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
-        whenever(sparkService.syncWallet()).thenAnswer {
+        whenever(sparkService.syncWallet()).doSuspendableAnswer {
+            sut.wipe()
             whenever(sparkService.isCurrent(0)).thenReturn(false)
             synced
         }
