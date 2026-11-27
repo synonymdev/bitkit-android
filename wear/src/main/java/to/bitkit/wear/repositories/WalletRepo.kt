@@ -156,8 +156,8 @@ class WalletRepo @Inject constructor(
      * one runs. When the seed key is certainly lost, the wallet is wiped and [WalletStatus.Removed] reported. A sync
      * that does not reach Spark fails the start: [WalletStatus.Offline] once this session has synced,
      * [WalletStatus.Error] before. A start that a wipe, a lock or the background overtook connects nothing and leaves
-     * the state to them. When a wipe ran or began before the start reported [WalletStatus.Connecting], the start puts
-     * back the status it found; a wipe that begins later reports its own status when it ends. When the network, an
+     * the state to them. When a wipe ran or began before the start's second token check, the start puts back the
+     * status it found; a wipe that begins later reports its own status when it ends. When the network, an
      * unlock or the app came back while a start that then failed was running, the start runs once more. Its caller
      * cannot cancel it, and its own timeouts bound it, so a start never leaves [WalletStatus.Connecting] behind
      * except to a wipe still running.
@@ -189,12 +189,11 @@ class WalletRepo @Inject constructor(
         }
         val wipeToken = sparkService.wipeToken() ?: return Result.failure(SparkError.WipeInProgress())
         val previous = _walletState.getAndUpdate { it.copy(status = WalletStatus.Connecting) }
-        // A wipe that ran since the token was read wrote its status before this one; a wipe still running writes
-        // its status later.
         if (!sparkService.isCurrent(wipeToken)) {
             _walletState.update {
                 if (it.status == WalletStatus.Connecting) it.copy(status = previous.status) else it
             }
+            Logger.info("Dropped wallet start that a wipe overtook", context = TAG)
             return Result.failure(SparkError.WipeInProgress())
         }
         return runSuspendCatching {
@@ -269,12 +268,15 @@ class WalletRepo @Inject constructor(
             }
             is SeedStoreError.NotFound -> {
                 Logger.warn("Failed to start wallet", error, context = TAG)
-                _walletState.update { it.copy(status = WalletStatus.Missing) }
+                _walletState.update {
+                    if (it.status == WalletStatus.Connecting) it.copy(status = WalletStatus.Missing) else it
+                }
             }
             else -> {
                 Logger.error("Failed to start wallet", error, context = TAG)
                 _walletState.update {
-                    it.copy(status = if (it.hasSynced) WalletStatus.Offline else WalletStatus.Error)
+                    val status = if (it.hasSynced) WalletStatus.Offline else WalletStatus.Error
+                    if (it.status == WalletStatus.Connecting) it.copy(status = status) else it
                 }
             }
         }

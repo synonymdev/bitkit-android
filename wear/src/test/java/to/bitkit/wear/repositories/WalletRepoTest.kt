@@ -3,6 +3,7 @@ package to.bitkit.wear.repositories
 import breez_sdk_spark.GetInfoResponse
 import breez_sdk_spark.SdkEvent
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
@@ -335,6 +336,46 @@ class WalletRepoTest : BaseUnitTest() {
         assertIs<SparkError.WipeInProgress>(result.exceptionOrNull())
         verify(seedStore, never()).load()
         verify(sparkService, never()).connect(any(), any())
+        assertEquals(WalletState(WalletStatus.Error), sut.walletState.value)
+    }
+
+    @Test
+    fun `a wipe that ends before the second token check of a start keeps its status`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.wipeStorage()).thenAnswer { throw SparkError.WipeFailed("dir") }
+        whenever(sparkService.isCurrent(0)).thenAnswer {
+            launch(start = CoroutineStart.UNDISPATCHED) { sut.wipe() }
+            false
+        }
+
+        val result = sut.start()
+
+        assertIs<SparkError.WipeInProgress>(result.exceptionOrNull())
+        verify(seedStore, never()).load()
+        assertEquals(WalletState(WalletStatus.Error), sut.walletState.value)
+    }
+
+    @Test
+    fun `a wipe still running at the second token check of a start replaces the status the start put back`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        val wipeStorage = CompletableDeferred<Unit>()
+        whenever(sparkService.wipeStorage()).doSuspendableAnswer {
+            wipeStorage.await()
+            throw SparkError.WipeFailed("dir")
+        }
+        var wipe: Job? = null
+        whenever(sparkService.isCurrent(0)).thenAnswer {
+            wipe = launch(start = CoroutineStart.UNDISPATCHED) { sut.wipe() }
+            false
+        }
+
+        val result = sut.start()
+        val statusDuringWipe = sut.walletState.value.status
+        wipeStorage.complete(Unit)
+        wipe?.join()
+
+        assertIs<SparkError.WipeInProgress>(result.exceptionOrNull())
+        assertEquals(WalletStatus.Idle, statusDuringWipe)
         assertEquals(WalletState(WalletStatus.Error), sut.walletState.value)
     }
 
