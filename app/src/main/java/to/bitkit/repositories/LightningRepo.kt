@@ -457,6 +457,13 @@ class LightningRepo @Inject constructor(
                     }
                 }
 
+                // A stop requested during the build waits on this lock; it wins and releases the built node.
+                if (stopRequestsSeen != null && stopRequestCount.get() != stopRequestsSeen) {
+                    Logger.info("Skipped start because a stop was requested during setup", context = TAG)
+                    _lightningState.update { it.copy(nodeLifecycleState = initialLifecycleState) }
+                    return@withLock Result.failure(NodeStartYieldedToStopError(null))
+                }
+
                 if (lightningService.status?.isRunning == true) {
                     Logger.info("LDK node already running", context = TAG)
                     runSuspendCatching { lightningService.reconcileWatchOnlyAccounts() }

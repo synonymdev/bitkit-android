@@ -4925,6 +4925,29 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restartWithElectrumServer keeps a stop requested during a build that succeeds`() = test {
+        startNodeForTesting()
+        val testScope = this
+        val newUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        clearInvocations(lightningService, settingsStore)
+        whenever { lightningService.setup(any(), eq(newUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                testScope.launch { sut.stop() }
+                delay(1)
+            }
+
+        assertTrue(sut.restartWithElectrumServer(newUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, never()).start(anyOrNull(), any())
+        verify(lightningService, never()).setup(any(), isNull(), isNull(), anyOrNull())
+        verify(settingsStore, never()).update(any())
+        assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
     fun `restartWithElectrumServer cancelled after a stop does not recover the previous config`() = test {
         startNodeForTesting()
         val newUrl = "ssl://10.0.2.2:60001"
