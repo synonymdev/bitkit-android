@@ -20,5 +20,9 @@
     <action>Take a screenshot and verify the lightning art sits left of the "Spending balance" headline without overlapping it, and the "TransferIntro-button" button is visible and no wider than the text column</action>
     <action>Run `adb shell am start -W -a android.intent.action.VIEW -d "bitkit://screen/spending-intro" to.bitkit.dev`</action>
     <action>Take a screenshot and verify the coin art sits left of the "Transfer to spending" headline without overlapping it, and the "SpendingIntro-button" button is visible and no wider than the text column</action>
+    <action>Run `adb shell wm size 1280x800` and `adb shell wm density 213` to emulate an 8-inch tablet in landscape</action>
+    <action>Tap the drawer button (tag "HeaderMenu") and swipe up inside the drawer; verify Settings (tag "DrawerSettings") and App Status (tag "DrawerAppStatus") come fully into view</action>
+    <action>Open Profile (tag "DrawerProfile") on a profile with an avatar image and verify a QR scanner reads the code (tag "ProfileQRCode") with the avatar over it</action>
+    <action>Run `adb shell wm size reset` and `adb shell wm density reset`</action>
   </actions>
 </journey>
