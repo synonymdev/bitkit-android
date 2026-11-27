@@ -712,6 +712,13 @@ class QuickPayRepo @Inject constructor(
         if (!success && !isAttributedFailure(record, op, paymentId, paymentHash)) {
             return QuickPayCompletionOutcome.None
         }
+        if (success && op != null && !op.dispatched) {
+            // QuickPay sent nothing yet, so the success is an earlier send's: the invoice is paid, and not by QuickPay.
+            spend.release(record.invoicePaymentHash)
+            emitErrorLocked(op, QuickPayAlreadyPaidError(), op.paymentRequest)
+            removeOpLocked(op)
+            return QuickPayCompletionOutcome.None
+        }
 
         spend.settle(keys, success)
 
