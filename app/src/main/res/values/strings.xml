@@ -846,6 +846,7 @@
     <string name="profile__edit_bio_placeholder">Short note. Tell a bit about yourself.</string>
     <string name="profile__edit_changed_error">Your profile changed in pubky.app. Bitkit loaded the latest version, so make your edit again.</string>
     <string name="profile__edit_delete_section">DELETE</string>
+    <string name="profile__edit_link_error">Fix the %1$s link to save your profile.</string>
     <string name="profile__edit_name_placeholder">YOUR NAME</string>
     <string name="profile__edit_nav_title">Edit Profile</string>
     <string name="profile__edit_public_note">This is your pubky.app profile. It is public, and changes you make here also show on pubky.app.</string>
@@ -857,6 +858,10 @@
     <string name="profile__empty_state">Unable to load your profile.</string>
     <string name="profile__intro_description">With your portable profile your contacts can reach you and pay you anywhere.</string>
     <string name="profile__intro_title">PORTABLE\n&lt;accent&gt;PROFILE&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">Label must be 100 characters or fewer.</string>
+    <string name="profile__link_error_label_stored">This link\'s label can\'t be saved. Remove the link and add it again.</string>
+    <string name="profile__link_error_url_invalid">Enter a valid web link, such as example.com.</string>
+    <string name="profile__link_error_url_length">Link must be 300 characters or fewer.</string>
     <string name="profile__nav_title">Profile</string>
     <string name="profile__pay_contacts_description">Use Bitkit with your contacts to send payments directly, anytime, anywhere.</string>
     <string name="profile__pay_contacts_headline">Let your\ncontacts\n&lt;accent&gt;pay you&lt;/accent&gt;</string>

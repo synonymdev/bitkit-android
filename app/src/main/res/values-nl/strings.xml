@@ -1561,6 +1561,7 @@
     <string name="profile__edit_bio_placeholder">Korte notitie. Vertel iets over uzelf.</string>
     <string name="profile__edit_changed_error">Je profiel is gewijzigd in pubky.app. Bitkit heeft de nieuwste versie geladen, dus voer je wijziging opnieuw uit.</string>
     <string name="profile__edit_delete_section">VERWIJDEREN</string>
+    <string name="profile__edit_link_error">Corrigeer de link %1$s om je profiel op te slaan.</string>
     <string name="profile__edit_name_placeholder">UW NAAM</string>
     <string name="profile__edit_public_note">Dit is je pubky.app-profiel. Het is openbaar, en wijzigingen die je hier maakt, verschijnen ook op pubky.app.</string>
     <string name="profile__edit_save_error">Profiel opslaan mislukt</string>
@@ -1571,6 +1572,10 @@
     <string name="profile__empty_state">Kan uw profiel niet laden.</string>
     <string name="profile__intro_description">Met uw draagbare profiel kunnen uw contacten u overal bereiken en betalen.</string>
     <string name="profile__intro_title">DRAAGBAAR\n&lt;accent&gt;PROFIEL&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">Het label mag maximaal 100 tekens bevatten.</string>
+    <string name="profile__link_error_label_stored">Het label van deze link kan niet worden opgeslagen. Verwijder de link en voeg hem opnieuw toe.</string>
+    <string name="profile__link_error_url_invalid">Voer een geldige weblink in, zoals example.com.</string>
+    <string name="profile__link_error_url_length">De link mag maximaal 300 tekens bevatten.</string>
     <string name="profile__pay_contacts_description">Gebruik Bitkit met uw contacten om direct betalingen te versturen, altijd en overal.</string>
     <string name="profile__pay_contacts_headline">Laat uw\ncontacten\n&lt;accent&gt;u betalen&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Contacten betalen</string>

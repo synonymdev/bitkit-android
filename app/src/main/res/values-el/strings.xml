@@ -1545,6 +1545,7 @@
     <string name="profile__edit_bio_placeholder">Σύντομη σημείωση. Πες λίγα λόγια για τον εαυτό σου.</string>
     <string name="profile__edit_changed_error">Το προφίλ σου άλλαξε στο pubky.app. Το Bitkit φόρτωσε την πιο πρόσφατη έκδοση, οπότε κάνε ξανά την αλλαγή σου.</string>
     <string name="profile__edit_delete_section">ΔΙΑΓΡΑΦΗ</string>
+    <string name="profile__edit_link_error">Διόρθωσε τον σύνδεσμο %1$s για να αποθηκεύσεις το προφίλ σου.</string>
     <string name="profile__edit_name_placeholder">ΤΟ ΟΝΟΜΑ ΣΟΥ</string>
     <string name="profile__edit_nav_title">Επεξεργασία προφίλ</string>
     <string name="profile__edit_public_note">Αυτό είναι το προφίλ σου στο pubky.app. Είναι δημόσιο, και οι αλλαγές που κάνεις εδώ εμφανίζονται και στο pubky.app.</string>
@@ -1556,6 +1557,10 @@
     <string name="profile__empty_state">Δεν ήταν δυνατή η φόρτωση του προφίλ σου.</string>
     <string name="profile__intro_description">Με το φορητό προφίλ σου, οι επαφές σου μπορούν να σε βρουν και να σε πληρώσουν οπουδήποτε.</string>
     <string name="profile__intro_title">ΦΟΡΗΤΟ\n&lt;accent&gt;ΠΡΟΦΙΛ&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">Η ετικέτα πρέπει να έχει έως 100 χαρακτήρες.</string>
+    <string name="profile__link_error_label_stored">Η ετικέτα αυτού του συνδέσμου δεν μπορεί να αποθηκευτεί. Αφαίρεσε τον σύνδεσμο και πρόσθεσέ τον ξανά.</string>
+    <string name="profile__link_error_url_invalid">Εισήγαγε έναν έγκυρο σύνδεσμο ιστού, όπως example.com.</string>
+    <string name="profile__link_error_url_length">Ο σύνδεσμος πρέπει να έχει έως 300 χαρακτήρες.</string>
     <string name="profile__pay_contacts_description">Χρησιμοποίησε το Bitkit με τις επαφές σου για να στέλνεις πληρωμές απευθείας, οποτεδήποτε, οπουδήποτε.</string>
     <string name="profile__pay_contacts_headline">Άφησε τις\nεπαφές σου\n&lt;accent&gt;να σε πληρώνουν&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Πληρωμή επαφών</string>
