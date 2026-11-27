@@ -11,7 +11,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
@@ -22,6 +24,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.wear.env.Env
 import to.bitkit.wear.env.LocalSparkSettings
 import to.bitkit.wear.env.WalletNetwork
+import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -30,6 +33,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class WatchSparkServiceTest {
+    @get:Rule
+    val folder = TemporaryFolder()
+
     @Test
     fun `a sync reached spark only without an error and with a sync time`() {
         assertTrue(SparkSync(error = null, syncedAtSecs = 1uL).hasReachedSpark)
@@ -191,6 +197,61 @@ class WatchSparkServiceTest {
     }
 
     @Test
+    fun `a listener removed by a disconnect that failed is not removed twice`() = runTest {
+        val sut = WatchSparkService(mock<Context>())
+        val sdk = connected(sut)
+        var failures = 1
+        whenever(sdk.disconnect()).thenAnswer { if (failures-- > 0) throw SparkError.NotConnected() }
+
+        assertFailsWith<SparkError.NotConnected> { sut.disconnect() }
+        sut.disconnect()
+
+        verify(sdk, times(1)).removeEventListener("listener")
+    }
+
+    @Test
+    fun `an sdk kept by a disconnect that failed gets its listener back when it connects again`() = runTest {
+        val sut = WatchSparkService(mock<Context>())
+        val sdk = connected(sut)
+        whenever(sdk.disconnect()).thenAnswer { throw SparkError.NotConnected() }
+        assertFailsWith<SparkError.NotConnected> { sut.disconnect() }
+
+        assertFalse(sut.connectWith(assertNotNull(sut.wipeToken())) { error("built over a live sdk") })
+        assertFalse(sut.connectWith(assertNotNull(sut.wipeToken())) { error("built over a live sdk") })
+
+        verify(sdk, times(2)).addEventListener(any())
+    }
+
+    @Test
+    fun `a wipe tries a disconnect that failed again, then deletes the storage`() = runTest {
+        val sut = WatchSparkService(context())
+        val sdk = connected(sut)
+        val storage = storage()
+        var failures = 1
+        whenever(sdk.disconnect()).thenAnswer { if (failures-- > 0) throw SparkError.NotConnected() }
+
+        sut.wipeStorage()
+
+        verify(sdk, times(2)).disconnect()
+        assertFalse(storage.exists())
+        assertFailsWith<SparkError.NotConnected> { sut.getInfo() }
+    }
+
+    @Test
+    fun `a wipe that cannot disconnect spark fails, and keeps the sdk and its storage`() = runTest {
+        val sut = WatchSparkService(context())
+        val sdk = connected(sut)
+        val storage = storage()
+        whenever(sdk.disconnect()).thenAnswer { throw SparkError.NotConnected() }
+
+        assertFailsWith<SparkError.NotConnected> { sut.wipeStorage() }
+
+        verify(sdk, times(2)).disconnect()
+        assertTrue(storage.exists())
+        assertFalse(sut.connectWith(assertNotNull(sut.wipeToken())) { error("built over a live sdk") })
+    }
+
+    @Test
     fun `a disconnect whose caller is cancelled still disconnects`() = runTest {
         val sut = WatchSparkService(mock<Context>())
         val sdk = connected(sut)
@@ -206,6 +267,13 @@ class WatchSparkServiceTest {
 
         verify(sdk).disconnect()
         assertFailsWith<SparkError.NotConnected> { sut.getInfo() }
+    }
+
+    private fun context() = mock<Context>().also { whenever(it.filesDir).thenReturn(folder.root) }
+
+    private fun storage() = File(folder.root, "${Env.network.name.lowercase()}/wallet0/spark").apply {
+        mkdirs()
+        File(this, "storage.sql").writeText("spark")
     }
 
     private suspend fun connected(sut: WatchSparkService): BreezSdkInterface {

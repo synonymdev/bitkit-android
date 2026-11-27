@@ -144,7 +144,8 @@ On-screen copy stays short: a title or one line of at most about six words per s
   start that the app left while it ran is disconnected and put off too. Returning to the app connects and syncs
   again under the loading ring, over the last balance. Returning within the 10 s only cancels the wait; a
   disconnect that already began always finishes, and the wallet then connects again. When Spark cannot be
-  disconnected, the app keeps hold of it so the next lock, pause or wipe tries again. Ambient mode is not the
+  disconnected, the app keeps hold of it so the next lock, pause or wipe tries again: each of them disconnects
+  whatever the wallet's status says, as does a start that finds the watch locked. Ambient mode is not the
   background: the app stays on screen and connected.
 - **Settings.** A short list of icon rows: About and Remove wallet. The unit has no setting: tapping the balance is
   the only way to switch it, and the choice is kept in the settings store across restarts. Remove wallet asks with a
@@ -219,8 +220,9 @@ The watch holds the full recovery phrase and passphrase, because Breez needs the
     read: a reset neither loses a wipe under way nor starts one.
   - The wallet counts as wiped once the seed file and the Spark storage are gone. A seed key that cannot be
     deleted, after a second try, does not fail the wipe: without its ciphertext it protects nothing, and each launch
-    without a wallet tries the delete again. A Spark instance that cannot be disconnected is dropped, so the next
-    wallet never uses it.
+    without a wallet tries the delete again. A Spark instance that cannot be disconnected, after a second try, fails the wipe
+    before its storage is deleted: the storage is never deleted under a live instance, the note stays, and the wipe
+    is finished later as after any failed step.
   - The note is written twice at most. When it still cannot be written, Remove wallet fails and deletes nothing, so
     a removal the wearer asked for can never be left half done without a note to finish it. A lost-key wipe goes on
     without the note: its seed is unreadable either way.

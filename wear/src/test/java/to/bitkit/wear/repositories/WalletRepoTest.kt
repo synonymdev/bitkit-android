@@ -459,7 +459,7 @@ class WalletRepoTest : BaseUnitTest() {
 
         foregroundMonitor.isForeground.update { true }
 
-        verify(sparkService).disconnect()
+        verify(sparkService, atLeastOnce()).disconnect()
         assertEquals(WalletStatus.Locked, sut.walletState.value.status)
     }
 
@@ -935,6 +935,74 @@ class WalletRepoTest : BaseUnitTest() {
 
         verify(sparkService, times(2)).connect(seed, 0)
         assertEquals(WalletStatus.Ready, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `a lock disconnects again after a pause whose disconnect failed`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.start()
+        whenever(sparkService.disconnect()).thenAnswer { throw SparkError.NotConnected() }
+        foregroundMonitor.isForeground.update { false }
+        testScheduler.advanceTimeBy(WalletRepo.BACKGROUND_GRACE + 1.seconds)
+        verify(sparkService, times(1)).disconnect()
+
+        deviceLock.isLocked.update { true }
+
+        verify(sparkService, times(2)).disconnect()
+        assertEquals(WalletStatus.Paused, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `a lock whose disconnect failed is tried again by the next lock and the next pause`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.start()
+        whenever(sparkService.disconnect()).thenAnswer { throw SparkError.NotConnected() }
+        deviceLock.isLocked.update { true }
+        verify(sparkService, times(1)).disconnect()
+        assertEquals(WalletStatus.Locked, sut.walletState.value.status)
+        foregroundMonitor.isForeground.update { false }
+        deviceLock.isLocked.update { false }
+
+        deviceLock.isLocked.update { true }
+        verify(sparkService, times(2)).disconnect()
+
+        testScheduler.advanceTimeBy(WalletRepo.BACKGROUND_GRACE + 1.seconds)
+        verify(sparkService, times(3)).disconnect()
+        assertEquals(WalletStatus.Locked, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `a start that finds the watch still locked tries a disconnect that failed again`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.start()
+        whenever(sparkService.disconnect()).thenAnswer { throw SparkError.NotConnected() }
+        deviceLock.isLocked.update { true }
+        verify(sparkService, times(1)).disconnect()
+
+        val result = sut.start()
+
+        assertIs<WalletError.DeviceLocked>(result.exceptionOrNull())
+        verify(sparkService, times(2)).disconnect()
+        assertEquals(WalletStatus.Locked, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `a start that a lock stops after a removal leaves the wallet missing`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        whenever(sparkService.syncWallet()).doSuspendableAnswer {
+            sut.wipe()
+            deviceLock.isLocked.update { true }
+            synced
+        }
+
+        val result = sut.start()
+
+        assertIs<WalletError.DeviceLocked>(result.exceptionOrNull())
+        assertEquals(WalletStatus.Missing, sut.walletState.value.status)
     }
 
     @Test

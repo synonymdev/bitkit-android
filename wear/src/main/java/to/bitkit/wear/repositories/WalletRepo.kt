@@ -175,8 +175,9 @@ class WalletRepo @Inject constructor(
         }
         deviceLock.refresh()
         if (deviceLock.isLocked.value) {
-            // A lock the system did not announce can find a wallet that failed its last start still connected.
-            if (_walletState.value.status !in disconnectedStatuses) disconnectQuietly()
+            // A lock the system did not announce can find a wallet still connected: its last start failed, or its
+            // last disconnect did.
+            disconnectQuietly()
             markLocked()
             return Result.failure(WalletError.DeviceLocked())
         }
@@ -235,7 +236,7 @@ class WalletRepo @Inject constructor(
         if (deviceLock.isLocked.value || error is SeedStoreError.DeviceLocked || error is WalletError.DeviceLocked) {
             Logger.info("Stopped wallet start because the watch locked", context = TAG)
             disconnectQuietly()
-            _walletState.update { it.copy(status = WalletStatus.Locked) }
+            markLocked()
             return
         }
         if (_walletState.value.status != WalletStatus.Connecting) {
@@ -284,8 +285,9 @@ class WalletRepo @Inject constructor(
     }
 
     private suspend fun lock() {
-        if (_walletState.value.status in disconnectedStatuses) return
+        // A disconnect that failed earlier left Spark connected under a disconnected status.
         disconnectQuietly()
+        if (_walletState.value.status in disconnectedStatuses) return
         markLocked()
         Logger.info("Disconnected wallet because the watch locked", context = TAG)
     }

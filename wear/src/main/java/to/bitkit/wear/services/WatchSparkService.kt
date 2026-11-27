@@ -104,6 +104,12 @@ class WatchSparkService @Inject constructor(
     private val _events = MutableSharedFlow<SdkEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<SdkEvent> = _events.asSharedFlow()
 
+    private val listener = object : EventListener {
+        override suspend fun onEvent(event: SdkEvent) {
+            _events.emit(event)
+        }
+    }
+
     val isSupported: Boolean get() = sparkNetwork(Env.network, Env.breezApiKey) != null
 
     /** Whether a wallet wipe is running: nothing connects during it. */
@@ -138,12 +144,16 @@ class WatchSparkService @Inject constructor(
 
     /**
      * Connects the Spark wallet of [seed]. Returns true, or false when it was already connected. It fails when
-     * [wipeToken] is no longer current.
+     * [wipeToken] is no longer current. An SDK kept by a [disconnect] that failed after it removed the listener gets
+     * the listener back.
      */
     suspend fun connect(seed: WalletSeed, wipeToken: Int): Boolean = connectWith(wipeToken) { build(seed) }
 
     internal suspend fun connectWith(wipeToken: Int, build: suspend () -> BreezSdkInterface): Boolean = mutex.withLock {
-        if (sdk != null) return@withLock false
+        sdk?.let {
+            if (listenerId == null) listenerId = it.addEventListener(listener)
+            return@withLock false
+        }
         if (!isCurrent(wipeToken)) throw SparkError.WipeInProgress()
         val connected = build()
         // A caller that gives up from here on, as on a timeout, must not leave a built SDK that nothing disconnects.
@@ -175,13 +185,7 @@ class WatchSparkService @Inject constructor(
 
     private suspend fun attach(connected: BreezSdkInterface) {
         runSuspendCatching {
-            listenerId = connected.addEventListener(
-                object : EventListener {
-                    override suspend fun onEvent(event: SdkEvent) {
-                        _events.emit(event)
-                    }
-                },
-            )
+            listenerId = connected.addEventListener(listener)
         }.onFailure {
             runSuspendCatching { connected.disconnect() }
             throw it
@@ -192,13 +196,14 @@ class WatchSparkService @Inject constructor(
     /**
      * Disconnects the SDK as one step that its caller cannot cancel. A listener that cannot be removed does not stop
      * the disconnect. When the disconnect itself fails, it throws and the SDK stays referenced, so the next
-     * [disconnect] reaches it again.
+     * [disconnect] reaches it again; a listener already removed is not removed twice.
      */
     suspend fun disconnect() = withContext(NonCancellable) {
         mutex.withLock {
             val current = sdk ?: return@withLock
             listenerId?.let { id ->
                 runSuspendCatching { current.removeEventListener(id) }
+                    .onSuccess { listenerId = null }
                     .onFailure { Logger.warn("Failed to remove Spark event listener", it, context = TAG) }
             }
             current.disconnect()
@@ -209,16 +214,14 @@ class WatchSparkService @Inject constructor(
     }
 
     /**
-     * Deletes Spark's storage. An SDK that cannot be disconnected is dropped first, so it is never used for the
-     * next wallet; once the storage is gone, the wipe has succeeded.
+     * Deletes Spark's storage, after a [disconnect] that is tried twice. When the SDK still cannot be disconnected,
+     * it throws, the SDK stays referenced and nothing is deleted, so storage is never deleted under a live SDK; once
+     * the storage is gone, the wipe has succeeded.
      */
     suspend fun wipeStorage() {
         runSuspendCatching { disconnect() }.onFailure {
-            Logger.warn("Failed to disconnect Spark wallet before its wipe", it, context = TAG)
-            mutex.withLock {
-                sdk = null
-                listenerId = null
-            }
+            Logger.warn("Failed to disconnect Spark wallet before its wipe, trying again", it, context = TAG)
+            disconnect()
         }
         val dir = storageDir
         if (!dir.deleteRecursively() && dir.exists()) throw SparkError.WipeFailed(dir.path)
