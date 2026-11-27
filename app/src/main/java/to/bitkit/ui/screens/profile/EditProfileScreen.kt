@@ -29,6 +29,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableMap
 import to.bitkit.R
 import to.bitkit.models.PROFILE_LINKS_MAX_COUNT
 import to.bitkit.models.isValidProfileName
@@ -38,6 +39,7 @@ import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.ProfileEditForm
 import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.components.PubkyImage
+import to.bitkit.ui.components.pubkyAppLinkErrorText
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -161,6 +163,15 @@ private fun Content(
                 onBioChange = onBioChange,
                 links = uiState.links,
                 onLinkUrlChange = onLinkUrlChange,
+                linkErrors = uiState.linkErrors
+                    .mapValues { (_, error) ->
+                        if (error.isLabelError) {
+                            stringResource(R.string.profile__link_error_label_stored)
+                        } else {
+                            pubkyAppLinkErrorText(error)
+                        }
+                    }
+                    .toImmutableMap(),
                 onRemoveLink = onRemoveLink,
                 onAddLink = onAddLink,
                 tags = uiState.tags,
@@ -168,7 +179,7 @@ private fun Content(
                 onAddTag = onAddTag,
                 onSave = onSave,
                 onCancel = onBackClick,
-                isSaveEnabled = isValidProfileName(uiState.name) && uiState.hasOnlyWebLinks && !uiState.isBusy,
+                isSaveEnabled = isValidProfileName(uiState.name) && uiState.linkErrors.isEmpty() && !uiState.isBusy,
                 topBar = topBar,
                 isSaving = uiState.isSaving,
                 isDeleting = uiState.isDeleting,

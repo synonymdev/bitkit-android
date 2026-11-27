@@ -1,0 +1,20 @@
+<journey name="lnurl-auth action wording">
+  <description>
+    Verifies that the LNURL-auth sheet words its title, prompt and confirm button by the LUD-04
+    `action` of the request instead of always asking to log in. Preconditions: an onboarded wallet
+    on Home. The links point at a dummy domain (site.example) and are only decoded, never confirmed:
+    each step cancels the sheet.
+  </description>
+  <actions>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:LNURL1DP68GURN8GHJ7UMFW3JJUETCV9KHQMR99ASH2ARG8A6XZEEAD3HKW6TWYE4NZ0T9XFSKVD3JX56XZWRYVC6RXVEJXC6XVCFJXDNRVDM9VGURZWPCXCEN2EP3X43K2WPCXDJNSENRXQERQWFC89JR2E3CXFSK2DNXXYCK2FNPVD6XJMMW84KX7EMFDCUQ7SUT" to.bitkit.dev` (action=login)</action>
+    <action>Verify the sheet title reads "Log In", the prompt "Log in to site.example?" and the confirm button (testTag "LnurlAuthContinue") "Log In", then tap Cancel (testTag "LnurlAuthCancel")</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:LNURL1DP68GURN8GHJ7UMFW3JJUETCV9KHQMR99ASH2ARG8A6XZEEAD3HKW6TWYE4NZ0T9XFSKVD3JX56XZWRYVC6RXVEJXC6XVCFJXDNRVDM9VGURZWPCXCEN2EP3X43K2WPCXDJNSENRXQERQWFC89JR2E3CXFSK2DNXXYCK2FNPVD6XJMMW84EX2EMFWD6X2USW52EHG" to.bitkit.dev` (action=register)</action>
+    <action>Verify the sheet title reads "Register", the prompt "Register at site.example?" and the confirm button "Register", then tap Cancel</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:LNURL1DP68GURN8GHJ7UMFW3JJUETCV9KHQMR99ASH2ARG8A6XZEEAD3HKW6TWYE4NZ0T9XFSKVD3JX56XZWRYVC6RXVEJXC6XVCFJXDNRVDM9VGURZWPCXCEN2EP3X43K2WPCXDJNSENRXQERQWFC89JR2E3CXFSK2DNXXYCK2FNPVD6XJMMW84KXJMNTCD590A" to.bitkit.dev` (action=link)</action>
+    <action>Verify the sheet title reads "Link", the prompt "Link account to site.example?" and the confirm button "Link", then tap Cancel</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:LNURL1DP68GURN8GHJ7UMFW3JJUETCV9KHQMR99ASH2ARG8A6XZEEAD3HKW6TWYE4NZ0T9XFSKVD3JX56XZWRYVC6RXVEJXC6XVCFJXDNRVDM9VGURZWPCXCEN2EP3X43K2WPCXDJNSENRXQERQWFC89JR2E3CXFSK2DNXXYCK2FNPVD6XJMMW84SH2ARGGNGZ9C" to.bitkit.dev` (action=auth)</action>
+    <action>Verify the sheet title reads "Authenticate", the prompt "Authenticate at site.example?" and the confirm button "Authenticate", then tap Cancel</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:LNURL1DP68GURN8GHJ7UMFW3JJUETCV9KHQMR99ASH2ARG8A6XZEEAD3HKW6TWYE4NZ0T9XFSKVD3JX56XZWRYVC6RXVEJXC6XVCFJXDNRVDM9VGURZWPCXCEN2EP3X43K2WPCXDJNSENRXQERQWFC89JR2E3CXFSK2DNXXYCK2M532YF" to.bitkit.dev` (no action)</action>
+    <action>Verify the sheet title reads "Authenticate" and the prompt "Authenticate at site.example?", then tap Cancel</action>
+  </actions>
+</journey>

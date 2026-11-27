@@ -342,6 +342,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">A Bitkit não conseguiu ler o progresso salvo desta transferência, então o reconstrói a partir da blockchain.</string>
     <string name="lightning__spark_exit__receive">Você recebe (estimativa)</string>
     <string name="lightning__spark_exit__savings_refused">Seu pagamento da poupança não foi concluído. Pague novamente ou financie de outra carteira.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Seu pagamento da poupança ainda não foi confirmado. Aguarde antes de pagar de outra carteira.</string>
     <string name="lightning__spark_exit__send_to_address">Enviar para o endereço</string>
     <string name="lightning__spark_exit__step_funding">Confirmação das taxas de emergência</string>
     <string name="lightning__spark_exit__step_publish">Publicação da transação de saída</string>
@@ -492,11 +493,17 @@
     <string name="other__high_balance__nav_title">Saldo Alto</string>
     <string name="other__high_balance__text">&lt;accent&gt;O saldo de sua carteira ultrapassa US$ 500.&lt;/accent&gt;\nPara sua segurança, considere transferir parte de suas economias para uma carteira offline.</string>
     <string name="other__high_balance__title">Alto\n&lt;accent&gt;Saldo de Gastos&lt;/accent&gt;</string>
+    <string name="other__lnurl_auth_auth_prompt">Autenticar-se em {domain}?</string>
+    <string name="other__lnurl_auth_auth_title">Autenticar</string>
     <string name="other__lnurl_auth_error">Falha ao Entrar (LNURL)</string>
     <string name="other__lnurl_auth_error_msg">Ocorreu um erro ao tentar fazer o login. {raw}</string>
+    <string name="other__lnurl_auth_link_prompt">Vincular a conta a {domain}?</string>
+    <string name="other__lnurl_auth_link_title">Vincular</string>
     <string name="other__lnurl_auth_login_button">Entrar</string>
     <string name="other__lnurl_auth_login_prompt">Entrar em {domain}?</string>
     <string name="other__lnurl_auth_login_title">Entrar</string>
+    <string name="other__lnurl_auth_register_prompt">Cadastrar-se em {domain}?</string>
+    <string name="other__lnurl_auth_register_title">Cadastrar</string>
     <string name="other__lnurl_auth_success_msg_domain">Você entrou com sucesso em {domain}</string>
     <string name="other__lnurl_auth_success_msg_no_domain">Você entrou com sucesso.</string>
     <string name="other__lnurl_auth_success_title">Entrou com sucesso.</string>
@@ -1435,6 +1442,8 @@
     <string name="hardware__search_error">Não foi possível procurar carteiras de hardware. Verifique sua conexão e tente novamente.</string>
     <string name="hardware__send_broadcast_failed_text">Verifique sua conexão e tente novamente.</string>
     <string name="hardware__send_broadcast_failed_title">Pagamento não confirmado</string>
+    <string name="hardware__send_broadcast_uncertain_text">Sua transação pode ter sido transmitida. Verifique sua atividade antes de tentar novamente.</string>
+    <string name="hardware__send_broadcast_uncertain_title">A transação pode ter sido enviada</string>
     <string name="hardware__send_confirm_address">PARA O ENDEREÇO (CONFIRME NO DISPOSITIVO)</string>
     <string name="hardware__send_onchain_only_text">O Trezor só pode enviar para um endereço Bitcoin a partir desta carteira.</string>
     <string name="hardware__send_onchain_only_text_jade">O Jade só pode enviar para um endereço Bitcoin a partir desta carteira.</string>
@@ -1555,6 +1564,7 @@
     <string name="profile__edit_bio_placeholder">Nota curta. Conte um pouco sobre você.</string>
     <string name="profile__edit_changed_error">Seu perfil mudou no pubky.app. O Bitkit carregou a versão mais recente, então faça sua alteração de novo.</string>
     <string name="profile__edit_delete_section">EXCLUIR</string>
+    <string name="profile__edit_link_error">Corrija o link %1$s para salvar seu perfil.</string>
     <string name="profile__edit_name_placeholder">SEU NOME</string>
     <string name="profile__edit_public_note">Este é o seu perfil do pubky.app. Ele é público, e as alterações que você faz aqui também aparecem no pubky.app.</string>
     <string name="profile__edit_save_error">Falha ao salvar perfil</string>
@@ -1565,6 +1575,10 @@
     <string name="profile__empty_state">Não foi possível carregar seu perfil.</string>
     <string name="profile__intro_description">Com seu perfil portátil, seus contatos podem encontrar você e pagar você em qualquer lugar.</string>
     <string name="profile__intro_title">PERFIL\n&lt;accent&gt;PORTÁTIL&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">O rótulo deve ter no máximo 100 caracteres.</string>
+    <string name="profile__link_error_label_stored">Não é possível salvar o rótulo deste link. Remova o link e adicione-o novamente.</string>
+    <string name="profile__link_error_url_invalid">Insira um link da web válido, como example.com.</string>
+    <string name="profile__link_error_url_length">O link deve ter no máximo 300 caracteres.</string>
     <string name="profile__pay_contacts_description">Use a Bitkit com seus contatos para enviar pagamentos diretamente, a qualquer hora, em qualquer lugar.</string>
     <string name="profile__pay_contacts_headline">Deixe seus\ncontatos\n&lt;accent&gt;pagarem você&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pagar Contatos</string>

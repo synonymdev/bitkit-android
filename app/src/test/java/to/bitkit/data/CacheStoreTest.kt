@@ -2,6 +2,7 @@ package to.bitkit.data
 
 import android.app.Application
 import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -14,7 +15,9 @@ import org.robolectric.annotation.Config
 import to.bitkit.ext.scopedActivityId
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.InMemoryDataStore
+import java.io.IOException
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -31,6 +34,68 @@ class CacheStoreTest : BaseUnitTest() {
 
     @After
     fun tearDown() = runBlocking { sut.reset() }
+
+    @Test
+    fun `a spark send attempt drops expired ones and restores the earlier one`() = test {
+        sut.setSparkSendAttempt("OLD", attempt = 2, amountSats = 100uL, expiresAt = 1_500, now = 1_000)
+        sut.setSparkSendAttempt("hash", attempt = 0, amountSats = 100uL, expiresAt = 3_000, now = 1_000)
+        sut.setSparkSendAttempt("hash", attempt = 1, amountSats = 100uL, expiresAt = 3_000, now = 2_000)
+
+        assertEquals(mapOf("hash" to SparkSendAttempt(1, 3_000, 100uL)), sut.data.first().sparkSendAttempts)
+
+        sut.dropSparkUnsentSend("HASH", restoresAttempt = true, previous = SparkSendAttempt(0, 3_000))
+        assertEquals(0, sut.data.first().sparkSendAttempts["hash"]?.attempt)
+
+        sut.dropSparkUnsentSend("hash", restoresAttempt = true, previous = null)
+        assertFalse("hash" in sut.data.first().sparkSendAttempts)
+    }
+
+    @Test
+    fun `dropping an unsent spark send clears its hold and hash and keeps a reused attempt`() = test {
+        sut.addSparkSendHash("hash", expiresAt = 3_000)
+        sut.setSparkSendAttempt("hash", attempt = 1, amountSats = 100uL, expiresAt = 3_000, now = 1_000)
+        sut.addSparkUncertainSend("hash", startedAt = 1_000, attemptId = "id")
+
+        sut.dropSparkUnsentSend("HASH", restoresAttempt = false, previous = null)
+
+        val data = sut.data.first()
+        assertFalse("hash" in data.sparkSendHashes)
+        assertFalse("hash" in data.sparkSendExpiries)
+        assertFalse("hash" in data.sparkUncertainSends)
+        assertFalse("hash" in data.sparkSendAttemptIds)
+        assertEquals(1, data.sparkSendAttempts["hash"]?.attempt)
+    }
+
+    @Test
+    fun `dropping an unsent spark send writes once and keeps the whole send when that write fails`() = test {
+        val store = FailingDataStore(InMemoryDataStore(AppCacheData()))
+        val cache = CacheStore(store)
+        cache.addSparkSendHash("hash", expiresAt = 3_000)
+        cache.setSparkSendAttempt("hash", attempt = 1, amountSats = 100uL, expiresAt = 3_000, now = 1_000)
+        cache.addSparkUncertainSend("hash", startedAt = 1_000, attemptId = "id")
+        val held = cache.data.first()
+
+        store.fails = true
+        assertFailsWith<IOException> { cache.dropSparkUnsentSend("hash", restoresAttempt = true, previous = null) }
+        assertEquals(held, cache.data.first())
+
+        store.fails = false
+        store.writes = 0
+        cache.dropSparkUnsentSend("hash", restoresAttempt = true, previous = null)
+        assertEquals(1, store.writes)
+        assertFalse("hash" in cache.data.first().sparkSendHashes)
+    }
+
+    private class FailingDataStore(private val delegate: DataStore<AppCacheData>) : DataStore<AppCacheData> {
+        var fails = false
+        var writes = 0
+        override val data = delegate.data
+        override suspend fun updateData(transform: suspend (t: AppCacheData) -> AppCacheData): AppCacheData {
+            if (fails) throw IOException("disk full")
+            writes++
+            return delegate.updateData(transform)
+        }
+    }
 
     @Test
     fun `invalidateReceiveLightningInvoice preserves a replacement invoice`() = test {

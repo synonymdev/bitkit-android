@@ -341,6 +341,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit nemohl přečíst uložený průběh tohoto převodu, proto ho znovu sestaví z blockchainu.</string>
     <string name="lightning__spark_exit__receive">Obdržíte (odhad)</string>
     <string name="lightning__spark_exit__savings_refused">Vaše platba z úspor neprošla. Zaplaťte znovu, nebo financujte z jiné peněženky.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Vaše platba z úspor ještě není potvrzena. Počkejte na ni, než zaplatíte z jiné peněženky.</string>
     <string name="lightning__spark_exit__send_to_address">Odeslat na adresu</string>
     <string name="lightning__spark_exit__step_funding">Potvrzení nouzových poplatků</string>
     <string name="lightning__spark_exit__step_publish">Zveřejnění transakce odchodu</string>
@@ -491,11 +492,17 @@
     <string name="other__high_balance__nav_title">Vysoký zůstatek</string>
     <string name="other__high_balance__text">&lt;accent&gt;Zůstatek ve vaší peněžence přesahuje $500.&lt;/accent&gt;\nPro svou bezpečnost zvažte přesunutí části svých úspor do offline peněženky.</string>
     <string name="other__high_balance__title">Vysoký\n&lt;accent&gt;zůstatek&lt;/accent&gt;</string>
+    <string name="other__lnurl_auth_auth_prompt">Ověřit se u {domain}?</string>
+    <string name="other__lnurl_auth_auth_title">Ověřit</string>
     <string name="other__lnurl_auth_error">Přihlášení se nezdařilo (LNURL)</string>
     <string name="other__lnurl_auth_error_msg">Při pokusu o přihlášení došlo k chybě. {raw}</string>
+    <string name="other__lnurl_auth_link_prompt">Propojit účet s {domain}?</string>
+    <string name="other__lnurl_auth_link_title">Propojit</string>
     <string name="other__lnurl_auth_login_button">Přihlásit se</string>
     <string name="other__lnurl_auth_login_prompt">Přihlásit se do {domain}?</string>
     <string name="other__lnurl_auth_login_title">Přihlásit se</string>
+    <string name="other__lnurl_auth_register_prompt">Registrovat se na {domain}?</string>
+    <string name="other__lnurl_auth_register_title">Registrovat</string>
     <string name="other__lnurl_auth_success_msg_domain">Úspěšně jste se přihlásili do {domain}.</string>
     <string name="other__lnurl_auth_success_msg_no_domain">Úspěšně jste se přihlásili.</string>
     <string name="other__lnurl_auth_success_title">Přihlášeno</string>
@@ -1434,6 +1441,8 @@
     <string name="hardware__search_error">Hardwarové peněženky se nepodařilo vyhledat. Zkontrolujte připojení a zkuste to znovu.</string>
     <string name="hardware__send_broadcast_failed_text">Zkontrolujte připojení a zkuste to znovu.</string>
     <string name="hardware__send_broadcast_failed_title">Platba nebyla potvrzena</string>
+    <string name="hardware__send_broadcast_uncertain_text">Vaše transakce mohla být odeslána do sítě. Před dalším pokusem zkontrolujte svou aktivitu.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Transakce mohla být odeslána</string>
     <string name="hardware__send_confirm_address">NA ADRESU (POTVRĎTE NA ZAŘÍZENÍ)</string>
     <string name="hardware__send_onchain_only_text">Trezor může z této peněženky posílat pouze na bitcoinovou adresu.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade může z této peněženky posílat pouze na bitcoinovou adresu.</string>
@@ -1554,6 +1563,7 @@
     <string name="profile__edit_bio_placeholder">Krátká poznámka. Řekněte něco o sobě.</string>
     <string name="profile__edit_changed_error">Tvůj profil se v pubky.app změnil. Bitkit načetl nejnovější verzi, proveď proto úpravu znovu.</string>
     <string name="profile__edit_delete_section">SMAZAT</string>
+    <string name="profile__edit_link_error">Opravte odkaz %1$s, abyste mohli uložit profil.</string>
     <string name="profile__edit_name_placeholder">VAŠE JMÉNO</string>
     <string name="profile__edit_public_note">Toto je tvůj profil na pubky.app. Je veřejný a změny, které zde provedeš, se zobrazí i na pubky.app.</string>
     <string name="profile__edit_save_error">Profil se nepodařilo uložit</string>
@@ -1564,6 +1574,10 @@
     <string name="profile__empty_state">Váš profil nelze načíst.</string>
     <string name="profile__intro_description">Díky přenosnému profilu vás kontakty mohou kdekoli zastihnout a zaplatit vám.</string>
     <string name="profile__intro_title">PŘENOSNÝ\n&lt;accent&gt;PROFIL&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">Popisek může mít nejvýše 100 znaků.</string>
+    <string name="profile__link_error_label_stored">Popisek tohoto odkazu nelze uložit. Odkaz odstraňte a přidejte znovu.</string>
+    <string name="profile__link_error_url_invalid">Zadejte platný webový odkaz, například example.com.</string>
+    <string name="profile__link_error_url_length">Odkaz může mít nejvýše 300 znaků.</string>
     <string name="profile__pay_contacts_description">Používejte Bitkit se svými kontakty a posílejte platby přímo, kdykoli a kdekoli.</string>
     <string name="profile__pay_contacts_headline">Nechte své\nkontakty\n&lt;accent&gt;platit vám&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Platby kontaktům</string>

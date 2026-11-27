@@ -334,6 +334,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">تعذّر على Bitkit قراءة التقدم المحفوظ لهذا التحويل، لذا يعيد بناءه من السلسلة.</string>
     <string name="lightning__spark_exit__receive">ستستلم (تقديريًا)</string>
     <string name="lightning__spark_exit__savings_refused">لم يكتمل دفعك من المدخرات. ادفع مرة أخرى، أو موّل من محفظة أخرى.</string>
+    <string name="lightning__spark_exit__savings_unresolved">لم يتأكد دفعك من المدخرات بعد. انتظره قبل أن تدفع من محفظة أخرى.</string>
     <string name="lightning__spark_exit__send_to_address">إرسال إلى العنوان</string>
     <string name="lightning__spark_exit__step_funding">تأكيد رسوم الطوارئ</string>
     <string name="lightning__spark_exit__step_publish">نشر معاملة الخروج</string>
@@ -484,11 +485,17 @@
     <string name="other__high_balance__nav_title">رصيد مرتفع</string>
     <string name="other__high_balance__text">&lt;accent&gt;رصيد محفظتك يتجاوز 500$.&lt;/accent&gt;\nلأمانك، فكر في نقل بعض مدخراتك إلى محفظة غير متصلة بالإنترنت.</string>
     <string name="other__high_balance__title">رصيد\n&lt;accent&gt;مرتفع&lt;/accent&gt;</string>
+    <string name="other__lnurl_auth_auth_prompt">المصادقة لدى {domain}؟</string>
+    <string name="other__lnurl_auth_auth_title">مصادقة</string>
     <string name="other__lnurl_auth_error">فشل تسجيل الدخول (LNURL)</string>
     <string name="other__lnurl_auth_error_msg">حدث خطأ عند محاولة تسجيل الدخول. {raw}</string>
+    <string name="other__lnurl_auth_link_prompt">ربط الحساب بـ {domain}؟</string>
+    <string name="other__lnurl_auth_link_title">ربط</string>
     <string name="other__lnurl_auth_login_button">تسجيل الدخول</string>
     <string name="other__lnurl_auth_login_prompt">تسجيل الدخول إلى {domain}؟</string>
     <string name="other__lnurl_auth_login_title">تسجيل الدخول</string>
+    <string name="other__lnurl_auth_register_prompt">التسجيل في {domain}؟</string>
+    <string name="other__lnurl_auth_register_title">تسجيل</string>
     <string name="other__lnurl_auth_success_msg_domain">لقد سجلت الدخول بنجاح إلى {domain}.</string>
     <string name="other__lnurl_auth_success_msg_no_domain">لقد سجلت الدخول بنجاح.</string>
     <string name="other__lnurl_auth_success_title">تم تسجيل الدخول</string>
@@ -1404,6 +1411,8 @@
     <string name="hardware__search_error">تعذر البحث عن محافظ الأجهزة. تحقق من اتصالك وحاول مرة أخرى.</string>
     <string name="hardware__send_broadcast_failed_text">تحقق من اتصالك وحاول مرة أخرى.</string>
     <string name="hardware__send_broadcast_failed_title">الدفعة غير مؤكدة</string>
+    <string name="hardware__send_broadcast_uncertain_text">ربما تم بث معاملتك. يرجى التحقق من نشاطك قبل المحاولة مرة أخرى.</string>
+    <string name="hardware__send_broadcast_uncertain_title">ربما تم إرسال المعاملة</string>
     <string name="hardware__send_confirm_address">إلى العنوان (أكّد على الجهاز)</string>
     <string name="hardware__send_onchain_only_text">يمكن لـ Trezor الإرسال إلى عنوان Bitcoin فقط من هذه المحفظة.</string>
     <string name="hardware__send_onchain_only_text_jade">يمكن لـ Jade الإرسال إلى عنوان Bitcoin فقط من هذه المحفظة.</string>
@@ -1530,6 +1539,7 @@
     <string name="profile__edit_bio_placeholder">ملاحظة قصيرة. أخبرنا قليلاً عن نفسك.</string>
     <string name="profile__edit_changed_error">تغيّر ملفك الشخصي في pubky.app. حمّل Bitkit أحدث نسخة، لذا أعد إجراء تعديلك.</string>
     <string name="profile__edit_delete_section">حذف</string>
+    <string name="profile__edit_link_error">أصلح رابط %1$s لحفظ ملفك الشخصي.</string>
     <string name="profile__edit_name_placeholder">اسمك</string>
     <string name="profile__edit_nav_title">تعديل الملف الشخصي</string>
     <string name="profile__edit_public_note">هذا هو ملفك الشخصي على pubky.app. إنه عام، والتغييرات التي تجريها هنا تظهر أيضًا على pubky.app.</string>
@@ -1541,6 +1551,10 @@
     <string name="profile__empty_state">تعذر تحميل ملفك الشخصي.</string>
     <string name="profile__intro_description">مع ملفك الشخصي المحمول، يمكن لجهات اتصالك الوصول إليك والدفع لك في أي مكان.</string>
     <string name="profile__intro_title">ملف شخصي\n&lt;accent&gt;محمول&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">يجب ألا يزيد التصنيف عن 100 حرفًا.</string>
+    <string name="profile__link_error_label_stored">لا يمكن حفظ تصنيف هذا الرابط. احذف الرابط وأضفه مرة أخرى.</string>
+    <string name="profile__link_error_url_invalid">أدخل رابط ويب صالحًا، مثل example.com.</string>
+    <string name="profile__link_error_url_length">يجب ألا يزيد الرابط عن 300 حرفًا.</string>
     <string name="profile__pay_contacts_description">استخدم Bitkit مع جهات اتصالك لإرسال المدفوعات مباشرةً، في أي وقت وفي أي مكان.</string>
     <string name="profile__pay_contacts_headline">دع\nجهات اتصالك\n&lt;accent&gt;تدفع لك&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">الدفع لجهات الاتصال</string>

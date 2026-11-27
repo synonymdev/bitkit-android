@@ -223,6 +223,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit konnte den gespeicherten Fortschritt dieser Übertragung nicht lesen und stellt ihn daher aus der Chain wieder her.</string>
     <string name="lightning__spark_exit__receive">Du erhältst (Schätzung)</string>
     <string name="lightning__spark_exit__savings_refused">Deine Zahlung vom Sparkonto ist nicht durchgegangen. Zahle erneut oder finanziere aus einer anderen Wallet.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Deine Zahlung vom Sparkonto ist noch nicht bestätigt. Warte darauf, bevor du aus einer anderen Wallet zahlst.</string>
     <string name="lightning__spark_exit__send_to_address">An Adresse senden</string>
     <string name="lightning__spark_exit__step_funding">Bestätigung der Notfallgebühren</string>
     <string name="lightning__spark_exit__step_publish">Veröffentlichung der Ausstiegstransaktion</string>
@@ -473,6 +474,12 @@
     <string name="onboarding__multiple_header">&lt;accent&gt;Achtung:&lt;/accent&gt;\nMehrere Geräte</string>
     <string name="onboarding__multiple_text">Füge deine Wiederherstellungsphrase nicht mehreren Geräten gleichzeitig hinzu, da es zu unwiderruflichen Schäden deiner Daten kommen kann.</string>
     <string name="other__bluetooth_enable">Bluetooth aktivieren</string>
+    <string name="other__lnurl_auth_auth_prompt">Bei {domain} authentifizieren?</string>
+    <string name="other__lnurl_auth_auth_title">Authentifizieren</string>
+    <string name="other__lnurl_auth_link_prompt">Konto mit {domain} verknüpfen?</string>
+    <string name="other__lnurl_auth_link_title">Verknüpfen</string>
+    <string name="other__lnurl_auth_register_prompt">Bei {domain} registrieren?</string>
+    <string name="other__lnurl_auth_register_title">Registrieren</string>
     <string name="other__nfc_enable">NFC aktivieren</string>
     <string name="other__nfc_read_error_text">Dieses NFC-Tag enthält keine Zahlungsanforderung, die Bitkit verwenden kann.</string>
     <string name="other__nfc_read_error_title">NFC kann nicht gelesen werden</string>
@@ -1431,6 +1438,8 @@
     <string name="hardware__search_error">Die Suche nach Hardware-Wallets ist fehlgeschlagen. Überprüfe deine Verbindung und versuche es erneut.</string>
     <string name="hardware__send_broadcast_failed_text">Überprüfe deine Verbindung und versuche es erneut.</string>
     <string name="hardware__send_broadcast_failed_title">Zahlung nicht bestätigt</string>
+    <string name="hardware__send_broadcast_uncertain_text">Deine Transaktion wurde möglicherweise übertragen. Bitte prüfe deine Aktivität, bevor du es erneut versuchst.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Transaktion wurde möglicherweise gesendet</string>
     <string name="hardware__send_confirm_address">AN ADRESSE (AM GERÄT BESTÄTIGEN)</string>
     <string name="hardware__send_onchain_only_text">Trezor kann von diesem Wallet nur an eine Bitcoin-Adresse senden.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade kann von diesem Wallet nur an eine Bitcoin-Adresse senden.</string>
@@ -1552,6 +1561,7 @@
     <string name="profile__edit_bio_placeholder">Kurze Notiz. Erzähl ein bisschen über dich.</string>
     <string name="profile__edit_changed_error">Dein Profil wurde in pubky.app geändert. Bitkit hat die neueste Version geladen, nimm deine Änderung bitte erneut vor.</string>
     <string name="profile__edit_delete_section">LÖSCHEN</string>
+    <string name="profile__edit_link_error">Korrigiere den Link %1$s, um dein Profil zu speichern.</string>
     <string name="profile__edit_name_placeholder">DEIN NAME</string>
     <string name="profile__edit_public_note">Das ist dein pubky.app-Profil. Es ist öffentlich, und Änderungen, die du hier vornimmst, erscheinen auch auf pubky.app.</string>
     <string name="profile__edit_save_error">Profil konnte nicht gespeichert werden</string>
@@ -1562,6 +1572,10 @@
     <string name="profile__empty_state">Dein Profil kann nicht geladen werden.</string>
     <string name="profile__intro_description">Mit deinem portablen Profil können deine Kontakte dich überall erreichen und bezahlen.</string>
     <string name="profile__intro_title">PORTABLES\n&lt;accent&gt;PROFIL&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">Die Bezeichnung darf höchstens 100 Zeichen lang sein.</string>
+    <string name="profile__link_error_label_stored">Die Bezeichnung dieses Links kann nicht gespeichert werden. Entferne den Link und füge ihn erneut hinzu.</string>
+    <string name="profile__link_error_url_invalid">Gib einen gültigen Weblink ein, z. B. example.com.</string>
+    <string name="profile__link_error_url_length">Der Link darf höchstens 300 Zeichen lang sein.</string>
     <string name="profile__pay_contacts_description">Nutze Bitkit mit deinen Kontakten, um Zahlungen direkt zu senden, jederzeit und überall.</string>
     <string name="profile__pay_contacts_headline">Lass deine\nKontakte\n&lt;accent&gt;dich bezahlen&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Kontakte bezahlen</string>

@@ -15,10 +15,20 @@ object ToastEventBus {
         autoHide: Boolean = true,
         visibilityTime: Long = Toast.VISIBILITY_TIME_DEFAULT,
         testTag: String? = null,
-        replacedByNext: Boolean = false,
+        replaceKey: String? = null,
+        interruptible: Boolean = true,
     ) {
         _events.emit(
-            Toast(type, title, description, autoHide, visibilityTime, testTag, replacedByNext = replacedByNext)
+            Toast(
+                type = type,
+                title = title,
+                description = description,
+                autoHide = autoHide,
+                visibilityTime = visibilityTime,
+                testTag = testTag,
+                interruptible = interruptible,
+                replaceKey = replaceKey,
+            )
         )
     }
 

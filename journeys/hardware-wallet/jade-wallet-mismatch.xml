@@ -1,0 +1,22 @@
+<journey name="Jade Different Wallet">
+  <description>
+    Reseeds the paired Jade emulator and checks the message when the app reaches the device again.
+    Requires a regtest debug build with the Jade emulator enabled (see the README) and the Jade
+    from `./scripts/jade-emulator start` already paired. The emulator keeps its hardware id across a
+    restart, as a wiped and restored Jade does.
+  </description>
+  <actions>
+    <action>
+      Run `JADE_MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" ./scripts/jade-emulator start` in `bitkit-docker`
+    </action>
+    <action>
+      Launch the Bitkit app, tap Receive (testTag "Receive"), select the Jade tab and tap "Show Details" if the address is hidden behind it
+    </action>
+    <action>
+      Tap "Verify on Device" (testTag "HardwareVerifyAddress") and verify an error toast reads "This device holds a different wallet than the one you paired. Connect the paired wallet, or add this one as a new hardware wallet."
+    </action>
+    <action>
+      Run `./scripts/jade-emulator start` in `bitkit-docker` to restore the paired seed, tap "Verify on Device" again and verify no error appears
+    </action>
+  </actions>
+</journey>

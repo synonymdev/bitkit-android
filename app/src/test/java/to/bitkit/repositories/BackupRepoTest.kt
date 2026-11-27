@@ -51,6 +51,7 @@ import to.bitkit.R
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
+import to.bitkit.data.CachedUsdtBalance
 import to.bitkit.data.HwWalletData
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.PaykitOutboundDeliveryStore
@@ -58,6 +59,7 @@ import to.bitkit.data.PrivatePaykitReservationData
 import to.bitkit.data.PrivatePaykitReservationStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.SparkSendAttempt
 import to.bitkit.data.WalletConnectionRecovery
 import to.bitkit.data.WatchOnlyAccountAllocationState
 import to.bitkit.data.WatchOnlyAccountBackupSnapshot
@@ -75,6 +77,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.withPublicSharingDisabledForRestore
 import to.bitkit.di.json
 import to.bitkit.env.Env
+import to.bitkit.ext.scopedActivityId
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
@@ -101,6 +104,7 @@ import to.bitkit.services.SparkError
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.test.connectionRecoveryFixture
 import to.bitkit.utils.AppError
+import to.bitkit.utils.jsonLogOf
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
@@ -2196,6 +2200,45 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a metadata backup carries the move parts Activity leaves out`() = test {
+        stubMetadataBackupReads()
+        cacheData.value = cacheData.value.copy(
+            moveToSparkHashes = listOf("bb", "aa"),
+            deletedActivities = listOf(scopedActivityId(WalletScope.default, "bb")),
+        )
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        sut.triggerBackup(BackupCategory.METADATA)
+
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture()) }
+        val payload = json.decodeFromString<MetadataBackupV1>(dataCaptor.firstValue.decodeToString())
+        assertEquals(listOf("bb"), payload.moveToSparkDroppedPaymentHashes)
+    }
+
+    @Test
+    fun `a metadata restore leaves out the move parts the other app's Activity left out`() = test {
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+        val envelope = json.encodeToString(
+            MetadataBackupV1(
+                createdAt = 123,
+                tagMetadata = emptyList(),
+                cache = AppCacheData(),
+                moveToSparkPaymentHashes = listOf("aa"),
+                moveToSparkDroppedPaymentHashes = listOf("BB"),
+            )
+        )
+        stubMetadataRestore(envelope = envelope)
+
+        sut.performFullRestoreFromLatestBackup().getOrThrow()
+
+        assertTrue(cacheData.value.isActivityDeleted("bb", WalletScope.default))
+        assertFalse(cacheData.value.isActivityDeleted("aa", WalletScope.default))
+        assertEquals(setOf("aa", "bb"), cacheData.value.moveToSparkHashes.toSet())
+    }
+
+    @Test
     fun `a metadata backup leaves the move to spark hashes out with none`() = test {
         stubMetadataBackupReads()
         val dataCaptor = argumentCaptor<ByteArray>()
@@ -3865,6 +3908,36 @@ class BackupRepoTest : BaseUnitTest() {
         db = db,
         connectionRecovery = connectionRecoveryFixture(settingsStore, keychain),
     )
+
+    @Test
+    fun `the restore log leaves out every payment detail`() {
+        val id = "PAYMENT_DETAIL"
+        val cache = AppCacheData(
+            onchainAddress = id,
+            bolt11 = id,
+            bolt11PaymentHash = id,
+            bip21 = id,
+            usdtDisplayBalance = CachedUsdtBalance(address = id, network = "regtest", balance = 1u),
+            deletedActivities = listOf(id),
+            detachedActivityContacts = setOf(id),
+            pendingLightningMessages = mapOf(id to id),
+            unfinishedPubkySwaps = listOf(id),
+            pubkySwapHoldHashes = mapOf(id to id),
+            sparkSendHashes = listOf(id),
+            sparkSendExpiries = mapOf(id to 1),
+            sparkUncertainSends = mapOf(id to 1),
+            sparkSendAttemptIds = mapOf(id to id),
+            sparkSendAttempts = mapOf(id to SparkSendAttempt(0, 1)),
+            sparkUnsavedOwnFailures = setOf(id),
+            moveToSparkHashes = listOf(id),
+            moveToSparkRetriedBefore = mapOf(id to listOf(id)),
+            ldkSendHashes = listOf(id),
+            ldkSendExpiries = mapOf(id to 1),
+            sparkSentDeposits = mapOf(id to SparkSentDeposit(amountSats = 1uL, sentAt = 1)),
+        )
+
+        assertFalse(id in jsonLogOf(cache.withoutPaymentDetails()))
+    }
 
     private class BackupRepoTestError(message: String) : AppError(message)
 

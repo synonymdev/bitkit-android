@@ -298,6 +298,34 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `openReceive resets the receive request once per sheet presentation`() = test {
+        whenever(walletRepo.refreshReceiveState()).thenReturn(Result.success(Unit))
+
+        assertTrue(sut.openReceive("first"))
+        advanceUntilIdle()
+        assertFalse(sut.openReceive("first"))
+        advanceUntilIdle()
+
+        verify(walletRepo, times(1)).refreshReceiveState()
+        verify(walletRepo, times(1)).resetPreActivityMetadataTagsForCurrentInvoice()
+
+        assertTrue(sut.openReceive("second"))
+        advanceUntilIdle()
+
+        verify(walletRepo, times(2)).refreshReceiveState()
+    }
+
+    @Test
+    fun `updateBip21Invoice should pass the confirmed note to walletRepo`() = test {
+        whenever(walletRepo.updateBip21Invoice(anyOrNull(), any())).thenReturn(Result.success(Unit))
+
+        sut.updateBip21Invoice(4_000uL, "coffee")
+        advanceUntilIdle()
+
+        verify(walletRepo).updateBip21Invoice(4_000uL, "coffee")
+    }
+
+    @Test
     fun `updateBip21Description should call walletRepo updateBip21Description`() = test {
         sut.updateBip21Description("test_description")
 
@@ -373,10 +401,15 @@ class WalletViewModelTest : BaseUnitTest() {
         )
         lightningState.value = lightningState.value.copy(nodeLifecycleState = NodeLifecycleState.Running)
 
-        sut.restoreWallet("mnemonic", "passphrase")
-        walletState.value = walletState.value.copy(walletExists = true)
-        advanceUntilIdle()
+        ToastEventBus.events.test {
+            sut.restoreWallet("mnemonic", "passphrase")
+            walletState.value = walletState.value.copy(walletExists = true)
+            advanceUntilIdle()
 
+            val toast = awaitItem()
+            assertFalse(toast.autoHide)
+            assertFalse(toast.interruptible)
+        }
         assertEquals(RestoreState.Completed(emptySet()), sut.restoreState.value)
         verify(pubkySwapsRouteRepo).restoredSwaps()
         verify(pubkySwapsRouteRepo).awaitClaim(eq("swap"), any(), anyOrNull())

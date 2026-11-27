@@ -1,7 +1,9 @@
 package to.bitkit.ui.settings.lightning
 
 import android.content.Context
+import com.synonym.bitkitcore.FeeRates
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -9,6 +11,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -25,6 +28,7 @@ import to.bitkit.repositories.SparkExitQuote
 import to.bitkit.repositories.SparkExitRecord
 import to.bitkit.repositories.SparkExitRepo
 import to.bitkit.repositories.SparkExitSavingsFunding
+import to.bitkit.repositories.SparkExitSavingsRetry
 import to.bitkit.repositories.SparkExitState
 import to.bitkit.repositories.SparkRepo
 import to.bitkit.repositories.SparkState
@@ -33,6 +37,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 class SparkExitViewModelTest : BaseUnitTest() {
     private val exitState = MutableStateFlow(SparkExitState())
@@ -306,6 +311,65 @@ class SparkExitViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `progress pays a start's refused savings payment at its shown price, then prices a higher fee`() = test {
+        val refusal = SparkExitRecord.SavingsRefusal(20_000uL, 650uL)
+        exitState.value = SparkExitState(record = SparkExitFixtures.record().copy(savingsRefusal = refusal))
+        val retry = SparkExitSavingsRetry(20_000uL, 650uL, FeeRates(fast = 7u, mid = 4u, slow = 1u), canPay = true)
+        whenever(repo.priceSavingsRefusal()).thenReturn(Result.success(retry))
+        whenever(repo.paySavingsRefusal(retry))
+            .thenReturn(Result.failure(OnchainSendNotDispatchedError(OnchainSendChangedError(preparedFeeSats = 800uL))))
+        val context = mock<Context> { on { getString(any()) } doReturn "Fees changed" }
+        val sut = SparkExitViewModel(context, repo, sparkRepo)
+        sut.startSavingsRetryPricing()
+        sut.loadSavingsRetry()
+        assertEquals(20_650uL, sut.uiState.value.savingsRetryOffer?.totalSats)
+        assertTrue(sut.uiState.value.offersSavingsRetry)
+
+        // A higher price published after the screen showed 650 is never what the tap pays.
+        val newer = retry.copy(feeSats = 900uL)
+        whenever(repo.priceSavingsRefusal()).thenReturn(Result.success(newer))
+        sut.loadSavingsRetry()
+        sut.retrySavingsPayment(retry)
+
+        verify(repo).paySavingsRefusal(retry)
+        verify(repo, never()).paySavingsRefusal(newer)
+        verify(repo, never()).retrySavingsPayment()
+        verify(repo, times(3)).priceSavingsRefusal()
+        // Once the refusal is at 1,000, the latest price at 900 is never offered.
+        val raised = SparkExitFixtures.record().copy(savingsRefusal = refusal.copy(feeSats = 1_000uL))
+        exitState.value = SparkExitState(record = raised)
+        assertNull(sut.uiState.value.savingsRetryOffer)
+    }
+
+    @Test
+    fun `a refused savings payment is priced only while progress is open`() = test {
+        val refusal = SparkExitRecord.SavingsRefusal(20_000uL, 650uL)
+        exitState.value = SparkExitState(record = SparkExitFixtures.record().copy(savingsRefusal = refusal))
+        // No price yet, as before the node runs: pricing goes on every 15 seconds.
+        whenever(repo.priceSavingsRefusal()).thenReturn(Result.failure(IllegalStateException("Node not running")))
+        val sut = SparkExitViewModel(mock(), repo, sparkRepo)
+
+        sut.loadSavingsRetry()
+        verify(repo, never()).priceSavingsRefusal()
+
+        sut.startSavingsRetryPricing()
+        sut.startSavingsRetryPricing()
+        sut.loadSavingsRetry()
+        verify(repo, times(1)).priceSavingsRefusal()
+
+        // A screen closing after another opened leaves the open one priced.
+        sut.stopSavingsRetryPricing()
+        delay(16.seconds)
+        verify(repo, times(2)).priceSavingsRefusal()
+
+        // The last screen closing stops the pricing still running, and a refresh never starts it again.
+        sut.stopSavingsRetryPricing()
+        delay(16.seconds)
+        sut.loadSavingsRetry()
+        verify(repo, times(2)).priceSavingsRefusal()
+    }
+
+    @Test
     fun `a paid higher fee no longer shows the fee as too low`() {
         val running = SparkExitFixtures.record(SparkExitRecord.Phase.Running)
             .adopt(SparkExitFixtures.recovery(listOf(SparkExitFixtures.tx("n1"))), 0L)
@@ -359,6 +423,30 @@ class SparkExitViewModelTest : BaseUnitTest() {
             SparkExitFundingState.Ask(SparkExitMath.FUNDING_DUST_SATS),
             SparkExitUiState(record = record).progressFunding,
         )
+    }
+
+    @Test
+    fun `progress says a savings payment may still land only while the exit waits for it`() {
+        val paid = SparkExitFixtures.record().copy(fundingPaymentTxid = "pending")
+        val landing = SparkExitUiState(
+            record = paid,
+            fundingState = SparkExitFundingState.Paid,
+            isSavingsSendUnresolved = true,
+        )
+
+        assertTrue(landing.isSavingsSendLanding)
+        assertEquals(SparkExitFundingState.Paid, landing.progressFunding)
+        assertFalse(landing.copy(isSavingsSendUnresolved = false).isSavingsSendLanding, "accepted")
+        assertFalse(landing.copy(isSavingsPaymentRefused = true).isSavingsSendLanding, "refused: its own retry shows")
+        val seen = landing.copy(fundingState = SparkExitFundingState.Seen)
+        assertFalse(seen.isSavingsSendLanding, "it reached the address")
+        // Before the first read of the address, the kept payment still holds the ask.
+        assertEquals(SparkExitFundingState.Paid, landing.copy(fundingState = null).progressFunding)
+        // Once the own-payment wait forgets it, the ask comes back, even with the journal still unresolved.
+        val ask = SparkExitFundingState.Ask(20_000uL)
+        val forgotten = landing.copy(record = paid.copy(fundingPaymentTxid = null), fundingState = ask)
+        assertFalse(forgotten.isSavingsSendLanding)
+        assertEquals(ask, forgotten.progressFunding)
     }
 
     /** The qa-03 rerun, case 5: one 32,768-sat leaf lost to an older owner, 1,696 sats Spark could not exit. */

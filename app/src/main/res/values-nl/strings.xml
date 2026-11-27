@@ -338,6 +338,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit kon de opgeslagen voortgang van deze overboeking niet lezen en bouwt die daarom opnieuw op vanaf de chain.</string>
     <string name="lightning__spark_exit__receive">Je ontvangt (schatting)</string>
     <string name="lightning__spark_exit__savings_refused">Je betaling uit spaargeld is niet gelukt. Betaal opnieuw of financier vanuit een andere wallet.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Je betaling uit spaargeld is nog niet bevestigd. Wacht erop voordat je vanuit een andere wallet betaalt.</string>
     <string name="lightning__spark_exit__send_to_address">Naar adres sturen</string>
     <string name="lightning__spark_exit__step_funding">Bevestiging van noodkosten</string>
     <string name="lightning__spark_exit__step_publish">Exittransactie publiceren</string>
@@ -488,11 +489,17 @@
     <string name="other__high_balance__nav_title">Hoog saldo</string>
     <string name="other__high_balance__text">&lt;accent&gt;Je wallet-saldo is hoger dan $500.&lt;/accent&gt;\nOverweeg voor je veiligheid om een deel van je spaargeld naar een offline wallet te verplaatsen.</string>
     <string name="other__high_balance__title">Hoog\n&lt;accent&gt;saldo&lt;/accent&gt;</string>
+    <string name="other__lnurl_auth_auth_prompt">Authenticeren bij {domain}?</string>
+    <string name="other__lnurl_auth_auth_title">Authenticeren</string>
     <string name="other__lnurl_auth_error">Inloggen mislukt (LNURL)</string>
     <string name="other__lnurl_auth_error_msg">Er is een fout opgetreden bij het inloggen. {raw}</string>
+    <string name="other__lnurl_auth_link_prompt">Account koppelen aan {domain}?</string>
+    <string name="other__lnurl_auth_link_title">Koppelen</string>
     <string name="other__lnurl_auth_login_button">Inloggen</string>
     <string name="other__lnurl_auth_login_prompt">Inloggen bij {domain}?</string>
     <string name="other__lnurl_auth_login_title">Inloggen</string>
+    <string name="other__lnurl_auth_register_prompt">Registreren bij {domain}?</string>
+    <string name="other__lnurl_auth_register_title">Registreren</string>
     <string name="other__lnurl_auth_success_msg_domain">Je bent succesvol ingelogd bij {domain}.</string>
     <string name="other__lnurl_auth_success_msg_no_domain">Je bent succesvol ingelogd.</string>
     <string name="other__lnurl_auth_success_title">Ingelogd</string>
@@ -1427,6 +1434,8 @@
     <string name="hardware__search_error">Kon niet zoeken naar hardwarewallets. Controleer uw verbinding en probeer het opnieuw.</string>
     <string name="hardware__send_broadcast_failed_text">Controleer uw verbinding en probeer het opnieuw.</string>
     <string name="hardware__send_broadcast_failed_title">Betaling niet bevestigd</string>
+    <string name="hardware__send_broadcast_uncertain_text">Uw transactie is mogelijk uitgezonden. Controleer uw activiteit voordat u het opnieuw probeert.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Transactie is mogelijk verzonden</string>
     <string name="hardware__send_confirm_address">NAAR ADRES (BEVESTIG OP APPARAAT)</string>
     <string name="hardware__send_onchain_only_text">Trezor kan vanuit deze wallet alleen naar een Bitcoin-adres versturen.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade kan vanuit deze wallet alleen naar een Bitcoin-adres versturen.</string>
@@ -1552,6 +1561,7 @@
     <string name="profile__edit_bio_placeholder">Korte notitie. Vertel iets over uzelf.</string>
     <string name="profile__edit_changed_error">Je profiel is gewijzigd in pubky.app. Bitkit heeft de nieuwste versie geladen, dus voer je wijziging opnieuw uit.</string>
     <string name="profile__edit_delete_section">VERWIJDEREN</string>
+    <string name="profile__edit_link_error">Corrigeer de link %1$s om je profiel op te slaan.</string>
     <string name="profile__edit_name_placeholder">UW NAAM</string>
     <string name="profile__edit_public_note">Dit is je pubky.app-profiel. Het is openbaar, en wijzigingen die je hier maakt, verschijnen ook op pubky.app.</string>
     <string name="profile__edit_save_error">Profiel opslaan mislukt</string>
@@ -1562,6 +1572,10 @@
     <string name="profile__empty_state">Kan uw profiel niet laden.</string>
     <string name="profile__intro_description">Met uw draagbare profiel kunnen uw contacten u overal bereiken en betalen.</string>
     <string name="profile__intro_title">DRAAGBAAR\n&lt;accent&gt;PROFIEL&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">Het label mag maximaal 100 tekens bevatten.</string>
+    <string name="profile__link_error_label_stored">Het label van deze link kan niet worden opgeslagen. Verwijder de link en voeg hem opnieuw toe.</string>
+    <string name="profile__link_error_url_invalid">Voer een geldige weblink in, zoals example.com.</string>
+    <string name="profile__link_error_url_length">De link mag maximaal 300 tekens bevatten.</string>
     <string name="profile__pay_contacts_description">Gebruik Bitkit met uw contacten om direct betalingen te versturen, altijd en overal.</string>
     <string name="profile__pay_contacts_headline">Laat uw\ncontacten\n&lt;accent&gt;u betalen&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Contacten betalen</string>

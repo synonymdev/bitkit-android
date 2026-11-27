@@ -1,0 +1,26 @@
+<journey name="Jade Sign On Device">
+  <description>
+    Declines and then approves a payment on the Jade emulator's own screens. Requires
+    `JADE_MODE=interactive ./scripts/jade-emulator start` in `bitkit-docker`, a regtest debug
+    build with the Jade emulator enabled (see the README), a paired Jade and funds on the Jade's
+    regtest addresses. The device shows one Output screen per output and then Send Transaction
+    with the fee, where X is selected; `./scripts/jade-emulator screen` saves what it shows.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Tap Send (testTag "Send"), enter a regtest address of the bitkit-docker node manually, select the Jade as the funding source on the amount screen (testTag "AssetButton-switch"), enter 50 000 sats and tap Continue (testTag "ContinueAmount")
+    </action>
+    <action>
+      Swipe to confirm and verify the hardware sign screen shows "Sign With Jade" (testTag "HardwareSendOpenTrezorConnect"), then tap it
+    </action>
+    <action>
+      If the device asks for its PIN, run `./scripts/jade-emulator pin 012345` in `bitkit-docker`. Run `./scripts/jade-emulator press front` to pass the Output screen, then `./scripts/jade-emulator press front` again to choose X on Send Transaction, and verify the app stays on the sign screen with no payment sent
+    </action>
+    <action>
+      Tap "Sign With Jade" again, run `./scripts/jade-emulator press front`, then `./scripts/jade-emulator press right front` to sign, and verify the success screen (testTag "SendSuccess") headed "Bitcoin Sent" appears within 30 seconds
+    </action>
+  </actions>
+</journey>

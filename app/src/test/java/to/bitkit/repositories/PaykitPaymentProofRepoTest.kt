@@ -1489,6 +1489,9 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             LdkError(NodeException.PaymentSendingFailed("no route")),
             SparkError.SendRefused("Spark fee over the limit"),
             to.bitkit.utils.AppError(SparkError.SendRefused("Spark could not prepare the payment")),
+            ServiceError.PaymentStoppedAtSubmission(),
+            AppError(ServiceError.PaymentStoppedAtSubmission()),
+            PaymentAbortedBeforeSend(),
         )
         for (error in errors) {
             val request = paymentRequest(MethodId.Bolt11.rawValue)
@@ -1499,6 +1502,20 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             assertTrue(repo.failLightningPayment(PAYMENT_HASH, error))
             assertTrue(storedProofs.isEmpty())
         }
+    }
+
+    @Test
+    fun `refused submission for one request keeps another request's proof of the same invoice`() = test {
+        val first = paymentRequest(MethodId.Bolt11.rawValue)
+        val second = paymentRequest(MethodId.Bolt11.rawValue, paymentRequestId = "second-request")
+        val repo = paymentProofRepo()
+        for (request in listOf(first, second)) {
+            repo.prepare(request, MethodId.Bolt11.rawValue, "bitkit", PaykitPaymentProofKind.Lightning).getOrThrow()
+            repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue, "bitkit").getOrThrow()
+        }
+
+        assertTrue(repo.failLightningPayment(PAYMENT_HASH, SparkError.SendRefused("refused"), second.id))
+        assertEquals(listOf(first.id), storedProofs.map { it.requestId })
     }
 
     @Test
@@ -3433,7 +3450,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 it.getArgument<suspend () -> Unit>(2)()
                 hwWalletRepo.broadcastFunding(it.getArgument(0), it.getArgument(1))
             }
-        val send = HwSendViewModel(context, hwWalletRepo, mock(), mock<CoreService>(), mock(), repo)
+        val send = HwSendViewModel(context, hwWalletRepo, mock(), mock<CoreService>(), mock(), repo, mock())
         send.signAndBroadcast(
             HwSendRequest(
                 walletId,

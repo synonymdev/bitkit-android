@@ -224,6 +224,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit nie mógł odczytać zapisanego postępu tego transferu, więc odbudowuje go z łańcucha.</string>
     <string name="lightning__spark_exit__receive">Otrzymasz (szacunkowo)</string>
     <string name="lightning__spark_exit__savings_refused">Twoja płatność z Oszczędności nie przeszła. Zapłać ponownie lub sfinansuj z innego portfela.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Twoja płatność z Oszczędności nie jest jeszcze potwierdzona. Poczekaj na nią, zanim zapłacisz z innego portfela.</string>
     <string name="lightning__spark_exit__send_to_address">Wyślij na adres</string>
     <string name="lightning__spark_exit__step_funding">Potwierdzenie opłat awaryjnych</string>
     <string name="lightning__spark_exit__step_publish">Publikowanie transakcji wyjścia</string>
@@ -474,6 +475,12 @@
     <string name="onboarding__multiple_header">&lt;accent&gt;Uwaga:&lt;/accent&gt;\nwiele urządzeń</string>
     <string name="onboarding__multiple_text">Nie instaluj swojej frazy odzyskiwania Bitkit na kilku telefonach jednocześnie, ponieważ może to uszkodzić Twoje dane.</string>
     <string name="other__bluetooth_enable">Włącz Bluetooth</string>
+    <string name="other__lnurl_auth_auth_prompt">Uwierzytelnić się w {domain}?</string>
+    <string name="other__lnurl_auth_auth_title">Uwierzytelnij</string>
+    <string name="other__lnurl_auth_link_prompt">Połączyć konto z {domain}?</string>
+    <string name="other__lnurl_auth_link_title">Połącz</string>
+    <string name="other__lnurl_auth_register_prompt">Zarejestrować się w {domain}?</string>
+    <string name="other__lnurl_auth_register_title">Zarejestruj</string>
     <string name="other__nfc_enable">Włącz NFC</string>
     <string name="other__nfc_read_error_text">Ten tag nie zawiera żądania płatności, którego Bitkit może użyć.</string>
     <string name="other__nfc_read_error_title">Nie można odczytać NFC</string>
@@ -1433,6 +1440,8 @@
     <string name="hardware__search_error">Nie udało się wyszukać portfeli sprzętowych. Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="hardware__send_broadcast_failed_text">Sprawdź połączenie i spróbuj ponownie.</string>
     <string name="hardware__send_broadcast_failed_title">Płatność niepotwierdzona</string>
+    <string name="hardware__send_broadcast_uncertain_text">Twoja transakcja mogła zostać rozgłoszona. Sprawdź swoją aktywność przed ponowną próbą.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Transakcja mogła zostać wysłana</string>
     <string name="hardware__send_confirm_address">NA ADRES (POTWIERDŹ NA URZĄDZENIU)</string>
     <string name="hardware__send_onchain_only_text">Trezor może wysyłać z tego portfela tylko na adres Bitcoin.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade może wysyłać z tego portfela tylko na adres Bitcoin.</string>
@@ -1553,6 +1562,7 @@
     <string name="profile__edit_bio_placeholder">Krótka notatka. Napisz coś o sobie.</string>
     <string name="profile__edit_changed_error">Twój profil zmienił się w pubky.app. Bitkit wczytał najnowszą wersję, więc wprowadź zmianę ponownie.</string>
     <string name="profile__edit_delete_section">USUWANIE</string>
+    <string name="profile__edit_link_error">Popraw link %1$s, aby zapisać profil.</string>
     <string name="profile__edit_name_placeholder">TWOJE IMIĘ</string>
     <string name="profile__edit_public_note">To jest Twój profil pubky.app. Jest publiczny, a zmiany wprowadzone tutaj pojawią się też w pubky.app.</string>
     <string name="profile__edit_save_error">Nie udało się zapisać profilu</string>
@@ -1563,6 +1573,10 @@
     <string name="profile__empty_state">Nie można wczytać Twojego profilu.</string>
     <string name="profile__intro_description">Dzięki przenośnemu profilowi Twoje kontakty mogą skontaktować się z Tobą i zapłacić Ci w dowolnym miejscu.</string>
     <string name="profile__intro_title">PRZENOŚNY\n&lt;accent&gt;PROFIL&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">Etykieta może mieć maksymalnie 100 znaków.</string>
+    <string name="profile__link_error_label_stored">Nie można zapisać etykiety tego linku. Usuń link i dodaj go ponownie.</string>
+    <string name="profile__link_error_url_invalid">Wpisz prawidłowy link internetowy, np. example.com.</string>
+    <string name="profile__link_error_url_length">Link może mieć maksymalnie 300 znaków.</string>
     <string name="profile__pay_contacts_description">Używaj Bitkit ze swoimi kontaktami, aby wysyłać płatności bezpośrednio, zawsze i wszędzie.</string>
     <string name="profile__pay_contacts_headline">Pozwól\nkontaktom\n&lt;accent&gt;płacić Ci&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Płać kontaktom</string>

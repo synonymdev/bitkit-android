@@ -113,6 +113,7 @@ import to.bitkit.utils.LdkError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.UrlValidator
+import to.bitkit.utils.isStoppedAtSubmission
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -350,7 +351,7 @@ class LightningRepo @Inject constructor(
     }.onFailure {
         // Cancellation is expected during pull-to-refresh, rethrow per Kotlin best practices
         if (it is CancellationException) throw it
-        if (it is PaymentAbortedBeforeSend) {
+        if (it is PaymentAbortedBeforeSend || it.isStoppedAtSubmission()) {
             Logger.debug("Aborted '$operationName' before dispatch", context = TAG)
         } else if (it.cause is OnchainSendReviewEndedError) {
             Logger.info("Ended '$operationName' unsent at its fee review", context = TAG)
@@ -1596,8 +1597,9 @@ class LightningRepo @Inject constructor(
     ): Result<PaymentId> = payInvoice(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat = null, onBeforeSend)
 
     /**
-     * Like [payInvoice], with [isAuthorizedAtSubmission] checked again where a node send is submitted, after its queue
-     * wait. When it is false, nothing is sent and the result fails with [ServiceError.PaymentStoppedAtSubmission].
+     * Like [payInvoice], with [isAuthorizedAtSubmission] checked again where the send is submitted: on the node's
+     * queue, or right before Spark sends. When it is false, nothing is sent and the result fails with
+     * [ServiceError.PaymentStoppedAtSubmission].
      */
     suspend fun payInvoiceAuthorizedAtSubmission(
         bolt11: String,
@@ -1610,6 +1612,27 @@ class LightningRepo @Inject constructor(
         paymentDeadlineAt = null,
         maxTotalRoutingFeeMsat = null,
         isAuthorizedAtSubmission = isAuthorizedAtSubmission,
+        onBeforeSend = onBeforeSend,
+    )
+
+    /**
+     * Like [payInvoice], with [onBeforeSend] run again right before the send is submitted, after the last journal
+     * write on either rail, for a check with no side effects such as a payment request's authorization. When it is
+     * false there, nothing is sent and the result fails with [ServiceError.PaymentStoppedAtSubmission].
+     */
+    suspend fun payInvoiceRecheckedAtSubmission(
+        bolt11: String,
+        sats: ULong?,
+        paymentDeadlineAt: Instant?,
+        maxTotalRoutingFeeMsat: ULong? = null,
+        onBeforeSend: suspend () -> Boolean,
+    ): Result<PaymentId> = payInvoiceChecked(
+        bolt11 = bolt11,
+        sats = sats,
+        paymentDeadlineAt = paymentDeadlineAt,
+        maxTotalRoutingFeeMsat = maxTotalRoutingFeeMsat,
+        isAuthorizedAtSubmission = null,
+        rechecksBeforeSend = true,
         onBeforeSend = onBeforeSend,
     )
 
@@ -1635,6 +1658,7 @@ class LightningRepo @Inject constructor(
         paymentDeadlineAt: Instant?,
         maxTotalRoutingFeeMsat: ULong?,
         isAuthorizedAtSubmission: (() -> Boolean)?,
+        rechecksBeforeSend: Boolean = false,
         isRetryAfterNodeStart: Boolean = false,
         onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> {
@@ -1659,6 +1683,7 @@ class LightningRepo @Inject constructor(
                         paymentDeadlineAt = paymentDeadlineAt,
                         maxTotalRoutingFeeMsat = maxTotalRoutingFeeMsat,
                         isAuthorizedAtSubmission = isAuthorizedAtSubmission,
+                        rechecksBeforeSend = rechecksBeforeSend,
                         isRetryAfterNodeStart = true,
                         onBeforeSend = onBeforeSend,
                     )
@@ -1671,7 +1696,16 @@ class LightningRepo @Inject constructor(
             var isAdmitted = false
             var isRefused = false
             var railBefore: LightningRail? = null
-            val authorizeSend: suspend () -> Boolean = {
+            var isChecked = false
+            val authorizeSend: suspend () -> Boolean = authorize@{
+                // Spark's check right before it sends, and its retry of a send whose leaves it couldn't select, keep
+                // the send's admission and recheck only the caller's check at submission, which has no side effects:
+                // the whole check for a caller that rechecks it, else its check at submission.
+                if (isChecked) {
+                    if (rechecksBeforeSend) return@authorize onBeforeSend()
+                    return@authorize isAuthorizedAtSubmission?.invoke() ?: true
+                }
+                isChecked = true
                 val isAuthorized = onBeforeSend().also { if (it) requireWalletRestoreComplete() }
                 if (isAuthorized) {
                     isAdmitted = admitSend(key, LightningRail.Spark) {
@@ -1719,6 +1753,7 @@ class LightningRepo @Inject constructor(
             paymentDeadlineAt,
             maxTotalRoutingFeeMsat,
             isAuthorizedAtSubmission = isAuthorizedAtSubmission,
+            rechecksBeforeSend = rechecksBeforeSend,
             onBeforeSend = onBeforeSend,
         )
     }
@@ -1877,6 +1912,7 @@ class LightningRepo @Inject constructor(
         paymentDeadlineAt: Instant?,
         maxTotalRoutingFeeMsat: ULong?,
         isAuthorizedAtSubmission: (() -> Boolean)? = null,
+        rechecksBeforeSend: Boolean = false,
         onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
         requireWalletRestoreComplete()
@@ -1906,8 +1942,27 @@ class LightningRepo @Inject constructor(
         try {
             ldkSendsInFlight.merge(key, 1, Int::plus)
             isCounted = true
-            ldkSendRecordedAt[key] = ldkSendRecords.incrementAndGet()
+            val wasRecorded = key in cacheStore.data.first().ldkSendHashes
+            val recordedAt = ldkSendRecords.incrementAndGet()
+            val recordedAtBefore = ldkSendRecordedAt.put(key, recordedAt)
             cacheStore.addLdkSendHash(key, invoiceExpiresAt(bolt11))
+            // After the hash write, the last step that suspends before the node's queue.
+            if (rechecksBeforeSend && !onBeforeSend()) {
+                // Nothing was sent, so only this send's record goes: one another send of the invoice made before or
+                // after it, or still has in flight, stays.
+                ldkSendRecordedAt.computeIfPresent(key) { _, at ->
+                    if (at == recordedAt) recordedAtBefore else at
+                }
+                // This send's record is gone by now, so a record left is another send's, whatever its order.
+                val isHeldElsewhere = { (ldkSendsInFlight[key] ?: 0) > 1 || ldkSendRecordedAt.containsKey(key) }
+                if (!wasRecorded && recordedAtBefore == null) {
+                    // The refusal reaches the caller even when this write fails: a hash left behind only holds a
+                    // Spark retry until the node's payments show no send.
+                    runSuspendCatching { cacheStore.removeLdkSendHash(key, isKept = isHeldElsewhere) }
+                        .onFailure { Logger.warn("Failed to drop refused node send '$key'", it, context = TAG) }
+                }
+                return@executeWhenNodeRunning Result.failure(ServiceError.PaymentStoppedAtSubmission())
+            }
             runCatching {
                 if (isAuthorizedAtSubmission == null) {
                     lightningService.send(bolt11, sats, paymentDeadlineAt, maxTotalRoutingFeeMsat)
@@ -2136,6 +2191,7 @@ class LightningRepo @Inject constructor(
         contactPublicKey: String? = null,
         approvedMiningFeeSats: ULong? = null,
         reviewHigherFee: (suspend (OnchainPreparedReceipt) -> Unit)? = null,
+        recheckBeforeSubmission: suspend () -> Unit = {},
     ): Result<OnchainSendOutcome> = executeWhenNodeRunning("sendOnChain") {
         requireWalletRestoreComplete()
         require(address.isNotEmpty()) { "Send address cannot be empty" }
@@ -2214,6 +2270,15 @@ class LightningRepo @Inject constructor(
                         checkPreparedSpend(prepared.receipt, sats, isDrain, isTransfer, utxosForSend)
                         if (approvedMiningFeeSats != null) {
                             checkApprovedSpend(prepared, sats, satsPerVByte, approvedMiningFeeSats, reviewHigherFee)
+                        }
+                        // Preparing suspends, so a payment request is authorized again before its receipt is kept.
+                        var isAuthorized = false
+                        try {
+                            recheckBeforeSubmission()
+                            isAuthorized = true
+                        } finally {
+                            // A refused send frees its inputs and change now, not when its handle is collected.
+                            if (!isAuthorized) prepared.release()
                         }
                         onchainSendAttemptStore.retainPreparedReceipt(
                             attempt.attemptId,

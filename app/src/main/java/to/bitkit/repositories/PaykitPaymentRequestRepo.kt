@@ -1191,20 +1191,25 @@ class PaykitPaymentRequestRepo @Inject constructor(
             if (forExecution && !hasCurrentExecutionContext(request)) {
                 throw PaykitPaymentRequestError.RequestUnavailable
             }
-            if (
-                paykitSdkService.linkedPeers().any {
-                    it.state == LinkedPeerState.BLOCKED &&
-                        PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty)
-                }
-            ) {
-                throw PaykitPaymentRequestError.RequestUnavailable
-            }
+            if (isBlocked(request)) throw PaykitPaymentRequestError.RequestUnavailable
             if (!isCurrentState(generation, identity)) throw PaykitPaymentRequestError.RequestUnavailable
             if (forExecution && !hasCurrentExecutionContext(request)) {
                 throw PaykitPaymentRequestError.RequestUnavailable
             }
             if (request.isPaymentDeadlineExpired(clock.now())) throw PaykitPaymentRequestError.RequestExpired
         }
+    }
+
+    /** Allows an allowance's automatic payment of [request] while it is unexpired and its contact is not blocked. */
+    suspend fun ensureAutomaticPaymentAllowed(request: PaykitPaymentRequest): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            if (request.isPaymentDeadlineExpired(clock.now())) throw PaykitPaymentRequestError.RequestExpired
+            if (isBlocked(request)) throw PaykitPaymentRequestError.RequestUnavailable
+        }
+    }
+
+    private suspend fun isBlocked(request: PaykitPaymentRequest): Boolean = paykitSdkService.linkedPeers().any {
+        it.state == LinkedPeerState.BLOCKED && PubkyPublicKeyFormat.matches(it.counterparty, request.counterparty)
     }
 
     suspend fun claimForPayment(request: PaykitPaymentRequest): Result<Unit> = withContext(ioDispatcher) {

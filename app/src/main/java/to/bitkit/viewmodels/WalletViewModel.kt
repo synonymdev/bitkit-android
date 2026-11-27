@@ -598,13 +598,15 @@ class WalletViewModel @Inject constructor(
                 swaps.restored.forEach { swapId ->
                     launch {
                         pubkySwapsRouteRepo.awaitClaim(swapId).onSuccess {
-                            // The claim also opens the received sheet above the toasts: stay until dismissed so the
-                            // user still sees why the money came back once that sheet closes.
+                            // The claim also opens the received sheet above the toasts: stay until dismissed, with
+                            // later toasts waiting behind, so the user still sees why the money came back once that
+                            // sheet closes.
                             ToastEventBus.send(
                                 type = Toast.ToastType.INFO,
                                 title = context.getString(R.string.wallet__swap_route_restored_title),
                                 description = context.getString(R.string.wallet__swap_route_restored_text),
                                 autoHide = false,
+                                interruptible = false,
                             )
                         }
                     }
@@ -837,6 +839,7 @@ class WalletViewModel @Inject constructor(
             }
     }
 
+    private var openedReceivePresentationId: String? = null
     private var swapEventsCollected = false
     private var swapUpdatesJob: Job? = null
 
@@ -1003,8 +1006,11 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun updateBip21Invoice(amountSats: ULong? = walletState.value.bip21AmountSats) = viewModelScope.launch {
-        walletRepo.updateBip21Invoice(amountSats).onFailure { error ->
+    fun updateBip21Invoice(
+        amountSats: ULong? = walletState.value.bip21AmountSats,
+        description: String = walletState.value.bip21Description,
+    ) = viewModelScope.launch {
+        walletRepo.updateBip21Invoice(amountSats, description).onFailure { error ->
             ToastEventBus.send(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.wallet__error_invoice_update),
@@ -1031,6 +1037,18 @@ class WalletViewModel @Inject constructor(
                 description = error.message ?: context.getString(R.string.common__error_body)
             )
         }
+    }
+
+    /**
+     * Resets the receive request once per sheet [presentationId], so an activity recreation keeps the open one.
+     * Returns whether this call opened it.
+     */
+    fun openReceive(presentationId: String): Boolean {
+        if (openedReceivePresentationId == presentationId) return false
+        openedReceivePresentationId = presentationId
+        resetPreActivityMetadataTagsForCurrentInvoice()
+        refreshReceiveState()
+        return true
     }
 
     fun refreshReceiveState() = viewModelScope.launch {

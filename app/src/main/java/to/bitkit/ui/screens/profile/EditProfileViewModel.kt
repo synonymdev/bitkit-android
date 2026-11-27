@@ -10,10 +10,13 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -24,12 +27,17 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.R
-import to.bitkit.ext.isWebLink
+import to.bitkit.ext.isPaykitNonWebProfileLinkRejected
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PROFILE_NAME_MAX_LENGTH
+import to.bitkit.models.PubkyAppLinkError
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
+import to.bitkit.models.isSocialV1WebUri
+import to.bitkit.models.pubkyAppLinkError
+import to.bitkit.models.singleLine
 import to.bitkit.models.takeCodePoints
+import to.bitkit.models.toPubkyAppLinkUrl
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.ProfileEditBase
 import to.bitkit.repositories.PubkyProfileChangedError
@@ -74,10 +82,14 @@ class EditProfileViewModel @Inject constructor(
                     it.copy(
                         isLoading = false,
                         publicKey = publicKey,
+                        rejectedLink = null,
                         removal = removal,
                         name = profile.name,
                         bio = profile.bio,
                         links = profile.links.map { link ->
+                            ProfileEditLink(label = link.label, url = link.url)
+                        }.toImmutableList(),
+                        storedLinks = profile.links.map { link ->
                             ProfileEditLink(label = link.label, url = link.url)
                         }.toImmutableList(),
                         storedLinkUrls = profile.links.map { it.url }.toImmutableSet(),
@@ -192,7 +204,7 @@ class EditProfileViewModel @Inject constructor(
 
     fun save() {
         viewModelScope.launch {
-            if (_uiState.value.isBusy || !_uiState.value.hasOnlyWebLinks) return@launch
+            if (_uiState.value.isBusy || _uiState.value.linkErrors.isNotEmpty()) return@launch
             _uiState.update { it.copy(isSaving = true) }
             val state = _uiState.value
 
@@ -228,12 +240,15 @@ class EditProfileViewModel @Inject constructor(
                 _effects.emit(EditProfileEffect.SaveSuccess)
             }.onFailure {
                 Logger.error("Failed to save profile", it, context = TAG)
-                _uiState.update { it.copy(isSaving = false) }
+                val rejectedLink = it.rejectedLink(state.links)
+                _uiState.update { it.copy(isSaving = false, rejectedLink = rejectedLink) }
                 val changed = it is PubkyProfileChangedError
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.profile__edit_save_error),
-                    description = it.profileSaveErrorText(context),
+                    description = rejectedLink?.let { link ->
+                        context.getString(R.string.profile__edit_link_error, link.label)
+                    } ?: it.profileSaveErrorText(context),
                 )
                 if (changed) reloadAfterExternalEdit()
                 // The other fields are on pubky.app, so a retry starts from their revision.
@@ -326,7 +341,10 @@ data class EditProfileUiState(
     val name: String = "",
     val bio: String = "",
     val links: ImmutableList<ProfileEditLink> = persistentListOf(),
+    val storedLinks: ImmutableList<ProfileEditLink> = persistentListOf(),
     val storedLinkUrls: ImmutableSet<String> = persistentSetOf(),
+    /** The link pubky.app last refused; it stays marked until that link is edited or removed. */
+    val rejectedLink: ProfileEditLink? = null,
     val tags: ImmutableList<String> = persistentListOf(),
     val imageUrl: String? = null,
     val newAvatarUri: Uri? = null,
@@ -341,8 +359,24 @@ data class EditProfileUiState(
 ) {
     val isBusy: Boolean get() = isSaving || isDeleting
 
-    /** Links added or edited here must be web links, which social v1 requires; stored ones are left as they are. */
-    val hasOnlyWebLinks: Boolean get() = links.all { it.url in storedLinkUrls || it.url.isWebLink() }
+    /**
+     * The links pubky.app would refuse, by index. A save sends the links only once they differ from the stored ones
+     * after its normalization, and then pubky.app checks every one, so a stored link is held to its rules too. Links
+     * added or edited here must also be web links, which social v1 requires; stored ones keep their scheme.
+     */
+    val linkErrors: ImmutableMap<Int, PubkyAppLinkError>
+        get() {
+            val sentLinks = links.map { ProfileEditLink(it.label.singleLine(), it.url.toPubkyAppLinkUrl() ?: it.url) }
+            if (sentLinks == storedLinks) return persistentMapOf()
+            return links.withIndex().mapNotNull { (index, link) ->
+                val error = when {
+                    link == rejectedLink -> PubkyAppLinkError.URL_INVALID
+                    link.url.isBlank() -> PubkyAppLinkError.URL_INVALID
+                    else -> pubkyAppLinkError(link.label, link.url, webOnly = link.url !in storedLinkUrls)
+                }
+                error?.let { index to it }
+            }.toMap().toImmutableMap()
+        }
 }
 
 enum class ProfileRemoval(
@@ -384,6 +418,11 @@ sealed interface EditProfileEffect {
     data object SaveSuccess : EditProfileEffect
     data object DeleteSuccess : EditProfileEffect
     data object DisconnectSuccess : EditProfileEffect
+}
+
+private fun Throwable.rejectedLink(links: List<ProfileEditLink>): ProfileEditLink? {
+    if (!isPaykitNonWebProfileLinkRejected()) return null
+    return links.firstOrNull { !(it.url.toPubkyAppLinkUrl() ?: it.url).isSocialV1WebUri() }
 }
 
 internal fun Throwable.profileSaveErrorText(context: Context): String? = when (this) {

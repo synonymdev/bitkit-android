@@ -334,6 +334,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Το Bitkit δεν μπόρεσε να διαβάσει την αποθηκευμένη πρόοδο αυτής της μεταφοράς, γι\' αυτό την ανακατασκευάζει από την αλυσίδα.</string>
     <string name="lightning__spark_exit__receive">Λαμβάνετε (εκτίμηση)</string>
     <string name="lightning__spark_exit__savings_refused">Η πληρωμή σας από αποταμιεύσεις δεν ολοκληρώθηκε. Πληρώστε ξανά ή χρηματοδοτήστε από άλλο πορτοφόλι.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Η πληρωμή σας από αποταμιεύσεις δεν έχει επιβεβαιωθεί ακόμη. Περιμένετέ την πριν πληρώσετε από άλλο πορτοφόλι.</string>
     <string name="lightning__spark_exit__send_to_address">Αποστολή σε διεύθυνση</string>
     <string name="lightning__spark_exit__step_funding">Επιβεβαίωση έκτακτων τελών</string>
     <string name="lightning__spark_exit__step_publish">Δημοσίευση συναλλαγής εξόδου</string>
@@ -484,11 +485,17 @@
     <string name="other__high_balance__nav_title">Υψηλό υπόλοιπο</string>
     <string name="other__high_balance__text">&lt;accent&gt;Το υπόλοιπο του πορτοφολιού σου υπερβαίνει τα $500.&lt;/accent&gt;\nΓια την ασφάλειά σου, σκέψου να μεταφέρεις μέρος των αποταμιεύσεών σου σε ένα offline πορτοφόλι.</string>
     <string name="other__high_balance__title">Υψηλό\n&lt;accent&gt;υπόλοιπο&lt;/accent&gt;</string>
+    <string name="other__lnurl_auth_auth_prompt">Επαλήθευση στο {domain};</string>
+    <string name="other__lnurl_auth_auth_title">Επαλήθευση</string>
     <string name="other__lnurl_auth_error">Αποτυχία σύνδεσης (LNURL)</string>
     <string name="other__lnurl_auth_error_msg">Παρουσιάστηκε σφάλμα κατά την προσπάθεια σύνδεσης. {raw}</string>
+    <string name="other__lnurl_auth_link_prompt">Σύνδεση λογαριασμού με το {domain};</string>
+    <string name="other__lnurl_auth_link_title">Σύνδεση λογαριασμού</string>
     <string name="other__lnurl_auth_login_button">Σύνδεση</string>
     <string name="other__lnurl_auth_login_prompt">Σύνδεση στο {domain};</string>
     <string name="other__lnurl_auth_login_title">Σύνδεση</string>
+    <string name="other__lnurl_auth_register_prompt">Εγγραφή στο {domain};</string>
+    <string name="other__lnurl_auth_register_title">Εγγραφή</string>
     <string name="other__lnurl_auth_success_msg_domain">Συνδέθηκες επιτυχώς στο {domain}.</string>
     <string name="other__lnurl_auth_success_msg_no_domain">Συνδέθηκες επιτυχώς.</string>
     <string name="other__lnurl_auth_success_title">Συνδεδεμένος</string>
@@ -1410,6 +1417,8 @@
     <string name="hardware__search_error">Δεν ήταν δυνατή η αναζήτηση πορτοφολιών υλικού. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
     <string name="hardware__send_broadcast_failed_text">Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.</string>
     <string name="hardware__send_broadcast_failed_title">Η πληρωμή δεν επιβεβαιώθηκε</string>
+    <string name="hardware__send_broadcast_uncertain_text">Η συναλλαγή σου μπορεί να έχει μεταδοθεί. Έλεγξε τη δραστηριότητά σου πριν δοκιμάσεις ξανά.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Η συναλλαγή μπορεί να έχει σταλεί</string>
     <string name="hardware__send_confirm_address">ΠΡΟΣ ΔΙΕΥΘΥΝΣΗ (ΕΠΙΒΕΒΑΙΩΣΗ ΣΤΗ ΣΥΣΚΕΥΗ)</string>
     <string name="hardware__send_onchain_only_text">Το Trezor μπορεί να στείλει μόνο σε διεύθυνση Bitcoin από αυτό το πορτοφόλι.</string>
     <string name="hardware__send_onchain_only_text_jade">Το Jade μπορεί να στείλει μόνο σε διεύθυνση Bitcoin από αυτό το πορτοφόλι.</string>
@@ -1536,6 +1545,7 @@
     <string name="profile__edit_bio_placeholder">Σύντομη σημείωση. Πες λίγα λόγια για τον εαυτό σου.</string>
     <string name="profile__edit_changed_error">Το προφίλ σου άλλαξε στο pubky.app. Το Bitkit φόρτωσε την πιο πρόσφατη έκδοση, οπότε κάνε ξανά την αλλαγή σου.</string>
     <string name="profile__edit_delete_section">ΔΙΑΓΡΑΦΗ</string>
+    <string name="profile__edit_link_error">Διόρθωσε τον σύνδεσμο %1$s για να αποθηκεύσεις το προφίλ σου.</string>
     <string name="profile__edit_name_placeholder">ΤΟ ΟΝΟΜΑ ΣΟΥ</string>
     <string name="profile__edit_nav_title">Επεξεργασία προφίλ</string>
     <string name="profile__edit_public_note">Αυτό είναι το προφίλ σου στο pubky.app. Είναι δημόσιο, και οι αλλαγές που κάνεις εδώ εμφανίζονται και στο pubky.app.</string>
@@ -1547,6 +1557,10 @@
     <string name="profile__empty_state">Δεν ήταν δυνατή η φόρτωση του προφίλ σου.</string>
     <string name="profile__intro_description">Με το φορητό προφίλ σου, οι επαφές σου μπορούν να σε βρουν και να σε πληρώσουν οπουδήποτε.</string>
     <string name="profile__intro_title">ΦΟΡΗΤΟ\n&lt;accent&gt;ΠΡΟΦΙΛ&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">Η ετικέτα πρέπει να έχει έως 100 χαρακτήρες.</string>
+    <string name="profile__link_error_label_stored">Η ετικέτα αυτού του συνδέσμου δεν μπορεί να αποθηκευτεί. Αφαίρεσε τον σύνδεσμο και πρόσθεσέ τον ξανά.</string>
+    <string name="profile__link_error_url_invalid">Εισήγαγε έναν έγκυρο σύνδεσμο ιστού, όπως example.com.</string>
+    <string name="profile__link_error_url_length">Ο σύνδεσμος πρέπει να έχει έως 300 χαρακτήρες.</string>
     <string name="profile__pay_contacts_description">Χρησιμοποίησε το Bitkit με τις επαφές σου για να στέλνεις πληρωμές απευθείας, οποτεδήποτε, οπουδήποτε.</string>
     <string name="profile__pay_contacts_headline">Άφησε τις\nεπαφές σου\n&lt;accent&gt;να σε πληρώνουν&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Πληρωμή επαφών</string>

@@ -14,6 +14,14 @@ class WebLinkTest {
             " www.example.com/path ",
             "medium.com/@alice",
             "example.com/a@b",
+            "bücher.de",
+            "my_site.example.com",
+            "https://example.com/?q=a|b",
+            "https://example.com.",
+            "example.com.",
+            "https://user:pass@example.com",
+            "EXAMPLE.COM",
+            "HTTPS://Example.COM/Path",
         ).forEach {
             assertTrue(it.isWebLink(), it)
         }
@@ -24,6 +32,9 @@ class WebLinkTest {
         listOf(
             "mailto:a@b.c", "a@b.c", "tel:+123456789", "+1 234 567 890", "123.456.7890",
             "ftp://example.com", "example", "two words.com", "example.com:8080", "",
+            "https:example.com", "https:/example.com", "https:\\\\example.com", "https://\\example.com",
+            "https:///example.com", "https:////example.com", "/example.com", "https://.", "https://..",
+            "example.com/a\u00A0b", "example\u2007.com", "https://example.com/a\u202Fb",
         ).forEach {
             assertFalse(it.isWebLink(), it)
         }

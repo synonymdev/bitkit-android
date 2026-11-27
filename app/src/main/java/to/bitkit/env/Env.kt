@@ -2,6 +2,9 @@ package to.bitkit.env
 
 import android.os.Build
 import com.synonym.bitkitcore.UsdtDestination
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import org.lightningdevkit.ldknode.LogLevel
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.BuildConfig
@@ -159,15 +162,39 @@ internal object Env {
             Network.REGTEST -> "https://mempool.bitkit.stag0.blocktank.to/"
         }
 
+    /** The Electrum server the running node syncs from; null while no node runs or it uses Esplora. */
+    val activeElectrumServerUrl = MutableStateFlow<String?>(null)
+
     /**
      * Whether the node's chain is the one Spark watches, so an on-chain funding of Spark from Savings or a hardware
-     * wallet reaches it. Hosted regtest supports the node's Spark Esplora proxy. The local fixture config selects
-     * Spark's chain only; the node and hardware wallet can use independently configured Electrum servers.
+     * wallet reaches it. Hosted regtest supports the node's Spark Esplora proxy. A local fixture shares it only while
+     * Spark reads the fixture's REST on [localHost], or on loopback forwarded there by `adb reverse`, and the node runs
+     * on the fixture's Electrum. Hardware wallets read the node's Electrum setting, so a server selected by a restore
+     * or in settings keeps it false.
      */
-    fun sparkSharesNodeChain(network: Network, regtestEsploraUrl: String?, localSpark: LocalSparkSettings?): Boolean =
-        network != Network.REGTEST || (localSpark == null && regtestEsploraUrl != null)
+    fun sparkSharesNodeChain(
+        network: Network,
+        regtestEsploraUrl: String?,
+        localSpark: LocalSparkSettings?,
+        nodeElectrumUrl: String?,
+        localHost: String = e2eLocalHost,
+    ): Boolean = when {
+        network != Network.REGTEST -> true
+        localSpark == null -> regtestEsploraUrl != null
+        else ->
+            regtestEsploraUrl == null &&
+                localSpark.isComplete &&
+                localSpark.chainUrl in setOf(localHost, "127.0.0.1").map { "http://$it:23090/api" } &&
+                nodeElectrumUrl == ElectrumServers.REGTEST.local(localHost)
+    }
 
-    val sparkSharesNodeChain: Boolean get() = sparkSharesNodeChain(network, regtestEsploraUrl, localSparkSettings)
+    val sparkSharesNodeChain: Boolean get() = sparkSharesChainWith(activeElectrumServerUrl.value)
+
+    /** [sparkSharesNodeChain] as the running node changes, for screens that show it. */
+    val sparkSharesNodeChainFlow: Flow<Boolean> = activeElectrumServerUrl.map(::sparkSharesChainWith)
+
+    private fun sparkSharesChainWith(nodeElectrumUrl: String?): Boolean =
+        sparkSharesNodeChain(network, regtestEsploraUrl, localSparkSettings, nodeElectrumUrl)
 
     /** REST endpoint for the Spark SDK. An unconfigured regtest uses the SDK's hosted default. */
     fun sparkChainServiceUrl(
@@ -386,7 +413,9 @@ private object ElectrumServers {
 
     object REGTEST {
         const val STAG = "ssl://electrs.bitkit.stag0.blocktank.to:9999"
-        val LOCAL get() = "tcp://${Env.e2eLocalHost}:60001"
+        val LOCAL get() = local(Env.e2eLocalHost)
+
+        fun local(host: String) = "tcp://$host:60001"
     }
 
     const val TESTNET = "ssl://electrum.blockstream.info:60002"

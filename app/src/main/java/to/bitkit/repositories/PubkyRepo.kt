@@ -63,6 +63,8 @@ import to.bitkit.ext.isPaykitTemporarilyUnavailable
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.HomegateResponse
+import to.bitkit.models.PUBKY_APP_LINK_TITLE_MAX_LENGTH
+import to.bitkit.models.PUBKY_APP_LINK_URL_MAX_LENGTH
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyAuthRequestError
@@ -73,14 +75,16 @@ import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
+import to.bitkit.models.isSocialV1WebUri
+import to.bitkit.models.singleLine
 import to.bitkit.models.takeCodePoints
+import to.bitkit.models.toPubkyAppLinkUrl
 import to.bitkit.services.PaykitReadLane
 import to.bitkit.services.PaykitReadTimeoutError
 import to.bitkit.services.PubkyService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.io.ByteArrayOutputStream
-import java.net.URI
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -211,11 +215,6 @@ class PubkyRepo @Inject constructor(
         private const val PUBKY_APP_NAME_MAX_LENGTH = 50
         private const val PUBKY_APP_BIO_MAX_LENGTH = 160
         private const val PUBKY_APP_LINKS_MAX_COUNT = 5
-        private val ISO_DATE = Regex("""\d{4}-\d{2}-\d{2}""")
-        private val WEB_SCHEMES = setOf("http", "https", "ws", "wss", "ftp")
-        private val IPV4 = Regex("""\d{1,3}(\.\d{1,3}){3}""")
-        private const val PUBKY_APP_LINK_TITLE_MAX_LENGTH = 100
-        private const val PUBKY_APP_LINK_URL_MAX_LENGTH = 300
         private const val PUBKY_APP_AVATAR_MAX_BYTES = 5_242_880uL
     }
 
@@ -1463,7 +1462,7 @@ class PubkyRepo @Inject constructor(
         links = links
             .mapNotNull { link ->
                 val title = link.label.singleLine().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                val url = link.url.toPubkyAppLinkUrl()?.takeIf { it.isSocialV1WebUrl() } ?: return@mapNotNull null
+                val url = link.url.toPubkyAppLinkUrl()?.takeIf { it.isSocialV1WebUri() } ?: return@mapNotNull null
                 PubkyProfileLink(label = title.takeCodePoints(PUBKY_APP_LINK_TITLE_MAX_LENGTH), url = url)
             }
             .take(PUBKY_APP_LINKS_MAX_COUNT),
@@ -1572,55 +1571,6 @@ class PubkyRepo @Inject constructor(
 
     private fun Throwable.isConcurrentUpdate() =
         generateSequence(this) { it.cause }.any { it is PaykitException.ConcurrentUpdate }
-
-    private fun String.singleLine() = map { if (it.isISOControl()) ' ' else it }.joinToString("").trim()
-
-    private fun String.toPubkyAppLinkUrl(): String? {
-        val value = trim().takeIf { it.isNotEmpty() } ?: return null
-        val isPhone = value.isPhoneNumber()
-        if (!isPhone && value.any { it.isWhitespace() }) return null
-        val scheme = if (isPhone) null else runCatching { URI(value).scheme }.getOrNull()
-        val url = when {
-            scheme != null -> scheme.lowercase() + value.substring(scheme.length)
-            value.isEmailAddress() -> "mailto:$value"
-            isPhone -> "tel:" + value.filterNot { it in " -()." }
-            '.' in value && !value.startsWith('.') -> "https://$value"
-            else -> return null
-        }
-        val parsed = runCatching { URI(url) }.getOrNull()
-        val valid = url.codePointCount(0, url.length) <= PUBKY_APP_LINK_URL_MAX_LENGTH &&
-            parsed?.scheme != null && parsed.hasValidHost()
-        return url.takeIf { valid }
-    }
-
-    /**
-     * Paykit's URL parser reads a web URL's host that ends in an all-digit label as an IPv4 address (one to four
-     * numbers, as in `127.1`) and rejects it when it is not one; other schemes keep such hosts as they are.
-     */
-    private fun URI.hasValidHost(): Boolean {
-        if (scheme?.lowercase() !in WEB_SCHEMES) return true
-        // java.net.URI leaves the host null when the name is not a valid hostname, so fall back to the authority.
-        val host = host ?: rawAuthority?.substringAfterLast('@')?.substringBefore(':') ?: return true
-        if (!host.substringAfterLast('.').all { it.isDigit() }) return true
-        val numbers = host.split('.').map { it.toLongOrNull() ?: return false }
-        if (numbers.size !in 1..4) return false
-        val lastLimit = (1L shl (8 * (5 - numbers.size))) - 1
-        return numbers.dropLast(1).all { it <= 255 } && numbers.last() <= lastLimit
-    }
-
-    private fun String.isEmailAddress(): Boolean {
-        val parts = split('@')
-        return parts.size == 2 && parts[0].isNotEmpty() && '.' in parts[1] && '/' !in this
-    }
-
-    private fun String.isPhoneNumber(): Boolean {
-        val digits = count { it.isDigit() }
-        return (startsWith('+') || digits >= 7) && digits >= 5 && all { it in "+0123456789 -()." } && '+' !in drop(1) &&
-            !ISO_DATE.matches(this) && !IPV4.matches(this)
-    }
-
-    /** Social v1's own link rule: a lowercase `http://` or `https://` prefix; it drops other links on migration too. */
-    private fun String.isSocialV1WebUrl() = startsWith("http://") || startsWith("https://")
 
     private fun String.isPaykitStorage() = "/pub/paykit/" in this
 

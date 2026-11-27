@@ -1,0 +1,21 @@
+<journey name="repay paid invoice">
+  <description>
+    Paying again a Lightning invoice this wallet already paid sends nothing: the second swipe opens the Success
+    sheet of the earlier payment with the amount it sent, also when the repeat typed another amount for an
+    amountless invoice. An invoice sharing the payment hash of another paid invoice is refused as already paid;
+    that case needs a payee that reuses a payment hash and is covered by AppViewModelSendFlowTest.
+    Precondition: onboarded dev wallet with at least 10 000 sats in Spark, QuickPay off, and an amountless Lightning
+    invoice from another node (for example `./spark invoice` on the bitkit-docker Spark stack), handed to the app as
+    a deep link. The Success sheet's own tag ("SendSuccess") sits on a wrapper `android layout` leaves out, so the
+    steps check its Close button. Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Record the spending balance; run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;invoice&gt;" to.bitkit.dev`</action>
+    <action>Enter 1 000 sats, continue to the Confirm screen (tag "SendConfirm") and swipe to pay</action>
+    <action>Verify the Success sheet opens within 30 seconds showing 1 000 sats, with its Close button (tag "Close"); tap Close and verify the spending balance is lower by about 1 000 sats</action>
+    <action>Run the same `adb shell am start … "lightning:&lt;invoice&gt;" …` command again with the same invoice</action>
+    <action>Enter 2 000 sats, continue to the Confirm screen (tag "SendConfirm") and swipe to pay</action>
+    <action>Verify the Success sheet opens showing 1 000 sats, not 2 000</action>
+    <action>Tap Close and verify the spending balance did not drop a second time, and the home activity list shows one Sent row for this invoice</action>
+  </actions>
+</journey>

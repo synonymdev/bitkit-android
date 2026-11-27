@@ -233,6 +233,8 @@
     <string name="hardware__search_error">Could not search for hardware wallets. Check your connection and try again.</string>
     <string name="hardware__send_broadcast_failed_text">Check your connection and try again.</string>
     <string name="hardware__send_broadcast_failed_title">Payment not confirmed</string>
+    <string name="hardware__send_broadcast_uncertain_text">Your transaction may have been broadcast. Please check your activity before trying again.</string>
+    <string name="hardware__send_broadcast_uncertain_title">Transaction may have been sent</string>
     <string name="hardware__send_confirm_address">TO ADDRESS (CONFIRM ON DEVICE)</string>
     <string name="hardware__send_onchain_only_text">Trezor can only send to a Bitcoin address from this wallet.</string>
     <string name="hardware__send_onchain_only_text_jade">Jade can only send to a Bitcoin address from this wallet.</string>
@@ -500,6 +502,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit couldn\'t read this transfer\'s saved progress, so it rebuilds it from the chain.</string>
     <string name="lightning__spark_exit__receive">You receive (estimate)</string>
     <string name="lightning__spark_exit__savings_refused">Your savings payment didn\'t go through. Pay again, or fund from another wallet.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Your savings payment hasn\'t confirmed yet. Wait for it before you pay from another wallet.</string>
     <string name="lightning__spark_exit__send_to_address">Send to address</string>
     <string name="lightning__spark_exit__step_funding">Confirmation of emergency fees</string>
     <string name="lightning__spark_exit__step_publish">Publishing of exit transaction</string>
@@ -662,11 +665,17 @@
     <string name="other__high_balance__nav_title">High Balance</string>
     <string name="other__high_balance__text">&lt;accent&gt;Your wallet balance exceeds $500.&lt;/accent&gt;\nFor your security, consider moving some of your savings to an offline wallet.</string>
     <string name="other__high_balance__title">High\n&lt;accent&gt;Balance&lt;/accent&gt;</string>
+    <string name="other__lnurl_auth_auth_prompt">Authenticate at {domain}?</string>
+    <string name="other__lnurl_auth_auth_title">Authenticate</string>
     <string name="other__lnurl_auth_error">Sign In Failed (LNURL)</string>
     <string name="other__lnurl_auth_error_msg">An error occurred when you attempted to sign in. {raw}</string>
+    <string name="other__lnurl_auth_link_prompt">Link account to {domain}?</string>
+    <string name="other__lnurl_auth_link_title">Link</string>
     <string name="other__lnurl_auth_login_button">Log In</string>
     <string name="other__lnurl_auth_login_prompt">Log in to {domain}?</string>
     <string name="other__lnurl_auth_login_title">Log In</string>
+    <string name="other__lnurl_auth_register_prompt">Register at {domain}?</string>
+    <string name="other__lnurl_auth_register_title">Register</string>
     <string name="other__lnurl_auth_success_msg_domain">You successfully signed in to {domain}.</string>
     <string name="other__lnurl_auth_success_msg_no_domain">You successfully signed in.</string>
     <string name="other__lnurl_auth_success_title">Signed In</string>
@@ -837,6 +846,7 @@
     <string name="profile__edit_bio_placeholder">Short note. Tell a bit about yourself.</string>
     <string name="profile__edit_changed_error">Your profile changed in pubky.app. Bitkit loaded the latest version, so make your edit again.</string>
     <string name="profile__edit_delete_section">DELETE</string>
+    <string name="profile__edit_link_error">Fix the %1$s link to save your profile.</string>
     <string name="profile__edit_name_placeholder">YOUR NAME</string>
     <string name="profile__edit_nav_title">Edit Profile</string>
     <string name="profile__edit_public_note">This is your pubky.app profile. It is public, and changes you make here also show on pubky.app.</string>
@@ -848,6 +858,10 @@
     <string name="profile__empty_state">Unable to load your profile.</string>
     <string name="profile__intro_description">With your portable profile your contacts can reach you and pay you anywhere.</string>
     <string name="profile__intro_title">PORTABLE\n&lt;accent&gt;PROFILE&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">Label must be 100 characters or fewer.</string>
+    <string name="profile__link_error_label_stored">This link\'s label can\'t be saved. Remove the link and add it again.</string>
+    <string name="profile__link_error_url_invalid">Enter a valid web link, such as example.com.</string>
+    <string name="profile__link_error_url_length">Link must be 300 characters or fewer.</string>
     <string name="profile__nav_title">Profile</string>
     <string name="profile__pay_contacts_description">Use Bitkit with your contacts to send payments directly, anytime, anywhere.</string>
     <string name="profile__pay_contacts_headline">Let your\ncontacts\n&lt;accent&gt;pay you&lt;/accent&gt;</string>

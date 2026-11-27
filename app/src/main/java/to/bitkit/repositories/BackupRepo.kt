@@ -42,6 +42,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import to.bitkit.R
 import to.bitkit.async.appScope
+import to.bitkit.data.AppCacheData
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.HwWalletStore
@@ -66,6 +67,7 @@ import to.bitkit.ext.formatPlural
 import to.bitkit.ext.isPaykitTemporarilyUnavailable
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.ext.scopedActivityId
 import to.bitkit.models.ActiveOnchainAttemptBackup
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.BackupCategory
@@ -978,6 +980,9 @@ class BackupRepo @Inject constructor(
             sparkExitEarlierAddresses = sparkExitEarlierAddressesBackup(),
             moveToSparkPaymentHashes = cacheData.moveToSparkHashes.map { it.lowercase() }.distinct().sorted()
                 .takeIf { it.isNotEmpty() },
+            moveToSparkDroppedPaymentHashes = cacheData.moveToSparkHashes.map { it.lowercase() }.distinct()
+                .filter { cacheData.isActivityDeleted(it, WalletScope.default) }.sorted()
+                .takeIf { it.isNotEmpty() },
         )
 
         json.encodeToString(payload).toByteArray()
@@ -1320,6 +1325,8 @@ class BackupRepo @Inject constructor(
                 sparkHistoryUnseededSince = restoredAt,
                 ldkHistoryUnseededSince = restoredAt,
                 sparkRestoredAt = restoredAt,
+                // A deposit's claim is followed by the install that sent it, never started again from a backup.
+                sparkSentDeposits = it.sparkSentDeposits,
                 // The higher index of each wallet, so an exit never funds from an address an earlier one used.
                 sparkExitNextFundingIndexes = SparkExitMath.mergeFundingIndexes(
                     it.sparkExitNextFundingIndexes,
@@ -1330,20 +1337,19 @@ class BackupRepo @Inject constructor(
                 sparkExitFundingRecoveryPending = it.sparkExitFundingRecoveryPending + restoredIndexKeys,
                 // Both apps back the moves up beside the cache; the device's own stay.
                 moveToSparkHashes = (
-                    it.moveToSparkHashes + cleanCache.moveToSparkHashes + parsed.moveToSparkPaymentHashes.orEmpty()
+                    it.moveToSparkHashes + cleanCache.moveToSparkHashes + parsed.moveToSparkPaymentHashes.orEmpty() +
+                        parsed.moveToSparkDroppedPaymentHashes.orEmpty()
                     ).map { hash -> hash.lowercase() }.distinct(),
+                // The other app backs up the move parts its Activity leaves out beside the moves.
+                deletedActivities = (
+                    cleanCache.deletedActivities + parsed.moveToSparkDroppedPaymentHashes.orEmpty()
+                        .map { hash -> scopedActivityId(WalletScope.default, hash.lowercase()) }
+                    ).distinct(),
             )
         }
         runCatching { restoreSparkExitEarlierAddresses(parsed.sparkExitEarlierAddresses) }
             .onFailure { Logger.warn("Failed to restore the earlier Spark exit addresses", it, context = TAG) }
-        // Payment history and Spark attempt ids stay out of the log, as support requests attach it.
-        val logged = parsed.cache.copy(
-            cachedRates = emptyList(),
-            moveToSparkHashes = emptyList(),
-            sparkSendAttemptIds = emptyMap(),
-            sparkUnsavedOwnFailures = emptySet(),
-        )
-        Logger.debug("Restored caches: ${jsonLogOf(logged)}", TAG)
+        Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.withoutPaymentDetails())}", TAG)
         onCacheRestored()
         val persisted = preActivityMetadataRepo.upsertPreActivityMetadata(parsed.tagMetadata)
             .onFailure { Logger.warn("Failed to restore pre-activity metadata", it, context = TAG) }
@@ -1720,3 +1726,37 @@ internal fun Throwable.isTemporaryBackupFailure(): Boolean = isPaykitTemporarily
     -> true
     else -> false
 }
+
+/**
+ * The cache as the restore log shows it: without the addresses, invoices, payment hashes, payment and activity ids,
+ * transaction ids and comments that identify a payment, as support requests attach the log.
+ */
+internal fun AppCacheData.withoutPaymentDetails() = copy(
+    cachedRates = emptyList(),
+    onchainAddress = "",
+    bolt11 = "",
+    bolt11PaymentHash = "",
+    bip21 = "",
+    usdtDisplayBalance = null,
+    deletedActivities = emptyList(),
+    detachedActivityContacts = emptySet(),
+    pendingBoostActivities = emptyList(),
+    backgroundReceive = null,
+    quickPayLedger = quickPayLedger?.copy(records = emptyList()),
+    pendingLightningMessages = emptyMap(),
+    pendingSparkWithdrawal = null,
+    sentSparkWithdrawals = emptyList(),
+    sparkSentDeposits = emptyMap(),
+    unfinishedPubkySwaps = emptyList(),
+    pubkySwapHoldHashes = emptyMap(),
+    sparkSendHashes = emptyList(),
+    sparkSendExpiries = emptyMap(),
+    sparkUncertainSends = emptyMap(),
+    sparkSendAttemptIds = emptyMap(),
+    sparkSendAttempts = emptyMap(),
+    sparkUnsavedOwnFailures = emptySet(),
+    moveToSparkHashes = emptyList(),
+    moveToSparkRetriedBefore = emptyMap(),
+    ldkSendHashes = emptyList(),
+    ldkSendExpiries = emptyMap(),
+)
