@@ -43,6 +43,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
@@ -3664,6 +3665,30 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             assertTrue(repo.abandonUnbroadcastOnchainPayment(attempt, wallet) {}.isSuccess)
             assertEquals(1, wallet.broadcasts)
         }
+    }
+
+    @Test
+    fun `savings send to an ended exit a new exit replaced is released`() = test {
+        val attempt = exitFundingAttempt()
+        val ended = exitRecord(SparkExitRecord.Phase.Done, fundingTxid = "f1".repeat(32))
+        val at = 0L
+        assertNull(SparkExitEarlierAddress.endedExit(ended, null, Network.REGTEST, at))
+        assertNull(SparkExitEarlierAddress.endedExit(ended, "bcrt1qordinary", Network.REGTEST, at))
+        assertNull(
+            SparkExitEarlierAddress.endedExit(
+                exitRecord(SparkExitRecord.Phase.AwaitingFunding(5_000uL)),
+                EXIT_FUNDING_ADDRESS,
+                Network.REGTEST,
+                at,
+            ),
+        )
+        val kept = assertNotNull(SparkExitEarlierAddress.endedExit(ended, EXIT_FUNDING_ADDRESS, Network.REGTEST, at))
+        val next = exitRecord(SparkExitRecord.Phase.AwaitingFunding(5_000uL)).copy(
+            funding = listOf(SparkExitRecord.Funding(index = 1u, address = "bcrt1qnextexit", pubkey = "02")),
+        )
+        val repo = paymentProofRepo().apply { sparkExit = { SparkExitFundingRelease.Exit(next, listOf(kept)) } }
+        assertTrue(repo.isSparkExitFunding(attempt), "Payment Pending treats it as the exit's funding")
+        assertTrue(repo.onchainRequestHasEnded(attempt), "Released, not retried to the old address")
     }
 
     @Test

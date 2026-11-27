@@ -819,6 +819,21 @@ class SparkExitRepo @Inject constructor(
         val network = requireNotNull(sparkService.networkName) { "Spark is not available on this network" }
         val key = fundingKey(pending.fundingIndex)
         var quote = pending.quote
+        // A savings send to the ended exit this one replaces may still land: its address stays listed, so Payment
+        // Pending releases that send instead of retrying it to an address nothing reads. A record or journal that
+        // can't be read, or a failed write, refuses the start before anything is held.
+        store.load()?.takeIf { !it.isActive }?.let { ended ->
+            val attempt = lightningRepo.currentOnchainSendAttempt()
+            SparkExitEarlierAddress.endedExit(
+                ended,
+                attempt?.takeIf { it.isUnresolved && it.mayFundSparkExit && it.walletIndex == walletIndex }?.address,
+                Env.network,
+                clock.nowMs(),
+            )?.let { entry ->
+                val listed = earlierAddressStore.add(entry)
+                _state.update { it.copy(earlierAddresses = listed) }
+            }
+        }
         // Spark stops paying and receiving in the same step the transfer counts its balance, before any wait.
         sparkRepo.holdForExit()
         val transferId = transferRepo.createTransfer(TransferType.SPARK_EXIT, quote.incomingSats.toLong())

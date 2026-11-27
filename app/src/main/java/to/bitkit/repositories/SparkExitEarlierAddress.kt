@@ -76,6 +76,18 @@ data class SparkExitEarlierAddress(
                 atMillis = atMillis,
             )
         }
+
+        /** The funding address of an ended exit a new exit replaces, while a savings send to it is unresolved. */
+        fun endedExit(
+            record: SparkExitRecord?,
+            unresolvedSendAddress: String?,
+            network: Network,
+            atMillis: Long,
+        ): SparkExitEarlierAddress? {
+            if (record == null || record.isActive || unresolvedSendAddress == null) return null
+            if (record.funding.firstOrNull()?.address != unresolvedSendAddress) return null
+            return cancelledFunding(record, network, atMillis)
+        }
     }
 }
 
