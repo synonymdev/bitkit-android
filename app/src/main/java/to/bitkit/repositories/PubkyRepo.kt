@@ -2192,10 +2192,11 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    /** The pubky [authUrl] must be approved with, or null when it names none or the request is invalid. */
-    suspend fun validExpectedSigner(authUrl: String): String? = runSuspendCatching {
-        withContext(ioDispatcher) { validatedExpectedSigner(authUrl) }
-    }.getOrNull()
+    /**
+     * The pubky [authUrl] must be approved with, or null when it names none or any part of the request is invalid,
+     * so an unusable link is never reported as meant for another pubky.
+     */
+    suspend fun validExpectedSigner(authUrl: String): String? = parseAuthUrl(authUrl).getOrNull()?.expectedSigner
 
     private suspend fun validatedExpectedSigner(authUrl: String): String? {
         val expectedSigner = PubkyAuthRequest.parseExpectedSigner(authUrl).getOrThrow() ?: return null

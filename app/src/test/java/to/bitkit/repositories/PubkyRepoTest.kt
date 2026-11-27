@@ -608,11 +608,24 @@ class PubkyRepoTest : BaseUnitTest() {
             sut.approveAuth(authUrl, "/pub/bitkit.to/:rw", "paykit.test"),
         ).forEach { assertIs<PubkyAuthRequestError.InvalidUrl>(it.exceptionOrNull()) }
         assertNull(sut.validExpectedSigner(authUrl))
-        assertNull(sut.validExpectedSigner("pubkyauth://signin_grant?caps=/pub/bitkit.to/:rw"))
-        val signer = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
-        assertEquals(signer, sut.validExpectedSigner("pubkyauth://signin_grant?spk=$signer"))
         verifyBlocking(pubkyService, never()) { parseAuthUrl(any()) }
         verifyBlocking(pubkyService, never()) { approveAuth(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `validExpectedSigner names a pubky only for a request that parses in full`() = test {
+        val other = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/locks.app/:rw&spk=$other"
+        val details = mock<PubkyAuthDetails>()
+        whenever(details.clientId).thenReturn("locks.test")
+        whenever(details.capabilities).thenReturn("/pub/locks.app/:rw")
+        whenever(details.relayUrl).thenReturn("https://relay.example/inbox/", "ftp://relay.example/inbox/")
+        whenever(pubkyService.parseAuthUrl(authUrl)).thenReturn(details)
+
+        assertEquals(other, sut.validExpectedSigner(authUrl))
+        assertNull(sut.validExpectedSigner(authUrl))
+        assertIs<PubkyAuthRequestError.InvalidUrl>(sut.parseAuthUrl(authUrl).exceptionOrNull())
+        assertNull(sut.validExpectedSigner("pubkyauth://signin_grant?caps=/pub/locks.app/:rw"))
     }
 
     @Test

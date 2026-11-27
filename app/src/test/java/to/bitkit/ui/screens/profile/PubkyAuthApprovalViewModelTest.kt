@@ -28,6 +28,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.same
 import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
@@ -55,6 +56,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -474,6 +476,35 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         }
         assertEquals(ApprovalState.Loading, sut.uiState.value.state)
         verifyBlocking(pubkyRepo, never()) { approveAuth(any(), any(), any()) }
+    }
+
+    @Test
+    fun `invalid link naming another pubky shows the invalid link message`() = test {
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/example/:rw&relay=ftp%3A%2F%2Frelay.example%2Finbox%2F" +
+            "&spk=5jsjx1o6fzu6aeeo697r3i5rx15zq41kikcye8wtwdqm4nb4tryo"
+        publicKeyFlow.value = "pubky8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        val invalidRelay = PubkyAuthRequest.parse(
+            rawUrl = authUrl,
+            clientId = clientId,
+            relay = "ftp://relay.example/inbox/",
+            capabilities = "/pub/example/:rw",
+        )
+        assertIs<PubkyAuthRequestError.InvalidUrl>(invalidRelay.exceptionOrNull())
+        whenever(context.getString(R.string.profile__auth_error_invalid_url)).thenReturn("Invalid link")
+        whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(invalidRelay)
+        val sut = createSut()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        sut.effects.test {
+            sut.load(authUrl)
+            advanceUntilIdle()
+            assertEquals(PubkyAuthApprovalEffect.Dismiss, awaitItem())
+        }
+
+        assertEquals("Invalid link", toasts.single().description)
+        verify(context, never()).getString(eq(R.string.profile__auth_error_other_pubky), any())
+        toastJob.cancel()
     }
 
     @Test
