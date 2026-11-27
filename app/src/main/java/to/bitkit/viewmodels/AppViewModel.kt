@@ -10730,7 +10730,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val expectedSigner = PubkyAuthRequest.parseExpectedSigner(authUrl).getOrNull()
+        val expectedSigner = pubkyRepo.validExpectedSigner(authUrl)
         val publicKey = pubkyRepo.publicKey.value
         if (expectedSigner != null && publicKey != null &&
             !PubkyAuthRequest.isExpectedSigner(expectedSigner, publicKey)

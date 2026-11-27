@@ -5952,6 +5952,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkyRepo.hasSecretKey()).thenReturn(false)
         val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw" +
             "&spk=8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        whenever(pubkyRepo.validExpectedSigner(authUrl))
+            .thenReturn("8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty")
 
         sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
         advanceUntilIdle()
@@ -5959,6 +5961,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertNull(sut.currentSheet.value)
         verify(context).getString(R.string.profile__auth_error_other_pubky, "8um7...1dty")
         verify(context, never()).getString(R.string.pubky_auth__use_ring)
+    }
+
+    @Test
+    fun `pubky auth deeplink with an spk that is not a public key is not reported as another pubky`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw&spk=ye${"y".repeat(50)}"
+        whenever(pubkyRepo.validExpectedSigner(authUrl)).thenReturn(null)
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+        advanceUntilIdle()
+
+        assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+        verify(context, never()).getString(eq(R.string.profile__auth_error_other_pubky), any())
     }
 
     @Test

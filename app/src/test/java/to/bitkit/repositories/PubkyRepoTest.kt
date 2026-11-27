@@ -597,7 +597,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
     @Test
     fun `expected signer that is not a public key makes the request invalid and is never signed`() = test {
-        val notAKey = "y".repeat(52)
+        val notAKey = "ye" + "y".repeat(50)
         val authUrl = "pubkyauth://signin_grant?caps=/pub/bitkit.to/:rw&spk=$notAKey"
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local_secret")
         whenever(pubkyService.validatePublicKey(notAKey)).thenAnswer { throw TestAppError("not a public key") }
@@ -607,6 +607,10 @@ class PubkyRepoTest : BaseUnitTest() {
             sut.checkExpectedSigner(authUrl),
             sut.approveAuth(authUrl, "/pub/bitkit.to/:rw", "paykit.test"),
         ).forEach { assertIs<PubkyAuthRequestError.InvalidUrl>(it.exceptionOrNull()) }
+        assertNull(sut.validExpectedSigner(authUrl))
+        assertNull(sut.validExpectedSigner("pubkyauth://signin_grant?caps=/pub/bitkit.to/:rw"))
+        val signer = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        assertEquals(signer, sut.validExpectedSigner("pubkyauth://signin_grant?spk=$signer"))
         verifyBlocking(pubkyService, never()) { parseAuthUrl(any()) }
         verifyBlocking(pubkyService, never()) { approveAuth(any(), any(), any(), any()) }
     }

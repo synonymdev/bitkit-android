@@ -2242,6 +2242,11 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    /** The pubky [authUrl] must be approved with, or null when it names none or the request is invalid. */
+    suspend fun validExpectedSigner(authUrl: String): String? = runSuspendCatching {
+        withContext(ioDispatcher) { validatedExpectedSigner(authUrl) }
+    }.getOrNull()
+
     private suspend fun validatedExpectedSigner(authUrl: String): String? {
         val expectedSigner = PubkyAuthRequest.parseExpectedSigner(authUrl).getOrThrow() ?: return null
         runSuspendCatching { pubkyService.validatePublicKey(expectedSigner) }
