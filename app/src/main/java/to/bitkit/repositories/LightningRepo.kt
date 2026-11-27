@@ -411,6 +411,7 @@ class LightningRepo @Inject constructor(
 
         if (shouldCancelPendingStop) cancelPendingStop()
         val stopRequestsAtStart = stopRequestsSeen ?: stopRequestCount.get()
+        val isConfigChange = customServerUrl != null || customRgsServerUrl != null
 
         // Spark needs no node, so it starts alongside it and stays up while the node stops in background.
         if (!isWiping) scope.launch { sparkRepo.start(walletIndex) }
@@ -436,6 +437,12 @@ class LightningRepo @Inject constructor(
                     customServerUrl = customServerUrl,
                     customRgsServerUrl = customRgsServerUrl,
                 )
+            }
+
+            // A changed config starts only a node it built itself, never a handle another start left behind.
+            if (isConfigChange && lightningService.node != null) {
+                releaseUnsavedConfigNode()
+                if (lightningService.node != null) return@withLock Result.failure(NodeConfigNotAppliedError())
             }
 
             runCatching {
@@ -509,10 +516,10 @@ class LightningRepo @Inject constructor(
             }.getOrElse { e ->
                 if (e is CancellationException) {
                     withContext(NonCancellable) {
-                        if (customServerUrl != null || customRgsServerUrl != null) {
+                        if (isConfigChange) {
                             // The change was never saved, so neither keep nor adopt a node built with its server.
-                            releaseUnsavedConfigNode()
-                            _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
+                            stopLocked()
+                            Logger.info("Released the node of a cancelled config change", context = TAG)
                         } else {
                             reconcileCancelledStart(initialLifecycleState)
                         }
@@ -539,7 +546,7 @@ class LightningRepo @Inject constructor(
                 } else {
                     // A node built with a changed server must not outlive its failed start: the next start would
                     // reuse it although the change was never saved.
-                    if (customServerUrl != null || customRgsServerUrl != null) releaseUnsavedConfigNode()
+                    if (isConfigChange) releaseUnsavedConfigNode()
                     _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.ErrorStarting(e)) }
                     Result.failure(e)
                 }

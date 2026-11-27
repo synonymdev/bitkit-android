@@ -5100,6 +5100,62 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restartWithElectrumServer retry builds its own node over a handle another start left`() = test {
+        startNodeForTesting()
+        val newUrl = "ssl://10.0.2.2:60001"
+        val node = mock<Node>()
+        var builtWith: String? = null
+        var hasNode = false
+        whenever(lightningService.node).thenAnswer { if (hasNode) node else null }
+        whenever(lightningService.stop()).thenAnswer { hasNode = false }
+        val busy = AppError(LdkError(BuildException.KvStoreSetupFailed("in flight")))
+        var changeAttempts = 0
+        whenever { lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                if (it.getArgument<String?>(1) == newUrl && ++changeAttempts == 1) {
+                    // A foreground start built from the saved server and left its handle before the retry.
+                    builtWith = null
+                    hasNode = true
+                    throw busy
+                }
+                builtWith = it.getArgument(1)
+                hasNode = true
+            }
+
+        assertTrue(sut.restartWithElectrumServer(newUrl).isSuccess)
+
+        assertEquals(2, changeAttempts)
+        assertEquals(newUrl, builtWith)
+    }
+
+    @Test
+    fun `restartWithElectrumServer cancelled while running publishes Stopping before releasing its node`() = test {
+        startNodeForTesting()
+        val newUrl = "ssl://10.0.2.2:60001"
+        val node = mock<Node>()
+        var hasNode = false
+        val statesAtRelease = mutableListOf<NodeLifecycleState>()
+        whenever(lightningService.node).thenAnswer { if (hasNode) node else null }
+        whenever(lightningService.stop()).thenAnswer {
+            if (hasNode) statesAtRelease += sut.lightningState.value.nodeLifecycleState
+            hasNode = false
+        }
+        whenever { lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { hasNode = true }
+        val refreshReached = CompletableDeferred<Unit>()
+        whenever(lightningService.disconnectIdlePeers()).doSuspendableAnswer {
+            refreshReached.complete(Unit)
+            awaitCancellation()
+        }
+
+        val change = launch { sut.restartWithElectrumServer(newUrl) }
+        refreshReached.await()
+        change.cancelAndJoin()
+
+        assertEquals(NodeLifecycleState.Stopping, statesAtRelease.first())
+    }
+
+    @Test
     fun `restartWithElectrumServer cancelled after a stop does not recover the previous config`() = test {
         startNodeForTesting()
         val newUrl = "ssl://10.0.2.2:60001"
