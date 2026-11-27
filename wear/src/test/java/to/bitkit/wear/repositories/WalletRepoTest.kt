@@ -18,10 +18,12 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.wear.data.SettingsStore
 import to.bitkit.wear.security.FakeDeviceLock
+import to.bitkit.wear.security.FakeNetworkMonitor
 import to.bitkit.wear.security.SeedStore
 import to.bitkit.wear.security.SeedStoreError
 import to.bitkit.wear.security.WalletSeed
 import to.bitkit.wear.services.SparkError
+import to.bitkit.wear.services.SparkSync
 import to.bitkit.wear.services.WatchSparkService
 import to.bitkit.wear.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -35,6 +37,7 @@ class WalletRepoTest : BaseUnitTest() {
     private val sparkService = mock<WatchSparkService>()
     private val settingsStore = mock<SettingsStore>()
     private val deviceLock = FakeDeviceLock()
+    private val networkMonitor = FakeNetworkMonitor()
     private val seed = WalletSeed(mnemonic = "words", passphrase = null)
 
     private lateinit var sut: WalletRepo
@@ -42,7 +45,8 @@ class WalletRepoTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(sparkService.events).thenReturn(MutableSharedFlow<SdkEvent>())
-        sut = WalletRepo(testDispatcher, seedStore, sparkService, settingsStore, deviceLock)
+        whenever { sparkService.syncWallet() }.thenReturn(synced)
+        sut = WalletRepo(testDispatcher, seedStore, sparkService, settingsStore, deviceLock, networkMonitor)
     }
 
     @Test
@@ -55,7 +59,7 @@ class WalletRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         verify(sparkService).connect(seed)
         verify(sparkService).syncWallet()
-        assertEquals(WalletState(WalletStatus.Ready, 21_000uL), sut.walletState.value)
+        assertEquals(WalletState(WalletStatus.Ready, 21_000uL, hasSynced = true), sut.walletState.value)
     }
 
     @Test
@@ -235,6 +239,107 @@ class WalletRepoTest : BaseUnitTest() {
         assertIs<SparkError.Unsupported>(sut.restore(seed).exceptionOrNull())
         verify(seedStore, times(2)).save(seed)
     }
+
+    @Test
+    fun `a sync that does not reach spark before any sync this session is an error`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(0uL))
+        whenever(sparkService.syncWallet()).thenReturn(offline)
+
+        val result = sut.start()
+
+        assertIs<WalletError.NotSynced>(result.exceptionOrNull())
+        assertEquals(WalletStatus.Error, sut.walletState.value.status)
+        assertFalse(sut.walletState.value.hasSynced)
+    }
+
+    @Test
+    fun `a sync that does not reach spark after one that did keeps the balance as offline`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.start()
+        whenever(sparkService.syncWallet()).thenReturn(offline)
+
+        sut.start()
+
+        assertEquals(WalletState(WalletStatus.Offline, 21_000uL, hasSynced = true), sut.walletState.value)
+    }
+
+    @Test
+    fun `losing the network turns a ready wallet offline, and its return syncs it again`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.setForeground(true)
+        sut.start()
+
+        networkMonitor.isOnline.update { false }
+
+        assertEquals(WalletStatus.Offline, sut.walletState.value.status)
+        assertEquals(21_000uL, sut.walletState.value.balanceSats)
+
+        networkMonitor.isOnline.update { true }
+
+        verify(sparkService, times(2)).syncWallet()
+        assertEquals(WalletStatus.Ready, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `the network returning syncs an offline wallet only once the app is on screen`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.start()
+        networkMonitor.isOnline.update { false }
+
+        networkMonitor.isOnline.update { true }
+        verify(sparkService, times(1)).syncWallet()
+        assertEquals(WalletStatus.Offline, sut.walletState.value.status)
+
+        sut.setForeground(true)
+        verify(sparkService, times(2)).syncWallet()
+        assertEquals(WalletStatus.Ready, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `coming to the front while still offline does not sync`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.start()
+        networkMonitor.isOnline.update { false }
+
+        sut.setForeground(true)
+
+        verify(sparkService, times(1)).syncWallet()
+        assertEquals(WalletStatus.Offline, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `the network returning leaves an error for the wearer to retry`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.syncWallet()).thenReturn(offline)
+        sut.setForeground(true)
+        networkMonitor.isOnline.update { false }
+        sut.start()
+
+        networkMonitor.isOnline.update { true }
+
+        verify(sparkService, times(1)).syncWallet()
+        assertEquals(WalletStatus.Error, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `wipe forgets that the wallet synced`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        whenever(seedStore.wipe()).thenReturn(Result.success(Unit))
+        sut.start()
+
+        sut.wipe()
+
+        assertFalse(sut.walletState.value.hasSynced)
+    }
+
+    private val synced = SparkSync(error = null, syncedAtSecs = 1uL)
+    private val offline = SparkSync(error = "Network(message=dns error)", syncedAtSecs = null)
 
     private fun info(balanceSats: ULong) = GetInfoResponse(
         identityPubkey = "pubkey",

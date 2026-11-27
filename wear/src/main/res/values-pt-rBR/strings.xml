@@ -7,6 +7,8 @@
     <string name="home__balance_hidden">Saldo oculto</string>
     <string name="home__error">Não foi possível carregar a carteira</string>
     <string name="home__nfc_hint">Toque para pagar</string>
+    <string name="home__nfc_off">NFC desligado</string>
+    <string name="home__offline">Sem conexão</string>
     <string name="home__toggle_unit">Alternar unidade</string>
     <string name="onboarding__restore">Restaurar</string>
     <string name="removed__title">Carteira removida</string>

@@ -19,6 +19,13 @@ import kotlin.test.assertTrue
 
 class WatchSparkServiceTest {
     @Test
+    fun `a sync reached spark only without an error and with a sync time`() {
+        assertTrue(SparkSync(error = null, syncedAtSecs = 1uL).hasReachedSpark)
+        assertFalse(SparkSync(error = "Network(message=dns error)", syncedAtSecs = 1uL).hasReachedSpark)
+        assertFalse(SparkSync(error = null, syncedAtSecs = null).hasReachedSpark)
+    }
+
+    @Test
     fun `config turns off breez data sync, the lightning address server and default parsers on every network`() {
         Network.entries.forEach { network ->
             val config = WatchSparkService.configure(defaults(network), apiKey = "key")

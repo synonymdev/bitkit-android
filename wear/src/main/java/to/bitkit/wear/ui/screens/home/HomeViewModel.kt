@@ -83,7 +83,8 @@ internal fun homeUiState(
     settings: WatchSettings,
     locale: Locale = Locale.getDefault(),
 ): HomeUiState {
-    val sats = wallet.balanceSats?.toLong()
+    // A balance no sync confirmed this session, such as 0 for a wallet restored offline, is never shown.
+    val sats = wallet.balanceSats?.takeIf { wallet.hasSynced }?.toLong()
     val bitcoin = sats?.let { DisplayAmount(BITCOIN_SYMBOL, it.formatToModernDisplay(locale)) }
     val fiat = sats?.let { amount ->
         rates.rateFor(settings.selectedCurrency)?.let { rate ->
@@ -96,6 +97,7 @@ internal fun homeUiState(
     return HomeUiState(
         isLoading = wallet.status == WalletStatus.Idle || wallet.status == WalletStatus.Connecting,
         isError = wallet.status == WalletStatus.Error,
+        isOffline = wallet.status == WalletStatus.Offline,
         isRemoved = wallet.status == WalletStatus.Removed,
         isMissing = wallet.status == WalletStatus.Missing,
         isBitcoinPrimary = !showsFiatFirst,
@@ -108,12 +110,16 @@ internal fun homeUiState(
 data class HomeUiState(
     val isLoading: Boolean = false,
     val isError: Boolean = false,
+    val isOffline: Boolean = false,
     val isRemoved: Boolean = false,
     val isMissing: Boolean = false,
     val isBitcoinPrimary: Boolean = true,
     val primaryAmount: DisplayAmount? = null,
     val secondaryAmount: DisplayAmount? = null,
-)
+) {
+    /** Whether the balance shown is synced and the wallet can pay: not loading, failed or offline. */
+    val isWalletReady: Boolean get() = !isLoading && !isError && !isOffline && primaryAmount != null
+}
 
 /** An amount as the balance shows it: the number and its currency symbol, drawn apart as on the phone. */
 @Immutable

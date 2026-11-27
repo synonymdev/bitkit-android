@@ -9,9 +9,11 @@ journey says to take a screenshot instead (`android screen capture -o shot.png`)
 
 What `android layout` misses on the watch, verified on the API 37 emulator:
 
-- **Anything under the loading ring.** While `BezelLoading` spins, `android layout` lists only `WatchHomePager`: the
-  balance, `WatchHomeBalancePending` and `NfcHint` are drawn but not reported, and the ring itself is never listed.
-  Wait for the ring to stop before asserting on the balance, and check the ring from a screenshot.
+- **The loading ring.** `android layout` leaves out `BezelLoading`, a node with no text or action, though
+  `adb shell uiautomator dump` lists it as a `ProgressBar`. Check the ring from a screenshot. What is under it stays
+  listed (the balance, for one), but wait for the ring to stop before asserting on a balance that is still loading.
+- **The pending and hidden marks.** `WatchHomeBalancePending` has no text either, so `android layout` leaves it out;
+  `uiautomator dump` lists it.
 - **The keyboard.** The Wear OS keyboard is a full-screen window that `android layout` does not show. It lists the
   app's screen underneath, so a tap you aim at a tag lands on a key instead. See [Typing](#typing).
 - **Screens with `FLAG_SECURE`.** The word and passphrase screens come out black in a screenshot and a screen
@@ -95,6 +97,10 @@ the first sync of the test wallet, which the [Restored wallet](#restored-wallet)
 | `remove-wallet.xml` | hosted | no |
 | `ambient-hides-balance.xml` | hosted | yes |
 | `no-backup.xml` | none | no |
+| `nfc-required.xml` | none | no |
+| `connect-error-retry.xml` | hosted | yes |
+| `offline-keeps-last-balance.xml` | hosted | yes |
+| `nfc-hint-states.xml` | hosted, physical watch only | yes |
 | `screenshot-blocked.xml` | none | no |
 
 ### Local `./spark` stack
@@ -305,11 +311,17 @@ Every journey here runs on a real watch; none needs an emulator-only command.
 - **Screenshots and screen recordings** work over adb as on the emulator, and the secure screens come out black the
   same way.
 
-## Not covered
+## Offline
 
-- **Couldn't load wallet (`WatchHomeError`, `WatchHomeRetry`).** Taking the network away does not reach it: with
-  airplane mode on (`adb shell cmd connectivity airplane-mode enable`, which works on the emulator), Spark still
-  connects and its sync returns in milliseconds, so Home shows the last synced balance, or 0 for a wallet restored
-  offline, with no error. The error shows only when connecting takes over 30 s or syncing over 5 minutes, or when
-  either fails outright. On the local stack, `../bitkit-docker/spark operators stop` may reach it; that is not
-  verified yet, so there is no journey.
+Airplane mode takes the watch offline: `adb shell cmd connectivity airplane-mode enable`, and `disable` to come back.
+On the API 37 emulator, `adb shell svc wifi disable` is not enough: the emulator's cellular network stays the default
+network. Spark's sync still returns at once offline, with a network error, and the app reads that error (see Offline
+in [docs/wear.md](../../docs/wear.md)). Turn airplane mode off again after a journey that turns it on.
+
+## NFC
+
+The emulators have no NFC, so the NFC hint is hidden there in every state (no adapter). On a physical watch it shows
+only on a ready wallet: `NfcHint` with NFC on, `NfcHintDisabled` with NFC off (`adb shell svc nfc disable` and
+`enable`). `nfc-hint-states.xml` checks both and is physical-only. The manifest requires `android.hardware.nfc`, a
+Play filter that `pm install` ignores, so `just wear-install` works on the emulators. `dumpsys package` does not list
+required features, so `nfc-required.xml` reads them from the installed APK with `aapt2`.

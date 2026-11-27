@@ -1,0 +1,23 @@
+<journey name="wear connect error retry">
+  <description>
+    Without a network, a wallet that has not synced this session shows the error with a retry instead of a balance,
+    since Spark's sync returns at once offline and its stored balance (0 for a wallet restored offline) is not
+    confirmed. The error waits for the wearer: a tap on retry once the network is back loads the balance. Emulator and
+    physical watch (on a watch, turn on airplane mode in its settings; it must cut Wi-Fi, LTE and the phone's
+    Bluetooth proxy).
+
+    Precondition: Restored wallet, see journeys/wear/README.md › Restored wallet. Backend: hosted regtest. Airplane
+    mode is the offline recipe: `svc wifi disable` leaves the emulator's cellular network up (README › Offline).
+  </description>
+  <actions>
+    <action>Run `adb shell cmd connectivity airplane-mode enable` and wait 5 s</action>
+    <action>Restart the app (README › Restart)</action>
+    <action>Dump `android layout` every 5 s until it lists "WatchHomeError", for up to 1 minute</action>
+    <action>Verify "WatchHomeError" reads "Couldn't load wallet", "WatchHomeRetry" is listed, and "WatchHomeBalance" and "WatchHomeOffline" are not</action>
+    <action>Run `adb shell cmd connectivity airplane-mode disable` and wait 15 s</action>
+    <action>Verify "WatchHomeError" and "WatchHomeRetry" are still listed: the error does not retry by itself</action>
+    <action>Tap "WatchHomeRetry"</action>
+    <action>Dump `android layout` every 5 s until it lists "WatchHomeBalance", for up to 1 minute</action>
+    <action>Verify "WatchHomeBalance" reads the test wallet's balance ("1 000") and "WatchHomeError" is not listed</action>
+  </actions>
+</journey>

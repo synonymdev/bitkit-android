@@ -7,6 +7,8 @@
     <string name="home__balance_hidden">الرصيد مخفي</string>
     <string name="home__error">تعذّر تحميل المحفظة</string>
     <string name="home__nfc_hint">انقر للدفع</string>
+    <string name="home__nfc_off">NFC متوقف</string>
+    <string name="home__offline">غير متصل</string>
     <string name="home__toggle_unit">تبديل الوحدة</string>
     <string name="onboarding__restore">استعادة</string>
     <string name="removed__title">تمت إزالة المحفظة</string>

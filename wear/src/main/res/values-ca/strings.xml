@@ -7,6 +7,8 @@
     <string name="home__balance_hidden">Saldo amagat</string>
     <string name="home__error">No s\'ha pogut carregar la cartera</string>
     <string name="home__nfc_hint">Toca per pagar</string>
+    <string name="home__nfc_off">NFC desactivat</string>
+    <string name="home__offline">Sense connexió</string>
     <string name="home__toggle_unit">Canvia la unitat</string>
     <string name="onboarding__restore">Restaurar</string>
     <string name="removed__title">Cartera eliminada</string>

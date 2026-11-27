@@ -7,6 +7,8 @@
     <string name="home__balance_hidden">Saldo verborgen</string>
     <string name="home__error">Wallet laden mislukt</string>
     <string name="home__nfc_hint">Tik om te betalen</string>
+    <string name="home__nfc_off">NFC uit</string>
+    <string name="home__offline">Offline</string>
     <string name="home__toggle_unit">Eenheid wisselen</string>
     <string name="onboarding__restore">Herstellen</string>
     <string name="removed__title">Wallet verwijderd</string>

@@ -7,6 +7,8 @@
     <string name="home__balance_hidden">Баланс скрыт</string>
     <string name="home__error">Не удалось загрузить кошелёк</string>
     <string name="home__nfc_hint">Коснитесь для оплаты</string>
+    <string name="home__nfc_off">NFC выключен</string>
+    <string name="home__offline">Нет сети</string>
     <string name="home__toggle_unit">Сменить единицу</string>
     <string name="onboarding__restore">Восстановить</string>
     <string name="removed__title">Кошелёк удалён</string>

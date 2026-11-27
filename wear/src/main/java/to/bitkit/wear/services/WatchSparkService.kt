@@ -184,9 +184,13 @@ class WatchSparkService @Inject constructor(
         disconnected.getOrThrow()
     }
 
-    /** Syncs with Spark now instead of waiting for the SDK's next background sync. */
-    suspend fun syncWallet() {
-        requireSdk().syncWallet(SyncWalletRequest)
+    /**
+     * Syncs with Spark now instead of waiting for the SDK's next background sync. Without a network the SDK still
+     * returns at once, so the result says whether this sync reached Spark.
+     */
+    suspend fun syncWallet(): SparkSync {
+        val response = requireSdk().syncWallet(SyncWalletRequest)
+        return SparkSync(error = response.lastSyncError?.toString(), syncedAtSecs = response.lastSyncedAt)
     }
 
     suspend fun getInfo(): GetInfoResponse = requireSdk().getInfo(GetInfoRequest(ensureSynced = false))
@@ -237,6 +241,18 @@ class WatchSparkService @Inject constructor(
     }
 
     private fun requireSdk(): BreezSdk = sdk ?: throw SparkError.NotConnected()
+}
+
+/**
+ * The outcome of a wallet sync: the SDK's last sync [error], and [syncedAtSecs], the Unix time of the last sync that
+ * reached Spark, which the SDK sets only when a wallet sync succeeds.
+ */
+data class SparkSync(
+    val error: String?,
+    val syncedAtSecs: ULong?,
+) {
+    /** Whether the sync reached Spark: the SDK reports a network failure as [error] and still returns. */
+    val hasReachedSpark: Boolean get() = error == null && syncedAtSecs != null
 }
 
 sealed class SparkError(message: String) : AppError(message) {

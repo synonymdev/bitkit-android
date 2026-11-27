@@ -7,6 +7,8 @@
     <string name="home__balance_hidden">Saldo oculto</string>
     <string name="home__error">No se pudo cargar la billetera</string>
     <string name="home__nfc_hint">Toca para pagar</string>
+    <string name="home__nfc_off">NFC desactivado</string>
+    <string name="home__offline">Sin conexión</string>
     <string name="home__toggle_unit">Cambiar unidad</string>
     <string name="onboarding__restore">Restaurar</string>
     <string name="removed__title">Billetera eliminada</string>

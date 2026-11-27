@@ -140,6 +140,7 @@ android {
     testOptions {
         unitTests {
             isReturnDefaultValues = true // mockito
+            isIncludeAndroidResources = true // robolectric
             all { it.maxHeapSize = "1g" }
         }
     }
@@ -205,6 +206,8 @@ dependencies {
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.test.manifest)
+    testImplementation(libs.compose.ui.test.junit4)
     // Wear
     implementation(libs.wear.compose.foundation)
     implementation(libs.wear.compose.material3)
@@ -225,6 +228,7 @@ dependencies {
     testImplementation(libs.test.coroutines)
     testImplementation(libs.test.junit)
     testImplementation(libs.test.mockito.kotlin)
+    testImplementation(libs.test.robolectric)
     testImplementation(libs.test.turbine)
     detektPlugins(libs.detekt.formatting)
     detektPlugins(libs.detekt.compose.rules)

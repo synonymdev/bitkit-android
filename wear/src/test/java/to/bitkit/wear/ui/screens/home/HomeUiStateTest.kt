@@ -6,6 +6,9 @@ import to.bitkit.wear.models.PrimaryDisplay
 import to.bitkit.wear.models.rate
 import to.bitkit.wear.repositories.WalletState
 import to.bitkit.wear.repositories.WalletStatus
+import to.bitkit.wear.ui.components.NfcHintState
+import to.bitkit.wear.ui.components.NfcState
+import to.bitkit.wear.ui.components.nfcHintState
 import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -13,7 +16,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class HomeUiStateTest {
-    private val ready = WalletState(WalletStatus.Ready, 150_000uL)
+    private val ready = WalletState(WalletStatus.Ready, 150_000uL, hasSynced = true)
     private val rates = listOf(rate("100000"))
 
     @Test
@@ -44,7 +47,8 @@ class HomeUiStateTest {
 
     @Test
     fun `groups the large bitcoin amount by thousands like the phone`() {
-        val state = homeUiState(WalletState(WalletStatus.Ready, 1_000uL), rates, WatchSettings(), Locale.US)
+        val wallet = WalletState(WalletStatus.Ready, 1_000uL, hasSynced = true)
+        val state = homeUiState(wallet, rates, WatchSettings(), Locale.US)
 
         assertEquals(DisplayAmount("₿", "1 000"), state.primaryAmount)
     }
@@ -79,5 +83,49 @@ class HomeUiStateTest {
         assertEquals(DisplayAmount("₿", "150 000"), connecting.primaryAmount)
         assertFalse(homeUiState(ready, rates, WatchSettings(), Locale.US).isLoading)
         assertFalse(homeUiState(WalletState(WalletStatus.Error), rates, WatchSettings(), Locale.US).isLoading)
+    }
+
+    @Test
+    fun `never shows a balance no sync confirmed this session, such as 0 restored offline`() {
+        val unsynced = WalletState(WalletStatus.Connecting, 0uL, hasSynced = false)
+
+        val state = homeUiState(unsynced, rates, WatchSettings(), Locale.US)
+
+        assertNull(state.primaryAmount)
+        assertNull(state.secondaryAmount)
+        assertFalse(state.isWalletReady)
+    }
+
+    @Test
+    fun `offline keeps the last synced balance and is not ready to pay`() {
+        val state = homeUiState(ready.copy(status = WalletStatus.Offline), rates, WatchSettings(), Locale.US)
+
+        assertTrue(state.isOffline)
+        assertFalse(state.isError)
+        assertFalse(state.isLoading)
+        assertEquals(DisplayAmount("₿", "150 000"), state.primaryAmount)
+        assertFalse(state.isWalletReady)
+    }
+
+    @Test
+    fun `only a synced, settled wallet is ready`() {
+        assertTrue(homeUiState(ready, rates, WatchSettings(), Locale.US).isWalletReady)
+        val connecting = homeUiState(ready.copy(status = WalletStatus.Connecting), rates, WatchSettings(), Locale.US)
+        assertFalse(connecting.isWalletReady)
+        val error = homeUiState(ready.copy(status = WalletStatus.Error), rates, WatchSettings(), Locale.US)
+        assertFalse(error.isWalletReady)
+    }
+
+    @Test
+    fun `the nfc hint shows only once the wallet is ready, never while loading, failed or offline`() {
+        val statuses = listOf(WalletStatus.Connecting, WalletStatus.Error, WalletStatus.Offline)
+        statuses.forEach { status ->
+            val state = homeUiState(ready.copy(status = status), rates, WatchSettings(), Locale.US)
+            assertEquals(NfcHintState.Hidden, nfcHintState(NfcState.On, state.isWalletReady, isAmbient = false))
+            assertEquals(NfcHintState.Hidden, nfcHintState(NfcState.Off, state.isWalletReady, isAmbient = false))
+        }
+        val readyState = homeUiState(ready, rates, WatchSettings(), Locale.US)
+        assertEquals(NfcHintState.Active, nfcHintState(NfcState.On, readyState.isWalletReady, isAmbient = false))
+        assertEquals(NfcHintState.Disabled, nfcHintState(NfcState.Off, readyState.isWalletReady, isAmbient = false))
     }
 }

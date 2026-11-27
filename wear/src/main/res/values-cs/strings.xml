@@ -7,6 +7,8 @@
     <string name="home__balance_hidden">Zůstatek skrytý</string>
     <string name="home__error">Peněženku nelze načíst</string>
     <string name="home__nfc_hint">Klepnutím zaplaťte</string>
+    <string name="home__nfc_off">NFC vypnuto</string>
+    <string name="home__offline">Offline</string>
     <string name="home__toggle_unit">Přepnout jednotku</string>
     <string name="onboarding__restore">Obnovit</string>
     <string name="removed__title">Peněženka odebrána</string>

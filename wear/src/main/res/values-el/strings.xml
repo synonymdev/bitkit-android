@@ -7,6 +7,8 @@
     <string name="home__balance_hidden">Κρυφό υπόλοιπο</string>
     <string name="home__error">Αδυναμία φόρτωσης πορτοφολιού</string>
     <string name="home__nfc_hint">Πατήστε για πληρωμή</string>
+    <string name="home__nfc_off">NFC ανενεργό</string>
+    <string name="home__offline">Εκτός σύνδεσης</string>
     <string name="home__toggle_unit">Αλλαγή μονάδας</string>
     <string name="onboarding__restore">Επαναφορά</string>
     <string name="removed__title">Το πορτοφόλι αφαιρέθηκε</string>

@@ -18,6 +18,7 @@ object Colors {
     val Gray1 = Color(0xFF8E8E8E)
 
     val White64 = Color.White.copy(alpha = 0.64f)
+    val White32 = Color.White.copy(alpha = 0.32f)
     val Brand24 = Brand.copy(alpha = 0.24f)
     val Red24 = Red.copy(alpha = 0.24f)
 }

@@ -1,15 +1,26 @@
 package to.bitkit.wear.ui.components
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.nfc.NfcAdapter
 import androidx.compose.animation.core.InfiniteTransition
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
@@ -23,11 +34,23 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import to.bitkit.wear.R
 import to.bitkit.wear.ext.areAnimationsDisabled
+import to.bitkit.wear.ext.nfcAdapter
+import to.bitkit.wear.ui.modifiers.clickableAlpha
 import to.bitkit.wear.ui.theme.Colors
+
+/** The hint's icon size. */
+private val HINT_SIZE = 24.dp
+
+/** The extra touch area around the disabled hint, which makes it a 48dp target without moving the icon. */
+private val DISABLED_TOUCH_PADDING = 12.dp
 
 /** The side of the viewport of `ic_broadcast`, whose path data [BroadcastPaths] holds. */
 private const val VIEWPORT = 16f
@@ -56,21 +79,105 @@ private const val HALO_ALPHA = 0.2f
 /** The alpha of an arc pair that is not lit. */
 private const val DARK_ALPHA = 0.2f
 
+/** Whether the watch can take an NFC tap: [Unavailable] without NFC hardware, which no store install lacks. */
+enum class NfcState { Unavailable, Off, On }
+
+/** What the NFC hint shows: nothing, the animated hint, or the dimmed, slashed icon that opens the NFC settings. */
+enum class NfcHintState { Hidden, Active, Disabled }
+
+fun Context.nfcState(): NfcState {
+    val adapter = nfcAdapter ?: return NfcState.Unavailable
+    return if (adapter.isEnabled) NfcState.On else NfcState.Off
+}
+
+/**
+ * The hint shows only on a wallet that is ready to pay, [isWalletReady], and never in ambient mode. With NFC off it
+ * asks the wearer to turn it on; without NFC hardware it stays hidden.
+ */
+fun nfcHintState(nfc: NfcState, isWalletReady: Boolean, isAmbient: Boolean): NfcHintState {
+    if (isAmbient || !isWalletReady) return NfcHintState.Hidden
+    return when (nfc) {
+        NfcState.Unavailable -> NfcHintState.Hidden
+        NfcState.Off -> NfcHintState.Disabled
+        NfcState.On -> NfcHintState.Active
+    }
+}
+
+/** The NFC state while the caller is shown, updated as NFC is turned on or off and when the app resumes. */
+@Composable
+fun rememberNfcState(): NfcState {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var state by remember { mutableStateOf(context.nfcState()) }
+    DisposableEffect(context, lifecycleOwner) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                state = context.nfcState()
+            }
+        }
+        // The NFC service sends this protected broadcast under its own uid, which a not-exported receiver could refuse;
+        // only the system may send it, so exporting the receiver lets no app spoof it.
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            IntentFilter(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED),
+            ContextCompat.RECEIVER_EXPORTED,
+        )
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) state = context.nfcState()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            context.unregisterReceiver(receiver)
+        }
+    }
+    return state
+}
+
 /**
  * The phone's broadcast icon (`ic_broadcast`), tinted white-64 as in the Send sheet's nearby pill, telling the
  * wearer that a tap pays. The centre dot stays on while the inner arc pair, then the outer pair, brighten in a slow
- * loop; only their alpha animates. When animations are off it is the still icon. Hidden when not [visible], which
- * callers use in ambient mode and where the watch has no usable NFC.
+ * loop; only their alpha animates. When animations are off it is the still icon. With NFC off it is the still icon,
+ * dimmed and slashed, and a tap on it opens the NFC settings through [onDisabledClick].
  */
 @Composable
 fun NfcHint(
-    visible: Boolean,
+    state: NfcHintState,
+    onDisabledClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (!visible) return
+    when (state) {
+        NfcHintState.Hidden -> Unit
+        NfcHintState.Active -> ActiveHint(modifier = modifier)
+        NfcHintState.Disabled -> DisabledHint(onClick = onDisabledClick, modifier = modifier)
+    }
+}
+
+@Composable
+private fun DisabledHint(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val description = stringResource(R.string.home__nfc_off)
+    Icon(
+        painter = painterResource(R.drawable.ic_broadcast_off),
+        contentDescription = description,
+        tint = Colors.White32,
+        modifier = modifier
+            .offset(y = DISABLED_TOUCH_PADDING)
+            .clickableAlpha(onClickLabel = description, onClick = onClick)
+            .padding(DISABLED_TOUCH_PADDING)
+            .size(HINT_SIZE)
+            .testTag("NfcHintDisabled")
+    )
+}
+
+@Composable
+private fun ActiveHint(modifier: Modifier = Modifier) {
     val description = stringResource(R.string.home__nfc_hint)
     val hintModifier = modifier
-        .size(24.dp)
+        .size(HINT_SIZE)
         .semantics { contentDescription = description }
         .testTag("NfcHint")
     if (LocalContext.current.areAnimationsDisabled) {
@@ -169,6 +276,14 @@ private class BroadcastPaths {
 @Composable
 private fun Preview() {
     WearPreview {
-        NfcHint(visible = true)
+        NfcHint(state = NfcHintState.Active, onDisabledClick = {})
+    }
+}
+
+@WearPreviewDevices
+@Composable
+private fun PreviewDisabled() {
+    WearPreview {
+        NfcHint(state = NfcHintState.Disabled, onDisabledClick = {})
     }
 }

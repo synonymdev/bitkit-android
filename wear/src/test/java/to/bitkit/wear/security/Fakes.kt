@@ -2,6 +2,7 @@ package to.bitkit.wear.security
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import to.bitkit.wear.data.NetworkMonitor
 
 /** A [Bip39] over a few words, whose phrases are valid when they end in "about". */
 class FakeBip39 : Bip39 {
@@ -22,6 +23,10 @@ class FakeBip39 : Bip39 {
     }
 
     override fun seed(mnemonic: String, passphrase: String?): ByteArray = ByteArray(64)
+}
+
+class FakeNetworkMonitor(isOnline: Boolean = true) : NetworkMonitor {
+    override val isOnline = MutableStateFlow(isOnline)
 }
 
 class FakeDeviceLock(

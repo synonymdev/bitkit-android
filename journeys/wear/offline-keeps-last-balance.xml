@@ -1,0 +1,22 @@
+<journey name="wear offline keeps last balance">
+  <description>
+    Once the wallet has synced this session, losing the network keeps the last balance on screen with a small
+    no-network icon and no text, and hides the NFC hint, since a tap cannot pay offline. When the network returns the
+    wallet syncs again by itself, under the loading ring, and the icon goes away. Emulator and physical watch (on a
+    watch, turn on airplane mode in its settings).
+
+    Precondition: Restored wallet, see journeys/wear/README.md › Restored wallet, on the Balance page with the loading
+    ring stopped and the app on screen. Backend: hosted regtest. Offline recipe: README › Offline.
+  </description>
+  <actions>
+    <action>Verify "WatchHomeBalance" reads the test wallet's balance ("1 000") and "WatchHomeOffline" is not listed</action>
+    <action>Run `adb logcat -c`</action>
+    <action>Run `adb shell cmd connectivity airplane-mode enable` and wait 5 s</action>
+    <action>Verify "WatchHomeOffline" is listed with the content-desc "Offline", "WatchHomeBalance" still reads "1 000", and "WatchHomeError" and "NfcHint" are not listed</action>
+    <action>Verify from a screenshot that a small crossed-out cloud sits below the time, with the balance unchanged and no added text</action>
+    <action>Run `adb shell cmd connectivity airplane-mode disable`</action>
+    <action>Dump `android layout` every 5 s until it no longer lists "WatchHomeOffline", for up to 1 minute</action>
+    <action>Verify "WatchHomeBalance" reads "1 000" and "WatchHomeError" is not listed</action>
+    <action>Run `adb logcat -d -s BitkitWear | grep "Synced wallet in"` and verify it prints a line: the wallet synced again by itself</action>
+  </actions>
+</journey>

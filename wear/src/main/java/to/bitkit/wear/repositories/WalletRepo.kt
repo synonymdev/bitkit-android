@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import to.bitkit.wear.data.NetworkMonitor
 import to.bitkit.wear.data.SettingsStore
 import to.bitkit.wear.di.IoDispatcher
 import to.bitkit.wear.ext.runSuspendCatching
@@ -34,6 +35,7 @@ class WalletRepo @Inject constructor(
     private val sparkService: WatchSparkService,
     private val settingsStore: SettingsStore,
     private val deviceLock: DeviceLock,
+    private val networkMonitor: NetworkMonitor,
 ) {
     companion object {
         private const val TAG = "WalletRepo"
@@ -62,6 +64,9 @@ class WalletRepo @Inject constructor(
         scope.launch {
             deviceLock.isLocked.collect { isLocked -> if (isLocked) lock() else resume() }
         }
+        scope.launch {
+            networkMonitor.isOnline.collect { isOnline -> if (isOnline) resume() else onNetworkLoss() }
+        }
     }
 
     suspend fun hasWallet(): Boolean = withContext(ioDispatcher) { seedStore.exists() }
@@ -86,8 +91,8 @@ class WalletRepo @Inject constructor(
     }
 
     /**
-     * Tells the wallet whether the app is on screen. Coming to the front reads the lock state again and reconnects a
-     * wallet that a lock disconnected.
+     * Tells the wallet whether the app is on screen. Coming to the front reads the lock state again, reconnects a
+     * wallet that a lock disconnected and syncs one that went offline.
      */
     suspend fun setForeground(isForeground: Boolean) = withContext(ioDispatcher) {
         this@WalletRepo.isForeground = isForeground
@@ -96,9 +101,10 @@ class WalletRepo @Inject constructor(
     }
 
     /**
-     * Connects the stored wallet and loads its balance; a wallet already connected only refreshes it. It stays
+     * Connects the stored wallet, syncs it and loads its balance; a wallet already connected only syncs it. It stays
      * disconnected while the watch is locked, which only a watch with a screen lock ever is. When the seed key is
-     * gone or permanently unusable, the wallet is wiped and [WalletStatus.Removed] reported.
+     * gone or permanently unusable, the wallet is wiped and [WalletStatus.Removed] reported. A sync that does not
+     * reach Spark fails the start: [WalletStatus.Offline] once this session has synced, [WalletStatus.Error] before.
      */
     suspend fun start(): Result<Unit> = withContext(ioDispatcher) {
         deviceLock.refresh()
@@ -121,14 +127,13 @@ class WalletRepo @Inject constructor(
                 throw WalletError.DeviceLocked()
             }
             val syncStart = TimeSource.Monotonic.markNow()
-            withTimeoutOrNull(SYNC_TIMEOUT) {
-                sparkService.syncWallet()
-                true
-            } ?: throw WalletError.Timeout("sync")
+            val sync = withTimeoutOrNull(SYNC_TIMEOUT) { sparkService.syncWallet() }
+                ?: throw WalletError.Timeout("sync")
+            if (!sync.hasReachedSpark) throw WalletError.NotSynced(sync.error)
             Logger.info("Synced wallet in '${syncStart.elapsedNow()}'", context = TAG)
             refreshBalance().getOrThrow()
         }.onSuccess {
-            _walletState.update { it.copy(status = WalletStatus.Ready) }
+            _walletState.update { it.copy(status = WalletStatus.Ready, hasSynced = true) }
         }.onFailure {
             Logger.error("Failed to start wallet", it, context = TAG)
             onStartFailure(it)
@@ -149,8 +154,14 @@ class WalletRepo @Inject constructor(
             is SeedStoreError.NotFound -> _walletState.update { it.copy(status = WalletStatus.Missing) }
             is SeedStoreError.DeviceLocked, is WalletError.DeviceLocked ->
                 _walletState.update { it.copy(status = WalletStatus.Locked) }
-            else -> _walletState.update { it.copy(status = WalletStatus.Error) }
+            else -> _walletState.update {
+                it.copy(status = if (it.hasSynced) WalletStatus.Offline else WalletStatus.Error)
+            }
         }
+    }
+
+    private fun onNetworkLoss() {
+        _walletState.update { if (it.status == WalletStatus.Ready) it.copy(status = WalletStatus.Offline) else it }
     }
 
     private suspend fun lock() {
@@ -162,8 +173,12 @@ class WalletRepo @Inject constructor(
     }
 
     private suspend fun resume() {
-        if (!isForeground || _walletState.value.status != WalletStatus.Locked) return
-        start()
+        if (!isForeground) return
+        when (_walletState.value.status) {
+            WalletStatus.Locked -> start()
+            WalletStatus.Offline if networkMonitor.isOnline.value -> start()
+            else -> Unit
+        }
     }
 
     suspend fun refreshBalance(): Result<Unit> = withContext(ioDispatcher) {
@@ -200,6 +215,11 @@ enum class WalletStatus {
     Idle,
     Connecting,
     Ready,
+
+    /** This session synced, but the last sync did not reach Spark, so the balance shown is the last one known. */
+    Offline,
+
+    /** The wallet could not be loaded, and no sync reached Spark this session. */
     Error,
 
     /** Disconnected because the watch is locked. */
@@ -215,11 +235,16 @@ enum class WalletStatus {
 sealed class WalletError(message: String) : AppError(message) {
     class DeviceLocked : WalletError("The watch is locked")
 
+    /** The wallet sync did not reach Spark, as without a network. */
+    class NotSynced(error: String?) : WalletError("Sync did not reach Spark: '$error'")
+
     /** Spark did not finish [step] in time. */
     class Timeout(step: String) : WalletError("Timed out on '$step'")
 }
 
+/** [balanceSats] is Spark's stored balance; only once [hasSynced] has this session reached Spark to confirm it. */
 data class WalletState(
     val status: WalletStatus = WalletStatus.Idle,
     val balanceSats: ULong? = null,
+    val hasSynced: Boolean = false,
 )

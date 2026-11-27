@@ -7,6 +7,8 @@
     <string name="home__balance_hidden">Balance cachée</string>
     <string name="home__error">Impossible de charger le wallet</string>
     <string name="home__nfc_hint">Touchez pour payer</string>
+    <string name="home__nfc_off">NFC désactivé</string>
+    <string name="home__offline">Hors ligne</string>
     <string name="home__toggle_unit">Changer d\'unité</string>
     <string name="onboarding__restore">Restaurer</string>
     <string name="removed__title">Wallet supprimé</string>

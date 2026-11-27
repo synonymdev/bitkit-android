@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -45,17 +47,27 @@ import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 import androidx.wear.compose.ui.tooling.preview.WearPreviewDevices
 import to.bitkit.wear.R
+import to.bitkit.wear.ext.openNfcSettings
 import to.bitkit.wear.ui.animations.BalanceAnimations
 import to.bitkit.wear.ui.animations.LARGE_ROW_SWAP_SCALE
 import to.bitkit.wear.ui.animations.SMALL_ROW_SWAP_SCALE
 import to.bitkit.wear.ui.components.BezelLoading
 import to.bitkit.wear.ui.components.CenteredScreen
 import to.bitkit.wear.ui.components.NfcHint
+import to.bitkit.wear.ui.components.NfcHintState
 import to.bitkit.wear.ui.components.WearPreview
 import to.bitkit.wear.ui.components.isAmbient
+import to.bitkit.wear.ui.components.nfcHintState
+import to.bitkit.wear.ui.components.rememberNfcState
 import to.bitkit.wear.ui.modifiers.clickableAlpha
 import to.bitkit.wear.ui.theme.AppTextStyles
 import to.bitkit.wear.ui.theme.Colors
+
+/** The offline icon's distance from the top edge, which keeps it below the time. */
+private val OFFLINE_ICON_TOP_PADDING = 40.dp
+
+/** The offline icon's size: small, as a status mark. */
+private val OFFLINE_ICON_SIZE = 18.dp
 
 /** The NFC hint's distance from the bottom edge, which keeps it above the page indicator. */
 private val NFC_HINT_BOTTOM_PADDING = 22.dp
@@ -81,17 +93,31 @@ private const val LARGE_SCREEN_DP = 227f
 /** The smallest size of the secondary row: Wear's minimum for essential text (WO-V14). */
 private const val MIN_SMALL_ROW_SP = 12f
 
+/** The gap between the small and the large row on a [SMALL_SCREEN_DP] screen; the phone's 12dp is too wide here. */
+private const val ROW_GAP_DP_SMALL_SCREEN = 3f
+
+/** The gap between the small and the large row on a [LARGE_SCREEN_DP] screen; sizes in between are interpolated. */
+private const val ROW_GAP_DP_LARGE_SCREEN = 4f
+
+@Composable
+private fun screenProgress(): Float {
+    val widthDp = LocalConfiguration.current.screenWidthDp.toFloat()
+    return ((widthDp - SMALL_SCREEN_DP) / (LARGE_SCREEN_DP - SMALL_SCREEN_DP)).coerceIn(0f, 1f)
+}
+
 /**
  * The share of the phone's text sizes the balance uses on this screen: the large amount is about 26sp on a 192dp
  * screen and 30sp on a 227dp screen, with the phone's proportions between the rows.
  */
 @Composable
 private fun balanceScale(): Float {
-    val widthDp = LocalConfiguration.current.screenWidthDp.toFloat()
-    val progress = ((widthDp - SMALL_SCREEN_DP) / (LARGE_SCREEN_DP - SMALL_SCREEN_DP)).coerceIn(0f, 1f)
-    val largeSp = LARGE_SP_SMALL_SCREEN + (LARGE_SP_LARGE_SCREEN - LARGE_SP_SMALL_SCREEN) * progress
+    val largeSp = LARGE_SP_SMALL_SCREEN + (LARGE_SP_LARGE_SCREEN - LARGE_SP_SMALL_SCREEN) * screenProgress()
     return largeSp / AppTextStyles.Display.fontSize.value
 }
+
+@Composable
+private fun rowGap(): Dp =
+    (ROW_GAP_DP_SMALL_SCREEN + (ROW_GAP_DP_LARGE_SCREEN - ROW_GAP_DP_SMALL_SCREEN) * screenProgress()).dp
 
 /** The opacity of the Bitkit mark that stands in for a balance that is hidden or not known yet. */
 private const val MARK_ALPHA = 0.4f
@@ -109,11 +135,16 @@ fun BalancePage(
         if (uiState.isRemoved) onSeedKeyLoss()
         if (uiState.isMissing) onWalletMissing()
     }
+    val context = LocalContext.current
+    val isAmbient = isAmbient()
+    val nfcState = rememberNfcState()
     Content(
         uiState = uiState,
-        isAmbient = isAmbient(),
+        isAmbient = isAmbient,
+        nfcHint = nfcHintState(nfcState, uiState.isWalletReady, isAmbient),
         onBalanceClick = viewModel::onUnitToggle,
         onRetryClick = viewModel::onRetryClick,
+        onNfcSettingsClick = context::openNfcSettings,
         modifier = modifier,
     )
 }
@@ -122,19 +153,29 @@ fun BalancePage(
 private fun Content(
     uiState: HomeUiState,
     isAmbient: Boolean,
+    nfcHint: NfcHintState,
     onBalanceClick: () -> Unit,
     onRetryClick: () -> Unit,
+    onNfcSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     CenteredScreen(
         sideInsetFraction = BALANCE_SIDE_INSET_FRACTION,
         overlay = {
             NfcHint(
-                visible = !isAmbient,
+                state = nfcHint,
+                onDisabledClick = onNfcSettingsClick,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = NFC_HINT_BOTTOM_PADDING)
             )
+            if (uiState.isOffline && !isAmbient) {
+                OfflineIcon(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = OFFLINE_ICON_TOP_PADDING)
+                )
+            }
             if (uiState.isLoading) BezelLoading()
         },
         modifier = modifier,
@@ -213,10 +254,10 @@ private fun BalanceHeader(
                     if (it == EnterExitState.Visible) 1f else SMALL_ROW_SWAP_SCALE
                 }
                 state.amount?.let {
-                    SmallRow(amount = it, modifier = Modifier.swapScale { scale })
+                    SmallRow(amount = it, modifier = Modifier.swapScale(SMALL_ROW_ORIGIN) { scale })
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(rowGap()))
             AnimatedContent(
                 targetState = largeRowState,
                 transitionSpec = { BalanceAnimations.swapLargeRowTransition using SizeTransform(clip = false) },
@@ -228,18 +269,30 @@ private fun BalanceHeader(
                     if (it == EnterExitState.Visible) 1f else LARGE_ROW_SWAP_SCALE
                 }
                 state.amount?.let {
-                    LargeRow(amount = it, maxWidth = maxRowWidth, modifier = Modifier.swapScale { scale })
+                    LargeRow(
+                        amount = it,
+                        maxWidth = maxRowWidth,
+                        modifier = Modifier.swapScale(LARGE_ROW_ORIGIN) { scale }
+                    )
                 }
             }
         }
     }
 }
 
-/** Scales a row from its top start, as on the phone. */
-private fun Modifier.swapScale(scale: () -> Float): Modifier = graphicsLayer {
+/** Scales the large row from its top start, as on the phone. */
+private val LARGE_ROW_ORIGIN = TransformOrigin(0f, 0f)
+
+/**
+ * Scales the small row from its bottom start, unlike the phone's top start: at the watch's tight row gap, a small row
+ * growing downwards to 1.5x mid-swap would overlap the large row; growing upwards it stays clear.
+ */
+private val SMALL_ROW_ORIGIN = TransformOrigin(0f, 1f)
+
+private fun Modifier.swapScale(origin: TransformOrigin, scale: () -> Float): Modifier = graphicsLayer {
     scaleX = scale()
     scaleY = scale()
-    transformOrigin = TransformOrigin(0f, 0f)
+    transformOrigin = origin
 }
 
 @Composable
@@ -358,6 +411,18 @@ private fun Mark(modifier: Modifier = Modifier) {
 }
 
 @Composable
+private fun OfflineIcon(modifier: Modifier = Modifier) {
+    Icon(
+        painter = painterResource(R.drawable.ic_cloud_off),
+        contentDescription = stringResource(R.string.home__offline),
+        tint = Colors.White64,
+        modifier = modifier
+            .size(OFFLINE_ICON_SIZE)
+            .testTag("WatchHomeOffline")
+    )
+}
+
+@Composable
 private fun Error(
     onRetryClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -394,8 +459,25 @@ private fun Preview() {
         Content(
             uiState = HomeUiState(primaryAmount = PreviewBitcoin, secondaryAmount = PreviewFiat),
             isAmbient = false,
+            nfcHint = NfcHintState.Active,
             onBalanceClick = {},
             onRetryClick = {},
+            onNfcSettingsClick = {},
+        )
+    }
+}
+
+@WearPreviewDevices
+@Composable
+private fun PreviewNfcOff() {
+    WearPreview {
+        Content(
+            uiState = HomeUiState(primaryAmount = PreviewBitcoin, secondaryAmount = PreviewFiat),
+            isAmbient = false,
+            nfcHint = NfcHintState.Disabled,
+            onBalanceClick = {},
+            onRetryClick = {},
+            onNfcSettingsClick = {},
         )
     }
 }
@@ -410,8 +492,10 @@ private fun PreviewWide() {
                 secondaryAmount = DisplayAmount(symbol = "$", text = "21,543,210,987.65"),
             ),
             isAmbient = false,
+            nfcHint = NfcHintState.Active,
             onBalanceClick = {},
             onRetryClick = {},
+            onNfcSettingsClick = {},
         )
     }
 }
@@ -423,8 +507,10 @@ private fun PreviewSyncing() {
         Content(
             uiState = HomeUiState(isLoading = true, primaryAmount = PreviewBitcoin, secondaryAmount = PreviewFiat),
             isAmbient = false,
+            nfcHint = NfcHintState.Hidden,
             onBalanceClick = {},
             onRetryClick = {},
+            onNfcSettingsClick = {},
         )
     }
 }
@@ -436,8 +522,10 @@ private fun PreviewFirstConnect() {
         Content(
             uiState = HomeUiState(isLoading = true),
             isAmbient = false,
+            nfcHint = NfcHintState.Hidden,
             onBalanceClick = {},
             onRetryClick = {},
+            onNfcSettingsClick = {},
         )
     }
 }
@@ -449,8 +537,25 @@ private fun PreviewError() {
         Content(
             uiState = HomeUiState(isError = true),
             isAmbient = false,
+            nfcHint = NfcHintState.Hidden,
             onBalanceClick = {},
             onRetryClick = {},
+            onNfcSettingsClick = {},
+        )
+    }
+}
+
+@WearPreviewDevices
+@Composable
+private fun PreviewOffline() {
+    WearPreview {
+        Content(
+            uiState = HomeUiState(isOffline = true, primaryAmount = PreviewBitcoin, secondaryAmount = PreviewFiat),
+            isAmbient = false,
+            nfcHint = NfcHintState.Hidden,
+            onBalanceClick = {},
+            onRetryClick = {},
+            onNfcSettingsClick = {},
         )
     }
 }
@@ -462,8 +567,10 @@ private fun PreviewAmbient() {
         Content(
             uiState = HomeUiState(primaryAmount = PreviewBitcoin, secondaryAmount = PreviewFiat),
             isAmbient = true,
+            nfcHint = NfcHintState.Hidden,
             onBalanceClick = {},
             onRetryClick = {},
+            onNfcSettingsClick = {},
         )
     }
 }

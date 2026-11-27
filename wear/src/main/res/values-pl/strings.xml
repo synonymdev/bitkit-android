@@ -7,6 +7,8 @@
     <string name="home__balance_hidden">Saldo ukryte</string>
     <string name="home__error">Nie udało się wczytać portfela</string>
     <string name="home__nfc_hint">Dotknij, aby zapłacić</string>
+    <string name="home__nfc_off">NFC wyłączone</string>
+    <string name="home__offline">Offline</string>
     <string name="home__toggle_unit">Zmień jednostkę</string>
     <string name="onboarding__restore">Odzyskaj</string>
     <string name="removed__title">Portfel usunięty</string>

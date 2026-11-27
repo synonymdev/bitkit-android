@@ -5,14 +5,15 @@
     palm does the same as `KEYCODE_SLEEP`).
 
     Precondition: Restored wallet, see journeys/wear/README.md › Restored wallet, on the Balance page with the loading
-    ring stopped, and the always-on screen on (README › Watch gestures). Backend: hosted regtest.
+    ring stopped, and the always-on screen on (README › Watch gestures). Backend: hosted regtest. The NFC hint shows
+    only on a watch with NFC on; the emulators have no NFC, so there the "NfcHint" checks expect it absent throughout.
   </description>
   <actions>
-    <action>Verify "WatchHomeBalance" and "NfcHint" are listed</action>
+    <action>Verify "WatchHomeBalance" is listed, and "NfcHint" too on a watch with NFC on</action>
     <action>Run `adb shell input keyevent KEYCODE_SLEEP` and wait 3 s</action>
     <action>Verify "WatchHomeBalanceHidden" is listed with the content-desc "Balance hidden", and "WatchHomeBalance", "WatchHomeBalanceSecondary" and "NfcHint" are not</action>
     <action>Verify from a screenshot that the screen shows the time, a dimmed Bitkit mark and the page dots, and no amount</action>
     <action>Run `adb shell input keyevent KEYCODE_WAKEUP` and wait 2 s</action>
-    <action>Verify "WatchHomeBalance" and "NfcHint" are listed again and "WatchHomeBalanceHidden" is not</action>
+    <action>Verify "WatchHomeBalance" is listed again, "NfcHint" too on a watch with NFC on, and "WatchHomeBalanceHidden" is not</action>
   </actions>
 </journey>

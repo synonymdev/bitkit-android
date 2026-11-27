@@ -7,6 +7,8 @@
     <string name="home__balance_hidden">Balance hidden</string>
     <string name="home__error">Couldn\'t load wallet</string>
     <string name="home__nfc_hint">Tap to pay</string>
+    <string name="home__nfc_off">NFC off</string>
+    <string name="home__offline">Offline</string>
     <string name="home__toggle_unit">Switch unit</string>
     <string name="onboarding__restore">Restore</string>
     <string name="removed__title">Wallet removed</string>

@@ -12,6 +12,10 @@ Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only
   watch build on a phone: it replaces the phone app.
 - **Flavors.** `dev` runs on regtest, `mainnet` on mainnet with a Breez API key. `tnet` builds, but Spark has no
   testnet, so it shows the Not supported screen.
+- **NFC required.** The manifest requires `android.hardware.nfc` (`android:required="true"`), so Play offers the
+  app only to watches with NFC. It is a store filter only: `pm install` ignores it, so `just wear-install` still
+  installs on the NFC-less emulators. Host card emulation (`android.hardware.nfc.hce`) is not required yet; PR 4
+  decides that with the tap-to-pay work.
 - **SDK levels.** `minSdk` 34 (Wear OS 5), `targetSdk` 36, `compileSdk` 37. Wear OS 6+ keeps apps targeting 36
   always-on, so the home screen hides the balance and stops its animations in ambient mode.
 - **ABIs.** Debug builds split `arm64-v8a`, `armeabi-v7a` and `x86_64` (emulator); release builds ship the two ARM
@@ -35,7 +39,9 @@ Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only
   bitkit-core, as on the phone.
 - `services/WatchSparkService`: connect, disconnect, sync, info, payments, receive and send, with the phone's SDK
   settings, the local regtest fixture and the `SparkSendKey` idempotency keys.
-- `repositories`: `WalletRepo` (wallet state and balance, restore, start, lock handling, wipe) and `CurrencyRepo` (Blocktank rates).
+- `repositories`: `WalletRepo` (wallet state and balance, restore, start, lock and network handling, wipe) and
+  `CurrencyRepo` (Blocktank rates).
+- `data`: `SettingsStore`, the rates client and `NetworkMonitor` (`ConnectivityManager`'s default network).
 - `ui`: one `MainActivity` with `testTagsAsResourceId`, a `SwipeDismissableNavHost` with the routes Onboarding,
   the Restore graph, Wallet removed, Home, About and Not supported, and the M3 Expressive theme (black background,
   Brand orange, Inter Tight).
@@ -54,24 +60,45 @@ On-screen copy stays short: a title or one line of at most about six words per s
 - **Balance.** The phone's balance header: the other unit in a small row above, the amount large below, both
   left-aligned within a block that is centered on the screen,
   each with its currency symbol drawn apart in the phone's styles (`AppTextStyles.Display` and `CaptionM`, copied).
-  The large row scales down only as far as a small round screen needs. A tap anywhere on it swaps the units
-  (`WatchHomeBalanceToggle`) with the phone's spring swap animation and press fade (`BalanceAnimations` and
-  `clickableAlpha`, copied), scaling the rows from their top start as the phone does. Before the
+  The large row scales down only as far as a small round screen needs. The rows are about 4dp apart on a 227dp
+  screen and 3dp on a 192dp one, tighter than the phone's 12dp to match the smaller type. A tap anywhere on it swaps
+  the units (`WatchHomeBalanceToggle`) with the phone's spring swap animation and press fade (`BalanceAnimations` and
+  `clickableAlpha`, copied). The large row scales from its top start as on the phone; the small row scales from its
+  bottom start, so at the tight gap it grows upwards mid-swap instead of over the large row. Before the
   first balance a small dimmed Bitkit mark stands in for it (`WatchHomeBalancePending`); a reconnect keeps the last
-  balance of the session on screen. A failed start shows a short error and a retry icon. In ambient mode the
+  balance of the session on screen. A failed start shows a short error and a retry icon. See Offline below. In ambient mode the
   balance is replaced by the dimmed mark (`WatchHomeBalanceHidden`) and nothing animates. The last balance is kept
   in memory only, never written to disk.
-- **NFC hint.** The phone's broadcast icon (`ic_broadcast`, tinted white-64 as in the Send sheet's nearby pill)
-  sits at the bottom of the Balance page as `NfcHint`, above the page indicator: its dot stays on while the inner
-  and then the outer arc pair brighten in a slow loop, to say that a tap pays. It is the still icon when animations
-  are off and hidden in ambient mode. `NfcHint` takes `visible`, for gating on NFC hardware later.
+- **NFC hint.** Shown at the bottom of the Balance page, above the page indicator, only while the wallet is ready
+  to pay: a synced balance, with no loading ring, error or offline icon, and never in ambient mode. Its state
+  follows NFC live (`NfcAdapter.ACTION_ADAPTER_STATE_CHANGED` while Home is shown, and on resume):
+  - NFC on: the phone's broadcast icon (`ic_broadcast`, tinted white-64 as in the Send sheet's nearby pill) as
+    `NfcHint`. Its dot stays on while the inner and then the outer arc pair brighten in a slow loop, to say that a
+    tap pays. It is the still icon when animations are off.
+  - NFC off: the same icon, still, dimmed to white-32 and slashed like the phone's `ic_eye_slash`
+    (`ic_broadcast_off`), as `NfcHintDisabled` ("NFC off"). A tap opens the NFC settings, or the settings home on
+    a watch without an NFC settings screen.
+  - No NFC adapter: hidden. Only the emulators get here; a store install always has NFC (see NFC required).
+
+  The emulators have no NFC, so the two visible states are checked on a physical watch, or in the `NfcHint` and
+  `BalancePage` previews (`PreviewNfcOff`).
+- **Offline.** `WalletRepo` counts a sync only when it reached Spark: offline, the SDK's `syncWallet` still returns
+  at once, with a `Network` error as `lastSyncError` and no `lastSyncedAt`. Until a sync of this session reaches
+  Spark, no balance shows, so an unsynced 0 (a wallet restored offline) never looks real: without a network the
+  start ends in the error with its retry (`WatchHomeError`, `WatchHomeRetry`). Once a sync of this session has
+  reached Spark, losing the network, or a later sync that does not reach Spark, keeps the last balance with a small
+  no-network icon (`WatchHomeOffline`, no text). When `NetworkMonitor` reports the network back and the app is on
+  screen, the wallet syncs again under the loading ring. The error does not retry by itself; the wearer taps retry.
 - **Settings.** A short list of icon rows: About and Remove wallet. The unit has no setting: tapping the balance is
   the only way to switch it, and the choice is kept in the settings store across restarts. Remove wallet asks with a
   one-line title and the two round ✕/✓ buttons.
 - **Loading.** Every wait shows `BezelLoading`: an indeterminate ring around the screen edge (test tag
   `BezelLoading`), with the screen's content readable inside it. It covers connecting and syncing on Balance, saving
-  the restored wallet, and removing the wallet. It is hidden in ambient mode. `BezelPadding` and `BezelStrokeWidth`
-  hold the ring's padding and stroke for other edge rings, such as hold-to-pay.
+  the restored wallet, and removing the wallet. It is hidden in ambient mode. Accessibility services report only
+  content that no node above it covers, so the full-screen ring has no semantics; its one progress node
+  (`BezelLoading`) is a stroke-sized spot at the top of the ring, and the content beneath stays reachable by TalkBack
+  and `android layout`. `BezelPadding` and `BezelStrokeWidth` hold the ring's padding and stroke for other edge
+  rings, such as hold-to-pay.
 - **Style.** Black background; Brand orange only on the one primary action (an `EdgeButton`) and accents; Inter
   Tight; content centered inside the round screen and clear of the time; icons rather than labels where the icon is
   clear; no stacked button lists. Icon and text buttons morph their shape on press and the theme uses the expressive
