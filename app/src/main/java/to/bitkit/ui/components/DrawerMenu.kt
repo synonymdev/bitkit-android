@@ -7,15 +7,19 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
@@ -202,132 +206,138 @@ private fun Menu(
 ) {
     val scope = rememberCoroutineScope()
 
-    Column(
+    BoxWithConstraints(
         modifier = Modifier
             .width(drawerWidth)
             .fillMaxHeight()
             .background(drawerBg)
             .systemBarsPadding()
     ) {
-        VerticalSpacer(16.dp)
+        Column(
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+        ) {
+            VerticalSpacer(16.dp)
 
-        DrawerItem(
-            label = stringResource(R.string.wallet__drawer__wallet),
-            iconRes = R.drawable.ic_coins,
-            onClick = {
-                onClickWallet()
-                scope.launch { drawerState.close() }
-            },
-            modifier = Modifier.testTag("DrawerWallet")
-        )
-
-        DrawerItem(
-            label = stringResource(R.string.wallet__drawer__activity),
-            iconRes = R.drawable.ic_heartbeat,
-            onClick = {
-                onBeforeNavigate(Routes.AllActivity)
-                rootNavController.navigateIfNotCurrent(Routes.AllActivity)
-                scope.launch { drawerState.close() }
-            },
-            modifier = Modifier.testTag("DrawerActivity")
-        )
-
-        if (showSubscriptions) {
             DrawerItem(
-                label = stringResource(R.string.subscriptions__title),
-                iconRes = R.drawable.ic_arrows_clockwise,
+                label = stringResource(R.string.wallet__drawer__wallet),
+                iconRes = R.drawable.ic_coins,
                 onClick = {
-                    val route = Routes.Subscriptions()
-                    onBeforeNavigate(route)
-                    rootNavController.navigateIfNotCurrent(route)
+                    onClickWallet()
                     scope.launch { drawerState.close() }
                 },
-                modifier = Modifier.testTag("DrawerSubscriptions")
+                modifier = Modifier.testTag("DrawerWallet")
             )
-        }
 
-        DrawerItem(
-            label = stringResource(R.string.wallet__drawer__contacts),
-            iconRes = R.drawable.ic_users,
-            onClick = {
-                onClickContacts()
-                scope.launch { drawerState.close() }
-            },
-            modifier = Modifier.testTag("DrawerContacts")
-        )
-
-        DrawerItem(
-            label = stringResource(R.string.wallet__drawer__profile),
-            iconRes = R.drawable.ic_user_square,
-            onClick = {
-                onClickProfile()
-                scope.launch { drawerState.close() }
-            },
-            modifier = Modifier.testTag("DrawerProfile")
-        )
-
-        DrawerItem(
-            label = stringResource(R.string.wallet__drawer__widgets),
-            iconRes = R.drawable.ic_stack,
-            onClick = {
-                onClickAddWidget()
-                scope.launch { drawerState.close() }
-            },
-            modifier = Modifier.testTag("DrawerWidgets")
-        )
-
-        DrawerItem(
-            label = stringResource(R.string.wallet__drawer__shop),
-            iconRes = R.drawable.ic_store_front,
-            onClick = {
-                onClickShop()
-                scope.launch { drawerState.close() }
-            },
-            modifier = Modifier.testTag("DrawerShop")
-        )
-
-        DrawerItem(
-            label = stringResource(R.string.wallet__drawer__support),
-            iconRes = R.drawable.ic_chats_circle,
-            onClick = {
-                onBeforeNavigate(Routes.Support)
-                rootNavController.navigateIfNotCurrent(Routes.Support)
-                scope.launch { drawerState.close() }
-            },
-            modifier = Modifier.testTag("DrawerSupport")
-        )
-
-        DrawerItem(
-            label = stringResource(R.string.wallet__drawer__settings),
-            iconRes = R.drawable.ic_settings,
-            onClick = {
-                onBeforeNavigate(Routes.Settings)
-                rootNavController.navigateIfNotCurrent(Routes.Settings)
-                scope.launch { drawerState.close() }
-            },
-            modifier = Modifier.testTag("DrawerSettings")
-        )
-
-        FillHeight()
-
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickableAlpha {
-                    onBeforeNavigate(Routes.AppStatus)
-                    rootNavController.navigateIfNotCurrent(Routes.AppStatus)
+            DrawerItem(
+                label = stringResource(R.string.wallet__drawer__activity),
+                iconRes = R.drawable.ic_heartbeat,
+                onClick = {
+                    onBeforeNavigate(Routes.AllActivity)
+                    rootNavController.navigateIfNotCurrent(Routes.AllActivity)
                     scope.launch { drawerState.close() }
-                }
-        ) {
-            AppStatus(
-                showText = true,
-                showReady = true,
-                color = Colors.Black,
-                modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .testTag("DrawerAppStatus")
+                },
+                modifier = Modifier.testTag("DrawerActivity")
             )
+
+            if (showSubscriptions) {
+                DrawerItem(
+                    label = stringResource(R.string.subscriptions__title),
+                    iconRes = R.drawable.ic_arrows_clockwise,
+                    onClick = {
+                        val route = Routes.Subscriptions()
+                        onBeforeNavigate(route)
+                        rootNavController.navigateIfNotCurrent(route)
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.testTag("DrawerSubscriptions")
+                )
+            }
+
+            DrawerItem(
+                label = stringResource(R.string.wallet__drawer__contacts),
+                iconRes = R.drawable.ic_users,
+                onClick = {
+                    onClickContacts()
+                    scope.launch { drawerState.close() }
+                },
+                modifier = Modifier.testTag("DrawerContacts")
+            )
+
+            DrawerItem(
+                label = stringResource(R.string.wallet__drawer__profile),
+                iconRes = R.drawable.ic_user_square,
+                onClick = {
+                    onClickProfile()
+                    scope.launch { drawerState.close() }
+                },
+                modifier = Modifier.testTag("DrawerProfile")
+            )
+
+            DrawerItem(
+                label = stringResource(R.string.wallet__drawer__widgets),
+                iconRes = R.drawable.ic_stack,
+                onClick = {
+                    onClickAddWidget()
+                    scope.launch { drawerState.close() }
+                },
+                modifier = Modifier.testTag("DrawerWidgets")
+            )
+
+            DrawerItem(
+                label = stringResource(R.string.wallet__drawer__shop),
+                iconRes = R.drawable.ic_store_front,
+                onClick = {
+                    onClickShop()
+                    scope.launch { drawerState.close() }
+                },
+                modifier = Modifier.testTag("DrawerShop")
+            )
+
+            DrawerItem(
+                label = stringResource(R.string.wallet__drawer__support),
+                iconRes = R.drawable.ic_chats_circle,
+                onClick = {
+                    onBeforeNavigate(Routes.Support)
+                    rootNavController.navigateIfNotCurrent(Routes.Support)
+                    scope.launch { drawerState.close() }
+                },
+                modifier = Modifier.testTag("DrawerSupport")
+            )
+
+            DrawerItem(
+                label = stringResource(R.string.wallet__drawer__settings),
+                iconRes = R.drawable.ic_settings,
+                onClick = {
+                    onBeforeNavigate(Routes.Settings)
+                    rootNavController.navigateIfNotCurrent(Routes.Settings)
+                    scope.launch { drawerState.close() }
+                },
+                modifier = Modifier.testTag("DrawerSettings")
+            )
+
+            FillHeight()
+
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickableAlpha {
+                        onBeforeNavigate(Routes.AppStatus)
+                        rootNavController.navigateIfNotCurrent(Routes.AppStatus)
+                        scope.launch { drawerState.close() }
+                    }
+            ) {
+                AppStatus(
+                    showText = true,
+                    showReady = true,
+                    color = Colors.Black,
+                    modifier = Modifier
+                        .padding(vertical = 16.dp)
+                        .testTag("DrawerAppStatus")
+                )
+            }
         }
     }
 }
