@@ -7797,6 +7797,8 @@ class AppViewModel @Inject constructor(
                 attempt.attemptId == original.attemptId && attempt.requestId == original.requestId &&
                     attempt.orderId == original.orderId && attempt.payerIdentity == original.payerIdentity
             )
+            // Read right before dispatch: a Spark exit's funding is paid again only while the exit still asks for it.
+            sparkExitRepo.authorizePayAgain(attempt)
             if (request != null) {
                 val currentRequest =
                     (

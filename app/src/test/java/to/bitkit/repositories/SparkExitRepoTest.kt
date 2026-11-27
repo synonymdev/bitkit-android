@@ -2226,6 +2226,79 @@ class SparkExitRepoTest : BaseUnitTest() {
         assertEquals(8000uL, ask.receivedSats, "the payment the first read found still counts")
     }
 
+    @Test
+    fun `an unresolved savings payment is paid again only while the exit asks`() = test {
+        SparkExitStore(File(Env.sparkExitRecordPath(0))).save(awaitingRecord())
+        var utxos = "[]"
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain { utxos })
+        val unknown = refusedSavingsPayment().copy(evidence = OnchainSendEvidence.Unknown)
+
+        sut.authorizePayAgain(unknown)
+        assertTrue(runCatching { sut.authorizePayAgain(unknown.copy(releaseApproved = true)) }.isFailure)
+        utxos = """[{"txid":"${"f0".repeat(32)}","vout":0,"value":21000,"status":{"confirmed":false}}]"""
+        assertTrue(runCatching { sut.authorizePayAgain(unknown) }.isFailure, "another wallet covered it")
+        sut.authorizePayAgain(unknown.copy(address = "bcrt1qordinary"))
+        sut.onAppBackgrounded()
+    }
+
+    @Test
+    fun `an unresolved savings payment keeps a way out once another wallet paid part of the funding`() = test {
+        // The exit asks 20_000 sats; another wallet paid 1_000, so it still asks for the rest.
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(awaitingRecord())
+        val partial = """[{"txid":"${"f0".repeat(32)}","vout":0,"value":1000,"status":{"confirmed":true}}]"""
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain { partial })
+        val unknown = refusedSavingsPayment().copy(evidence = OnchainSendEvidence.Unknown)
+
+        val retry = runCatching { sut.authorizePayAgain(unknown) }
+        // Its txid is kept on the exit, as for a send with no answer.
+        store.save(awaitingRecord(paidTxid = unknown.txid))
+        val kept = runCatching { sut.authorizePayAgain(unknown) }
+        sut.onAppBackgrounded()
+
+        assertTrue(retry.isSuccess, "Retry refused with '${retry.exceptionOrNull()?.message}'")
+        assertTrue(kept.isSuccess, "Retry of the kept payment refused with '${kept.exceptionOrNull()?.message}'")
+    }
+
+    @Test
+    fun `an ordinary savings send is paid again when the earlier exit addresses cannot be read`() = test {
+        File(Env.sparkExitEarlierAddressesPath(0)).apply { parentFile?.mkdirs() }.writeText("not json")
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain())
+        val ordinary = refusedSavingsPayment().copy(
+            address = "bcrt1qordinary",
+            evidence = OnchainSendEvidence.Unknown,
+        )
+
+        val retry = runCatching { sut.authorizePayAgain(ordinary) }
+        sut.onAppBackgrounded()
+
+        assertTrue(retry.isSuccess, "Ordinary send refused with '${retry.exceptionOrNull()?.message}'")
+    }
+
+    @Test
+    fun `paying again from savings is refused once funding from another wallet arrived`() = test {
+        val store = SparkExitStore(File(Env.sparkExitRecordPath(0)))
+        store.save(awaitingRecord())
+        val refused = refusedSavingsPayment()
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(refused)
+        var utxos = "[]"
+        whenever(
+            lightning.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any())
+        ).doSuspendableAnswer {
+            // Another wallet funded the address while the payment was prepared.
+            utxos = """[{"txid":"${"f0".repeat(32)}","vout":0,"value":21000,"status":{"confirmed":false}}]"""
+            val authorize = it.getArgument<suspend (OnchainSendAttempt) -> Unit>(5)
+            runCatching { authorize(refused) }.map { OnchainSendOutcome.Accepted("again") }
+        }
+        val sut = quotedSut(FakeSparkExitRecovering(), fundingChain { utxos })
+        sut.load().getOrThrow()
+        sut.tick().getOrThrow()
+
+        assertTrue(sut.retrySavingsPayment().isFailure)
+        assertNull(assertNotNull(store.load()).fundingPaymentTxid)
+        sut.onAppBackgrounded()
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `a cancel while savings pays again waits for the payment and then keeps the exit`() = test {

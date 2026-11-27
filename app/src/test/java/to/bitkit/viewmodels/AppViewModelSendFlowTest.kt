@@ -20661,6 +20661,32 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `send pending pays a Spark exit's funding again only while the exit asks for it`() = test {
+        val original = OnchainSendAttempt(
+            walletId = WalletScope.default, attemptId = "exit-funding", requestId = null, orderId = null,
+            address = "bcrt1qexitfunding", amountSats = 5_000uL, isMaxAmount = false,
+            feeRateSatsPerVByte = 1uL, isTransfer = false, channelId = null, tags = emptyList(),
+            evidence = OnchainSendEvidence.Unknown,
+        )
+        var dispatched = 0
+        whenever(lightningRepo.retryOriginalOnchainSend(any(), any(), any(), anyOrNull(), any(), any()))
+            .doSuspendableAnswer { invocation ->
+                val authorize = invocation.getArgument<suspend (OnchainSendAttempt) -> Unit>(5)
+                runCatching {
+                    authorize(original)
+                    dispatched++
+                    OnchainSendOutcome.Accepted("ab".repeat(32))
+                }
+            }
+
+        assertTrue(sut.retryOriginalOnchainSend(original, 2uL).isSuccess)
+        verify(sparkExitRepo).authorizePayAgain(original)
+        whenever(sparkExitRepo.authorizePayAgain(any())).thenThrow(IllegalStateException("funded"))
+        assertTrue(sut.retryOriginalOnchainSend(original, 2uL).isFailure)
+        assertEquals(1, dispatched, "Paid again once the exit no longer asked")
+    }
+
+    @Test
     fun `recovery of a Blocktank order shows the sheet and broadcasts nothing`() = test {
         val order = to.bitkit.ext.mockOrder().copy(
             orderExpiresAt = (Clock.System.now() + 60.seconds).toString(),

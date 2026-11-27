@@ -1055,6 +1055,7 @@
     <string name="wallet__send_paykit_no_route__description">Ce contact n\'a aucun moyen de paiement que Bitkit peut utiliser pour le moment.</string>
     <string name="wallet__send_paykit_no_route__title">Impossible de payer ce contact</string>
     <string name="wallet__send_paykit_withdrawal_settling__description">Un retrait précédent de votre solde dépenses est encore en cours de règlement. Réessayez une fois terminé.</string>
+    <string name="wallet__send_pending__abandon_exit_note">Ce transfert forcé n\'a plus besoin de ce paiement. Bitkit vérifie d\'abord le réseau, puis renvoie ses pièces vers votre portefeuille afin qu\'il ne soit jamais confirmé. Cela coûte des frais de réseau.</string>
     <string name="wallet__send_pending__abandon_transfer_note">Les transferts vers le solde de dépenses ne sont plus disponibles. Bitkit vérifie d\'abord le réseau, puis renvoie les pièces de ce transfert vers votre portefeuille afin que le transfert d\'origine ne soit jamais confirmé. Cela coûte des frais de réseau.</string>
     <string name="wallet__send_to">Pour</string>
     <string name="wallet__recipient_contact">Contact</string>

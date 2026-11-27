@@ -1221,6 +1221,7 @@
     <string name="wallet__send_paykit_no_route__description">Este contato não tem nenhum método de pagamento que o Bitkit possa usar agora.</string>
     <string name="wallet__send_paykit_no_route__title">Não é possível pagar este contato</string>
     <string name="wallet__send_paykit_withdrawal_settling__description">Um levantamento anterior do seu saldo de gastos ainda está a ser concluído. Tente novamente quando for concluído.</string>
+    <string name="wallet__send_pending__abandon_exit_note">Esta transferência forçada não precisa mais deste pagamento. O Bitkit primeiro verifica a rede e depois devolve as moedas dele para sua carteira, para que nunca seja confirmado. Isso tem uma taxa de rede.</string>
     <string name="wallet__send_pending__abandon_transfer_note">As transferências para o saldo de gastos não estão mais disponíveis. O Bitkit primeiro verifica a rede e depois devolve as moedas desta transferência para sua carteira, para que a transferência original nunca seja confirmada. Isso tem uma taxa de rede.</string>
     <string name="wallet__send_pending__description">Esse pagamento está demorando mais do que o esperado. Enquanto isso, você pode continuar usando a Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Pagamento Pendente</string>

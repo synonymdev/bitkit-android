@@ -130,13 +130,21 @@ data class OnchainSendAttempt(
         get() = requestId == null && isTransfer && orderId != null
 
     /**
-     * A Shop payment, or a Blocktank funding, from the node wallet that dispatched but never had its acceptance
-     * confirmed.
+     * An ordinary savings send, which may pay a Spark exit's fee funding. It is released only once that exit no longer
+     * needs it ([SparkExitFundingRelease]).
+     */
+    val mayFundSparkExit: Boolean
+        get() = requestId == null && !isTransfer && orderId == null
+
+    /**
+     * A Shop payment, a Blocktank funding, or a savings send a Spark exit may no longer need, from the node wallet
+     * that dispatched but never had its acceptance confirmed.
      */
     val canBeAbandoned: Boolean
         get() {
             val isShopPayment = requestId != null && !isTransfer && !payerIdentity.isNullOrBlank()
-            return isUnresolved && (isShopPayment || isBlocktankFunding) && walletId == WalletScope.default &&
+            return isUnresolved && (isShopPayment || isBlocktankFunding || mayFundSparkExit) &&
+                walletId == WalletScope.default &&
                 initialDispatchAttempted && txid != null && !originalInputs.isNullOrEmpty() &&
                 candidateTxids.isNotEmpty()
         }

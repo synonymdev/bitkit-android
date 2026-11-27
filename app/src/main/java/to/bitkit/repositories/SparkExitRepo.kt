@@ -1195,6 +1195,27 @@ class SparkExitRepo @Inject constructor(
     }
 
     /**
+     * Refuses paying [attempt] to a Spark exit again once the stored exit of its wallet no longer asks for it, read
+     * right before dispatch; an exit that cannot be read refuses a send that may fund one.
+     */
+    suspend fun authorizePayAgain(attempt: OnchainSendAttempt) {
+        if (!attempt.mayFundSparkExit) return
+        val exit = withContext(bgDispatcher) { SparkExitFundingRelease.storedExit(attempt) }
+        checkNotNull(exit) { "The Spark exit could not be read" }
+        authorizePayAgain(attempt, exit)
+    }
+
+    /** Funding from another wallet may have reached the address while the payment was prepared. */
+    private suspend fun authorizePayAgain(attempt: OnchainSendAttempt, exit: SparkExitFundingRelease.Exit) {
+        check(!attempt.releaseApproved) { "Its release was approved" }
+        if (!SparkExitFundingRelease.isExitFunding(attempt, exit)) return
+        val utxos = runSuspendCatching { chain?.utxos(attempt.address) }.getOrNull()
+        check(SparkExitFundingRelease.mayPayAgain(attempt, exit, utxos)) {
+            "The Spark exit no longer asks for this funding"
+        }
+    }
+
+    /**
      * Pays the exit's fee funding from savings again after a node refused the payment: the same attempt, re-signed at
      * the rate the user approved over the inputs it already spends. Every version spends those inputs, so at most one
      * ever confirms, and it never needs the refused one to be known gone from the mempool first.
@@ -1225,7 +1246,10 @@ class SparkExitRepo @Inject constructor(
                             attemptId = refused.attemptId,
                             walletId = refused.walletId,
                             feeRateSatsPerVByte = refused.feeRateSatsPerVByte,
-                        ) { check(it.attemptId == refused.attemptId && it.address == refused.address) }
+                        ) {
+                            check(it.attemptId == refused.attemptId && it.address == refused.address)
+                            authorizePayAgain(it, SparkExitFundingRelease.Exit(record, _state.value.earlierAddresses))
+                        }
                             .getOrElse {
                                 pendingFundingTxid(it, refused.address)?.let { pending -> keepFundingPayment(pending) }
                                 _state.value.record?.let { current -> noteSavingsSend(current) }

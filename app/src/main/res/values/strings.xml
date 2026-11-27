@@ -1787,6 +1787,7 @@
     <string name="wallet__send_pending__abandon">Cancel expired payment</string>
     <string name="wallet__send_pending__abandon_checking">Checking the network. This can take up to 30 seconds.</string>
     <string name="wallet__send_pending__abandon_done">Payment cancelled. Its coins are back in your wallet.</string>
+    <string name="wallet__send_pending__abandon_exit_note">This force transfer no longer needs this payment. Bitkit first checks the network, then sends its coins back to your wallet so it can never confirm. This costs a network fee.</string>
     <string name="wallet__send_pending__abandon_note">This payment\'s request has ended. Bitkit first checks the network, then sends the payment\'s coins back to your wallet so the original payment can never confirm. This costs a network fee.</string>
     <string name="wallet__send_pending__abandon_pending">The cancellation was sent but is not confirmed yet. Open this payment again later to finish it.</string>
     <string name="wallet__send_pending__abandon_refused">This payment may still reach the network, so it cannot be cancelled.</string>
