@@ -3077,21 +3077,46 @@ class LightningRepo @Inject constructor(
 
     /**
      * The completion event of a send that settled before its caller started watching for it, read from the rail it
-     * last went out on: a node send only when it succeeded, as one the node paid earlier gets no new event.
+     * last went out on: a node send once it succeeded, or with [includeNodeFailure] once it failed with no attempt of
+     * it live. The node lists no failure reason, so a caller that can still get the node's failure event leaves it out.
      */
-    suspend fun settledSparkSendEvent(paymentHash: String): Event? =
-        if (isLdkSend(paymentHash)) paidNodeSendEvent(paymentHash) else sparkRepo.settledSendEvent(paymentHash)
+    suspend fun settledSparkSendEvent(paymentHash: String, includeNodeFailure: Boolean = true): Event? =
+        if (isLdkSend(paymentHash)) {
+            settledNodeSendEvent(paymentHash, includeNodeFailure)
+        } else {
+            sparkRepo.settledSendEvent(paymentHash)
+        }
 
-    private suspend fun paidNodeSendEvent(paymentHash: String): Event? {
+    private suspend fun settledNodeSendEvent(paymentHash: String, includeFailure: Boolean): Event? {
+        val key = paymentHash.lowercase()
+        // Read before the row too, so a retry that ends while it is read still counts as live. The marks come first,
+        // so a send they count as recorded is already admitted or in flight when liveness is read.
+        val ldkRecordsBefore = ldkSendRecordedAt[key] ?: 0L
+        val sparkRecordsBefore = sparkRepo.sendRecordMark()
+        val wasLive = isSendLive(paymentHash, key, ldkRecordsBefore)
         val payments = runSuspendCatching { lightningService.listPayments() }
             .onFailure { Logger.warn("Failed to list node payments", it, context = TAG) }
             .getOrNull()
         val payment = payments?.firstOrNull {
-            it.direction == PaymentDirection.OUTBOUND && it.status == PaymentStatus.SUCCEEDED &&
+            it.direction == PaymentDirection.OUTBOUND &&
                 (it.kind as? PaymentKind.Bolt11)?.hash.equals(paymentHash, ignoreCase = true)
         } ?: return null
         val kind = payment.kind as PaymentKind.Bolt11
-        return Event.PaymentSuccessful(payment.id, kind.hash, kind.preimage, payment.feePaidMsat)
+        return when (payment.status) {
+            PaymentStatus.SUCCEEDED -> Event.PaymentSuccessful(
+                payment.id,
+                kind.hash,
+                kind.preimage,
+                payment.feePaidMsat,
+            )
+            PaymentStatus.FAILED -> {
+                // A failed row can be an earlier attempt's while a retry of it on either rail can still pay it.
+                val isLive = wasLive || isSendLive(paymentHash, key, ldkRecordsBefore) ||
+                    sparkRepo.hasRecordedSendSince(sparkRecordsBefore, paymentHash)
+                Event.PaymentFailed(payment.id, kind.hash, null).takeIf { includeFailure && !isLive }
+            }
+            PaymentStatus.PENDING -> null
+        }
     }
 
     /** Spark's record of the Lightning send with [paymentHash], for recovery after its completion event was missed. */

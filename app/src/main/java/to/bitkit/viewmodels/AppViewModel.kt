@@ -8967,7 +8967,11 @@ class AppViewModel @Inject constructor(
                         outcome(it)?.let { result -> WatchResult.Complete(result) } ?: WatchResult.Continue()
                     }
                 }
-                lightningRepo.settledSparkSendEvent(hash)?.let(::outcome)?.also { watch.cancel() } ?: watch.await()
+                // A node failure comes with its reason in the watched event, which the payment list does not carry.
+                lightningRepo.settledSparkSendEvent(hash, includeNodeFailure = false)
+                    ?.let(::outcome)
+                    ?.also { watch.cancel() }
+                    ?: watch.await()
             }
             return result ?: Result.failure(PaymentPendingException(hash))
         }

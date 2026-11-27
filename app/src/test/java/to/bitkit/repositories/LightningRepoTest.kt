@@ -2417,6 +2417,77 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a failed node send with no attempt live settles as failed`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
+        assertEquals("h", sut.payInvoice("h", 1_000uL).getOrThrow())
+
+        // Its failure event was handled before the caller watched for it, so the caller reads the settled payment.
+        whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("h", PaymentStatus.FAILED)))
+
+        assertEquals("h", assertIs<Event.PaymentFailed>(sut.settledSparkSendEvent("h")).paymentHash)
+    }
+
+    @Test
+    fun `a failed node send settles nothing while a retry of it is sent`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
+        assertEquals("h", sut.payInvoice("h", 1_000uL).getOrThrow())
+        whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("h", PaymentStatus.FAILED)))
+        val proceed = CompletableDeferred<Unit>()
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            proceed.await()
+            "h"
+        }
+        val retry = backgroundScope.launch { sut.payInvoice("h", 1_000uL) }
+        runCurrent()
+
+        assertNull(sut.settledSparkSendEvent("h"))
+        proceed.complete(Unit)
+        retry.join()
+    }
+
+    @Test
+    fun `a failed node send settles nothing when a retry of it ends while the payments are listed`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
+        assertEquals("h", sut.payInvoice("h", 1_000uL).getOrThrow())
+        val proceed = CompletableDeferred<Unit>()
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            proceed.await()
+            "h"
+        }
+        val retry = backgroundScope.launch { sut.payInvoice("h", 1_000uL) }
+        runCurrent()
+        // The listing reads the earlier attempt's failed row, and the retry is sent and released before it returns.
+        whenever(lightningService.listPayments()).doSuspendableAnswer {
+            proceed.complete(Unit)
+            retry.join()
+            listOf(nodeSend("h", PaymentStatus.FAILED))
+        }
+
+        assertNull(sut.settledSparkSendEvent("h"))
+    }
+
+    @Test
+    fun `a failed node send is left to its event when the caller can still get it`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
+        assertEquals("h", sut.payInvoice("h", 1_000uL).getOrThrow())
+        whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("h", PaymentStatus.FAILED)))
+
+        assertNull(sut.settledSparkSendEvent("h", includeNodeFailure = false))
+    }
+
+    @Test
     fun `a spark send of an invoice the node already paid settles as paid`() = test {
         startNodeForTesting()
         whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("h", PaymentStatus.SUCCEEDED)))

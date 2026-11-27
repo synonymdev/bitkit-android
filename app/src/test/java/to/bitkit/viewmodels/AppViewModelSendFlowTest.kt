@@ -12353,7 +12353,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val invoice = lightningInvoice(bolt11, 1_000u)
         val paymentHash = invoice.paymentHash.toHex()
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12390,7 +12390,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val paymentHash = invoice.paymentHash.toHex()
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 1_000u)).thenReturn(Result.success(paymentHash))
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 2_000u)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12423,7 +12423,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val paymentHash = invoice.paymentHash.toHex()
         whenever(context.getString(R.string.wallet__send_quickpay__already_paid)).thenReturn("Already paid")
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12460,7 +12460,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val invoice = lightningInvoice(bolt11, 0u)
         val paymentHash = invoice.paymentHash.toHex()
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 2_000u)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12488,7 +12488,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val invoice = lightningInvoice(bolt11, 1_000u)
         val paymentHash = invoice.paymentHash.toHex()
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12514,7 +12514,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val invoice = lightningInvoice(bolt11, 1_000u)
         val paymentHash = invoice.paymentHash.toHex()
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12562,7 +12562,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val paymentHash = invoice.paymentHash.toHex()
         whenever(moveToSparkRepo.needsUpdateToSend(1_000uL)).thenReturn(true)
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12590,7 +12590,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val invoice = lightningInvoice(bolt11, 1_000u)
         val paymentHash = invoice.paymentHash.toHex()
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12795,7 +12795,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.onSendSuccess(details)
             Result.success(paymentHash)
         }
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -20758,7 +20758,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val paymentHash = "spark_hash"
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = paymentHash,
                 paymentHash = paymentHash,
@@ -20790,7 +20790,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
             .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
         // Spark's success was handled after the send returned pending, before the send screen tracked it.
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = paymentHash,
                 paymentHash = paymentHash,
@@ -20824,7 +20824,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
             .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
         // The send screen moved on to a payment to a contact before the pending send's success was read.
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenAnswer {
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenAnswer {
             setActiveContactPaymentContext(nextContactKey)
             Event.PaymentSuccessful(
                 paymentId = paymentHash,
