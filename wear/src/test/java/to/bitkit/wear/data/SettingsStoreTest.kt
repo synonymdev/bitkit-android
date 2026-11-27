@@ -1,7 +1,5 @@
 package to.bitkit.wear.data
 
-import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.edit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -32,7 +30,6 @@ class SettingsStoreTest : BaseUnitTest() {
     private val settingsFile by lazy { File(folder.root, "datastore/settings.preferences_pb") }
     private val seedDirectory by lazy { File(folder.root, "seed") }
     private val markerFile by lazy { File(seedDirectory, "wipe.pending") }
-    private val legacyWipePendingKey = booleanPreferencesKey("wallet_wipe_pending")
 
     @Test
     fun `a wipe note is an empty file beside the seed, and finishing the wipe deletes it`() = test {
@@ -92,24 +89,6 @@ class SettingsStoreTest : BaseUnitTest() {
 
         assertFalse(seedStore.exists())
         assertTrue(sut.isWipePending())
-        close()
-    }
-
-    @Test
-    fun `a note from the settings file moves to the marker file once`() = test {
-        val scope = scope()
-        settingsDataStore(scope) { settingsFile }.edit { it[legacyWipePendingKey] = true }
-        scope.coroutineContext.job.cancelAndJoin()
-        assertFalse(markerFile.exists())
-
-        val sut = open()
-
-        assertTrue(sut.isWipePending())
-        assertTrue(markerFile.exists())
-        close()
-
-        markerFile.delete()
-        assertFalse(open().isWipePending())
         close()
     }
 

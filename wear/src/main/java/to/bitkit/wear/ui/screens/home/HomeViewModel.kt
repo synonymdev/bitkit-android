@@ -55,6 +55,8 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val TAG = "HomeViewModel"
+
+        /** How long the state stays collected after the screen stops, so a short stop does not restart it. */
         private val STOP_TIMEOUT = 5.seconds
 
         /** How often the exchange rates are fetched again while the app is on screen. */
@@ -81,9 +83,11 @@ class HomeViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            // Only a change counts as becoming ready: the fetch above covers a wallet that is ready at the start.
             walletRepo.walletState
                 .map { it.status == WalletStatus.Ready }
                 .distinctUntilChanged()
+                .drop(1)
                 .collect { isReady -> if (isReady) fetchRates() }
         }
         viewModelScope.launch {

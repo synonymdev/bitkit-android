@@ -55,39 +55,39 @@ class HomeViewModelTest : BaseUnitTest() {
     override fun onTestEnd() = foregroundMonitor.isForeground.update { false }
 
     @Test
-    fun `rates are fetched when home opens and again each time the wallet becomes ready`() = test {
-        verify(currencyRepo, times(2)).refresh()
+    fun `rates are fetched once when home opens and again each time the wallet becomes ready`() = test {
+        verify(currencyRepo, times(1)).refresh()
 
         walletState.update { it.copy(status = WalletStatus.Offline) }
-        verify(currencyRepo, times(2)).refresh()
+        verify(currencyRepo, times(1)).refresh()
 
         walletState.update { it.copy(status = WalletStatus.Ready) }
-        verify(currencyRepo, times(3)).refresh()
+        verify(currencyRepo, times(2)).refresh()
     }
 
     @Test
     fun `rates are fetched every five minutes only while the app is on screen`() = test {
         testScheduler.advanceTimeBy(HomeViewModel.RATES_REFRESH_INTERVAL + 1.seconds)
-        verify(currencyRepo, times(3)).refresh()
+        verify(currencyRepo, times(2)).refresh()
 
         foregroundMonitor.isForeground.update { false }
         testScheduler.advanceTimeBy(HomeViewModel.RATES_REFRESH_INTERVAL * 3)
-        verify(currencyRepo, times(3)).refresh()
+        verify(currencyRepo, times(2)).refresh()
 
         foregroundMonitor.isForeground.update { true }
-        verify(currencyRepo, times(4)).refresh()
+        verify(currencyRepo, times(3)).refresh()
     }
 
     @Test
     fun `the network returning fetches the rates only while there are none`() = test {
         networkMonitor.isOnline.update { false }
         networkMonitor.isOnline.update { true }
-        verify(currencyRepo, times(3)).refresh()
+        verify(currencyRepo, times(2)).refresh()
 
         rates.update { listOf(rate("100000")) }
         networkMonitor.isOnline.update { false }
         networkMonitor.isOnline.update { true }
-        verify(currencyRepo, times(3)).refresh()
+        verify(currencyRepo, times(2)).refresh()
     }
 
     @Test
@@ -95,7 +95,7 @@ class HomeViewModelTest : BaseUnitTest() {
         sut.onRetryClick()
 
         verify(walletRepo, times(2)).start()
-        verify(currencyRepo, times(3)).refresh()
+        verify(currencyRepo, times(2)).refresh()
     }
 
     @Test

@@ -3,7 +3,9 @@
     The word entry screen blocks screenshots and screen recordings (FLAG_SECURE, debug builds included), while
     `android layout` still lists its tags; the screen before it can be captured. Emulator and physical watch.
 
-    Precondition: Fresh app, see journeys/wear/README.md › Fresh app. Backend: none.
+    Precondition: Fresh app, see journeys/wear/README.md › Fresh app. Backend: none. Read the screen
+    size once with `adb shell wm size` and use the swipe written for it: 454 px (`Wear_Large_Round_API37`) or 384 px
+    (`Wear_Small_Round_API34`); for another size scale it as in README › What differs.
   </description>
   <actions>
     <action>Tap Restore (tag "WatchOnboardingRestore")</action>
@@ -11,7 +13,7 @@
     <action>Verify `android layout` lists "RestoreWordInput"</action>
     <action>Run `adb shell input keyevent KEYCODE_BACK` to close the keyboard</action>
     <action>Take a screenshot and verify it is entirely black</action>
-    <action>Swipe to dismiss from the left edge: `adb shell input swipe 20 227 400 227 300`</action>
+    <action>Swipe to dismiss from the left edge: on a 454 px screen `adb shell input swipe 20 227 400 227 300`, on a 384 px screen `adb shell input swipe 15 192 340 192 300`</action>
     <action>Verify the title (tag "RestoreTitle") reads "How many words?"</action>
     <action>Take a screenshot and verify it shows "How many words?" with the 12 and 24 buttons, not a black frame</action>
   </actions>

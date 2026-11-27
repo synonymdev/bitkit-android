@@ -38,7 +38,7 @@ Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only
   needs no release signing.
 - **Build settings.** `gradle/bitkit-env.gradle.kts` holds the BuildConfig fields `:app` and `:wear` share
   (`BREEZ_API_KEY` with its length check, `NETWORK`, `E2E`, `E2E_BACKEND`, `E2E_LOCAL_HOST`,
-  `SPARK_LOCAL_CONFIG_B64`, `SPARK_LOCAL_CHAIN_URL`, `ESPLORA_URL`), read from the same sources as the phone build.
+  `SPARK_LOCAL_CONFIG_B64`, `SPARK_LOCAL_CHAIN_URL`), read from the same sources as the phone build.
   The watch app's `BREEZ_API_KEY` is always empty for now: regtest needs no key and mainnet is off, so the key stays
   out of the watch APK until `Env.IS_MAINNET_ENABLED` turns on.
 - **Locales.** The watch app ships the phone app's locales (`localeFilters`) and generates its locale config from
@@ -112,7 +112,8 @@ On-screen copy stays short: a title or one line of at most about six words per s
   and the page only collects its state. Until the first read the hint is hidden.
   - NFC on: the phone's broadcast icon (`ic_broadcast`, tinted white-64 as in the Send sheet's nearby pill) as
     `NfcHint`. Its dot stays on while the inner and then the outer arc pair brighten in a slow loop, to say that a
-    tap pays. It is the still icon when animations are off.
+    tap pays. It is the still icon when animations are off; that setting is read on the IO dispatcher each time
+    the hint appears, and the icon is still until then.
   - NFC off: the same icon, still, dimmed to white-32 and slashed like the phone's `ic_eye_slash`
     (`ic_broadcast_off`), as `NfcHintDisabled` ("NFC off"). A tap opens the NFC settings, or the settings home on
     a watch without an NFC settings screen.
@@ -215,8 +216,7 @@ The watch holds the full recovery phrase and passphrase, because Breez needs the
   storage, a seed key and a half-written seed file.
   - The note is an empty file, `wipe.pending`, beside the seed in the no-backup directory; the file existing is the
     note. It and its directory are synced to disk. It is not in the settings file, which is reset when it cannot be
-    read: a reset neither loses a wipe under way nor starts one. A note that an earlier build left in the settings
-    file is moved once: the file is written, then the old note removed.
+    read: a reset neither loses a wipe under way nor starts one.
   - The wallet counts as wiped once the seed file and the Spark storage are gone. A seed key that cannot be
     deleted, after a second try, does not fail the wipe: without its ciphertext it protects nothing, and each launch
     without a wallet tries the delete again. A Spark instance that cannot be disconnected is dropped, so the next

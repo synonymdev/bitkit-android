@@ -8,6 +8,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -24,6 +25,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.wear.data.SettingsStore
+import to.bitkit.wear.security.DeviceLock
 import to.bitkit.wear.security.FakeDeviceLock
 import to.bitkit.wear.security.FakeForegroundMonitor
 import to.bitkit.wear.security.FakeNetworkMonitor
@@ -241,6 +243,29 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a lost key wipe reports removed as its only status after connecting`() = test {
+        whenever(seedStore.load()).thenReturn(Result.failure(SeedStoreError.KeyInvalidated()))
+        val statuses = mutableListOf<WalletStatus>()
+        val collector = launch { sut.walletState.collect { statuses += it.status } }
+
+        sut.start()
+        collector.cancelAndJoin()
+
+        assertEquals(listOf(WalletStatus.Idle, WalletStatus.Connecting, WalletStatus.Removed), statuses)
+    }
+
+    @Test
+    fun `a lost key wipe that fails still ends removed and keeps its note`() = test {
+        whenever(seedStore.load()).thenReturn(Result.failure(SeedStoreError.KeyInvalidated()))
+        whenever(sparkService.wipeStorage()).thenAnswer { throw SparkError.WipeInProgress() }
+
+        sut.start()
+
+        verify(settingsStore, never()).finishWipe()
+        assertEquals(WalletState(WalletStatus.Removed), sut.walletState.value)
+    }
+
+    @Test
     fun `start keeps the wallet for every seed error but a lost key`() = test {
         for (error in listOf(SeedStoreError.Failed(), SeedStoreError.Corrupted(), SeedStoreError.DeviceLocked())) {
             whenever(seedStore.load()).thenReturn(Result.failure(error))
@@ -436,6 +461,64 @@ class WalletRepoTest : BaseUnitTest() {
 
         verify(sparkService).disconnect()
         assertEquals(WalletStatus.Locked, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `a start that finds a lock the system did not announce disconnects a wallet left connected`() = test {
+        val unannouncedLock = mock<DeviceLock>()
+        whenever(unannouncedLock.isLocked).thenReturn(MutableStateFlow(false))
+        val sut = WalletRepo(
+            testDispatcher,
+            seedStore,
+            sparkService,
+            settingsStore,
+            unannouncedLock,
+            networkMonitor,
+            foregroundMonitor,
+        )
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.start()
+        whenever(sparkService.syncWallet()).thenReturn(offline)
+        sut.start()
+        assertEquals(WalletStatus.Offline, sut.walletState.value.status)
+        verify(sparkService, never()).disconnect()
+        whenever(unannouncedLock.isLocked).thenReturn(MutableStateFlow(true))
+
+        val result = sut.start()
+
+        assertIs<WalletError.DeviceLocked>(result.exceptionOrNull())
+        verify(sparkService).disconnect()
+        assertEquals(WalletStatus.Locked, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `a lock that lands while a removal runs leaves the wallet missing`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.getInfo()).thenReturn(info(21_000uL))
+        sut.start()
+        val disconnect = CompletableDeferred<Unit>()
+        whenever(sparkService.disconnect()).doSuspendableAnswer { disconnect.await() }
+        deviceLock.isLocked.update { true }
+
+        sut.wipe()
+        disconnect.complete(Unit)
+
+        assertEquals(WalletState(WalletStatus.Missing), sut.walletState.value)
+    }
+
+    @Test
+    fun `a lock that lands while a lost key wipe runs leaves the wallet removed`() = test {
+        whenever(seedStore.load()).thenReturn(Result.failure(SeedStoreError.KeyInvalidated()))
+        val disconnect = CompletableDeferred<Unit>()
+        whenever(sparkService.disconnect()).doSuspendableAnswer { disconnect.await() }
+        whenever(sparkService.wipeStorage()).doSuspendableAnswer { deviceLock.isLocked.update { true } }
+
+        sut.start()
+        disconnect.complete(Unit)
+
+        verify(sparkService).disconnect()
+        assertEquals(WalletState(WalletStatus.Removed), sut.walletState.value)
     }
 
     @Test

@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -26,6 +28,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.Icon
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import to.bitkit.wear.R
 import to.bitkit.wear.data.NfcState
 import to.bitkit.wear.ext.areAnimationsDisabled
@@ -84,7 +88,8 @@ fun nfcHintState(nfc: NfcState, isWalletReady: Boolean, isAmbient: Boolean): Nfc
 /**
  * The phone's broadcast icon (`ic_broadcast`), tinted white-64 as in the Send sheet's nearby pill, telling the
  * wearer that a tap pays. The centre dot stays on while the inner arc pair, then the outer pair, brighten in a slow
- * loop; only their alpha animates. When animations are off it is the still icon. With NFC off it is the still icon,
+ * loop; only their alpha animates. When animations are off it is the still icon; that setting is read off the main
+ * thread each time the hint appears, and the icon is still until then. With NFC off it is the still icon,
  * dimmed and slashed, and a tap on it opens the NFC settings through [onDisabledClick].
  */
 @Composable
@@ -126,7 +131,11 @@ private fun ActiveHint(modifier: Modifier = Modifier) {
         .size(HINT_SIZE)
         .semantics { contentDescription = description }
         .testTag("NfcHint")
-    if (LocalContext.current.areAnimationsDisabled) {
+    val context = LocalContext.current
+    val isStill by produceState(initialValue = true) {
+        value = withContext(Dispatchers.IO) { context.areAnimationsDisabled }
+    }
+    if (isStill) {
         Icon(
             painter = painterResource(R.drawable.ic_broadcast),
             contentDescription = null,

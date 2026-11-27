@@ -6,6 +6,8 @@
 
     Precondition: Fresh app, see journeys/wear/README.md › Fresh app. Backend: none; the journey stops before the
     wallet is saved. The word screens block screenshots, so check them with `android layout` only.
+    "Tap Next eleven times" is one action repeated: tap "RestoreNext", wait 1 s, and do that eleven times in a row,
+    with no check in between; "RestoreProgress" goes up by one each time.
   </description>
   <actions>
     <action>Tap Restore (tag "WatchOnboardingRestore")</action>

@@ -209,7 +209,8 @@ androidComponents {
         val buildConfigFields = requireNotNull(variant.buildConfigFields) {
             "buildFeatures.buildConfig must stay enabled for '${variant.name}'."
         }
-        sparkBuildConfig(variant.flavorName).forEach { (name, field) ->
+        // The watch runs no on-chain wallet, so it reads no Esplora URL.
+        sparkBuildConfig(variant.flavorName).filterKeys { it != "ESPLORA_URL" }.forEach { (name, field) ->
             // Regtest needs no Breez API key and mainnet is off on the watch (#2152), so the key stays out of the
             // watch app until Env.IS_MAINNET_ENABLED turns on.
             val value = if (name == "BREEZ_API_KEY") provider { "\"\"" } else field.second

@@ -175,7 +175,9 @@ class WalletRepo @Inject constructor(
         }
         deviceLock.refresh()
         if (deviceLock.isLocked.value) {
-            _walletState.update { it.copy(status = WalletStatus.Locked) }
+            // A lock the system did not announce can find a wallet that failed its last start still connected.
+            if (_walletState.value.status !in disconnectedStatuses) disconnectQuietly()
+            markLocked()
             return Result.failure(WalletError.DeviceLocked())
         }
         finishPendingWipe().onFailure { error ->
@@ -253,7 +255,6 @@ class WalletRepo @Inject constructor(
             is SeedStoreError.KeyInvalidated -> {
                 Logger.error("Failed to start wallet", error, context = TAG)
                 wipe(isKeyLost = true, isNoteRequired = false)
-                _walletState.update { it.copy(status = WalletStatus.Removed) }
             }
             is SeedStoreError.NotFound -> {
                 Logger.warn("Failed to start wallet", error, context = TAG)
@@ -285,8 +286,12 @@ class WalletRepo @Inject constructor(
     private suspend fun lock() {
         if (_walletState.value.status in disconnectedStatuses) return
         disconnectQuietly()
-        _walletState.update { it.copy(status = WalletStatus.Locked) }
+        markLocked()
         Logger.info("Disconnected wallet because the watch locked", context = TAG)
+    }
+
+    private fun markLocked() = _walletState.update {
+        if (it.status in removedStatuses) it else it.copy(status = WalletStatus.Locked)
     }
 
     private fun onForegroundChange(isForeground: Boolean) {
@@ -368,7 +373,8 @@ class WalletRepo @Inject constructor(
      * the note runs even when an earlier one fails, and the first failure is returned, with
      * [WalletStatus.Error]. The wallet counts as wiped once the seed file and Spark's storage are gone. When the
      * process dies or a step fails, the note stays and [recover] finishes the wipe at the next launch or the next
-     * [start].
+     * [start]. The wipe after a lost seed key ends in [WalletStatus.Removed] instead, and reports no other status
+     * on the way, so the wearer is told at once.
      */
     suspend fun wipe(): Result<Unit> = wipe(isKeyLost = false, isNoteRequired = true)
 
@@ -388,7 +394,12 @@ class WalletRepo @Inject constructor(
             val spark = runSuspendCatching { sparkService.wipeStorage() }
             val isWiped = seed.isSuccess && spark.isSuccess
             val settings = if (isWiped) runSuspendCatching { settingsStore.finishWipe() } else Result.success(Unit)
-            _walletState.update { WalletState(status = if (isWiped) WalletStatus.Missing else WalletStatus.Error) }
+            val status = when {
+                isKeyLost -> WalletStatus.Removed
+                isWiped -> WalletStatus.Missing
+                else -> WalletStatus.Error
+            }
+            _walletState.update { WalletState(status = status) }
             return listOf(seed, spark, settings).firstOrNull { it.isFailure } ?: Result.success(Unit)
         } finally {
             sparkService.endWipe()
@@ -418,6 +429,8 @@ class WalletRepo @Inject constructor(
 
 private val disconnectedStatuses =
     setOf(WalletStatus.Idle, WalletStatus.Locked, WalletStatus.Paused, WalletStatus.Removed, WalletStatus.Missing)
+
+private val removedStatuses = setOf(WalletStatus.Removed, WalletStatus.Missing)
 
 private val unpausedStatuses = setOf(WalletStatus.Ready, WalletStatus.Removed, WalletStatus.Missing)
 

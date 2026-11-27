@@ -16,8 +16,8 @@
     <action>Tap "NfcHintDisabled"</action>
     <action>Run `adb shell dumpsys activity activities | grep -m1 topResumedActivity` and verify it names a settings activity, not `to.bitkit.dev`</action>
     <action>Run `adb shell svc nfc enable`</action>
-    <action>Run `adb shell am start -n to.bitkit.dev/to.bitkit.wear.ui.MainActivity` and wait 3 s</action>
-    <action>Verify "NfcHint" is listed again</action>
+    <action>Run `adb shell am start -n to.bitkit.dev/to.bitkit.wear.ui.MainActivity`</action>
+    <action>Dump `android layout` every 5 s until it lists "NfcHint", for up to 1 minute: the wallet may connect again first, and the hint shows only once it is ready</action>
     <action>Verify "NfcHintDisabled" is not listed</action>
   </actions>
 </journey>

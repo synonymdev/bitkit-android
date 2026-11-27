@@ -9,8 +9,7 @@
   </description>
   <actions>
     <action>Run `adb logcat -c`</action>
-    <action>Run `adb shell input keyevent KEYCODE_HOME` and wait 3 s</action>
-    <action>Run `adb shell am start -n to.bitkit.dev/to.bitkit.wear.ui.MainActivity` and wait 2 s</action>
+    <action>Run `adb shell "input keyevent KEYCODE_HOME; sleep 3; am start -n to.bitkit.dev/to.bitkit.wear.ui.MainActivity; sleep 2"`: one command, so the app is away for 3 s however slow the runner is</action>
     <action>Run `adb logcat -d -s BitkitWear | grep -c "Disconnected wallet"` and verify it prints 0: the app came back within the grace period</action>
     <action>Run `adb shell input keyevent KEYCODE_HOME` and wait 15 s</action>
     <action>Run `adb logcat -d -s BitkitWear | grep "Disconnected wallet because the app left the screen"` and verify it prints one line</action>

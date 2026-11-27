@@ -39,9 +39,6 @@ class SettingsStore @Inject constructor(
     private val selectedCurrencyKey = stringPreferencesKey("selected_currency")
     private val removedNoticeKey = booleanPreferencesKey("wallet_removed_notice")
 
-    /** Where the wipe note lived before [WipeMarker]; [isWipePending] moves one found here. */
-    private val legacyWipePendingKey = booleanPreferencesKey("wallet_wipe_pending")
-
     val data: Flow<WatchSettings> = dataStore.data.map { prefs ->
         WatchSettings(
             primaryDisplay = prefs[primaryDisplayKey]
@@ -62,18 +59,8 @@ class SettingsStore @Inject constructor(
         dataStore.edit { it[removedNoticeKey] = isPending }
     }
 
-    /**
-     * Whether a wallet wipe started and was not finished, as when the process died during it. A note that an
-     * earlier version left in the settings file is moved to the [WipeMarker] first: the marker is written, then the
-     * old note removed.
-     */
-    suspend fun isWipePending(): Boolean {
-        if (dataStore.data.first()[legacyWipePendingKey] == true) {
-            wipeMarker.create()
-            dataStore.edit { it.remove(legacyWipePendingKey) }
-        }
-        return wipeMarker.exists()
-    }
+    /** Whether a wallet wipe started and was not finished, as when the process died during it. */
+    suspend fun isWipePending(): Boolean = wipeMarker.exists()
 
     /**
      * Notes that a wallet wipe is under way; [showsRemovedNotice] also leaves the removed notice for the wearer.
