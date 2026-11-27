@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -1031,6 +1032,51 @@ class QuickPayRepoTest : BaseUnitTest() {
         assertEquals(false, isAuthorized)
         assertEquals(0L, spentCents())
         assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+    }
+
+    @Test
+    fun `stale dispatch after an early success leaves a later pay of the invoice alone`() = test {
+        val (bolt11, hash) = testInvoice()
+        val started = CompletableDeferred<Unit>()
+        val proceed = CompletableDeferred<Unit>()
+        var calls = 0
+        var isStaleAuthorized: Boolean? = null
+        whenever {
+            lightningRepo.payInvoiceAuthorizedAtSubmission(any(), anyOrNull(), any(), any())
+        }.doSuspendableAnswer { invocation ->
+            if (++calls > 1) awaitCancellation()
+            // The first send is still waiting before dispatch, for example on the node, when the invoice is paid.
+            started.complete(Unit)
+            proceed.await()
+            isStaleAuthorized = invocation.getArgument<suspend () -> Boolean>(3)()
+            Result.failure(PaymentAbortedBeforeSend())
+        }
+        val first = QuickPaySession()
+        val second = QuickPaySession()
+        val request = QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u)
+
+        sut.attach(first).test {
+            val stale = backgroundScope.launch { sut.payNow(first, request) }
+            started.await()
+            sut.signalCompletion(paymentId = hash, paymentHash = hash, success = true)
+            assertIs<QuickPayAlreadyPaidError>(assertIs<QuickPaySessionEvent.Error>(awaitItem()).error)
+
+            sut.attach(second).test {
+                val later = backgroundScope.launch { sut.payNow(second, request) }
+                runCurrent()
+                assertEquals(2, calls)
+                assertEquals(250L, spentCents())
+
+                proceed.complete(Unit)
+                stale.join()
+
+                assertEquals(false, isStaleAuthorized)
+                assertTrue(sut.hasOpen(hash))
+                assertEquals(250L, spentCents())
+                expectNoEvents()
+                later.cancel()
+            }
+        }
     }
 
     @Test

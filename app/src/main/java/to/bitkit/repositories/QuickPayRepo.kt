@@ -284,8 +284,10 @@ class QuickPayRepo @Inject constructor(
             PreparePayResult.REJECTED -> return
             PreparePayResult.RECOVERED -> settleRecovered(invoiceHash)
             PreparePayResult.FRESH -> {
-                dispatchBolt11(invoice, invoiceHash, canDispatch)
-                awaitCompletionOrPending(invoiceHash)
+                val job = currentCoroutineContext()[Job]
+                val op = mutex.withLock { opsByKey[invoiceHash]?.takeIf { it.job === job } } ?: return
+                dispatchBolt11(invoice, op, canDispatch)
+                awaitCompletionOrPending(op)
             }
         }
     }
@@ -433,27 +435,29 @@ class QuickPayRepo @Inject constructor(
         }
     }
 
-    private suspend fun dispatchBolt11(invoice: ResolvedInvoice, invoiceHash: String, canDispatch: () -> Boolean) {
+    private suspend fun dispatchBolt11(invoice: ResolvedInvoice, op: InFlightOp, canDispatch: () -> Boolean) {
         var isAuthorizationLapsed = false
         lightningRepo.payInvoiceAuthorizedAtSubmission(invoice.bolt11, sats = null, canDispatch) {
             isAuthorizationLapsed = !canDispatch()
-            !isAuthorizationLapsed && tryMarkDispatched(invoiceHash)
+            !isAuthorizationLapsed && tryMarkDispatched(op)
         }.fold(
-            onSuccess = { onInvoiceAccepted(invoiceHash, invoice.bolt11, it) },
+            onSuccess = { onInvoiceAccepted(op, invoice.bolt11, it) },
             onFailure = {
                 when {
-                    isAuthorizationLapsed -> fallBackBeforeDispatch(invoiceHash)
+                    isAuthorizationLapsed -> fallBackBeforeDispatch(op)
                     // Stopped on the node's queue, after it was marked dispatched but before anything was submitted.
-                    it.isStoppedAtSubmission() -> fallBackBeforeDispatch(invoiceHash, isMarkedDispatched = true)
-                    else -> onInvoiceRejected(invoiceHash, invoice.bolt11, it)
+                    it.isStoppedAtSubmission() -> fallBackBeforeDispatch(op, isMarkedDispatched = true)
+                    else -> onInvoiceRejected(op, invoice.bolt11, it)
                 }
             },
         )
     }
 
     /** Releases a payment that was never submitted and sends its session to the swipe review. */
-    private suspend fun fallBackBeforeDispatch(invoiceHash: String, isMarkedDispatched: Boolean = false) {
+    private suspend fun fallBackBeforeDispatch(op: InFlightOp, isMarkedDispatched: Boolean = false) {
+        val invoiceHash = op.invoiceHash
         mutex.withLock {
+            if (isSupersededLocked(op)) return@withLock
             val current = opsByKey[invoiceHash]
             if (current == null || current.dispatched != isMarkedDispatched) return@withLock
             spend.release(invoiceHash)
@@ -462,10 +466,10 @@ class QuickPayRepo @Inject constructor(
         }
     }
 
-    private suspend fun tryMarkDispatched(invoiceHash: String): Boolean {
+    private suspend fun tryMarkDispatched(op: InFlightOp): Boolean {
         val settings = readSettings()
         return mutex.withLock {
-            val current = opsByKey[invoiceHash] ?: return@withLock false
+            val current = opsByKey[op.invoiceHash]?.takeIf { it === op } ?: return@withLock false
             if (current.rejection != null) return@withLock false
             val rejection = sendRejectionLocked(current, settings)
             if (rejection != null) {
@@ -488,8 +492,10 @@ class QuickPayRepo @Inject constructor(
         return null
     }
 
-    private suspend fun onInvoiceAccepted(invoiceHash: String, paymentRequest: String, paymentId: String) {
+    private suspend fun onInvoiceAccepted(op: InFlightOp, paymentRequest: String, paymentId: String) {
+        val invoiceHash = op.invoiceHash
         mutex.withLock {
+            if (isSupersededLocked(op)) return@withLock
             val undispatched = opsByKey[invoiceHash]?.takeIf { !it.dispatched }
             if (undispatched != null) {
                 // Accepted without a dispatch, so an earlier send of the invoice paid it and nothing new went out.
@@ -508,30 +514,31 @@ class QuickPayRepo @Inject constructor(
     }
 
     private suspend fun onInvoiceRejected(
-        invoiceHash: String,
+        op: InFlightOp,
         paymentRequest: String,
         error: Throwable,
     ) {
         if (error is PaymentAbortedBeforeSend) {
-            releaseIfNotDispatched(invoiceHash)
+            releaseIfNotDispatched(op)
             return
         }
-        handleDispatchError(invoiceHash, paymentRequest, error)
+        handleDispatchError(op, paymentRequest, error)
     }
 
-    private suspend fun awaitCompletionOrPending(invoiceHash: String) {
-        val current = mutex.withLock { opsByKey[invoiceHash] } ?: return
+    private suspend fun awaitCompletionOrPending(op: InFlightOp) {
+        if (mutex.withLock { opsByKey[op.invoiceHash] !== op }) return
         withTimeoutOrNull(LightningRepo.SEND_LN_TIMEOUT) {
-            current.settled.await()
+            op.settled.await()
         }
         mutex.withLock {
-            val live = opsByKey[invoiceHash] ?: return@withLock
-            emitPendingLocked(live)
+            if (opsByKey[op.invoiceHash] === op) emitPendingLocked(op)
         }
     }
 
-    private suspend fun releaseIfNotDispatched(invoiceHash: String) {
+    private suspend fun releaseIfNotDispatched(op: InFlightOp) {
+        val invoiceHash = op.invoiceHash
         mutex.withLock {
+            if (isSupersededLocked(op)) return@withLock
             val current = opsByKey[invoiceHash]
             if (current == null || current.dispatched) return@withLock
             spend.release(invoiceHash)
@@ -571,13 +578,15 @@ class QuickPayRepo @Inject constructor(
     }
 
     private suspend fun handleDispatchError(
-        invoiceHash: String,
+        op: InFlightOp,
         paymentRequest: String,
         error: Throwable,
     ) {
+        val invoiceHash = op.invoiceHash
         when (val kind = classifyDispatchError(error)) {
             QuickPayDispatchClass.PRE_DISPATCH_REJECTION -> {
                 mutex.withLock {
+                    if (isSupersededLocked(op)) return@withLock
                     signalCompletionLocked(
                         paymentId = null,
                         paymentHash = invoiceHash,
@@ -591,6 +600,7 @@ class QuickPayRepo @Inject constructor(
             -> {
                 val rows = loadPaymentRows()
                 val isEarlierSendTracked = mutex.withLock {
+                    if (isSupersededLocked(op)) return@withLock false
                     settleAmbiguousLocked(
                         invoiceHash = invoiceHash,
                         paymentRequest = paymentRequest,
@@ -856,6 +866,9 @@ class QuickPayRepo @Inject constructor(
         opsByKey[op.invoiceHash] = op
         op.paymentId?.takeIf { it.isNotBlank() && it != op.invoiceHash }?.let { opsByKey[it] = op }
     }
+
+    /** True when a later pay registered its own op for this op's invoice, which this op's dispatch must not touch. */
+    private fun isSupersededLocked(op: InFlightOp): Boolean = opsByKey[op.invoiceHash].let { it != null && it !== op }
 
     private fun removeOpLocked(op: InFlightOp) {
         opsByKey.entries.removeAll { it.value === op }
