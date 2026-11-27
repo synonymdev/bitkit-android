@@ -3250,6 +3250,29 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `recipient status is loaded with no targets only when no identity is active`() = test {
+        sut.markNoEligibleTargets()
+        assertEquals(PaykitPaymentRequestTargetsStatus.Loading, sut.eligibleTargetsStatus.value)
+
+        sut.clear()
+        sut.markNoEligibleTargets()
+        assertEquals(PaykitPaymentRequestTargetsStatus.Loaded, sut.eligibleTargetsStatus.value)
+        assertTrue(sut.eligibleTargets.value.isEmpty())
+    }
+
+    @Test
+    fun `recipient status shows loading again only when retrying a failed check`() = test {
+        sut.markEligibleTargetsUnknown()
+        sut.markEligibleTargetsLoading()
+        assertEquals(PaykitPaymentRequestTargetsStatus.Loading, sut.eligibleTargetsStatus.value)
+
+        sut.clear()
+        sut.markNoEligibleTargets()
+        sut.markEligibleTargetsLoading()
+        assertEquals(PaykitPaymentRequestTargetsStatus.Loaded, sut.eligibleTargetsStatus.value)
+    }
+
+    @Test
     fun `recipient status is failed when the identity cannot be activated`() = test {
         sut.clear()
         whenever(presentationStore.loadSubscriptionState(any())).doSuspendableAnswer { error("storage unavailable") }

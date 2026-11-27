@@ -1644,7 +1644,8 @@ class AppViewModel @Inject constructor(
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
         // An empty list read before the saved contacts load is not "no contacts"; the load triggers this again.
         if (pubkyRepo.contactsLoadVersion.value == 0L) {
-            val didContactsLoadFail = pubkyRepo.contactsLoadCompletionVersion.value > 0L
+            val didContactsLoadFail = pubkyRepo.contactsLoadCompletionVersion.value > 0L &&
+                !pubkyRepo.isLoadingContacts.value
             if (didContactsLoadFail) paykitPaymentRequestRepo.markEligibleTargetsUnknown()
             return
         }
@@ -10186,17 +10187,38 @@ class AppViewModel @Inject constructor(
 
     fun showPaymentRequests() {
         showSheet(Sheet.PaymentRequests)
-        viewModelScope.launch { refreshPaymentRequestTargets(force = true) }
+        viewModelScope.launch { refreshPaymentRequestTargetsForPicker() }
     }
 
     fun showPaymentRequestRecipient() {
         showSheet(Sheet.Receive(route = ReceiveRoute.PaymentRequestRecipient))
-        viewModelScope.launch { refreshPaymentRequestTargets(force = true) }
+        viewModelScope.launch { refreshPaymentRequestTargetsForPicker() }
     }
 
     fun showSubscriptionCreator() {
         showSheet(Sheet.CreateSubscription)
-        viewModelScope.launch { refreshPaymentRequestTargets(force = true) }
+        viewModelScope.launch { refreshPaymentRequestTargetsForPicker() }
+    }
+
+    /**
+     * Settles the recipient picker on open: no profile means no saved contacts, a profile still signing in cannot be
+     * checked yet, and saved contacts that are not loaded and not loading are loaded again, which retries a failed
+     * load.
+     */
+    private suspend fun refreshPaymentRequestTargetsForPicker() {
+        if (pubkyRepo.publicKey.value == null) {
+            if (pubkyRepo.isRestoringSession.value) {
+                paykitPaymentRequestRepo.markEligibleTargetsUnknown()
+            } else {
+                paykitPaymentRequestRepo.markNoEligibleTargets()
+            }
+            return
+        }
+        if (pubkyRepo.contactsLoadVersion.value == 0L) {
+            paykitPaymentRequestRepo.markEligibleTargetsLoading()
+            if (!pubkyRepo.isLoadingContacts.value) pubkyRepo.loadContacts()
+        }
+        refreshPaymentRequestTargets(force = true)
     }
 
     fun subscription(id: PaykitSubscriptionId): PaykitSubscription? =

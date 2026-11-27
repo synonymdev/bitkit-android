@@ -886,6 +886,24 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
+    /** Without a profile no saved contact can receive a request, which is a final answer rather than a failure. */
+    suspend fun markNoEligibleTargets() = withContext(ioDispatcher) {
+        operationMutex.withLock {
+            if (activeIdentity != null) return@withLock
+            _eligibleTargets.update { emptyList() }
+            _eligibleTargetsStatus.update { PaykitPaymentRequestTargetsStatus.Loaded }
+        }
+    }
+
+    /** Shows the spinner again while a failed check is retried. */
+    suspend fun markEligibleTargetsLoading() = withContext(ioDispatcher) {
+        operationMutex.withLock {
+            _eligibleTargetsStatus.update {
+                if (it == PaykitPaymentRequestTargetsStatus.Failed) PaykitPaymentRequestTargetsStatus.Loading else it
+            }
+        }
+    }
+
     /** Saved contacts could not be loaded, so a first load cannot tell whether any of them can receive a request. */
     suspend fun markEligibleTargetsUnknown() = withContext(ioDispatcher) {
         operationMutex.withLock {

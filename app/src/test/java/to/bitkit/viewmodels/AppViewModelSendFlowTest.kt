@@ -392,6 +392,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val isProfileDeletionInProgress = MutableStateFlow(false)
     private val pubkyContactsLoadVersion = MutableStateFlow(0L)
     private val pubkyContactsLoadCompletionVersion = MutableStateFlow(0L)
+    private val pubkyIsLoadingContacts = MutableStateFlow(false)
     private val pubkyContactImportFailure = MutableStateFlow<Throwable?>(null)
     private val pendingPaykitPaymentRequests = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     private val expiredPaykitProposals = MutableSharedFlow<List<PaykitPaymentRequest>>(extraBufferCapacity = 8)
@@ -841,6 +842,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkyRepo.contactImportFailure).thenReturn(pubkyContactImportFailure)
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
         whenever(pubkyRepo.isRestoringSession).thenReturn(isRestoringPubkySession)
+        whenever(pubkyRepo.isLoadingContacts).thenReturn(pubkyIsLoadingContacts)
         whenever(pubkyRepo.currentSignIn()).thenAnswer { pubkyPublicKey.value?.let { PubkySignIn(it, 0L) } }
         whenever(pubkyRepo.isCurrent(any())).thenAnswer {
             pubkyPublicKey.value == it.getArgument<PubkySignIn>(0).publicKey
@@ -20898,6 +20900,51 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyContactsLoadVersion.update { 1L }
         sut.showPaymentRequestRecipient()
         runCurrent()
+        verify(paykitPaymentRequestRepo, atLeastOnce()).refreshEligibleTargets(any(), eq(true))
+    }
+
+    @Test
+    fun `subscription recipient picker without a profile shows no eligible contact`() = test {
+        enablePaykitUi()
+        isRestoringPubkySession.update { false }
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo)
+
+        sut.showSubscriptionCreator()
+        runCurrent()
+
+        verify(paykitPaymentRequestRepo).markNoEligibleTargets()
+        verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), any())
+    }
+
+    @Test
+    fun `recipient picker while the profile is still signing in fails at once`() = test {
+        enablePaykitUi()
+        isRestoringPubkySession.update { true }
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo)
+
+        sut.showPaymentRequestRecipient()
+        runCurrent()
+
+        verify(paykitPaymentRequestRepo).markEligibleTargetsUnknown()
+        verify(paykitPaymentRequestRepo, never()).markNoEligibleTargets()
+    }
+
+    @Test
+    fun `reopening the recipient picker retries a failed contacts load`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.update { testPublicKey }
+        pubkyContactsLoadCompletionVersion.update { 1L }
+        runCurrent()
+        clearInvocations(paykitPaymentRequestRepo, pubkyRepo)
+        whenever(pubkyRepo.loadContacts()).doSuspendableAnswer { pubkyContactsLoadVersion.update { 1L } }
+
+        sut.showPaymentRequestRecipient()
+        runCurrent()
+
+        verify(paykitPaymentRequestRepo).markEligibleTargetsLoading()
+        verify(pubkyRepo).loadContacts()
         verify(paykitPaymentRequestRepo, atLeastOnce()).refreshEligibleTargets(any(), eq(true))
     }
 
