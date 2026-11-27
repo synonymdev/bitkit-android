@@ -464,9 +464,11 @@ class LightningRepo @Inject constructor(
                     }
                 }
 
-                // A stop requested during the build wins. A foreground start can cancel that stop before it runs,
-                // so release the built node here, or that start would reuse it with the change's server.
-                if (stopRequestsSeen != null && stopRequestCount.get() != stopRequestsSeen) {
+                // A stop requested during a server change's or recovery's build wins. A foreground start can cancel
+                // that stop before it runs, so release the built node here, or that start would reuse it. An ordinary
+                // start, which cancels pending stops, is not held back by one.
+                val yieldsToStop = isConfigChange || !shouldCancelPendingStop
+                if (yieldsToStop && stopRequestsSeen != null && stopRequestCount.get() != stopRequestsSeen) {
                     Logger.info("Skipped start because a stop was requested during setup", context = TAG)
                     releaseUnsavedConfigNode()
                     _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }

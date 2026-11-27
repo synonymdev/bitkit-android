@@ -5156,6 +5156,33 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restartWithElectrumServer recovery keeps a stop requested during its build`() = test {
+        startNodeForTesting()
+        val testScope = this
+        val badUrl = "ssl://10.0.2.2:60001"
+        val node = mock<Node>()
+        var hasNode = false
+        whenever(lightningService.node).thenAnswer { if (hasNode) node else null }
+        whenever(lightningService.stop()).thenAnswer { hasNode = false }
+        whenever { lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer { throw AppError("Electrum unreachable") }
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                testScope.launch { sut.stop() }
+                delay(1)
+                hasNode = true
+            }
+        clearInvocations(lightningService)
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService).setup(any(), isNull(), isNull(), anyOrNull())
+        verify(lightningService, never()).start(anyOrNull(), any())
+        assertFalse(hasNode)
+    }
+
+    @Test
     fun `restartWithElectrumServer cancelled after a stop does not recover the previous config`() = test {
         startNodeForTesting()
         val newUrl = "ssl://10.0.2.2:60001"
@@ -5391,6 +5418,46 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(1, recoveryAttempts)
         assertNotEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
+
+    @Test
+    fun `start keeps the node running when a cancelled background stop arrived during the graph reset rebuild`() =
+        test {
+            sut.setInitNodeLifecycleState()
+            whenever(lightningService.sync()).thenReturn(Unit)
+            val blocktank = mock<BlocktankService>()
+            whenever(coreService.blocktank).thenReturn(blocktank)
+            whenever(blocktank.info(any())).thenReturn(null)
+            whenever(vssBackupClientLdk.setup(any())).thenReturn(Result.success(Unit))
+            whenever(vssBackupClientLdk.deleteObject(any(), any())).thenReturn(Result.success(true))
+            whenever(lightningService.aresRequiredPeersInNetworkGraph()).thenReturn(false, true)
+            val node = mock<Node>()
+            var hasNode = false
+            var builds = 0
+            whenever(lightningService.node).thenAnswer { if (hasNode) node else null }
+            whenever(lightningService.stop()).thenAnswer { hasNode = false }
+            whenever { lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull()) }
+                .doSuspendableAnswer {
+                    builds++
+                    if (builds == 2) delay(10.seconds)
+                    hasNode = true
+                }
+
+            val start = async { sut.start() }
+            runCurrent()
+            sut.stopDebounced()
+            testScheduler.advanceTimeBy(BACKGROUND_STOP_DELAY_MS + 1)
+            runCurrent()
+            sut.cancelPendingStop()
+            val result = start.await()
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(2, builds)
+            assertEquals(
+                NodeLifecycleState.Running,
+                sut.lightningState.value.nodeLifecycleState,
+                "Foreground node left down after graph reset rebuild, start returned '$result'",
+            )
+        }
 
     // Regression: a server that cannot work is rejected by the probe before the node is touched.
     // Tearing the node down for one is what leaves its electrum tasks wedged, so that a later
