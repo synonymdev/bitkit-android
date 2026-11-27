@@ -8,6 +8,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
@@ -26,7 +27,7 @@ class DrawerMenuTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    @Config(sdk = [34], qualifiers = "w960dp-h600dp-land")
+    @Config(sdk = [34], qualifiers = "w960dp-h480dp-land")
     @Test
     fun `short landscape tablet scrolls to settings and app status`() {
         composeRule.setContent {
@@ -51,6 +52,7 @@ class DrawerMenuTest {
         }
 
         composeRule.onNodeWithTag("DrawerSubscriptions").assertIsDisplayed()
+        composeRule.onNodeWithTag("DrawerAppStatus").assertIsNotDisplayed()
         composeRule.onNodeWithTag("DrawerSettings").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("DrawerAppStatus").performScrollTo().assertIsDisplayed()
     }
