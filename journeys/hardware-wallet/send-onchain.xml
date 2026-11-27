@@ -36,8 +36,8 @@
       start transaction preparation again while the confirmation is being prepared
     </action>
     <action>
-      Verify the Send review screen opens and the FROM field (testTag "SendConfirmAssetButton")
-      shows the paired Trezor name
+      Verify the Send review screen opens, tap Show details (testTag "SendConfirmToggleDetails") and
+      verify the FROM field (testTag "SendConfirmAssetButton") shows the paired Trezor name
     </action>
     <action>
       Swipe to confirm the payment

@@ -158,7 +158,7 @@ class JadeRepoTest : BaseUnitTest() {
 
         val result = sut.connect(USB_PATH)
 
-        assertTrue(result.exceptionOrNull() is HwDeviceUninitializedError)
+        assertTrue(result.exceptionOrNull() is JadeException.DeviceUninitialized)
         verify(jadeService).disconnect()
         verify(jadeService, never()).unlock(any())
         assertNull(sut.state.value.connected)
