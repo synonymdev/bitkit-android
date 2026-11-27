@@ -150,9 +150,16 @@ internal object Env {
 
     val lnurlAuthServerUrl
         get() = backupTestEndpoints?.auth ?: when (network) {
-            Network.BITCOIN -> "https://bitkit.to/lnurl_auth/auth"
+            Network.BITCOIN -> "https://api.bitkit.to/lnurl_auth/auth"
             else -> "https://bitkit.stag0.blocktank.to/lnurl_auth/auth"
         }
+
+    /**
+     * Domain the VSS LNURL-auth linking key is derived for. Mainnet keeps `bitkit.to`, where the auth
+     * server used to live, so wallets keep their VSS identity. `null` uses the returned LNURL's domain.
+     */
+    val lnurlAuthKeyDomain: String?
+        get() = if (backupTestEndpoints == null && network == Network.BITCOIN) "bitkit.to" else null
 
     val blockExplorerUrl
         get() = when (network) {

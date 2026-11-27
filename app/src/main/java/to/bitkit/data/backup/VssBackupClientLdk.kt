@@ -62,6 +62,7 @@ class VssBackupClientLdk @Inject constructor(
                         mnemonic = mnemonic,
                         passphrase = passphrase,
                         lnurlAuthServerUrl = Env.lnurlAuthServerUrl,
+                        keyDomain = Env.lnurlAuthKeyDomain,
                     )
                     gate.complete(Unit)
                     Logger.info("VSS LDK client setup", context = TAG)
