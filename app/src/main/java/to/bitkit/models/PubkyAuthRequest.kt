@@ -157,8 +157,14 @@ data class PubkyAuthRequest(
         /** An IPv4 address in the only form the SDK's URL parser leaves unchanged. */
         private val CANONICAL_IPV4 = "(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])".let { Regex("""($it\.){3}$it""") }
 
-        /** Characters the SDK's URL parser rewrites or percent-encodes, so a relay holding one is not shown as sent. */
-        private const val RELAY_REWRITTEN_CHARACTERS = "\\\"<>`{}^'"
+        /**
+         * Characters the SDK's URL parser (rust-url 2.5.8, `url/src/parser.rs`) changes in the path of an http(s) URL:
+         * its `PATH` set percent-encodes them, and a backslash becomes a slash.
+         */
+        private const val RELAY_PATH_REWRITTEN_CHARACTERS = "\\\"<>`{}"
+
+        /** Characters the SDK's URL parser percent-encodes in the query of an http(s) URL (`SPECIAL_QUERY`). */
+        private const val RELAY_QUERY_REWRITTEN_CHARACTERS = "\"<>'"
 
         /** Ports the SDK's URL parser drops because they are the scheme's default. */
         private val RELAY_DEFAULT_PORTS = mapOf("http" to 80, "https" to 443)
@@ -178,22 +184,26 @@ data class PubkyAuthRequest(
         /**
          * The relay as shown on the approval sheet: scheme, host, port, path and query, exactly as the Pubky SDK's URL
          * parser keeps them. Null when [relay] is not already in that form apart from letter case, user info, the
-         * fragment and a missing root path: a backslash, a space, control or non-ASCII characters, characters the
-         * parser percent-encodes, a missing, percent-encoded or non-canonical host, a default, padded or out-of-range
-         * port, or a `.` or `..` path segment.
+         * fragment and a missing root path: a space, control or non-ASCII characters, a backslash before the query,
+         * characters the parser percent-encodes in the path or in the query, a missing, percent-encoded or
+         * non-canonical host, a default, padded or out-of-range port, or a `.` or `..` path segment.
          */
         fun displayRelay(relay: String): String? {
-            if (relay.any { it.code <= ' '.code || it.code >= DEL || it in RELAY_REWRITTEN_CHARACTERS }) return null
+            if (relay.any { it.code <= ' '.code || it.code >= DEL }) return null
             val schemeEnd = relay.indexOf("://")
             if (schemeEnd <= 0) return null
             val scheme = relay.substring(0, schemeEnd).lowercase().takeIf { it in RELAY_SCHEMES } ?: return null
             val rest = relay.substring(schemeEnd + "://".length)
             val authorityEnd = rest.indexOfAny(charArrayOf('/', '?', '#')).takeIf { it >= 0 } ?: rest.length
-            val hostPort = rest.substring(0, authorityEnd).substringAfterLast('@').lowercase()
+            val authority = rest.substring(0, authorityEnd)
+            val hostPort = authority.substringAfterLast('@').lowercase()
             val pathAndQuery = rest.substring(authorityEnd).substringBefore('#')
-            val hasDotSegment = pathAndQuery.substringBefore('?').split('/')
-                .any { it.lowercase().replace("%2e", ".") in setOf(".", "..") }
-            if (hasDotSegment || !isUnchangedRelayHostPort(scheme, hostPort)) return null
+            val path = pathAndQuery.substringBefore('?')
+            val isRewritten = '\\' in authority ||
+                path.any { it in RELAY_PATH_REWRITTEN_CHARACTERS } ||
+                pathAndQuery.substringAfter('?', "").any { it in RELAY_QUERY_REWRITTEN_CHARACTERS } ||
+                path.split('/').any { it.lowercase().replace("%2e", ".") in setOf(".", "..") }
+            if (isRewritten || !isUnchangedRelayHostPort(scheme, hostPort)) return null
             val rootPath = if (pathAndQuery.startsWith("/")) "" else "/"
             return "$scheme://$hostPort$rootPath$pathAndQuery"
         }
