@@ -20,13 +20,15 @@ import to.bitkit.wear.data.ForegroundMonitor
 import to.bitkit.wear.repositories.WalletRepo
 import to.bitkit.wear.security.Bip39
 import to.bitkit.wear.security.Bip39Validation
+import to.bitkit.wear.security.SeedStoreError
 import to.bitkit.wear.security.WalletSeed
 import javax.inject.Inject
 
 /**
  * Restores a wallet from a recovery phrase typed one word per screen. It is shared by the restore screens and holds
  * the words only in memory, until the wallet is saved, the wearer leaves the flow or the app leaves the screen, which
- * drops them and returns to the start of the flow; they are never logged or saved to instance state.
+ * drops them and returns to the start of the flow; they are never logged or saved to instance state. A save under
+ * way when the app leaves the screen finishes, and drops them too when it fails.
  */
 @HiltViewModel
 class RestoreViewModel @Inject constructor(
@@ -93,7 +95,7 @@ class RestoreViewModel @Inject constructor(
     }
 
     fun onPassphraseAdd() {
-        _uiState.update { it.copy(isPassphraseEditing = true, isSaveFailed = false) }
+        _uiState.update { it.copy(isPassphraseEditing = true, saveError = null) }
     }
 
     /** A passphrase over [MAX_PASSPHRASE_LENGTH] is refused with an error, never cut short without a word. */
@@ -121,7 +123,7 @@ class RestoreViewModel @Inject constructor(
             _effects.trySend(effectFor(validation))
             return
         }
-        _uiState.update { it.copy(isSaving = true, isSaveFailed = false) }
+        _uiState.update { it.copy(isSaving = true, saveError = null) }
         viewModelScope.launch {
             val mnemonic = _uiState.value.entries.joinToString(" ") { it.input }
             walletRepo.restore(WalletSeed(mnemonic, passphrase))
@@ -129,8 +131,19 @@ class RestoreViewModel @Inject constructor(
                     _uiState.update { RestoreUiState() }
                     _effects.trySend(RestoreEffect.Restored)
                 }
-                .onFailure { _uiState.update { it.copy(isSaving = false, isSaveFailed = true) } }
+                .onFailure { onSaveFailure(it) }
         }
+    }
+
+    private fun onSaveFailure(error: Throwable) {
+        // A save that fails behind another app keeps nothing typed: the words are dropped as on leaving the app.
+        if (!foregroundMonitor.isForeground.value) {
+            _uiState.update { RestoreUiState() }
+            _effects.trySend(RestoreEffect.ShowStart)
+            return
+        }
+        val saveError = if (error is SeedStoreError.InsecureKey) SaveError.InsecureKey else SaveError.Failed
+        _uiState.update { it.copy(isSaving = false, saveError = saveError) }
     }
 
     private fun validate(): Bip39Validation = bip39.validate(_uiState.value.entries.map { it.input })
@@ -166,7 +179,7 @@ data class RestoreUiState(
     val isPassphraseEditing: Boolean = false,
     val isPassphraseTooLong: Boolean = false,
     val isSaving: Boolean = false,
-    val isSaveFailed: Boolean = false,
+    val saveError: SaveError? = null,
 ) {
     override fun toString(): String = "RestoreUiState(***)"
 }
@@ -180,6 +193,9 @@ data class WordEntry(
 ) {
     override fun toString(): String = "WordEntry(***)"
 }
+
+/** Why the wallet was not saved: [InsecureKey] when the watch has no secure hardware to keep the seed key in. */
+enum class SaveError { Failed, InsecureKey }
 
 sealed interface RestoreEffect {
     data object ShowStart : RestoreEffect

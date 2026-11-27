@@ -1,16 +1,27 @@
 package to.bitkit.wear.di
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.preferencesDataStoreFile
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import to.bitkit.wear.data.AdapterNfcMonitor
 import to.bitkit.wear.data.ConnectivityNetworkMonitor
 import to.bitkit.wear.data.ForegroundMonitor
 import to.bitkit.wear.data.NetworkMonitor
+import to.bitkit.wear.data.NfcMonitor
 import to.bitkit.wear.data.ProcessForegroundMonitor
+import to.bitkit.wear.data.WipeMarker
+import to.bitkit.wear.data.settingsDataStore
+import to.bitkit.wear.env.Env
 import to.bitkit.wear.security.AndroidKeystoreSeedKey
 import to.bitkit.wear.security.Bip39
 import to.bitkit.wear.security.CoreBip39
@@ -39,6 +50,10 @@ abstract class SecurityModule {
 
     @Binds
     @Singleton
+    abstract fun bindNfcMonitor(monitor: AdapterNfcMonitor): NfcMonitor
+
+    @Binds
+    @Singleton
     abstract fun bindForegroundMonitor(monitor: ProcessForegroundMonitor): ForegroundMonitor
 
     @Binds
@@ -47,14 +62,34 @@ abstract class SecurityModule {
 
     companion object {
         private const val SEED_DIR = "seed"
+        private const val SETTINGS_NAME = "settings"
 
-        /** The seed file lives in the no-backup directory, on top of the app's backups being off. */
+        /**
+         * The seed file lives in the no-backup directory, on top of the app's backups being off. The directory is
+         * resolved on first use, since asking the context for it reads the disk.
+         */
+        private fun seedDirectory(context: Context): Lazy<File> = lazy { File(context.noBackupFilesDir, SEED_DIR) }
+
+        /** Debug builds may keep the seed key in software, which is all the emulators offer. */
         @Provides
         @Singleton
         fun provideSeedStore(
             @ApplicationContext context: Context,
             key: SeedKey,
             deviceLock: DeviceLock,
-        ): SeedStore = KeystoreSeedStore(File(context.noBackupFilesDir, SEED_DIR), key, deviceLock)
+        ): SeedStore = KeystoreSeedStore(seedDirectory(context), key, deviceLock, isSoftwareKeyAllowed = Env.isDebug)
+
+        @Provides
+        @Singleton
+        fun provideWipeMarker(@ApplicationContext context: Context): WipeMarker = WipeMarker(seedDirectory(context))
+
+        @Provides
+        @Singleton
+        fun provideSettingsDataStore(
+            @ApplicationContext context: Context,
+            @IoDispatcher ioDispatcher: CoroutineDispatcher,
+        ): DataStore<Preferences> = settingsDataStore(CoroutineScope(ioDispatcher + SupervisorJob())) {
+            context.preferencesDataStoreFile(SETTINGS_NAME)
+        }
     }
 }

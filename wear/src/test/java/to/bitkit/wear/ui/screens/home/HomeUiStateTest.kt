@@ -1,13 +1,13 @@
 package to.bitkit.wear.ui.screens.home
 
 import org.junit.Test
+import to.bitkit.wear.data.NfcState
 import to.bitkit.wear.data.WatchSettings
 import to.bitkit.wear.models.PrimaryDisplay
 import to.bitkit.wear.models.rate
 import to.bitkit.wear.repositories.WalletState
 import to.bitkit.wear.repositories.WalletStatus
 import to.bitkit.wear.ui.components.NfcHintState
-import to.bitkit.wear.ui.components.NfcState
 import to.bitkit.wear.ui.components.nfcHintState
 import java.util.Locale
 import kotlin.test.assertEquals
@@ -117,8 +117,23 @@ class HomeUiStateTest {
     }
 
     @Test
-    fun `the nfc hint shows only once the wallet is ready, never while loading, failed or offline`() {
-        val statuses = listOf(WalletStatus.Connecting, WalletStatus.Error, WalletStatus.Offline)
+    fun `a wallet that still shows its balance while locked or paused is not ready`() {
+        for (status in listOf(WalletStatus.Locked, WalletStatus.Paused, WalletStatus.Idle)) {
+            val state = homeUiState(ready.copy(status = status), rates, WatchSettings(), Locale.US)
+
+            assertTrue(state.primaryAmount != null, "$status")
+            assertFalse(state.isWalletReady, "$status")
+        }
+    }
+
+    @Test
+    fun `the state carries the nfc state it was given`() {
+        assertEquals(NfcState.Off, homeUiState(ready, rates, WatchSettings(), Locale.US, NfcState.Off).nfc)
+    }
+
+    @Test
+    fun `the nfc hint shows only once the wallet is ready, never while loading, failed, offline or locked`() {
+        val statuses = listOf(WalletStatus.Connecting, WalletStatus.Error, WalletStatus.Offline, WalletStatus.Locked)
         statuses.forEach { status ->
             val state = homeUiState(ready.copy(status = status), rates, WatchSettings(), Locale.US)
             assertEquals(NfcHintState.Hidden, nfcHintState(NfcState.On, state.isWalletReady, isAmbient = false))

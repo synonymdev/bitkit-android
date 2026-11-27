@@ -15,6 +15,7 @@
     <string name="restore__checksum_review">Revisa</string>
     <string name="restore__checksum_title">Frase no vàlida</string>
     <string name="restore__error_failed">No s\'ha pogut desar la cartera</string>
+    <string name="restore__error_insecure">Sense maquinari segur</string>
     <plurals name="restore__length_words">
         <item quantity="one">%1$d paraula</item>
         <item quantity="many">%1$d paraules</item>

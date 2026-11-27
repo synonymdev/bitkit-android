@@ -2,7 +2,10 @@ package to.bitkit.wear.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
@@ -33,15 +36,20 @@ fun WearNavHost(
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberSwipeDismissableNavController()
+    var isRestoreSaving by remember { mutableStateOf(false) }
     SwipeDismissableNavHost(
         navController = navController,
         startDestination = startRoute,
+        userSwipeEnabled = !isRestoreSaving,
         modifier = modifier
     ) {
         composable(Routes.ONBOARDING) {
-            OnboardingScreen(onRestoreClick = { navController.navigateTo(Routes.RESTORE) })
+            OnboardingScreen(
+                onRestoreClick = { navController.navigateTo(Routes.RESTORE) },
+                onWalletFind = { navController.navigateClearingBackStack(Routes.HOME) },
+            )
         }
-        restore(navController)
+        restore(navController, onSavingChange = { isRestoreSaving = it })
         composable(Routes.WALLET_REMOVED) {
             WalletRemovedScreen(onConfirm = { navController.navigateClearingBackStack(Routes.ONBOARDING) })
         }
@@ -61,7 +69,10 @@ fun WearNavHost(
     }
 }
 
-private fun NavGraphBuilder.restore(navController: NavController) {
+private fun NavGraphBuilder.restore(
+    navController: NavController,
+    onSavingChange: (Boolean) -> Unit,
+) {
     navigation(startDestination = Routes.RESTORE_START, route = Routes.RESTORE) {
         composable(Routes.RESTORE_START) {
             RestoreStartScreen(viewModel = restoreViewModel(navController, it))
@@ -82,7 +93,10 @@ private fun NavGraphBuilder.restore(navController: NavController) {
             )
         }
         composable(Routes.RESTORE_PASSPHRASE) {
-            RestorePassphraseScreen(viewModel = restoreViewModel(navController, it))
+            RestorePassphraseScreen(
+                viewModel = restoreViewModel(navController, it),
+                onSavingChange = onSavingChange,
+            )
         }
     }
 }

@@ -43,6 +43,16 @@ Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only
   out of the watch APK until `Env.IS_MAINNET_ENABLED` turns on.
 - **Locales.** The watch app ships the phone app's locales (`localeFilters`) and generates its locale config from
   them, with English as the default (`res/resources.properties`).
+- **Play services components.** The Breez SDK's dependencies bring Play services' sign-in and credential
+  components into the manifest: three activities and two services, one of them exported
+  (`RevocationBoundService`). The watch app uses none of them, so its manifest removes them
+  (`tools:node="remove"`), and the merged manifest lists only `MainActivity` and the androidx startup and profile
+  components. The libraries themselves stay on the classpath, since Breez's classes load them.
+- **Main thread.** Nothing reads the disk, the network or a system service on the main thread at launch or while
+  a screen composes. `NetworkMonitor`, `DeviceLock` and `NfcMonitor` are created empty and register with the system
+  on the IO dispatcher; the HTTP client, the settings file and the seed directory are opened on first use there.
+  Debug builds turn on `StrictMode` (disk reads, disk writes and network on the main thread, logged to logcat under
+  `StrictMode`), so a regression shows while the journeys run.
 - **Backups.** `allowBackup` is off and both backup rule files exclude every domain, so neither the seed nor the Spark
   state leaves the watch.
 - **Copied code.** The currency formatting, the colour tokens and text styles, the balance swap animations and
@@ -58,13 +68,15 @@ Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only
   the local regtest fixture. Payments, and the idempotency keys they use, come with PR 2.
 - `repositories`: `WalletRepo` (wallet state and balance, restore, start, lock, background and network handling,
   wipe and its recovery at launch) and `CurrencyRepo` (Blocktank rates and the unit shown first).
-- `data`: `SettingsStore` (display settings and the wipe's notes), the rates client, `NetworkMonitor`
-  (`ConnectivityManager`'s default network) and `ForegroundMonitor` (the process lifecycle: whether the app is on
+- `data`: `SettingsStore` (display settings and the wipe's notes, with `WipeMarker` for the note itself), the rates
+  client, `NetworkMonitor` (`ConnectivityManager`'s default network, online once the system validated it),
+  `NfcMonitor` (the NFC adapter's state) and `ForegroundMonitor` (the process lifecycle: whether the app is on
   screen).
 - `ui`: one `MainActivity` with `testTagsAsResourceId`, a `SwipeDismissableNavHost` with the routes Onboarding,
   the Restore graph, Wallet removed, Home, About and Not supported, and the M3 Expressive theme (black background,
-  Brand orange, Inter Tight). When the wallet storage cannot be recovered at launch, the start error
-  (`WatchStartError` with `WatchStartRetry`) shows instead of a first screen.
+  Brand orange, Inter Tight). The splash screen stays while the first screen is picked, for at most about a second;
+  after that the loading ring shows until it is. When the wallet storage cannot be recovered at launch, the start
+  error (`WatchStartError` with `WatchStartRetry`) shows instead of a first screen.
 
 Test tags are PascalCase. Tags of screens the phone also has start with `Watch`, so they never clash with the
 phone's; the restore screens use `Restore…` tags.
@@ -93,8 +105,11 @@ On-screen copy stays short: a title or one line of at most about six words per s
   balance is replaced by the dimmed mark (`WatchHomeBalanceHidden`) and nothing animates. The last balance is kept
   in memory only, never written to disk.
 - **NFC hint.** Shown at the bottom of the Balance page, above the page indicator, only while the wallet is ready
-  to pay: a synced balance, with no loading ring, error or offline icon, and never in ambient mode. Its state
-  follows NFC live (`NfcAdapter.ACTION_ADAPTER_STATE_CHANGED` while Home is shown, and on resume):
+  to pay: connected and synced (`WalletStatus.Ready`) with its balance showing, so never under the loading ring,
+  with the error or the offline icon, or while the watch is locked, and never in ambient mode. Its state follows
+  NFC live: `NfcMonitor`, a singleton, reads the adapter on the IO dispatcher at start and on every
+  `NfcAdapter.ACTION_ADAPTER_STATE_CHANGED` broadcast, through one receiver registered for the life of the process,
+  and the page only collects its state. Until the first read the hint is hidden.
   - NFC on: the phone's broadcast icon (`ic_broadcast`, tinted white-64 as in the Send sheet's nearby pill) as
     `NfcHint`. Its dot stays on while the inner and then the outer arc pair brighten in a slow loop, to say that a
     tap pays. It is the still icon when animations are off.
@@ -110,17 +125,26 @@ On-screen copy stays short: a title or one line of at most about six words per s
   Spark, no balance shows, so an unsynced 0 (a wallet restored offline) never looks real: without a network the
   start ends in the error with its retry (`WatchHomeError`, `WatchHomeRetry`). Once a sync of this session has
   reached Spark, losing the network, or a later sync that does not reach Spark, keeps the last balance with a small
-  no-network icon (`WatchHomeOffline`, no text). When `NetworkMonitor` reports the network back and the app is on
-  screen, the wallet syncs again under the loading ring. The error does not retry by itself; the wearer taps retry.
+  no-network icon (`WatchHomeOffline`, no text). `NetworkMonitor` counts a network as online only once the system
+  validated that it reaches the internet. When it reports the network back and the app is on screen, the wallet
+  syncs again under the loading ring. A wallet that stays offline although the watch has a network tries again by
+  itself while the app is on screen: after 5 s, then 15 s, then every 60 s, starting over once a sync succeeds. A
+  tap on the offline icon tries at once. The error does not retry by itself; the wearer taps retry.
   One exception keeps a start from ending on a stale result: when the network, an unlock or the app came back while
   a start was still running and that start then failed, it runs once more.
+- **Exchange rates.** While Home is open, the Blocktank rates are fetched when the app comes on screen and every
+  5 minutes from then, each time the wallet becomes ready, and when the network returns while there are no rates
+  yet. Until rates arrive the balance shows in bitcoin only.
 - **Background.** The wallet is connected only while the app is on screen. `ForegroundMonitor` follows the process
   lifecycle (`ProcessLifecycleOwner`), which counts the app as off screen about 0.7 s after its last activity
   stopped. From then, `WalletRepo` waits 10 s and disconnects Spark (`WalletStatus.Paused`), so a glance at another
   app keeps the connection and closing the watch app stops its Spark instance. Nothing starts the wallet in the
-  background: not the network coming back, not an unlock, not a retry. A start asked for there is put off, and
-  returning to the app connects and syncs again under the loading ring, over the last balance. Ambient mode is not
-  the background: the app stays on screen and connected.
+  background: not the network coming back, not an unlock, not a retry. A start asked for there is put off, and a
+  start that the app left while it ran is disconnected and put off too. Returning to the app connects and syncs
+  again under the loading ring, over the last balance. Returning within the 10 s only cancels the wait; a
+  disconnect that already began always finishes, and the wallet then connects again. When Spark cannot be
+  disconnected, the app keeps hold of it so the next lock, pause or wipe tries again. Ambient mode is not the
+  background: the app stays on screen and connected.
 - **Settings.** A short list of icon rows: About and Remove wallet. The unit has no setting: tapping the balance is
   the only way to switch it, and the choice is kept in the settings store across restarts. Remove wallet asks with a
   one-line title and the two round ✕/✓ buttons.
@@ -141,9 +165,13 @@ On-screen copy stays short: a title or one line of at most about six words per s
 The watch holds the full recovery phrase and passphrase, because Breez needs them to open the wallet.
 
 - **Key.** An AES-256-GCM key in AndroidKeyStore wraps the seed. It is created in StrongBox when the watch has one
-  and in the trusted execution environment otherwise, and the log names which (the emulator reports software). When
-  StrongBox fails to make the key for any reason, the app deletes what it left and makes the key in the trusted
-  execution environment. A new key is created for every restore.
+  and in the trusted execution environment otherwise, and the log names which. When StrongBox fails to make the key
+  for any reason, the app deletes what it left and makes the key in the trusted execution environment. A new key is
+  created for every restore.
+- **No software keys.** A release build stores a seed only under a key that the Keystore reports as StrongBox or
+  trusted execution environment. Any other key is deleted, nothing is stored and the restore ends with the one
+  line "No secure hardware" (`RestoreError`). Debug builds are exempt, because the emulators report software; a
+  release build therefore cannot restore a wallet on an emulator.
 - **One seed at a time.** Saving refuses while a seed is stored, so a restore can never destroy the key of a seed
   that is still there. The wallet is removed first, which is the only way to a second restore.
 - **Screen lock trade-off.** Without a screen lock, anyone holding the watch can spend. With one, the key only works
@@ -179,19 +207,29 @@ The watch holds the full recovery phrase and passphrase, because Breez needs the
   message: the Keystore, Breez and bitkit-core write those messages, and the app cannot vouch for what they hold.
 - **Wipe.** Remove wallet, and a lost key, run one wipe that the screen which asked for it cannot cancel. It writes
   a note that a wipe is under way, deletes the seed (key, then ciphertext), deletes the Spark storage, and last
-  clears the settings and the note in one write. The seed goes first, so whatever happens next the wallet can no
+  clears the settings and then the note. The seed goes first, so whatever happens next the wallet can no
   longer be opened. Every step after the note runs even when an earlier one fails. When a step fails or the process
   dies, the note stays, and the next launch finishes the wipe before it picks the first screen; a wallet start
   finishes it too, and connects nothing while it cannot. When the launch cannot finish it, the start error shows
-  with a retry and no wallet opens. A launch, and every restore, also deletes Spark storage that no stored seed
-  owns.
+  with a retry and no wallet opens. A launch, and every restore, also deletes what no stored seed owns: Spark
+  storage, a seed key and a half-written seed file.
+  - The note is an empty file, `wipe.pending`, beside the seed in the no-backup directory; the file existing is the
+    note. It and its directory are synced to disk. It is not in the settings file, which is reset when it cannot be
+    read: a reset neither loses a wipe under way nor starts one. A note that an earlier build left in the settings
+    file is moved once: the file is written, then the old note removed.
+  - The wallet counts as wiped once the seed file and the Spark storage are gone. A seed key that cannot be
+    deleted, after a second try, does not fail the wipe: without its ciphertext it protects nothing, and each launch
+    without a wallet tries the delete again. A Spark instance that cannot be disconnected is dropped, so the next
+    wallet never uses it.
   - The note is written twice at most. When it still cannot be written, Remove wallet fails and deletes nothing, so
     a removal the wearer asked for can never be left half done without a note to finish it. A lost-key wipe goes on
     without the note: its seed is unreadable either way.
-  - A settings file that cannot be read is replaced by an empty one, so it never blocks a launch or a removal.
+  - A settings file that cannot be read is replaced by an empty one, so it never blocks a launch or a removal. The
+    removed notice of a lost-key wipe lives there and can be lost that way; the wipe itself cannot.
   - While a wipe runs nothing connects to Spark. A wallet start takes a token before it reads the seed; no token is
     handed out during a wipe, and a token stops being valid when a wipe begins and again when it ends. So a start
-    begun before or during a wipe is refused, and a balance that arrives is dropped.
+    begun before or during a wipe is refused, and a balance that arrives is dropped. The token is checked again once
+    Spark is built: an instance built while a wipe began is disconnected and never used.
 
 ### Key loss or a passing error
 
@@ -243,9 +281,14 @@ passphrase and Home.
 - The passphrase step continues without one by default; a small key button adds one. A typed passphrase is used
   exactly as typed. It holds at most 256 characters: typing past that is refused with Too long
   (`RestorePassphraseTooLong`), never cut short without a word.
-- Leaving the app during the restore drops the words and the passphrase at once and returns to the length choice,
-  so nothing typed lingers in memory behind another app. Only a save already under way finishes. Ambient mode keeps
+- Leaving the app during the restore drops the words and the passphrase and returns to the length choice, so
+  nothing typed lingers in memory behind another app. The drop follows the process lifecycle
+  (`ProcessLifecycleOwner`), which reports the app off screen about 0.7 s after its last activity stopped. Only a
+  save already under way finishes; when it fails behind another app, the words are dropped then. Ambient mode keeps
   the app on screen and the words with it.
+- While the wallet is saved, the passphrase screen cannot be left by a swipe or the back button, so the wearer
+  never lands on an earlier screen with a wallet stored behind it. Onboarding checks for a stored wallet each time
+  it comes on screen and opens Home when there is one, as after a save that finished while the wearer was away.
 - The word and passphrase screens set `FLAG_SECURE` while shown, in debug builds too (the phone's
   `BlockScreenshots` exempts debug builds). Screenshots and screen recordings of them come out black, so journeys
   check these screens with `android layout` only.
@@ -269,7 +312,8 @@ The Wear OS keyboard swallows hardware key events while it is open, so close it 
    when the checksum fails; on review, `RestoreNext` keeps a word.
 4. Tap `RestorePassphraseSkip`, or `RestorePassphraseAdd`, type into `RestorePassphraseInput` the same way and tap
    `RestorePassphraseConfirm`. `RestoreSaving` (holding `BezelLoading`) shows while the wallet is saved,
-   `RestoreError` when saving failed.
+   `RestoreError` when saving failed ("Couldn't save wallet", or "No secure hardware" in a release build on a
+   watch without a hardware Keystore).
 5. Home shows `BezelLoading` with `WatchHomeBalancePending` until the first sync, then `WatchHomeBalance`. Swipe
    left (`adb shell input swipe 400 227 60 227`) for Settings.
 
@@ -279,6 +323,8 @@ The Wear OS keyboard swallows hardware key events while it is open, so close it 
   It refuses a device that is not a watch.
 - `just wear-run` installs and launches it; `just wear-run logs` then streams its logcat.
 - `./gradlew :wear:assembleDevDebug` writes the split APKs to `wear/build/outputs/apk/dev/debug/`.
+- A bad local `BREEZ_API_KEY` stops only the `:app` build: the key is checked when a build reads it, and `:wear`
+  never does.
 - `just compile`, `just test` and `just lint` run on both modules. `just build`, `just install` and `just run` stay
   on the phone app. An unqualified Gradle install task, such as `./gradlew installDevDebug`, would install both apps on
   one device, where the watch app replaces the phone app: always name the module (`:app:` or `:wear:`).

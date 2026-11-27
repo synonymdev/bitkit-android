@@ -15,6 +15,7 @@
     <string name="restore__checksum_review">Έλεγχος</string>
     <string name="restore__checksum_title">Μη έγκυρη φράση</string>
     <string name="restore__error_failed">Αδυναμία αποθήκευσης πορτοφολιού</string>
+    <string name="restore__error_insecure">Χωρίς ασφαλές υλικό</string>
     <plurals name="restore__length_words">
         <item quantity="one">%1$d λέξη</item>
         <item quantity="other">%1$d λέξεις</item>

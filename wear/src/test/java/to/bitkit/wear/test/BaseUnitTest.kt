@@ -16,5 +16,17 @@ abstract class BaseUnitTest(
 
     protected val testDispatcher get() = coroutinesTestRule.testDispatcher
 
-    protected fun test(block: suspend TestScope.() -> Unit) = runTest(testDispatcher) { block() }
+    protected fun test(block: suspend TestScope.() -> Unit) = runTest(testDispatcher) {
+        try {
+            block()
+        } finally {
+            onTestEnd()
+        }
+    }
+
+    /**
+     * Runs after each [test] body, before the test drains its scheduler: a test whose subject keeps a timer that
+     * repeats forever stops it here, or the drain never ends.
+     */
+    protected open fun onTestEnd() = Unit
 }

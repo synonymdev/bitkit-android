@@ -5,16 +5,18 @@ import java.io.File
 import kotlin.test.assertTrue
 
 /**
- * Keeps `docs/screens-map.md` in sync with the `*Screen.kt` files: the phone app's in `app/src/main/java` against the
- * sections before the Wear OS heading, the watch app's in `wear/src/main/java` against the Wear OS section. A file
- * name both apps use needs a row in each.
+ * Keeps `docs/screens-map.md` in sync with the `*Screen.kt` files: the phone app's in `app/src/main/java` against
+ * every section but Wear OS, the watch app's in `wear/src/main/java` against the Wear OS section, which ends at the
+ * next `## ` heading. A file name both apps use needs a row in each.
  */
 class ScreensMapTest {
     private val projectRoot = generateSequence(File("").absoluteFile) { it.parentFile }
         .first { File(it, "docs/screens-map.md").isFile }
     private val screensMap = File(projectRoot, "docs/screens-map.md").readText()
-    private val phoneMap = screensMap.substringBefore(WEAR_HEADING)
-    private val wearMap = screensMap.substringAfter(WEAR_HEADING, missingDelimiterValue = "")
+    private val afterWearHeading = screensMap.substringAfter(WEAR_HEADING, missingDelimiterValue = "")
+    private val wearMap = afterWearHeading.substringBefore(SECTION_HEADING)
+    private val phoneMap = screensMap.substringBefore(WEAR_HEADING) +
+        afterWearHeading.substringAfter(SECTION_HEADING, missingDelimiterValue = "")
 
     @Test
     fun `every phone screen has a map entry and every entry has a screen`() =
@@ -49,6 +51,9 @@ class ScreensMapTest {
 
     private companion object {
         const val WEAR_HEADING = "\n## Wear OS\n"
+
+        /** The start of a top-level section; the Wear OS section ends at the next one. */
+        const val SECTION_HEADING = "\n## "
         val SCREEN_ENTRY = Regex("""\b[A-Z]\w*Screen\.kt\b""")
     }
 }

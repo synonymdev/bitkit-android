@@ -15,6 +15,7 @@
     <string name="restore__checksum_review">Revisar</string>
     <string name="restore__checksum_title">Frase no válida</string>
     <string name="restore__error_failed">No se pudo guardar la cartera</string>
+    <string name="restore__error_insecure">Sin hardware seguro</string>
     <plurals name="restore__length_words">
         <item quantity="one">%1$d palabra</item>
         <item quantity="many">%1$d palabras</item>

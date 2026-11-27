@@ -15,6 +15,8 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.wear.env.Env
@@ -140,6 +142,78 @@ class WatchSparkServiceTest {
 
         verify(sdk).disconnect()
         assertFailsWith<SparkError.NotConnected> { sut.getInfo() }
+    }
+
+    @Test
+    fun `an sdk built while a wipe began is disconnected and never used`() = runTest {
+        val sut = WatchSparkService(mock<Context>())
+        val sdk = mock<BreezSdkInterface>()
+        val token = assertNotNull(sut.wipeToken())
+
+        assertFailsWith<SparkError.WipeInProgress> {
+            sut.connectWith(token) {
+                sut.beginWipe()
+                sdk
+            }
+        }
+
+        verify(sdk).disconnect()
+        verify(sdk, never()).addEventListener(any())
+        assertFailsWith<SparkError.NotConnected> { sut.getInfo() }
+    }
+
+    @Test
+    fun `a listener that cannot be removed does not stop the disconnect`() = runTest {
+        val sut = WatchSparkService(mock<Context>())
+        val sdk = connected(sut)
+        whenever(sdk.removeEventListener(any())).thenAnswer { throw SparkError.NotConnected() }
+
+        sut.disconnect()
+
+        verify(sdk).disconnect()
+        assertFailsWith<SparkError.NotConnected> { sut.getInfo() }
+    }
+
+    @Test
+    fun `a disconnect that fails keeps the sdk, so the next one reaches it`() = runTest {
+        val sut = WatchSparkService(mock<Context>())
+        val sdk = connected(sut)
+        var failures = 1
+        whenever(sdk.disconnect()).thenAnswer { if (failures-- > 0) throw SparkError.NotConnected() }
+
+        assertFailsWith<SparkError.NotConnected> { sut.disconnect() }
+        assertFalse(sut.connectWith(assertNotNull(sut.wipeToken())) { error("built over a live sdk") })
+
+        sut.disconnect()
+
+        verify(sdk, times(2)).disconnect()
+        assertFailsWith<SparkError.NotConnected> { sut.getInfo() }
+    }
+
+    @Test
+    fun `a disconnect whose caller is cancelled still disconnects`() = runTest {
+        val sut = WatchSparkService(mock<Context>())
+        val sdk = connected(sut)
+        lateinit var caller: Job
+        whenever(sdk.removeEventListener(any())).doSuspendableAnswer {
+            caller.cancel()
+            yield()
+            true
+        }
+
+        caller = launch { sut.disconnect() }
+        caller.join()
+
+        verify(sdk).disconnect()
+        assertFailsWith<SparkError.NotConnected> { sut.getInfo() }
+    }
+
+    private suspend fun connected(sut: WatchSparkService): BreezSdkInterface {
+        val sdk = mock<BreezSdkInterface>()
+        whenever(sdk.addEventListener(any())).thenReturn("listener")
+        whenever(sdk.removeEventListener(any())).thenReturn(true)
+        assertTrue(sut.connectWith(assertNotNull(sut.wipeToken())) { sdk })
+        return sdk
     }
 
     private fun mainnet(apiKey: String?, isMainnetEnabled: Boolean) =

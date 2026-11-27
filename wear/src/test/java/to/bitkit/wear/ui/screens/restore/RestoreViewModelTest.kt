@@ -14,6 +14,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.wear.repositories.WalletRepo
 import to.bitkit.wear.security.FakeBip39
 import to.bitkit.wear.security.FakeForegroundMonitor
+import to.bitkit.wear.security.KeyBacking
 import to.bitkit.wear.security.SeedStoreError
 import to.bitkit.wear.security.WalletSeed
 import to.bitkit.wear.test.BaseUnitTest
@@ -178,12 +179,43 @@ class RestoreViewModelTest : BaseUnitTest() {
 
         sut.onPassphraseSkip()
 
-        assertTrue(sut.uiState.value.isSaveFailed)
+        assertEquals(SaveError.Failed, sut.uiState.value.saveError)
         assertFalse(sut.uiState.value.isSaving)
         assertEquals("about", sut.uiState.value.entries[11].input)
 
         whenever(walletRepo.restore(any())).thenReturn(Result.success(Unit))
         sut.onPassphraseSkip()
+        assertEquals(RestoreUiState(), sut.uiState.value)
+    }
+
+    @Test
+    fun `a save refused for want of secure hardware says so`() = test {
+        enter(valid)
+        whenever(walletRepo.restore(any()))
+            .thenReturn(Result.failure(SeedStoreError.InsecureKey(KeyBacking.Software)))
+
+        sut.onPassphraseSkip()
+
+        assertEquals(SaveError.InsecureKey, sut.uiState.value.saveError)
+        assertFalse(sut.uiState.value.isSaving)
+    }
+
+    @Test
+    fun `a save that fails after the app left the screen drops the words and returns to the start`() = test {
+        val saved = CompletableDeferred<Result<Unit>>()
+        whenever(walletRepo.restore(any())).doSuspendableAnswer { saved.await() }
+        sut.effects.test {
+            enter(valid)
+            sut.onPassphraseSkip()
+            cancelAndConsumeRemainingEvents()
+        }
+
+        sut.effects.test {
+            foregroundMonitor.isForeground.update { false }
+            saved.complete(Result.failure(SeedStoreError.Failed()))
+
+            assertEquals(RestoreEffect.ShowStart, awaitItem())
+        }
         assertEquals(RestoreUiState(), sut.uiState.value)
     }
 

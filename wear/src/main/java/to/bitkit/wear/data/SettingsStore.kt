@@ -1,43 +1,48 @@
 package to.bitkit.wear.data
 
-import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
-import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import to.bitkit.wear.models.PrimaryDisplay
 import to.bitkit.wear.models.USD
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * A settings file that cannot be read is replaced by an empty one, so a corrupted file never blocks the launch or a
- * wallet removal. A wipe note lost this way is covered at launch, which deletes Spark storage no seed owns.
+ * The watch's settings file. One that cannot be read is replaced by an empty one, so a corrupted file never blocks
+ * the launch or a wallet removal. The note of a wipe under way is not in it: see [WipeMarker].
  */
-private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "settings",
-    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
-)
+fun settingsDataStore(scope: CoroutineScope, produceFile: () -> File): DataStore<Preferences> =
+    PreferenceDataStoreFactory.create(
+        corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+        scope = scope,
+        produceFile = produceFile,
+    )
 
 /** The watch's display preferences and the wallet wipe's progress notes. It holds nothing secret. */
 @Singleton
 class SettingsStore @Inject constructor(
-    @ApplicationContext private val context: Context,
+    private val dataStore: DataStore<Preferences>,
+    private val wipeMarker: WipeMarker,
 ) {
     private val primaryDisplayKey = stringPreferencesKey("primary_display")
     private val selectedCurrencyKey = stringPreferencesKey("selected_currency")
     private val removedNoticeKey = booleanPreferencesKey("wallet_removed_notice")
-    private val wipePendingKey = booleanPreferencesKey("wallet_wipe_pending")
 
-    val data: Flow<WatchSettings> = context.settingsDataStore.data.map { prefs ->
+    /** Where the wipe note lived before [WipeMarker]; [isWipePending] moves one found here. */
+    private val legacyWipePendingKey = booleanPreferencesKey("wallet_wipe_pending")
+
+    val data: Flow<WatchSettings> = dataStore.data.map { prefs ->
         WatchSettings(
             primaryDisplay = prefs[primaryDisplayKey]
                 ?.let { runCatching { PrimaryDisplay.valueOf(it) }.getOrNull() }
@@ -47,35 +52,46 @@ class SettingsStore @Inject constructor(
     }
 
     suspend fun setPrimaryDisplay(display: PrimaryDisplay) {
-        context.settingsDataStore.edit { it[primaryDisplayKey] = display.name }
+        dataStore.edit { it[primaryDisplayKey] = display.name }
     }
 
     /** Whether the wearer still has to be told that the wallet was deleted because its seed key was lost. */
-    suspend fun isRemovedNoticePending(): Boolean =
-        context.settingsDataStore.data.first()[removedNoticeKey] == true
+    suspend fun isRemovedNoticePending(): Boolean = dataStore.data.first()[removedNoticeKey] == true
 
     suspend fun setRemovedNoticePending(isPending: Boolean) {
-        context.settingsDataStore.edit { it[removedNoticeKey] = isPending }
+        dataStore.edit { it[removedNoticeKey] = isPending }
     }
 
-    /** Whether a wallet wipe started and was not finished, as when the process died during it. */
-    suspend fun isWipePending(): Boolean = context.settingsDataStore.data.first()[wipePendingKey] == true
-
-    /** Notes that a wallet wipe is under way; [showsRemovedNotice] also leaves the removed notice for the wearer. */
-    suspend fun beginWipe(showsRemovedNotice: Boolean) {
-        context.settingsDataStore.edit {
-            it[wipePendingKey] = true
-            if (showsRemovedNotice) it[removedNoticeKey] = true
+    /**
+     * Whether a wallet wipe started and was not finished, as when the process died during it. A note that an
+     * earlier version left in the settings file is moved to the [WipeMarker] first: the marker is written, then the
+     * old note removed.
+     */
+    suspend fun isWipePending(): Boolean {
+        if (dataStore.data.first()[legacyWipePendingKey] == true) {
+            wipeMarker.create()
+            dataStore.edit { it.remove(legacyWipePendingKey) }
         }
+        return wipeMarker.exists()
     }
 
-    /** Clears every setting and the wipe note in one write, keeping only a pending removed notice. */
+    /**
+     * Notes that a wallet wipe is under way; [showsRemovedNotice] also leaves the removed notice for the wearer.
+     * The marker is written first, so a notice is never left without a wipe that will finish.
+     */
+    suspend fun beginWipe(showsRemovedNotice: Boolean) {
+        wipeMarker.create()
+        if (showsRemovedNotice) dataStore.edit { it[removedNoticeKey] = true }
+    }
+
+    /** Clears every setting, keeping only a pending removed notice, and then the wipe note. */
     suspend fun finishWipe() {
-        context.settingsDataStore.edit {
+        dataStore.edit {
             val isRemovedNoticePending = it[removedNoticeKey] == true
             it.clear()
             if (isRemovedNoticePending) it[removedNoticeKey] = true
         }
+        wipeMarker.clear()
     }
 }
 

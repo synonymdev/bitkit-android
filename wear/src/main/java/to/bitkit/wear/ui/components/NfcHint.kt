@@ -1,10 +1,5 @@
 package to.bitkit.wear.ui.components
 
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.nfc.NfcAdapter
 import androidx.compose.animation.core.InfiniteTransition
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -15,12 +10,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
@@ -34,14 +25,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.wear.compose.material3.Icon
 import to.bitkit.wear.R
+import to.bitkit.wear.data.NfcState
 import to.bitkit.wear.ext.areAnimationsDisabled
-import to.bitkit.wear.ext.nfcAdapter
 import to.bitkit.wear.ui.modifiers.clickableAlpha
 import to.bitkit.wear.ui.theme.Colors
 
@@ -78,60 +65,20 @@ private const val HALO_ALPHA = 0.2f
 /** The alpha of an arc pair that is not lit. */
 private const val DARK_ALPHA = 0.2f
 
-/** Whether the watch can take an NFC tap: [Unavailable] without NFC hardware, which no store install lacks. */
-enum class NfcState { Unavailable, Off, On }
-
 /** What the NFC hint shows: nothing, the animated hint, or the dimmed, slashed icon that opens the NFC settings. */
 enum class NfcHintState { Hidden, Active, Disabled }
 
-fun Context.nfcState(): NfcState {
-    val adapter = nfcAdapter ?: return NfcState.Unavailable
-    return if (adapter.isEnabled) NfcState.On else NfcState.Off
-}
-
 /**
  * The hint shows only on a wallet that is ready to pay, [isWalletReady], and never in ambient mode. With NFC off it
- * asks the wearer to turn it on; without NFC hardware it stays hidden.
+ * asks the wearer to turn it on; without NFC hardware, or before the NFC state was read, it stays hidden.
  */
 fun nfcHintState(nfc: NfcState, isWalletReady: Boolean, isAmbient: Boolean): NfcHintState {
     if (isAmbient || !isWalletReady) return NfcHintState.Hidden
     return when (nfc) {
-        NfcState.Unavailable -> NfcHintState.Hidden
+        NfcState.Unknown, NfcState.Unavailable -> NfcHintState.Hidden
         NfcState.Off -> NfcHintState.Disabled
         NfcState.On -> NfcHintState.Active
     }
-}
-
-/** The NFC state while the caller is shown, updated as NFC is turned on or off and when the app resumes. */
-@Composable
-fun rememberNfcState(): NfcState {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var state by remember { mutableStateOf(context.nfcState()) }
-    DisposableEffect(context, lifecycleOwner) {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                state = context.nfcState()
-            }
-        }
-        // The NFC service sends this protected broadcast under its own uid, which a not-exported receiver could refuse;
-        // only the system may send it, so exporting the receiver lets no app spoof it.
-        ContextCompat.registerReceiver(
-            context,
-            receiver,
-            IntentFilter(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED),
-            ContextCompat.RECEIVER_EXPORTED,
-        )
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) state = context.nfcState()
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            context.unregisterReceiver(receiver)
-        }
-    }
-    return state
 }
 
 /**

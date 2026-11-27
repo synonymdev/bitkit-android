@@ -274,8 +274,8 @@ Coordinates are pixels. The 227 dp screen is 454 px square (centre 227), the 192
 - A negative rotary value scrolls the content up, revealing what is below.
 - `KEYCODE_SLEEP` puts the watch in ambient mode only when the always-on screen is on (Settings › Display ›
   Always-on screen; on by default on the emulators). With it off, the screen goes dark and the app stops instead.
-- Ambient mode keeps the app on screen. Leaving the app is different: a restore under way drops its words at once,
-  and the wallet disconnects from Spark 10 s later and reconnects on return (Background in
+- Ambient mode keeps the app on screen. Leaving the app is different: a restore under way drops its words within
+  about a second, and the wallet disconnects from Spark 10 s later and reconnects on return (Background in
   [docs/wear.md](../../docs/wear.md)).
 
 ## Media

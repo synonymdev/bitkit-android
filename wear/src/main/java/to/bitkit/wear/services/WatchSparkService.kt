@@ -147,7 +147,14 @@ class WatchSparkService @Inject constructor(
         if (!isCurrent(wipeToken)) throw SparkError.WipeInProgress()
         val connected = build()
         // A caller that gives up from here on, as on a timeout, must not leave a built SDK that nothing disconnects.
-        withContext(NonCancellable) { attach(connected) }
+        withContext(NonCancellable) {
+            if (!isCurrent(wipeToken)) {
+                runSuspendCatching { connected.disconnect() }
+                    .onFailure { Logger.warn("Failed to disconnect Spark built during a wipe", it, context = TAG) }
+                throw SparkError.WipeInProgress()
+            }
+            attach(connected)
+        }
         true
     }
 
@@ -182,24 +189,39 @@ class WatchSparkService @Inject constructor(
         sdk = connected
     }
 
-    suspend fun disconnect() = mutex.withLock {
-        val current = sdk ?: return@withLock
-        try {
-            listenerId?.let { current.removeEventListener(it) }
+    /**
+     * Disconnects the SDK as one step that its caller cannot cancel. A listener that cannot be removed does not stop
+     * the disconnect. When the disconnect itself fails, it throws and the SDK stays referenced, so the next
+     * [disconnect] reaches it again.
+     */
+    suspend fun disconnect() = withContext(NonCancellable) {
+        mutex.withLock {
+            val current = sdk ?: return@withLock
+            listenerId?.let { id ->
+                runSuspendCatching { current.removeEventListener(id) }
+                    .onFailure { Logger.warn("Failed to remove Spark event listener", it, context = TAG) }
+            }
             current.disconnect()
-            Logger.info("Disconnected Spark wallet", context = TAG)
-        } finally {
             sdk = null
             listenerId = null
+            Logger.info("Disconnected Spark wallet", context = TAG)
         }
     }
 
-    /** Deletes Spark's storage, even when disconnecting failed. */
+    /**
+     * Deletes Spark's storage. An SDK that cannot be disconnected is dropped first, so it is never used for the
+     * next wallet; once the storage is gone, the wipe has succeeded.
+     */
     suspend fun wipeStorage() {
-        val disconnected = runSuspendCatching { disconnect() }
+        runSuspendCatching { disconnect() }.onFailure {
+            Logger.warn("Failed to disconnect Spark wallet before its wipe", it, context = TAG)
+            mutex.withLock {
+                sdk = null
+                listenerId = null
+            }
+        }
         val dir = storageDir
         if (!dir.deleteRecursively() && dir.exists()) throw SparkError.WipeFailed(dir.path)
-        disconnected.getOrThrow()
     }
 
     /**

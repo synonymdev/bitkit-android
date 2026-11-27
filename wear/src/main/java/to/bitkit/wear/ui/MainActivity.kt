@@ -15,17 +15,28 @@ import androidx.wear.compose.foundation.LocalAmbientModeManager
 import androidx.wear.compose.foundation.rememberAmbientModeManager
 import androidx.wear.compose.material3.AppScaffold
 import dagger.hilt.android.AndroidEntryPoint
+import to.bitkit.wear.ui.components.BezelLoading
 import to.bitkit.wear.ui.screens.start.StartErrorScreen
 import to.bitkit.wear.ui.theme.BitkitWearTheme
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    companion object {
+        /** How long the splash screen may stay while the first screen is picked; the loading ring takes over. */
+        private val SPLASH_LIMIT = 1.seconds
+    }
+
     private val startViewModel: StartViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
-        splashScreen.setKeepOnScreenCondition { startViewModel.uiState.value.isStarting }
+        val splashStart = TimeSource.Monotonic.markNow()
+        splashScreen.setKeepOnScreenCondition {
+            startViewModel.uiState.value.isStarting && splashStart.elapsedNow() < SPLASH_LIMIT
+        }
         setContent {
             BitkitWearTheme {
                 CompositionLocalProvider(LocalAmbientModeManager provides rememberAmbientModeManager()) {
@@ -36,6 +47,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         val uiState by startViewModel.uiState.collectAsStateWithLifecycle()
                         uiState.startRoute?.let { WearNavHost(startRoute = it) }
+                        if (uiState.isStarting) BezelLoading()
                         if (uiState.isRecoveryFailed) {
                             StartErrorScreen(
                                 isLoading = uiState.isLoading,

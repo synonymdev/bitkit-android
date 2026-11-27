@@ -9,7 +9,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.getAndUpdate
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -57,6 +61,9 @@ class WalletRepo @Inject constructor(
 
         /** How long the app may be off screen before Spark is disconnected, so a glance away keeps it connected. */
         val BACKGROUND_GRACE = 10.seconds
+
+        /** How long an offline wallet waits before each try to sync again; the last wait repeats. */
+        val OFFLINE_RETRY_DELAYS = listOf(5.seconds, 15.seconds, 60.seconds)
     }
 
     private val scope = CoroutineScope(ioDispatcher + SupervisorJob())
@@ -67,7 +74,7 @@ class WalletRepo @Inject constructor(
 
     private val isResumePending = AtomicBoolean(false)
 
-    private var backgroundJob: Job? = null
+    private var graceJob: Job? = null
 
     private val isForeground: Boolean get() = foregroundMonitor.isForeground.value
 
@@ -89,6 +96,7 @@ class WalletRepo @Inject constructor(
         scope.launch {
             foregroundMonitor.isForeground.collect { onForegroundChange(it) }
         }
+        scope.launch { retryWhileOffline() }
     }
 
     suspend fun hasWallet(): Boolean = withContext(ioDispatcher) { seedStore.exists() }
@@ -106,7 +114,7 @@ class WalletRepo @Inject constructor(
 
     /**
      * Run at every launch before the wallet is used: finishes a wipe that the last process did not complete, and
-     * deletes Spark storage that no stored seed owns.
+     * deletes Spark storage, a seed key and a half-written seed file that no stored seed owns.
      */
     suspend fun recover(): Result<Unit> = withContext(ioDispatcher + NonCancellable) {
         walletMutex.withLock { recoverLocked() }
@@ -149,11 +157,14 @@ class WalletRepo @Inject constructor(
      * that does not reach Spark fails the start: [WalletStatus.Offline] once this session has synced,
      * [WalletStatus.Error] before. A start that a wipe, a lock or the background overtook connects nothing and leaves
      * the state to them. When the network, an unlock or the app came back while a start that then failed was
-     * running, the start runs once more.
+     * running, the start runs once more. Its caller cannot cancel it, so a start always ends in a settled state,
+     * never left at [WalletStatus.Connecting]; its own timeouts bound it.
      */
-    suspend fun start(): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun start(): Result<Unit> = withContext(ioDispatcher + NonCancellable) { runStart() }
+
+    private suspend fun runStart(): Result<Unit> {
         val result = startMutex.withLock { startLocked() }
-        if (result.isFailure && isResumePending.getAndSet(false) && canRetryStart()) start() else result
+        return if (result.isFailure && isResumePending.getAndSet(false) && canRetryStart()) runStart() else result
     }
 
     private suspend fun startLocked(): Result<Unit> {
@@ -181,7 +192,7 @@ class WalletRepo @Inject constructor(
                 true
             } ?: throw WalletError.Timeout("connect")
             Logger.info("Connected wallet in '${connectStart.elapsedNow()}'", context = TAG)
-            // A lock or a pause that landed while connecting found nothing to disconnect.
+            // A lock, a pause or a trip to the background that landed while connecting found nothing to disconnect.
             checkStillStarting()
             val syncStart = TimeSource.Monotonic.markNow()
             val sync = withTimeoutOrNull(SYNC_TIMEOUT) { sparkService.syncWallet() }
@@ -206,11 +217,12 @@ class WalletRepo @Inject constructor(
     private fun checkStillStarting() {
         if (deviceLock.isLocked.value) throw WalletError.DeviceLocked()
         if (_walletState.value.status != WalletStatus.Connecting) throw WalletError.Overtaken()
+        if (!isForeground) throw WalletError.Backgrounded()
     }
 
     private fun markReady(wipeToken: Int) {
         if (!sparkService.isCurrent(wipeToken)) throw SparkError.WipeInProgress()
-        if (deviceLock.isLocked.value) throw WalletError.DeviceLocked()
+        checkStillStarting()
         val previous = _walletState.getAndUpdate {
             if (it.status == WalletStatus.Connecting) it.copy(status = WalletStatus.Ready, hasSynced = true) else it
         }
@@ -227,6 +239,14 @@ class WalletRepo @Inject constructor(
         if (_walletState.value.status != WalletStatus.Connecting) {
             Logger.info("Stopped wallet start that a lock or the background overtook", context = TAG)
             disconnectQuietly()
+            return
+        }
+        if (error is WalletError.Backgrounded) {
+            Logger.info("Stopped wallet start because the app left the screen", context = TAG)
+            disconnectQuietly()
+            _walletState.update {
+                if (it.status == WalletStatus.Connecting) it.copy(status = WalletStatus.Paused) else it
+            }
             return
         }
         when (error) {
@@ -270,40 +290,66 @@ class WalletRepo @Inject constructor(
     }
 
     private fun onForegroundChange(isForeground: Boolean) {
-        backgroundJob?.cancel()
+        graceJob?.cancel()
         if (isForeground) {
             deviceLock.refresh()
             scope.launch { resume() }
             return
         }
-        backgroundJob = scope.launch {
+        graceJob = scope.launch {
             delay(BACKGROUND_GRACE)
-            pause()
+            // Returning to the app cancels only the wait above, never a pause that began.
+            withContext(NonCancellable) { pause() }
         }
     }
 
     private suspend fun pause() {
         if (isForeground) return
-        disconnectQuietly()
+        val isDisconnected = disconnectQuietly()
         _walletState.update { if (it.status in pausableStatuses) it.copy(status = WalletStatus.Paused) else it }
-        Logger.info("Disconnected wallet because the app left the screen", context = TAG)
-        resume()
+        if (isDisconnected) Logger.info("Disconnected wallet because the app left the screen", context = TAG)
+        scope.launch { resume() }
     }
 
     private suspend fun resume() {
         if (!isForeground) return
         when (_walletState.value.status) {
-            WalletStatus.Connecting -> isResumePending.set(true)
+            WalletStatus.Connecting -> {
+                isResumePending.set(true)
+                // A start that ended between the two reads of the status never saw the flag.
+                if (_walletState.value.status != WalletStatus.Connecting && isResumePending.getAndSet(false)) resume()
+            }
             WalletStatus.Locked, WalletStatus.Paused -> start()
             WalletStatus.Offline if networkMonitor.isOnline.value -> start()
             else -> Unit
         }
     }
 
-    private suspend fun disconnectQuietly() {
+    private suspend fun retryWhileOffline() {
+        var attempt = 0
+        combine(
+            _walletState.map { it.status },
+            foregroundMonitor.isForeground,
+            networkMonitor.isOnline,
+        ) { status, isForeground, isOnline -> status to (isForeground && isOnline) }
+            .distinctUntilChanged()
+            .collectLatest { (status, canSync) ->
+                when (status) {
+                    WalletStatus.Offline if canSync -> while (true) {
+                        delay(OFFLINE_RETRY_DELAYS.getOrElse(attempt) { OFFLINE_RETRY_DELAYS.last() })
+                        attempt++
+                        scope.launch { resume() }
+                    }
+                    WalletStatus.Offline, WalletStatus.Connecting -> Unit
+                    else -> attempt = 0
+                }
+            }
+    }
+
+    private suspend fun disconnectQuietly(): Boolean =
         runSuspendCatching { sparkService.disconnect() }
             .onFailure { Logger.warn("Failed to disconnect wallet", it, context = TAG) }
-    }
+            .isSuccess
 
     /** Loads the balance from Spark. A balance read while the wallet is wiped is dropped. */
     suspend fun refreshBalance(): Result<Unit> = withContext(ioDispatcher) {
@@ -320,8 +366,9 @@ class WalletRepo @Inject constructor(
      * [WalletStatus.Missing]. When the note cannot be written, even on a second try, nothing is deleted and the
      * failure is returned, so a removal the wearer asked for can always be finished by [recover]. Every step after
      * the note runs even when an earlier one fails, and the first failure is returned, with
-     * [WalletStatus.Error]. When the process dies or a step fails, the note stays and [recover] finishes the wipe at
-     * the next launch or the next [start].
+     * [WalletStatus.Error]. The wallet counts as wiped once the seed file and Spark's storage are gone. When the
+     * process dies or a step fails, the note stays and [recover] finishes the wipe at the next launch or the next
+     * [start].
      */
     suspend fun wipe(): Result<Unit> = wipe(isKeyLost = false, isNoteRequired = true)
 
@@ -362,7 +409,10 @@ class WalletRepo @Inject constructor(
             wipeLocked(isKeyLost = false, isNoteRequired = false).getOrThrow()
             return@runSuspendCatching
         }
-        if (!seedStore.exists()) sparkService.wipeStorage()
+        if (!seedStore.exists()) {
+            seedStore.wipe().onFailure { Logger.warn("Failed to delete what a seed left behind", it, context = TAG) }
+            sparkService.wipeStorage()
+        }
     }
 }
 

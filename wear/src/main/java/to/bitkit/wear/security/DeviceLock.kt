@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.wear.di.IoDispatcher
 import to.bitkit.wear.ext.keyguardManager
+import to.bitkit.wear.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
@@ -32,23 +33,29 @@ interface DeviceLock {
 
     val isLocked: StateFlow<Boolean>
 
-    /** Reads the lock state again; the system does not announce every lock. */
+    /** Reads the lock state again, off the main thread; the system does not announce every lock. */
     fun refresh()
 }
 
+/**
+ * Reads the keyguard off the main thread. The lock state is false until the first read, a moment after the
+ * process starts; a caller that must know calls [refresh] first, off the main thread.
+ */
 @Singleton
 class KeyguardDeviceLock @Inject constructor(
     @ApplicationContext private val context: Context,
     @IoDispatcher ioDispatcher: CoroutineDispatcher,
 ) : DeviceLock {
     companion object {
+        private const val TAG = "DeviceLock"
+
         /** The system may lock a moment after the screen turns off, so the state is read again after this long. */
         private val LOCK_SETTLE_DELAY = 6.seconds
     }
 
     private val scope = CoroutineScope(ioDispatcher + SupervisorJob())
-    private val keyguard = context.keyguardManager
-    private val _isLocked = MutableStateFlow(keyguard.isDeviceLocked)
+    private val keyguard by lazy { context.keyguardManager }
+    private val _isLocked = MutableStateFlow(false)
     private var settleJob: Job? = null
 
     override val isSecure: Boolean get() = keyguard.isDeviceSecure
@@ -56,6 +63,17 @@ class KeyguardDeviceLock @Inject constructor(
     override val isLocked: StateFlow<Boolean> = _isLocked.asStateFlow()
 
     init {
+        scope.launch {
+            runCatching {
+                refresh()
+                register()
+            }.onFailure { Logger.error("Failed to watch the screen lock", it, context = TAG) }
+        }
+    }
+
+    override fun refresh() = _isLocked.update { keyguard.isDeviceLocked }
+
+    private fun register() {
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_SCREEN_ON)
@@ -63,14 +81,12 @@ class KeyguardDeviceLock @Inject constructor(
         }
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                refresh()
+                scope.launch { refresh() }
                 if (intent.action == Intent.ACTION_SCREEN_OFF) refreshOnceSettled()
             }
         }
         ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
-
-    override fun refresh() = _isLocked.update { keyguard.isDeviceLocked }
 
     private fun refreshOnceSettled() {
         settleJob?.cancel()

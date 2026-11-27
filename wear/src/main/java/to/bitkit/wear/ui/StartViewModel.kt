@@ -13,8 +13,9 @@ import to.bitkit.wear.repositories.WalletRepo
 import javax.inject.Inject
 
 /**
- * Picks the first screen while the splash screen shows, after the wallet storage is recovered. When the recovery
- * fails, as when a wipe that did not complete cannot be finished, no screen is picked and the wearer retries.
+ * Picks the first screen while the splash screen and then the loading ring show, after the wallet storage is
+ * recovered. When the recovery fails, as when a wipe that did not complete cannot be finished, no screen is picked
+ * and the wearer retries.
  */
 @HiltViewModel
 class StartViewModel @Inject constructor(
@@ -62,6 +63,6 @@ data class StartUiState(
     val isRecoveryFailed: Boolean = false,
     val isLoading: Boolean = true,
 ) {
-    /** Whether the first screen is still being picked, which keeps the splash screen up. */
+    /** Whether the first screen is still being picked: the splash screen stays for a moment, then the loading ring. */
     val isStarting: Boolean get() = startRoute == null && !isRecoveryFailed
 }

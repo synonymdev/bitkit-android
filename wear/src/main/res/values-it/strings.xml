@@ -15,6 +15,7 @@
     <string name="restore__checksum_review">Rivedi</string>
     <string name="restore__checksum_title">Frase non valida</string>
     <string name="restore__error_failed">Impossibile salvare il portafoglio</string>
+    <string name="restore__error_insecure">Nessun hardware sicuro</string>
     <plurals name="restore__length_words">
         <item quantity="one">%1$d parola</item>
         <item quantity="many">%1$d parole</item>

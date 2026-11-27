@@ -9,6 +9,7 @@
   <actions>
     <action>Verify "WatchHomeBalanceSymbol" reads "₿"</action>
     <action>Verify "WatchHomeBalance" reads the balance in sats, a number above 0; note it</action>
+    <action>Dump `android layout` every 5 s until "WatchHomeBalanceSecondary" reads a fiat value, for up to 1 minute: the rates load after the balance, and without them a tap swaps nothing</action>
     <action>Tap the balance (tag "WatchHomeBalanceToggle")</action>
     <action>Verify "WatchHomeBalanceSymbol" reads "$"</action>
     <action>Verify "WatchHomeBalanceSecondary" reads the sats amount noted</action>

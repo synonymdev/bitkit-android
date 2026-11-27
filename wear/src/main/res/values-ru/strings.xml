@@ -15,6 +15,7 @@
     <string name="restore__checksum_review">Проверить</string>
     <string name="restore__checksum_title">Неверная фраза</string>
     <string name="restore__error_failed">Не удалось сохранить кошелёк</string>
+    <string name="restore__error_insecure">Нет защищённого модуля</string>
     <plurals name="restore__length_words">
         <item quantity="one">%1$d слово</item>
         <item quantity="few">%1$d слова</item>

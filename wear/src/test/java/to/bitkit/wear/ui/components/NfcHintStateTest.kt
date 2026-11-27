@@ -1,6 +1,7 @@
 package to.bitkit.wear.ui.components
 
 import org.junit.Test
+import to.bitkit.wear.data.NfcState
 import kotlin.test.assertEquals
 
 class NfcHintStateTest {
@@ -9,6 +10,11 @@ class NfcHintStateTest {
         assertEquals(NfcHintState.Active, nfcHintState(NfcState.On, isWalletReady = true, isAmbient = false))
         assertEquals(NfcHintState.Disabled, nfcHintState(NfcState.Off, isWalletReady = true, isAmbient = false))
         assertEquals(NfcHintState.Hidden, nfcHintState(NfcState.Unavailable, isWalletReady = true, isAmbient = false))
+    }
+
+    @Test
+    fun `the hint stays hidden until the nfc state was read`() {
+        assertEquals(NfcHintState.Hidden, nfcHintState(NfcState.Unknown, isWalletReady = true, isAmbient = false))
     }
 
     @Test

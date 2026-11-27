@@ -19,11 +19,12 @@ object Logger {
     private var saver: LogFileSaver? = null
 
     /**
-     * Starts writing this process's log to a new file in [filesDir]/logs and logging the messages of errors; only
-     * debug builds call it.
+     * Starts writing this process's log to a new file in the logs directory of [filesDir] and logging the messages
+     * of errors; only debug builds call it. [filesDir] is resolved on the log's own thread, since asking the context
+     * for it reads the disk.
      */
-    fun init(filesDir: File) {
-        saver = LogFileSaver(File(filesDir, "logs"))
+    fun init(filesDir: () -> File) {
+        saver = LogFileSaver(lazy { File(filesDir(), "logs") })
     }
 
     fun debug(msg: String, context: String = "") = log(Log.DEBUG, "DEBUG", format(msg, context))
@@ -50,7 +51,7 @@ object Logger {
         if (hasMessage) ": ${e::class.simpleName}: ${e.message}" else ": ${e::class.simpleName}"
 }
 
-private class LogFileSaver(private val directory: File) {
+private class LogFileSaver(lazyDirectory: Lazy<File>) {
     companion object {
         /** How many log files are kept, this process's included. */
         const val MAX_FILES = 5
@@ -60,7 +61,9 @@ private class LogFileSaver(private val directory: File) {
     }
 
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
-    private val file = File(directory, "bitkit_${LocalDateTime.now().format(FILE_TIME)}.log")
+    private val directory by lazyDirectory
+    private val fileName = "bitkit_${LocalDateTime.now().format(FILE_TIME)}.log"
+    private val file by lazy { File(directory, fileName) }
 
     init {
         executor.execute {

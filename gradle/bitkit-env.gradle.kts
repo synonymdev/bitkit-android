@@ -55,15 +55,19 @@ fun derSize(der: ByteArray): Int? {
 // Breez's API key is a base64 DER certificate. A cut-short key (the bare `security … -w` prompt keeps only 128
 // characters) turns Spark off at start, so a set key whose decoded size differs from the size its own DER header
 // declares stops the build. The error names the source that supplied the key. Only lengths are reported.
-fun breezApiKey(): Provider<String> {
+// The key is read and checked only when the returned provider is, so a module that leaves the key out, as :wear does,
+// builds whatever the local key looks like.
+fun breezApiKey(): Provider<String> = provider { checkedBreezApiKey() }
+
+fun checkedBreezApiKey(): String {
     val name = "BREEZ_API_KEY"
     val (source, raw) = localPropSources(name).firstNotNullOfOrNull { (src, prop) -> prop.orNull?.let { src to it } }
-        ?: return provider { "" }
+        ?: return ""
     val key = raw.trim()
-    if (key.isEmpty()) return provider { key }
+    if (key.isEmpty()) return key
     val der = runCatching { Base64.getDecoder().decode(key) }.getOrNull()
     val declared = der?.let { derSize(it) }
-    if (der != null && declared == der.size) return provider { key }
+    if (der != null && declared == der.size) return key
     val problem = when {
         der == null -> "is not valid base64"
         declared == null -> "decodes to ${der.size} bytes that are not a certificate"

@@ -14,17 +14,20 @@ import java.nio.file.StandardOpenOption
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Stores the seed encrypted by [key] in one file under [directory], which must be app-private and outside every
- * backup. The file holds a format version and the [SeedKey.encrypt] output; nothing else on the watch persists the
- * seed. On a watch with a screen lock the key only works while the watch is unlocked; without one the key has no such
- * limit. A key that looks lost is read a second time, a moment later, before [load] reports it, and [load] never
- * deletes the seed. Plaintext lives in byte arrays that are zeroed after use; the [WalletSeed] strings handed in and
- * out are the caller's to drop.
+ * Stores the seed encrypted by [key] in one file under the directory, which must be app-private and outside every
+ * backup; it is resolved on first use, off the main thread. The file holds a format version and the
+ * [SeedKey.encrypt] output; nothing else on the watch persists the seed. Unless [isSoftwareKeyAllowed], which only
+ * debug builds set, for the emulators, a seed is never saved under a key outside secure hardware: the save fails and
+ * the key is deleted. On a watch with a screen lock the key only works while the watch is unlocked; without one the
+ * key has no such limit. A key that looks lost is read a second time, a moment later, before [load] reports it, and
+ * [load] never deletes the seed. Plaintext lives in byte arrays that are zeroed after use; the [WalletSeed] strings
+ * handed in and out are the caller's to drop.
  */
 class KeystoreSeedStore(
-    private val directory: File,
+    directory: Lazy<File>,
     private val key: SeedKey,
     private val deviceLock: DeviceLock,
+    private val isSoftwareKeyAllowed: Boolean,
 ) : SeedStore {
     companion object {
         private const val TAG = "KeystoreSeedStore"
@@ -34,6 +37,9 @@ class KeystoreSeedStore(
 
         /** How long a key that looks lost is left alone before it is read again, so a passing Keystore hiccup ends. */
         val KEY_LOSS_RECHECK_DELAY = 500.milliseconds
+
+        /** Where a key is out of reach of the system's own software. */
+        private val secureBackings = setOf(KeyBacking.StrongBox, KeyBacking.TrustedEnvironment)
 
         /** Binds a ciphertext to this use and format, so it cannot be mistaken for another blob of the same key. */
         private val aad = "to.bitkit.wear.seed.v1".toByteArray(Charsets.UTF_8)
@@ -75,6 +81,7 @@ class KeystoreSeedStore(
     }
 
     private val mutex = Mutex()
+    private val directory by directory
     private val file get() = File(directory, FILE_NAME)
     private val tempFile get() = File(directory, "$FILE_NAME.tmp")
 
@@ -103,6 +110,7 @@ class KeystoreSeedStore(
                 runCatching {
                     val isUnlockedDeviceRequired = deviceLock.isSecure
                     val backing = key.create(isUnlockedDeviceRequired)
+                    if (!isSoftwareKeyAllowed && backing !in secureBackings) throw SeedStoreError.InsecureKey(backing)
                     Logger.info(
                         "Created seed key backed by '$backing' with unlocked device required " +
                             "'$isUnlockedDeviceRequired'",
@@ -134,14 +142,15 @@ class KeystoreSeedStore(
     }
 
     private fun delete(): Result<Unit> {
-        val keyResult = runCatching { key.delete() }
-        val fileResult = runCatching {
+        runCatching { key.delete() }
+            .recoverCatching { key.delete() }
+            .onFailure { Logger.warn("Failed to delete the seed key", it, context = TAG) }
+        return runCatching {
             for (target in listOf(file, tempFile)) {
                 if (!target.delete() && target.exists()) throw SeedStoreError.Failed()
             }
             if (directory.exists()) syncDirectory()
         }
-        return if (keyResult.isFailure) keyResult else fileResult
     }
 
     private fun write(blob: ByteArray) {

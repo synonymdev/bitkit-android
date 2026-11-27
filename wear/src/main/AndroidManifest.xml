@@ -27,6 +27,32 @@
             android:name="com.google.android.wearable.standalone"
             android:value="true" />
 
+        <!--
+            The Breez SDK's dependencies bring Play services' sign-in and credential components, which the watch app
+            never uses. One of them is an exported service, so all are left out of the app. These entries only
+            remove a library's entry, so lint's checks of a declared component do not apply to them.
+        -->
+        <activity
+            android:name="androidx.credentials.playservices.HiddenActivity"
+            tools:ignore="MissingClass,WearRecents"
+            tools:node="remove" />
+        <activity
+            android:name="com.google.android.gms.auth.api.signin.internal.SignInHubActivity"
+            tools:ignore="MissingClass,WearRecents"
+            tools:node="remove" />
+        <activity
+            android:name="com.google.android.gms.common.api.GoogleApiActivity"
+            tools:ignore="MissingClass,WearRecents"
+            tools:node="remove" />
+        <service
+            android:name="androidx.credentials.playservices.CredentialProviderMetadataHolder"
+            tools:ignore="MissingClass"
+            tools:node="remove" />
+        <service
+            android:name="com.google.android.gms.auth.api.signin.RevocationBoundService"
+            tools:ignore="MissingClass"
+            tools:node="remove" />
+
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"

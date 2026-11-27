@@ -13,10 +13,16 @@ interface SeedStore {
      */
     suspend fun load(): Result<WalletSeed>
 
-    /** Stores [seed] under a new key. Fails with [SeedStoreError.AlreadyExists] while a seed is stored. */
+    /**
+     * Stores [seed] under a new key. Fails with [SeedStoreError.AlreadyExists] while a seed is stored, and with
+     * [SeedStoreError.InsecureKey] when the key would not live in secure hardware.
+     */
     suspend fun save(seed: WalletSeed): Result<Unit>
 
-    /** Deletes the seed and the key that protects it. */
+    /**
+     * Deletes the seed and the key that protects it. It succeeds once the seed file is gone: a key that could not be
+     * deleted protects nothing, and its delete is tried again at the next launch.
+     */
     suspend fun wipe(): Result<Unit>
 }
 
@@ -43,4 +49,7 @@ sealed class SeedStoreError(message: String, cause: Throwable? = null) : AppErro
     class Corrupted(cause: Throwable? = null) : SeedStoreError("The stored seed cannot be read", cause)
 
     class Failed(cause: Throwable? = null) : SeedStoreError("The seed key operation failed", cause)
+
+    /** The watch can only keep the seed key in software, where a release build never stores a seed. */
+    class InsecureKey(backing: KeyBacking) : SeedStoreError("The seed key would be backed by '$backing'")
 }

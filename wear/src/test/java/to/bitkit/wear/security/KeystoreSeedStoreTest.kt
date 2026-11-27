@@ -25,7 +25,7 @@ class KeystoreSeedStoreTest : BaseUnitTest() {
         passphrase = "TREZOR ü",
     )
     private val directory by lazy { File(folder.root, "seed") }
-    private val sut by lazy { KeystoreSeedStore(directory, key, deviceLock) }
+    private val sut by lazy { store(isSoftwareKeyAllowed = false) }
 
     @Test
     fun `a saved seed loads back with and without a passphrase`() = test {
@@ -214,6 +214,73 @@ class KeystoreSeedStoreTest : BaseUnitTest() {
     }
 
     @Test
+    fun `wipe succeeds once the seed file is gone, even when the key cannot be deleted`() = test {
+        sut.save(seed).getOrThrow()
+        key.failingDeletes = 2
+
+        assertTrue(sut.wipe().isSuccess)
+
+        assertEquals(2, key.deleteCount)
+        assertTrue(key.exists())
+        assertFalse(sut.exists())
+    }
+
+    @Test
+    fun `wipe tries the key delete a second time`() = test {
+        sut.save(seed).getOrThrow()
+        key.failingDeletes = 1
+
+        assertTrue(sut.wipe().isSuccess)
+
+        assertFalse(key.exists())
+    }
+
+    @Test
+    fun `wipe without a seed deletes a key and a half written file left behind`() = test {
+        key.create(isUnlockedDeviceRequired = false)
+        directory.mkdirs()
+        File(directory, "seed.bin.tmp").writeBytes(byteArrayOf(1, 2, 3))
+
+        assertTrue(sut.wipe().isSuccess)
+
+        assertFalse(key.exists())
+        assertTrue(directory.listFiles().orEmpty().isEmpty())
+    }
+
+    @Test
+    fun `a key outside secure hardware is refused and deleted, and nothing is stored`() = test {
+        for (backing in listOf(KeyBacking.Software, KeyBacking.Unknown)) {
+            key.backing = backing
+
+            assertIs<SeedStoreError.InsecureKey>(sut.save(seed).exceptionOrNull())
+
+            assertFalse(key.exists())
+            assertFalse(sut.exists())
+            assertTrue(key.plaintexts.isEmpty())
+        }
+    }
+
+    @Test
+    fun `a key in secure hardware is accepted`() = test {
+        for (backing in listOf(KeyBacking.StrongBox, KeyBacking.TrustedEnvironment)) {
+            key.backing = backing
+            sut.wipe().getOrThrow()
+
+            assertTrue(sut.save(seed).isSuccess)
+        }
+    }
+
+    @Test
+    fun `a debug build stores the seed under a software key, as on the emulators`() = test {
+        key.backing = KeyBacking.Software
+
+        val debugStore = store(isSoftwareKeyAllowed = true)
+
+        assertTrue(debugStore.save(seed).isSuccess)
+        assertEquals(seed, debugStore.load().getOrThrow())
+    }
+
+    @Test
     fun `decode rejects malformed plaintext`() {
         val encoded = KeystoreSeedStore.encode(seed)
 
@@ -223,4 +290,7 @@ class KeystoreSeedStoreTest : BaseUnitTest() {
                 .let { assertIs<SeedStoreError.Corrupted>(it.exceptionOrNull()) }
         }
     }
+
+    private fun store(isSoftwareKeyAllowed: Boolean) =
+        KeystoreSeedStore(lazy { directory }, key, deviceLock, isSoftwareKeyAllowed)
 }

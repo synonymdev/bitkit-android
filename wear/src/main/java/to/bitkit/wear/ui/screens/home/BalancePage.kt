@@ -56,7 +56,6 @@ import to.bitkit.wear.ui.components.WearPreview
 import to.bitkit.wear.ui.components.WearPreviewDevices
 import to.bitkit.wear.ui.components.isAmbient
 import to.bitkit.wear.ui.components.nfcHintState
-import to.bitkit.wear.ui.components.rememberNfcState
 import to.bitkit.wear.ui.modifiers.clickableAlpha
 import to.bitkit.wear.ui.theme.AppTextStyles
 import to.bitkit.wear.ui.theme.Colors
@@ -66,6 +65,9 @@ private val OFFLINE_ICON_TOP_PADDING = 40.dp
 
 /** The offline icon's size: small, as a status mark. */
 private val OFFLINE_ICON_SIZE = 18.dp
+
+/** The extra touch area around the offline icon, which makes it a 48dp target without moving the icon. */
+private val OFFLINE_TOUCH_PADDING = 15.dp
 
 /** The NFC hint's distance from the bottom edge, which keeps it above the page indicator. */
 private val NFC_HINT_BOTTOM_PADDING = 22.dp
@@ -125,11 +127,10 @@ fun BalancePage(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val isAmbient = isAmbient()
-    val nfcState = rememberNfcState()
     Content(
         uiState = uiState,
         isAmbient = isAmbient,
-        nfcHint = nfcHintState(nfcState, uiState.isWalletReady, isAmbient),
+        nfcHint = nfcHintState(uiState.nfc, uiState.isWalletReady, isAmbient),
         onBalanceClick = viewModel::onUnitToggle,
         onRetryClick = viewModel::onRetryClick,
         onNfcSettingsClick = context::openNfcSettings,
@@ -159,9 +160,10 @@ private fun Content(
             )
             if (uiState.isOffline && !isAmbient) {
                 OfflineIcon(
+                    onClick = onRetryClick,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = OFFLINE_ICON_TOP_PADDING)
+                        .padding(top = OFFLINE_ICON_TOP_PADDING - OFFLINE_TOUCH_PADDING)
                 )
             }
             if (uiState.isLoading) BezelLoading()
@@ -397,12 +399,17 @@ private fun Mark(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun OfflineIcon(modifier: Modifier = Modifier) {
+private fun OfflineIcon(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Icon(
         painter = painterResource(R.drawable.ic_cloud_off),
         contentDescription = stringResource(R.string.home__offline),
         tint = Colors.White64,
         modifier = modifier
+            .clickableAlpha(onClickLabel = stringResource(R.string.common__retry), onClick = onClick)
+            .padding(OFFLINE_TOUCH_PADDING)
             .size(OFFLINE_ICON_SIZE)
             .testTag("WatchHomeOffline")
     )

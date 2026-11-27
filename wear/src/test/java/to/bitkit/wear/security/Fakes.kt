@@ -4,6 +4,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import to.bitkit.wear.data.ForegroundMonitor
 import to.bitkit.wear.data.NetworkMonitor
+import to.bitkit.wear.data.NfcMonitor
+import to.bitkit.wear.data.NfcState
 import to.bitkit.wear.ext.runSuspendCatching
 
 /** A [Bip39] over a few words, whose phrases are valid when they end in "about". */
@@ -31,6 +33,10 @@ class FakeForegroundMonitor(isForeground: Boolean = true) : ForegroundMonitor {
 
 class FakeNetworkMonitor(isOnline: Boolean = true) : NetworkMonitor {
     override val isOnline = MutableStateFlow(isOnline)
+}
+
+class FakeNfcMonitor(state: NfcState = NfcState.On) : NfcMonitor {
+    override val state = MutableStateFlow(state)
 }
 
 class FakeDeviceLock(
@@ -77,6 +83,11 @@ class FakeSeedKey : SeedKey {
     var decryptCount = 0
     var createCount = 0
     var isUnlockedDeviceRequired: Boolean? = null
+    var backing = KeyBacking.TrustedEnvironment
+
+    /** How many of the next deletes fail before the key can be deleted again. */
+    var failingDeletes = 0
+    var deleteCount = 0
     val plaintexts = mutableListOf<ByteArray>()
 
     /** The key disappears, as when the system deletes it. */
@@ -91,7 +102,7 @@ class FakeSeedKey : SeedKey {
         this.isUnlockedDeviceRequired = isUnlockedDeviceRequired
         createCount++
         key = (++counter).toByte()
-        return KeyBacking.TrustedEnvironment
+        return backing
     }
 
     override fun encrypt(plaintext: ByteArray, aad: ByteArray): ByteArray {
@@ -109,6 +120,8 @@ class FakeSeedKey : SeedKey {
     }
 
     override fun delete() {
+        deleteCount++
+        if (failingDeletes-- > 0) throw SeedStoreError.Failed()
         key = null
     }
 

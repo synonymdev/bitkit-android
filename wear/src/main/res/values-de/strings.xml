@@ -15,6 +15,7 @@
     <string name="restore__checksum_review">Prüfen</string>
     <string name="restore__checksum_title">Ungültige Phrase</string>
     <string name="restore__error_failed">Wallet konnte nicht gespeichert werden</string>
+    <string name="restore__error_insecure">Keine sichere Hardware</string>
     <plurals name="restore__length_words">
         <item quantity="one">%1$d Wort</item>
         <item quantity="other">%1$d Wörter</item>

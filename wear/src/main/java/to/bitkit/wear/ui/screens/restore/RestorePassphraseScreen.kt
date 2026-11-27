@@ -1,10 +1,13 @@
 package to.bitkit.wear.ui.screens.restore
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
@@ -34,15 +37,23 @@ import to.bitkit.wear.ui.components.isAmbient
 
 /**
  * Offers to add the wallet's optional BIP39 passphrase, skipped by default, then saves the wallet. The screen blocks
- * screenshots, and ambient mode shows [RestoreHidden] instead.
+ * screenshots, and ambient mode shows [RestoreHidden] instead. While the wallet is saved the screen cannot be left
+ * by a swipe or the back button, which [onSavingChange] lets the navigation host enforce.
  */
 @Composable
 fun RestorePassphraseScreen(
     viewModel: RestoreViewModel,
+    onSavingChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     BlockScreenshots()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val currentOnSavingChange by rememberUpdatedState(onSavingChange)
+    DisposableEffect(uiState.isSaving) {
+        currentOnSavingChange(uiState.isSaving)
+        onDispose { currentOnSavingChange(false) }
+    }
+    BackHandler(enabled = uiState.isSaving) {}
     if (isAmbient()) {
         RestoreHidden(modifier = modifier)
         return
@@ -106,7 +117,7 @@ private fun Content(
                 contentDescription = stringResource(R.string.restore__passphrase_add),
             )
         }
-        if (uiState.isSaveFailed) SaveError()
+        uiState.saveError?.let { SaveErrorText(error = it) }
     }
 }
 
@@ -164,8 +175,8 @@ private fun Editing(
                     )
                 }
             }
-            if (uiState.isSaveFailed) {
-                item { SaveError(modifier = Modifier.transformedHeight(this, spec)) }
+            uiState.saveError?.let {
+                item { SaveErrorText(error = it, modifier = Modifier.transformedHeight(this, spec)) }
             }
         }
         if (uiState.isSaving) Saving()
@@ -180,9 +191,16 @@ private fun Saving(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun SaveError(modifier: Modifier = Modifier) {
+private fun SaveErrorText(
+    error: SaveError,
+    modifier: Modifier = Modifier,
+) {
+    val text = when (error) {
+        SaveError.Failed -> R.string.restore__error_failed
+        SaveError.InsecureKey -> R.string.restore__error_insecure
+    }
     ErrorText(
-        text = stringResource(R.string.restore__error_failed),
+        text = stringResource(text),
         modifier = modifier.testTag("RestoreError")
     )
 }
