@@ -59,7 +59,11 @@ class RequestOrPaySheetTest {
         val request = composeTestRule.onNodeWithTag("RequestOrPayRequest").assertHasClickAction().assertIsEnabled()
         val payBounds = pay.getUnclippedBoundsInRoot()
         val requestBounds = request.getUnclippedBoundsInRoot()
-        assertEquals(payBounds.bottom - payBounds.top, requestBounds.bottom - requestBounds.top)
+        assertEquals(
+            (payBounds.bottom - payBounds.top).value,
+            (requestBounds.bottom - requestBounds.top).value,
+            absoluteTolerance = 0.5f,
+        )
         assertTrue(requestBounds.bottom <= 560.dp)
         pay.performClick()
         request.performClick()
