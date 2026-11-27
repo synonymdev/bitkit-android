@@ -178,8 +178,10 @@
     <string name="lightning__move_to_spark__in_flight_text">De betaling is onderweg en verschijnt in Spark zodra ze is afgerond. Als ze mislukt, blijft het bedrag in je verbinding.</string>
     <string name="lightning__move_to_spark__in_flight_title">Verplaatsen naar\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__nav_title">Verplaatsen naar Spark</string>
+    <string name="lightning__move_to_spark__retry_moved">%1$s is naar Spark verplaatst. %2$s staat nog in je verbinding.</string>
+    <string name="lightning__move_to_spark__retry_none">Er is geen saldo verplaatst. %1$s staat nog in je verbinding.</string>
     <string name="lightning__move_to_spark__update">Bijwerken</string>
-    <string name="lightning__move_to_spark__update_fee">Kosten bijwerking: %1$s</string>
+    <string name="lightning__move_to_spark__update_fee">Kosten bijwerking: tot %1$s</string>
     <string name="lightning__move_to_spark__update_nav_title">Bestedingssaldo bijwerken</string>
     <string name="lightning__move_to_spark__update_text">Bitkit stapt over op een andere Lightning-provider. Werk je bestedingssaldo bij om snelle, goedkope betalingen te blijven doen.</string>
     <string name="lightning__move_to_spark__update_title">Bestedingssaldo\n&lt;accent&gt;bijwerken&lt;/accent&gt;</string>

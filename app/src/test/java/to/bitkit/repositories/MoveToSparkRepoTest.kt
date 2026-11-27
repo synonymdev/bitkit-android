@@ -96,9 +96,42 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         val quote = sut.quote().getOrThrow()
 
         assertEquals(INVOICE, quote.invoice)
-        assertEquals(MoveToSparkMath.quotedFeeSats(30uL), quote.feeSats)
-        assertEquals(MoveToSparkMath.amountAfterFee(100_000uL, 30uL), quote.amountSats)
+        assertEquals(MoveToSparkMath.cappedFeeSats(30uL, 100_000uL), quote.feeSats)
+        assertEquals(MoveToSparkMath.amountAfterCappedFee(100_000uL, 30uL), quote.amountSats)
         verify(sparkRepo).createInvoice(eq(null), any(), any())
+    }
+
+    @Test
+    fun `quote leaves a costlier route room under the fee cap and the send limit`() = test {
+        // RC1 mainnet: an 11-sat estimate on a 10,001-sat limit; the route that worked cost 51 sats.
+        sendable(10_001uL)
+        whenever(sparkRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
+        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(eq(INVOICE), any())).thenReturn(Result.success(11uL))
+
+        val quote = sut.quote().getOrThrow()
+
+        assertTrue(quote.feeSats >= 51uL, "fee cap ${quote.feeSats}")
+        assertTrue(quote.amountSats + 51uL <= 10_001uL, "amount ${quote.amountSats}")
+        assertTrue(quote.amountSats >= MoveToSparkMath.MIN_MOVE_SATS)
+    }
+
+    @Test
+    fun `capped fee keeps the margin, LDK's cap and the minimum move for any estimate and limit`() {
+        val random = Random(2164)
+        repeat(10_000) {
+            val limitSats = random.nextLong(0L, 2_000_000L).toULong()
+            val estimateSats = random.nextLong(0L, 30_000L).toULong()
+            val feeSats = MoveToSparkMath.cappedFeeSats(estimateSats, limitSats)
+            val amountSats = MoveToSparkMath.amountAfterCappedFee(limitSats, estimateSats)
+            val context = "limit $limitSats, estimate $estimateSats, fee $feeSats"
+
+            assertTrue(feeSats >= MoveToSparkMath.quotedFeeSats(estimateSats), context)
+            assertTrue(feeSats <= maxOf(MoveToSparkMath.quotedFeeSats(estimateSats), limitSats / 100uL + 50uL), context)
+            assertTrue(amountSats + feeSats <= maxOf(limitSats, feeSats), context)
+            if (limitSats >= MoveToSparkMath.MIN_MOVE_SATS + MoveToSparkMath.quotedFeeSats(estimateSats)) {
+                assertTrue(amountSats >= MoveToSparkMath.MIN_MOVE_SATS, context)
+            }
+        }
     }
 
     @Test
@@ -109,7 +142,7 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
         val quote = sut.quote().getOrThrow()
 
-        assertEquals(MoveToSparkMath.amountAfterFee(1_000_000uL, 9_000uL), quote.amountSats)
+        assertEquals(MoveToSparkMath.amountAfterCappedFee(1_000_000uL, 9_000uL), quote.amountSats)
         assertTrue(quote.amountSats + quote.feeSats <= 1_000_000uL)
     }
 
@@ -353,9 +386,11 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         val plan = sut.quoteAll().getOrThrow()
         val outcome = sut.moveAll(plan).getOrThrow()
 
-        assertEquals(MoveToSparkQuote(INVOICE, 99_988uL, MoveToSparkMath.quotedFeeSats(10uL)), plan.firstPart)
-        assertEquals(MoveToSparkMath.quotedFeeSats(10uL), plan.feeSats)
-        assertEquals(MoveToSparkOutcome.Moved(99_988uL, feeSats = 10uL), outcome)
+        val amountSats = MoveToSparkMath.amountAfterCappedFee(100_000uL, 10uL)
+        val feeSats = MoveToSparkMath.cappedFeeSats(10uL, 100_000uL)
+        assertEquals(MoveToSparkQuote(INVOICE, amountSats, feeSats), plan.firstPart)
+        assertEquals(feeSats, plan.feeSats)
+        assertEquals(MoveToSparkOutcome.Moved(amountSats, feeSats = 10uL), outcome)
         verify(lightningRepo, times(1)).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
     }
 
@@ -367,7 +402,7 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         val outcome = assertIs<MoveToSparkOutcome.Moved>(sut.moveAll(plan).getOrThrow())
 
         assertEquals(24_874uL, plan.firstPart.amountSats)
-        assertEquals(MoveToSparkMath.quotedFeeSats(10uL) * 4uL, plan.feeSats)
+        assertEquals(MoveToSparkMath.cappedFeeSats(10uL, 100_000uL) * 4uL, plan.feeSats)
         assertEquals(MoveToSparkOutcome.Moved(99_496uL, feeSats = 40uL), outcome)
         assertTrue(outcome.feeSats <= plan.feeSats)
         verify(lightningRepo, times(4)).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
@@ -379,7 +414,8 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
         sut.moveAll(sut.quoteAll().getOrThrow())
 
-        listOf(48_000uL, 38_000uL, 28_000uL, 18_000uL).forEach { capMsat ->
+        // Four parts quoted at 70 sats each; each part pays 10 sats of the 280 left.
+        listOf(280_000uL, 270_000uL, 260_000uL, 250_000uL).forEach { capMsat ->
             verify(lightningRepo).payInvoiceOverLdk(any(), any(), anyOrNull(), eq(capMsat))
         }
     }
@@ -391,7 +427,8 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
         val outcome = sut.moveAll(plan).getOrThrow()
 
-        assertEquals(MoveToSparkOutcome.Moved(24_994uL + 24_984uL, feeSats = 20uL), outcome)
+        // Half of the 49,930 sats that did not route, then the rest less its 70-sat cap.
+        assertEquals(MoveToSparkOutcome.Moved(24_965uL + 24_955uL, feeSats = 20uL), outcome)
     }
 
     @Test
@@ -463,7 +500,8 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
         val outcome = sut.moveAll(plan).getOrThrow()
 
-        assertEquals(MoveToSparkOutcome.Moved(24_994uL + 24_984uL, feeSats = 20uL), outcome)
+        // Half of the 49,930 sats that did not route, then the rest less its 70-sat cap.
+        assertEquals(MoveToSparkOutcome.Moved(24_965uL + 24_955uL, feeSats = 20uL), outcome)
     }
 
     @Test
@@ -491,6 +529,8 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     @Test
     fun `a part capped while the peer was away keeps later parts at the earlier size`() = test {
         channelsRouting(100_000uL, maxRouteSats = 30_000uL)
+        // Room for four 70-sat part caps at 10 sats paid each, not a fifth.
+        val plan = MoveToSparkPlan(sut.quoteAll().getOrThrow().firstPart, feeSats = 100uL)
         var syncs = 0
         whenever(lightningRepo.syncState()).thenAnswer {
             if (++syncs != 1) return@thenAnswer Unit
@@ -500,9 +540,10 @@ class MoveToSparkRepoTest : BaseUnitTest() {
             )
         }
 
-        val error = sut.moveAll(sut.quoteAll().getOrThrow()).exceptionOrNull()
+        val error = sut.moveAll(plan).exceptionOrNull()
 
-        assertEquals(24_874uL + 1_988uL + 24_874uL * 2uL, assertIs<MoveToSparkError.FeeRose>(error).movedSats)
+        val cappedSats = MoveToSparkMath.amountAfterCappedFee(2_000uL, 10uL)
+        assertEquals(24_874uL + cappedSats + 24_874uL * 2uL, assertIs<MoveToSparkError.FeeRose>(error).movedSats)
     }
 
     @Test
@@ -512,8 +553,8 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
         val error = assertIs<MoveToSparkError.FeeRose>(sut.moveAll(plan).exceptionOrNull())
 
-        assertEquals(MoveToSparkMath.quotedFeeSats(10uL), plan.feeSats)
-        assertEquals(24_994uL, error.movedSats)
+        assertEquals(MoveToSparkMath.cappedFeeSats(10uL, 50_000uL), plan.feeSats)
+        assertEquals(MoveToSparkMath.amountAfterCappedFee(50_000uL, 10uL) / 2uL, error.movedSats)
         verify(lightningRepo, times(2)).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
     }
 
@@ -528,24 +569,28 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
     @Test
     fun `a whole balance on a fee that grows with the amount is priced at the size it pays`() = test {
-        channelsRouting(1_000_000uL, feeMsatOf = { 1_000uL + it * 1_000uL / 1_000uL })
+        // Small enough that the cap's unused headroom leaves no second part.
+        channelsRouting(500_000uL, feeMsatOf = { 1_000uL + it * 1_000uL / 1_000uL })
 
         val plan = sut.quoteAll().getOrThrow()
         val outcome = sut.moveAll(plan).getOrThrow()
 
-        assertEquals(MoveToSparkOutcome.Moved(plan.firstPart.amountSats, feeSats = 999uL, feeMsat = 999_999uL), outcome)
-        assertTrue(plan.firstPart.amountSats + plan.feeSats <= 1_000_000uL)
+        assertEquals(MoveToSparkMath.amountAfterCappedFee(500_000uL, 499uL), plan.firstPart.amountSats)
+        assertEquals(MoveToSparkOutcome.Moved(plan.firstPart.amountSats, feeSats = 499uL, feeMsat = 499_952uL), outcome)
+        assertTrue(plan.firstPart.amountSats + plan.feeSats <= 500_000uL)
         verify(lightningRepo, times(1)).payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
     }
 
     @Test
     fun `a part grown past what the route carries keeps the size that routed`() = test {
-        channelsRouting(1_800uL, maxRouteSats = 1_790uL, feeMsatOf = { 0uL })
+        // Large enough that the first guess's fee is above the 50-sat cap, so the part tries to grow, to 19,950.
+        channelsRouting(20_000uL, maxRouteSats = 19_900uL, feeMsatOf = { 0uL })
 
         val plan = sut.quoteAll().getOrThrow()
 
-        assertEquals(1_788uL, plan.firstPart.amountSats)
-        assertEquals(MoveToSparkOutcome.Moved(1_788uL, feeSats = 0uL, feeMsat = 0uL), sut.moveAll(plan).getOrThrow())
+        assertTrue(MoveToSparkMath.amountAfterCappedFee(20_000uL, 0uL) in quotedSats)
+        assertEquals(MoveToSparkMath.firstCandidate(20_000uL, 20_000uL), plan.firstPart.amountSats)
+        assertEquals(MoveToSparkOutcome.Moved(19_898uL, feeSats = 0uL, feeMsat = 0uL), sut.moveAll(plan).getOrThrow())
     }
 
     @Test
@@ -554,7 +599,8 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
         sut.moveAll(sut.quoteAll().getOrThrow())
 
-        listOf(56_000uL, 43_500uL, 31_000uL, 18_500uL).forEach { capMsat ->
+        // Four parts quoted at 74 sats each; each part pays 12.5 sats of what is left.
+        listOf(296_000uL, 283_500uL, 271_000uL, 258_500uL).forEach { capMsat ->
             verify(lightningRepo).payInvoiceOverLdk(any(), any(), anyOrNull(), eq(capMsat))
         }
     }
@@ -566,9 +612,10 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         val plan = sut.quoteAll().getOrThrow()
         val outcome = sut.moveAll(plan).getOrThrow()
 
-        assertEquals(29_988uL, plan.firstPart.amountSats)
-        assertEquals(MoveToSparkMath.quotedFeeSats(10uL) * 4uL, plan.feeSats)
-        assertEquals(MoveToSparkOutcome.Moved(99_958uL, feeSats = 40uL, feeMsat = 40_000uL), outcome)
+        assertEquals(MoveToSparkMath.amountAfterCappedFee(30_000uL, 10uL), plan.firstPart.amountSats)
+        assertEquals(MoveToSparkMath.cappedFeeSats(10uL, 100_000uL) * 4uL, plan.feeSats)
+        // Three parts of 29,930 sats, then 10,110 of the 10,180 left, leaving its cap's 60 unpaid sats.
+        assertEquals(MoveToSparkOutcome.Moved(99_900uL, feeSats = 40uL, feeMsat = 40_000uL), outcome)
     }
 
     @Test
@@ -576,11 +623,12 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         var feeMsat = 10_000uL
         channelsRouting(1_800uL, feeMsatOf = { feeMsat })
         val plan = sut.quoteAll().getOrThrow()
-        feeMsat = 20_000uL
+        // Past the part's 68-sat cap, which a smaller rise would still fit under.
+        feeMsat = 100_000uL
 
         val error = sut.moveAll(plan).exceptionOrNull()
 
-        assertEquals(1_788uL, plan.firstPart.amountSats)
+        assertEquals(MoveToSparkMath.amountAfterCappedFee(1_800uL, 10uL), plan.firstPart.amountSats)
         assertEquals(0uL, assertIs<MoveToSparkError.FeeRose>(error).movedSats)
     }
 
@@ -600,7 +648,7 @@ class MoveToSparkRepoTest : BaseUnitTest() {
         val plan = sut.quoteAll().getOrThrow()
 
         assertEquals(1_554uL, plan.firstPart.amountSats)
-        assertEquals(MoveToSparkMath.quotedFeeSats(10uL) * 16uL, plan.feeSats)
+        assertEquals(MoveToSparkMath.cappedFeeSats(10uL, 100_000uL) * 16uL, plan.feeSats)
     }
 
     @Test
@@ -994,6 +1042,32 @@ class MoveToSparkRepoTest : BaseUnitTest() {
 
         assertEquals(MoveToSparkOutcome.Moved(50_000uL, feeSats = 9uL), updating.await().getOrThrow())
         verify(sparkRepo).refreshState()
+    }
+
+    @Test
+    fun `update to send of the most it can send moves the fee's headroom too`() = test {
+        sendable(5_000uL)
+        sparkState.value = SparkState(isReady = true)
+        whenever(sparkRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
+        whenever(lightningRepo.estimateLdkRoutingFeesForAmount(eq(INVOICE), any())).thenReturn(Result.success(5uL))
+        val maxSats = MoveToSparkMath.combinedSendableSats(lightningState.value.channels, sparkState.value)
+        whenever(sparkRepo.estimateFeeSats(INVOICE, maxSats)).thenReturn(Result.success(0uL))
+        whenever(
+            lightningRepo.payInvoiceOverLdk(any(), any(), anyOrNull(), anyOrNull())
+        ).thenReturn(Result.success("id"))
+        whenever(sparkRepo.canSend(maxSats)).thenReturn(true)
+        val quote = sut.quote().getOrThrow()
+        val updating = async { sut.updateToSend(quote, INVOICE, maxSats) }
+
+        nodeEvents.emit(Event.PaymentSuccessful("id", "hash", null, 5_000uL))
+
+        assertEquals(5_000uL - 7uL, updating.await().getOrThrow().amountSats)
+        verify(lightningRepo).payInvoiceOverLdk(
+            bolt11 = INVOICE,
+            paymentHash = "hash",
+            sats = 5_000uL - 7uL,
+            maxTotalRoutingFeeMsat = 7_000uL,
+        )
     }
 
     @Test

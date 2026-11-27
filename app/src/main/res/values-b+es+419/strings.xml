@@ -181,8 +181,10 @@
     <string name="lightning__move_to_spark__in_flight_text">El pago está en camino y aparecerá en Spark cuando se complete. Si falla, el monto permanece en tu conexión.</string>
     <string name="lightning__move_to_spark__in_flight_title">Moviendo a\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__nav_title">Mover a Spark</string>
+    <string name="lightning__move_to_spark__retry_moved">Se movieron %1$s a Spark. %2$s sigue en tu conexión.</string>
+    <string name="lightning__move_to_spark__retry_none">No se movieron fondos. %1$s sigue en tu conexión.</string>
     <string name="lightning__move_to_spark__update">Actualizar</string>
-    <string name="lightning__move_to_spark__update_fee">Comisión de actualización: %1$s</string>
+    <string name="lightning__move_to_spark__update_fee">Comisión de actualización: hasta %1$s</string>
     <string name="lightning__move_to_spark__update_nav_title">Actualizar saldo de gastos</string>
     <string name="lightning__move_to_spark__update_text">Bitkit está cambiando de proveedor Lightning. Actualiza tu saldo de gastos para seguir haciendo pagos instantáneos y baratos.</string>
     <string name="lightning__move_to_spark__update_title">Actualizar\n&lt;accent&gt;saldo de gastos&lt;/accent&gt;</string>

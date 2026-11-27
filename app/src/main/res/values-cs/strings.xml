@@ -181,8 +181,10 @@
     <string name="lightning__move_to_spark__in_flight_text">Platba je na cestě a po dokončení se zobrazí ve Spark. Pokud selže, částka zůstane ve vašem spojení.</string>
     <string name="lightning__move_to_spark__in_flight_title">Přesun do\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__nav_title">Přesun do Spark</string>
+    <string name="lightning__move_to_spark__retry_moved">Do Spark bylo přesunuto %1$s. %2$s zůstává ve vašem spojení.</string>
+    <string name="lightning__move_to_spark__retry_none">Žádné prostředky nebyly přesunuty. %1$s zůstává ve vašem spojení.</string>
     <string name="lightning__move_to_spark__update">Aktualizovat</string>
-    <string name="lightning__move_to_spark__update_fee">Poplatek za aktualizaci: %1$s</string>
+    <string name="lightning__move_to_spark__update_fee">Poplatek za aktualizaci: až %1$s</string>
     <string name="lightning__move_to_spark__update_nav_title">Aktualizovat výdajový zůstatek</string>
     <string name="lightning__move_to_spark__update_text">Bitkit mění poskytovatele Lightning. Aktualizujte svůj výdajový zůstatek, abyste mohli dál platit okamžitě a levně.</string>
     <string name="lightning__move_to_spark__update_title">Aktualizovat\n&lt;accent&gt;výdajový zůstatek&lt;/accent&gt;</string>

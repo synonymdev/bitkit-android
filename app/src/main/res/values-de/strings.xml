@@ -109,8 +109,10 @@
     <string name="lightning__move_to_spark__in_flight_text">Die Zahlung ist unterwegs und erscheint in Spark, sobald sie abgeschlossen ist. Schlägt sie fehl, bleibt der Betrag in deiner Verbindung.</string>
     <string name="lightning__move_to_spark__in_flight_title">Verschiebe zu\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__nav_title">Zu Spark verschieben</string>
+    <string name="lightning__move_to_spark__retry_moved">%1$s wurden zu Spark verschoben. %2$s ist noch in deiner Verbindung.</string>
+    <string name="lightning__move_to_spark__retry_none">Es wurde kein Guthaben verschoben. %1$s ist noch in deiner Verbindung.</string>
     <string name="lightning__move_to_spark__update">Aktualisieren</string>
-    <string name="lightning__move_to_spark__update_fee">Aktualisierungsgebühr: %1$s</string>
+    <string name="lightning__move_to_spark__update_fee">Aktualisierungsgebühr: bis zu %1$s</string>
     <string name="lightning__move_to_spark__update_nav_title">Ausgabenguthaben aktualisieren</string>
     <string name="lightning__move_to_spark__update_text">Bitkit wechselt den Lightning-Anbieter. Aktualisiere dein Ausgabenguthaben, um weiterhin sofort und günstig zu bezahlen.</string>
     <string name="lightning__move_to_spark__update_title">Ausgabenguthaben\n&lt;accent&gt;aktualisieren&lt;/accent&gt;</string>

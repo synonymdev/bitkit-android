@@ -3,7 +3,7 @@
     Verifies the "Update Spending Balance" modal and the move behind it. With an LDK channel that can send at least
     1,000 sats and Spark connected, Home shows the modal once (testTag "UpdateSpendingBalance"); Spending and Lightning
     Connections show a "Move To Spark" button (testTag "MoveToSpark") that opens the same modal while the channel can
-    still send. The modal quotes the routing fee over the channel only and shows it as "Update fee: " in the primary
+    still send. The modal quotes the routing fee over the channel only and shows it as "Update fee: up to " in the primary
     currency (testTag "UpdateSpendingBalanceUpdate" is the Update button, loading while it quotes and moves). Update
     pays the whole balance to new invoices of the user's own Spark wallet, splitting it into parts by itself when one
     payment does not route, and shows "Spending Balance Updated" (testTag "SpendingBalanceUpdated"). Once the move
@@ -19,11 +19,11 @@
     app freshly launched.
   </description>
   <actions>
-    <action>Wait on Home and verify the "Update Spending Balance" modal (testTag "UpdateSpendingBalance") shows "UPDATE SPENDING BALANCE" and "Bitkit is switching Lightning providers. Update your spending balance to continue making instant, cheap payments." followed by "Update fee: " and an amount</action>
+    <action>Wait on Home and verify the "Update Spending Balance" modal (testTag "UpdateSpendingBalance") shows "UPDATE SPENDING BALANCE" and "Bitkit is switching Lightning providers. Update your spending balance to continue making instant, cheap payments." followed by "Update fee: up to " and an amount</action>
     <action>Tap "Later" (testTag "UpdateSpendingBalanceLater") and verify the modal closes</action>
     <action>Relaunch the app, wait on Home and verify the modal does not show again</action>
     <action>Open the Spending wallet and verify the "Move To Spark" button (testTag "MoveToSpark") shows</action>
-    <action>Tap "Move To Spark" and verify the "Update Spending Balance" modal opens and shows "Update fee: " with an amount once the Update button (testTag "UpdateSpendingBalanceUpdate") stops loading</action>
+    <action>Tap "Move To Spark" and verify the "Update Spending Balance" modal opens and shows "Update fee: up to " with an amount once the Update button (testTag "UpdateSpendingBalanceUpdate") stops loading</action>
     <action>Tap "Update" and verify the modal titled "Spending Balance Updated" (testTag "SpendingBalanceUpdated") shows "SPENDING BALANCE UPDATED" and "Your spending balance has been successfully migrated to Spark, Bitkit’s new Lightning service provider."</action>
     <action>Tap "OK" (testTag "SpendingBalanceUpdatedOk") and verify the modal closes</action>
     <action>Open Settings › Advanced › Lightning Connections and verify the channel is closing or closed, and that it shows no channel under OPEN CONNECTIONS, only Spark via Breez, whose balance grew by the moved amount</action>

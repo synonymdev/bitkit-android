@@ -41,9 +41,15 @@ class MoveToSparkViewModel @Inject constructor(
 
 @Immutable
 sealed interface MoveToSparkUiState {
-    data object Quoting : MoveToSparkUiState
+    /** [lastAttempt]: as on [Confirm], kept while the rest is quoted. */
+    data class Quoting(val lastAttempt: MoveToSparkLastAttempt? = null) : MoveToSparkUiState
 
-    data class Confirm(val plan: MoveToSparkPlan, val isMoving: Boolean = false) : MoveToSparkUiState
+    /** [lastAttempt]: what the last Update did, when it stopped with a balance left to move. */
+    data class Confirm(
+        val plan: MoveToSparkPlan,
+        val isMoving: Boolean = false,
+        val lastAttempt: MoveToSparkLastAttempt? = null,
+    ) : MoveToSparkUiState
 
     data class Done(val outcome: MoveToSparkOutcome) : MoveToSparkUiState
 
@@ -51,3 +57,7 @@ sealed interface MoveToSparkUiState {
 }
 
 enum class MoveToSparkFailure { NOTHING_TO_MOVE, SPARK_UNAVAILABLE, UNKNOWN }
+
+/** A stopped move: it moved [movedSats], none when 0, and the channels still hold [leftSats]. */
+@Immutable
+data class MoveToSparkLastAttempt(val movedSats: ULong, val leftSats: ULong)

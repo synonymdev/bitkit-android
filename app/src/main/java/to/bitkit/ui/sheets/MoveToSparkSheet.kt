@@ -39,6 +39,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settings.lightning.MoveToSparkFailure
+import to.bitkit.ui.settings.lightning.MoveToSparkLastAttempt
 import to.bitkit.ui.settings.lightning.MoveToSparkUiState
 import to.bitkit.ui.settings.lightning.MoveToSparkViewModel
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -83,8 +84,22 @@ private fun Content(
     onRetry: () -> Unit = {},
 ) {
     when (uiState) {
-        MoveToSparkUiState.Quoting -> Update(null, true, onDismiss, onUpdate, modifier)
-        is MoveToSparkUiState.Confirm -> Update(uiState.plan.feeSats, uiState.isMoving, onDismiss, onUpdate, modifier)
+        is MoveToSparkUiState.Quoting -> Update(
+            feeSats = null,
+            isLoading = true,
+            onDismiss = onDismiss,
+            onUpdate = onUpdate,
+            lastAttempt = uiState.lastAttempt,
+            modifier = modifier
+        )
+        is MoveToSparkUiState.Confirm -> Update(
+            feeSats = uiState.plan.feeSats,
+            isLoading = uiState.isMoving,
+            onDismiss = onDismiss,
+            onUpdate = onUpdate,
+            lastAttempt = uiState.lastAttempt,
+            modifier = modifier
+        )
         is MoveToSparkUiState.Done -> Done(uiState, onDismiss, modifier)
         is MoveToSparkUiState.Failed -> Failed(uiState.failure, onDismiss, onRetry, modifier)
     }
@@ -97,8 +112,19 @@ private fun Update(
     onDismiss: () -> Unit,
     onUpdate: () -> Unit,
     modifier: Modifier = Modifier,
+    lastAttempt: MoveToSparkLastAttempt? = null,
 ) {
-    val text = stringResource(R.string.lightning__move_to_spark__update_text)
+    // After an Update that stopped with a balance left, the text says what it did in place of the introduction.
+    val text = when {
+        lastAttempt == null -> stringResource(R.string.lightning__move_to_spark__update_text)
+        lastAttempt.movedSats == 0uL ->
+            stringResource(R.string.lightning__move_to_spark__retry_none, plainMoney(lastAttempt.leftSats))
+        else -> stringResource(
+            R.string.lightning__move_to_spark__retry_moved,
+            plainMoney(lastAttempt.movedSats),
+            plainMoney(lastAttempt.leftSats),
+        )
+    }
     val fee = feeSats?.let { stringResource(R.string.lightning__move_to_spark__update_fee, plainMoney(it)) }
     Modal(
         navTitle = stringResource(R.string.lightning__move_to_spark__update_nav_title),
@@ -115,7 +141,9 @@ private fun Update(
             modifier = Modifier.weight(1f)
         )
         PrimaryButton(
-            stringResource(R.string.lightning__move_to_spark__update),
+            stringResource(
+                if (lastAttempt == null) R.string.lightning__move_to_spark__update else R.string.common__try_again
+            ),
             onClick = onUpdate,
             isLoading = isLoading,
             enabled = !isLoading,
@@ -272,6 +300,21 @@ private fun PreviewUpdate() {
         BottomSheetPreview {
             Content(
                 uiState = MoveToSparkUiState.Confirm(MoveToSparkPlan(MoveToSparkQuote("lnbc", 98_500uL, 12uL), 12uL))
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewRetry() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                uiState = MoveToSparkUiState.Confirm(
+                    plan = MoveToSparkPlan(MoveToSparkQuote("lnbc", 3_200uL, 56uL), 56uL),
+                    lastAttempt = MoveToSparkLastAttempt(movedSats = 22_800uL, leftSats = 3_608uL),
+                )
             )
         }
     }

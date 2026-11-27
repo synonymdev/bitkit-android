@@ -174,8 +174,10 @@
     <string name="lightning__move_to_spark__in_flight_text">الدفعة في طريقها وستظهر في Spark بمجرد اكتمالها. إذا فشلت، يبقى المبلغ في اتصالك.</string>
     <string name="lightning__move_to_spark__in_flight_title">جارٍ النقل إلى\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__nav_title">النقل إلى Spark</string>
+    <string name="lightning__move_to_spark__retry_moved">تم نقل %1$s إلى Spark. لا يزال %2$s في اتصالك.</string>
+    <string name="lightning__move_to_spark__retry_none">لم تُنقل أي أموال. لا يزال %1$s في اتصالك.</string>
     <string name="lightning__move_to_spark__update">تحديث</string>
-    <string name="lightning__move_to_spark__update_fee">رسوم التحديث: %1$s</string>
+    <string name="lightning__move_to_spark__update_fee">رسوم التحديث: حتى %1$s</string>
     <string name="lightning__move_to_spark__update_nav_title">تحديث رصيد الإنفاق</string>
     <string name="lightning__move_to_spark__update_text">يغيّر Bitkit مزوّد Lightning. حدّث رصيد الإنفاق لمواصلة الدفعات الفورية والرخيصة.</string>
     <string name="lightning__move_to_spark__update_title">تحديث\n&lt;accent&gt;رصيد الإنفاق&lt;/accent&gt;</string>
