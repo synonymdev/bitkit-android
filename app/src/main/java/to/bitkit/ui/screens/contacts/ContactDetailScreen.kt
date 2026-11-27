@@ -3,30 +3,38 @@ package to.bitkit.ui.screens.contacts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -46,7 +54,6 @@ import to.bitkit.ui.components.BottomSheet
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.CenteredProfileHeader
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.LinkRow
 import to.bitkit.ui.components.PrimaryButton
@@ -133,6 +140,9 @@ fun ContactDetailScreen(
     }
 }
 
+/** Smallest height the Request or Pay illustration is shown at; below it the illustration is hidden. */
+private val MIN_ILLUSTRATION_HEIGHT = 72.dp
+
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun RequestOrPaySheet(
@@ -144,37 +154,96 @@ private fun RequestOrPaySheet(
     onRequest: () -> Unit,
 ) {
     BottomSheet(onDismissRequest = onDismiss) {
-        Column(
+        RequestOrPaySheetContent(
+            contact = contact,
+            isPayLoading = isPayLoading,
+            canRequest = canRequest,
+            onPay = onPay,
+            onRequest = onRequest,
+            modifier = Modifier.sheetHeight(SheetSize.MEDIUM, isModal = true)
+        )
+    }
+}
+
+@Composable
+internal fun RequestOrPaySheetContent(
+    contact: PubkyProfile,
+    isPayLoading: Boolean,
+    canRequest: Boolean,
+    onPay: () -> Unit,
+    onRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .gradientBackground()
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp)
+            .testTag("RequestOrPaySheet")
+    ) {
+        SheetTopBar(titleText = stringResource(R.string.wallet__payment_request_or_pay))
+        BoxWithConstraints(
             modifier = Modifier
-                .sheetHeight(SheetSize.MEDIUM, isModal = true)
-                .gradientBackground()
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp)
-                .testTag("RequestOrPaySheet")
+                .weight(1f)
+                .fillMaxWidth()
         ) {
-            SheetTopBar(titleText = stringResource(R.string.wallet__payment_request_or_pay))
-            FillHeight()
-            Image(
-                painter = painterResource(R.drawable.coin_stack),
-                contentDescription = null,
+            Column(
                 modifier = Modifier
-                    .size(256.dp)
-                    .align(Alignment.CenterHorizontally),
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = maxHeight)
+            ) {
+                BoxWithConstraints(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    if (maxHeight >= MIN_ILLUSTRATION_HEIGHT) {
+                        Image(
+                            painter = painterResource(R.drawable.coin_stack),
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .sizeIn(maxWidth = 256.dp, maxHeight = 256.dp)
+                                .aspectRatio(1f)
+                        )
+                    }
+                }
+                Display(
+                    text = stringResource(R.string.wallet__payment_request_or_pay_headline)
+                        .withAccent(accentColor = Colors.Purple),
+                )
+                VerticalSpacer(12.dp)
+                BodyM(
+                    text = stringResource(R.string.wallet__payment_request_or_pay_description, contact.name),
+                    color = Colors.White64,
+                )
+            }
+        }
+        VerticalSpacer(24.dp)
+        val payLabel = stringResource(R.string.wallet__payment_request_pay)
+        val requestLabel = stringResource(R.string.wallet__payment_request_request)
+        val textMeasurer = rememberTextMeasurer()
+        val buttonStyle = MaterialTheme.typography.labelLarge
+        val iconWidth = 16.dp + ButtonSize.Large.primaryGap
+        val minimumButtonWidth = with(LocalDensity.current) {
+            maxOf(
+                textMeasurer.measure(payLabel, buttonStyle, softWrap = false).size.width.toDp() +
+                    iconWidth + ButtonSize.Large.secondaryHorizontalPadding * 2,
+                textMeasurer.measure(requestLabel, buttonStyle, softWrap = false).size.width.toDp() +
+                    iconWidth + ButtonSize.Large.primaryHorizontalPadding * 2,
             )
-            FillHeight()
-            Display(
-                text = stringResource(R.string.wallet__payment_request_or_pay_headline)
-                    .withAccent(accentColor = Colors.Purple),
-            )
-            VerticalSpacer(12.dp)
-            BodyM(
-                text = stringResource(R.string.wallet__payment_request_or_pay_description, contact.name),
-                color = Colors.White64,
-            )
-            VerticalSpacer(24.dp)
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        }
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                maxItemsInEachRow = if (maxWidth >= minimumButtonWidth * 2 + 16.dp) 2 else 1,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 SecondaryButton(
-                    text = stringResource(R.string.wallet__payment_request_pay),
+                    text = payLabel,
                     onClick = onPay,
                     isLoading = isPayLoading,
                     icon = {
@@ -184,10 +253,11 @@ private fun RequestOrPaySheet(
                             modifier = Modifier.size(16.dp)
                         )
                     },
+                    testTag = "RequestOrPayPay",
                     modifier = Modifier.weight(1f)
                 )
                 PrimaryButton(
-                    text = stringResource(R.string.wallet__payment_request_request),
+                    text = requestLabel,
                     onClick = onRequest,
                     enabled = canRequest && !isPayLoading,
                     icon = {
@@ -197,11 +267,13 @@ private fun RequestOrPaySheet(
                             modifier = Modifier.size(16.dp)
                         )
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("RequestOrPayRequest")
                 )
             }
-            VerticalSpacer(16.dp)
         }
+        VerticalSpacer(16.dp)
     }
 }
 
