@@ -1361,7 +1361,10 @@
     <string name="contacts__edit_public_note">Bitte beachte, dass Kontaktinformationen in öffentlichen Dateien gespeichert werden. Änderungen, die du in Bitkit an einem Kontakt vornimmst, aktualisieren nicht dessen Profil.</string>
     <string name="contacts__edit_save_error">Kontakt konnte nicht gespeichert werden</string>
     <string name="contacts__import_all">Alle importieren</string>
-    <string name="contacts__import_friends_count">%1$d Freunde</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d Freund</item>
+        <item quantity="other">%1$d Freunde</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Gefunden:\n&lt;accent&gt;Profil &amp; Kontakte&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit hat Profil- und Kontaktdaten gefunden, die mit dem pubky &lt;accent&gt;%1$s&lt;/accent&gt; verknüpft sind</string>
     <string name="contacts__import_select">Auswählen</string>

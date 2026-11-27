@@ -1338,7 +1338,10 @@
     <string name="contacts__edit_public_note">Τα στοιχεία των επαφών αποθηκεύονται σε δημόσια αρχεία. Οι αλλαγές που κάνεις σε μια επαφή στο Bitkit δεν θα ενημερώσουν το προφίλ της.</string>
     <string name="contacts__edit_save_error">Αποτυχία αποθήκευσης επαφής</string>
     <string name="contacts__import_all">Εισαγωγή όλων</string>
-    <string name="contacts__import_friends_count">%1$d φίλοι</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d φίλος</item>
+        <item quantity="other">%1$d φίλοι</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Βρέθηκαν\n&lt;accent&gt;προφίλ και επαφές&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Το Bitkit βρήκε δεδομένα προφίλ και επαφών συνδεδεμένα με το pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Επιλογή</string>

@@ -1357,7 +1357,10 @@
     <string name="contacts__edit_public_note">Let op: contactgegevens worden opgeslagen in openbare bestanden. Wijzigingen die u in Bitkit aan een contact maakt, werken hun profiel niet bij.</string>
     <string name="contacts__edit_save_error">Contact opslaan mislukt</string>
     <string name="contacts__import_all">Alles importeren</string>
-    <string name="contacts__import_friends_count">%1$d vrienden</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d vriend</item>
+        <item quantity="other">%1$d vrienden</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Gevonden:\n&lt;accent&gt;profiel &amp; contacten&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit heeft profiel- en contactgegevens gevonden die gekoppeld zijn aan pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Selecteren</string>
