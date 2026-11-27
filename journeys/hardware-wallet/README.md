@@ -116,7 +116,7 @@ sign screen `HwTransferPassphraseSheet`, `HwTransferPassphraseInput`,
 `HwTransferPassphraseCancel`, `HwTransferPassphraseContinue`.
 
 Send and receive testTags: `Send`, `RecipientManual`, `RecipientInput`, `AddressContinue`,
-`send_amount_screen`, `AssetButton-switch`, `ContinueAmount`, `SendConfirmAssetButton`,
+`send_amount_screen`, `AssetButton-switch`, `ContinueAmount`, `SendConfirmToggleDetails`, `SendConfirmAssetButton`,
 `HardwareSendAmount`, `HardwareSendAddress`, `HardwareSendOpenTrezorConnect`, `SendSuccess`,
 `Receive`, `ReceiveScreen`, `QRCode`, `ReceiveHardwareAddress`, and `HardwareVerifyAddress`.
 
