@@ -70,9 +70,10 @@ for port in 23535 23536 23537 23049 23090 60001; do adb reverse tcp:$port tcp:$p
 - An existing dev install keeps the Electrum server saved in its settings, which includes the old default. Uninstall
   first (backups are off, so nothing comes back), or use Settings › Advanced › Electrum Server › Reset To Default, then
   Connect To Host (Reset only fills the form).
-- On Android the local stack turns off Transfer to Spending and exit fees paid from Savings
-  (`Env.sparkSharesNodeChain`). Fund Spark with `./spark send <deposit address> <sats>` or
-  `./spark pay <Spending invoice> [sats]`, and pay exit funding with `./spark send`. iOS allows both when its URLs match the fixture.
+- Transfer to Spending and exit fees paid from Savings need Spark and Savings on one chain
+  (`Env.sparkSharesNodeChain`): the Spark URL is the fixture's `23090` on `E2E_LOCAL_HOST` or `127.0.0.1`, and the
+  node runs on Electrum `E2E_LOCAL_HOST:60001` with no `ESPLORA_URL`. Otherwise fund Spark with
+  `./spark send <deposit address> <sats>` or `./spark pay <Spending invoice> [sats]`, and pay exit funding with `./spark send`.
 - A deposit is claimed after 1 block here.
 - Mine with `./spark mine`, not `./bitcoin-cli mine`: only `spark-bitcoind` relays Spark's v3 packages.
 - A phone over adb: set `E2E_LOCAL_HOST=127.0.0.1` and keep the `adb reverse` loop. Over the LAN: run `export SPARK_PUBLIC_HOST=<LAN IP>`

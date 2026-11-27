@@ -341,6 +341,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit nemohl přečíst uložený průběh tohoto převodu, proto ho znovu sestaví z blockchainu.</string>
     <string name="lightning__spark_exit__receive">Obdržíte (odhad)</string>
     <string name="lightning__spark_exit__savings_refused">Vaše platba z úspor neprošla. Zaplaťte znovu, nebo financujte z jiné peněženky.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Vaše platba z úspor ještě není potvrzena. Počkejte na ni, než zaplatíte z jiné peněženky.</string>
     <string name="lightning__spark_exit__send_to_address">Odeslat na adresu</string>
     <string name="lightning__spark_exit__step_funding">Potvrzení nouzových poplatků</string>
     <string name="lightning__spark_exit__step_publish">Zveřejnění transakce odchodu</string>
@@ -586,6 +587,7 @@
     <string name="profile__add_tag">Vložit tag</string>
     <string name="profile__auth_approval_authorize">Autorizovat</string>
     <string name="profile__auth_approval_details">Podrobnosti</string>
+    <string name="profile__auth_approval_relay">Relay</string>
     <string name="profile__auth_approval_title">Autorizovat</string>
     <string name="profile__auth_error_other_pubky">Tento požadavek je určen pro %1$s, ne pro pubky této peněženky.</string>
     <string name="profile__create_nav_title">Vytvořit profil</string>
@@ -1363,7 +1365,12 @@
     <string name="contacts__edit_public_note">Upozorňujeme, že informace o kontaktech jsou uloženy ve veřejných souborech. Změny kontaktu provedené v Bitkitu neaktualizují jeho profil.</string>
     <string name="contacts__edit_save_error">Kontakt se nepodařilo uložit</string>
     <string name="contacts__import_all">Importovat vše</string>
-    <string name="contacts__import_friends_count">Počet přátel: %1$d</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d přítel</item>
+        <item quantity="few">%1$d přátelé</item>
+        <item quantity="many">%1$d přítele</item>
+        <item quantity="other">%1$d přátel</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Nalezen\n&lt;accent&gt;profil a kontakty&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit našel data profilu a kontaktů propojená s pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Vybrat</string>
@@ -1563,6 +1570,7 @@
     <string name="profile__edit_bio_placeholder">Krátká poznámka. Řekněte něco o sobě.</string>
     <string name="profile__edit_changed_error">Tvůj profil se v pubky.app změnil. Bitkit načetl nejnovější verzi, proveď proto úpravu znovu.</string>
     <string name="profile__edit_delete_section">SMAZAT</string>
+    <string name="profile__edit_link_error">Opravte odkaz %1$s, abyste mohli uložit profil.</string>
     <string name="profile__edit_name_placeholder">VAŠE JMÉNO</string>
     <string name="profile__edit_public_note">Toto je tvůj profil na pubky.app. Je veřejný a změny, které zde provedeš, se zobrazí i na pubky.app.</string>
     <string name="profile__edit_save_error">Profil se nepodařilo uložit</string>
@@ -1573,6 +1581,10 @@
     <string name="profile__empty_state">Váš profil nelze načíst.</string>
     <string name="profile__intro_description">Díky přenosnému profilu vás kontakty mohou kdekoli zastihnout a zaplatit vám.</string>
     <string name="profile__intro_title">PŘENOSNÝ\n&lt;accent&gt;PROFIL&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">Popisek může mít nejvýše 100 znaků.</string>
+    <string name="profile__link_error_label_stored">Popisek tohoto odkazu nelze uložit. Odkaz odstraňte a přidejte znovu.</string>
+    <string name="profile__link_error_url_invalid">Zadejte platný webový odkaz, například example.com.</string>
+    <string name="profile__link_error_url_length">Odkaz může mít nejvýše 300 znaků.</string>
     <string name="profile__pay_contacts_description">Používejte Bitkit se svými kontakty a posílejte platby přímo, kdykoli a kdekoli.</string>
     <string name="profile__pay_contacts_headline">Nechte své\nkontakty\n&lt;accent&gt;platit vám&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Platby kontaktům</string>

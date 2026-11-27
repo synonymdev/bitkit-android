@@ -128,7 +128,10 @@
     <string name="contacts__edit_public_note">Please note contact information is stored in public files. Changes you make to a contact in Bitkit will not update their profile.</string>
     <string name="contacts__edit_save_error">Failed to save contact</string>
     <string name="contacts__import_all">Import All</string>
-    <string name="contacts__import_friends_count" tools:ignore="PluralsCandidate">%1$d friends</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d friend</item>
+        <item quantity="other">%1$d friends</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Found\n&lt;accent&gt;profile &amp; contacts&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit found profile and contacts data connected to pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Select</string>
@@ -502,6 +505,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit couldn\'t read this transfer\'s saved progress, so it rebuilds it from the chain.</string>
     <string name="lightning__spark_exit__receive">You receive (estimate)</string>
     <string name="lightning__spark_exit__savings_refused">Your savings payment didn\'t go through. Pay again, or fund from another wallet.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Your savings payment hasn\'t confirmed yet. Wait for it before you pay from another wallet.</string>
     <string name="lightning__spark_exit__send_to_address">Send to address</string>
     <string name="lightning__spark_exit__step_funding">Confirmation of emergency fees</string>
     <string name="lightning__spark_exit__step_publish">Publishing of exit transaction</string>
@@ -792,6 +796,7 @@
     <string name="profile__auth_approval_ok">OK</string>
     <string name="profile__auth_approval_paykit_access_description">This service will manage your private Paykit data and send Paykit messages for you. Your pubky secret and wallet keys stay private.</string>
     <string name="profile__auth_approval_permissions">Requested permissions</string>
+    <string name="profile__auth_approval_relay">Relay</string>
     <string name="profile__auth_approval_service">A service is requesting permission to access and edit your &lt;accent&gt;%1$s&lt;/accent&gt; data.</string>
     <string name="profile__auth_approval_service_named">&lt;accent&gt;%1$s&lt;/accent&gt; is requesting permission to access and edit your &lt;accent&gt;%2$s&lt;/accent&gt; data.</string>
     <string name="profile__auth_approval_service_unknown">Unknown service</string>
@@ -846,6 +851,7 @@
     <string name="profile__edit_bio_placeholder">Short note. Tell a bit about yourself.</string>
     <string name="profile__edit_changed_error">Your profile changed in pubky.app. Bitkit loaded the latest version, so make your edit again.</string>
     <string name="profile__edit_delete_section">DELETE</string>
+    <string name="profile__edit_link_error">Fix the %1$s link to save your profile.</string>
     <string name="profile__edit_name_placeholder">YOUR NAME</string>
     <string name="profile__edit_nav_title">Edit Profile</string>
     <string name="profile__edit_public_note">This is your pubky.app profile. It is public, and changes you make here also show on pubky.app.</string>
@@ -857,6 +863,10 @@
     <string name="profile__empty_state">Unable to load your profile.</string>
     <string name="profile__intro_description">With your portable profile your contacts can reach you and pay you anywhere.</string>
     <string name="profile__intro_title">PORTABLE\n&lt;accent&gt;PROFILE&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">Label must be 100 characters or fewer.</string>
+    <string name="profile__link_error_label_stored">This link\'s label can\'t be saved. Remove the link and add it again.</string>
+    <string name="profile__link_error_url_invalid">Enter a valid web link, such as example.com.</string>
+    <string name="profile__link_error_url_length">Link must be 300 characters or fewer.</string>
     <string name="profile__nav_title">Profile</string>
     <string name="profile__pay_contacts_description">Use Bitkit with your contacts to send payments directly, anytime, anywhere.</string>
     <string name="profile__pay_contacts_headline">Let your\ncontacts\n&lt;accent&gt;pay you&lt;/accent&gt;</string>

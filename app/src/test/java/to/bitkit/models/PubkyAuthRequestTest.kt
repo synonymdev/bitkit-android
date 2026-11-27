@@ -212,6 +212,160 @@ class PubkyAuthRequestTest {
     }
 
     @Test
+    fun `relay display url keeps the path and drops user info and fragment`() {
+        val origins = mapOf(
+            "https://Relay.Example:8443/inbox/" to "https://relay.example:8443/inbox/",
+            "https://httprelay.pubky.app/link" to "https://httprelay.pubky.app/link",
+            "https://httprelay.pubky.app" to "https://httprelay.pubky.app/",
+            "HTTPS://httprelay.pubky.app/link" to "https://httprelay.pubky.app/link",
+            "http://localhost:8080/link" to "http://localhost:8080/link",
+            "https://relay.example:0/link" to "https://relay.example:0/link",
+            "https://relay.example:80/link" to "https://relay.example:80/link",
+            "https://evil.example?@relay.example" to "https://evil.example/?@relay.example",
+            "https://relay.example/?x=@evil.example" to "https://relay.example/?x=@evil.example",
+            "https://evil.example#@relay.example" to "https://evil.example/",
+            "https://relay.example/a/.../b/..c/" to "https://relay.example/a/.../b/..c/",
+            "https://relay.example/inbox?next=../x" to "https://relay.example/inbox?next=../x",
+            "https://[::1]/link" to "https://[::1]/link",
+            "http://[::1]:443/" to "http://[::1]:443/",
+            "https://relay.example:65535/link" to "https://relay.example:65535/link",
+            "https://[2001:DB8::1]/link" to "https://[2001:db8::1]/link",
+            "https://[::ffff:102:304]/link" to "https://[::ffff:102:304]/link",
+            "https://relay.example/a/..;x" to "https://relay.example/a/..;x",
+            "https://relay.example/a/..%2f" to "https://relay.example/a/..%2f",
+            "https://[2001:db8:0:1::]/link" to "https://[2001:db8:0:1::]/link",
+            "http://user@10.0.2.2:15412/link?x=1#y" to "http://10.0.2.2:15412/link?x=1",
+            "https://trusted.example@relay.example/in%20box/" to "https://relay.example/in%20box/",
+            "https://relay.example/a|b?c=[e]" to "https://relay.example/a|b?c=[e]",
+            "https://relay.example/o'neil/inbox/" to "https://relay.example/o'neil/inbox/",
+            "https://relay.example/a^b/[c]" to "https://relay.example/a^b/[c]",
+            "https://relay.example/inbox/?x={y}" to "https://relay.example/inbox/?x={y}",
+            "https://relay.example/inbox/?x=a^b|c" to "https://relay.example/inbox/?x=a^b|c",
+            "https://relay.example/inbox/?x=a`b" to "https://relay.example/inbox/?x=a`b",
+            "https://relay.example/inbox/?x=a\\b" to "https://relay.example/inbox/?x=a\\b",
+            "https://relay.example?x={y}" to "https://relay.example/?x={y}",
+            "https://us'er:pa{ss}@relay.example/inbox/" to "https://relay.example/inbox/",
+            "https://relay.example/inbox/#a\"b<c>'\\" to "https://relay.example/inbox/",
+            "https://relay.example?x=1" to "https://relay.example/?x=1",
+            "https://relay.example./link" to "https://relay.example./link",
+            "https://-re_lay~.1abc/link" to "https://-re_lay~.1abc/link",
+            "https://xn--e1aybc.example/link" to "https://xn--e1aybc.example/link",
+            "https://[2001:DB8::1]:8443/link" to "https://[2001:db8::1]:8443/link",
+            "https://127.0.0.1/link" to "https://127.0.0.1/link",
+            "https://evil.example/@httprelay.pubky.app/link" to "https://evil.example/@httprelay.pubky.app/link",
+        )
+
+        origins.forEach { (relay, origin) ->
+            assertEquals(origin, PubkyAuthRequest.displayRelay(relay), relay)
+            val request = PubkyAuthRequest.parse(
+                rawUrl = authUrl("/pub/example.app/:rw"),
+                clientId = "example.app",
+                relay = relay,
+                capabilities = "/pub/example.app/:rw",
+            ).getOrThrow()
+
+            assertEquals(origin, request.relayDisplayUrl, relay)
+        }
+    }
+
+    @Test
+    fun `relay whose destination cannot be read with certainty makes the request invalid`() {
+        val unreadable = listOf(
+            "https://evil.example\\@httprelay.pubky.app/link",
+            "https://httprelay.pubky.app\\.evil.example/link",
+            "https://реле.example/link",
+            "https://%65vil.example/link",
+            "https://0x7f.1/link",
+            "https://2130706433/link",
+            "https://1.2.3/link",
+            "https://127.0.0.1./link",
+            "https://relay.example /link",
+            "https://relay\t.example/link",
+            "https://relay.example:/link",
+            "https://relay.example\n/link",
+            "https://relay.example:443/link",
+            "http://relay.example:80/link",
+            "https://relay.example:65536/link",
+            "https://relay.example:08443/link",
+            "https://relay.example/inbox/../../other/",
+            "https://relay.example/inbox/./x",
+            "https://relay.example/inbox/%2e%2e/other/",
+            "https://relay.example/inbox/%2E./other/",
+            "https://relay.example/inbox/..",
+            "https://relay.example/..?x=1",
+            "https://relay.example/a{b}",
+            "https://relay.example/a?b='c'",
+            "https://relay.example/a\"b",
+            "https://relay.example/a}b",
+            "https://relay.example/a\\b",
+            "https://relay.example/a/\\..\\b",
+            "https://user\\@relay.example/inbox/",
+            "https://relay.example/inbox/?x=\"y\"",
+            "https://relay.example/inbox/?x=<y",
+            "https://relay.example/inbox/?x=y>",
+            "https://relay.example/inbox/?x='y",
+            "https://relay.example/inbox/?x=a b",
+            "https://relay.example/a<b",
+            "https://relay.example/a>b",
+            "https://relay.example/a`b",
+            "https://relay.example/inbox/%2e/x",
+            "https://relay.example/inbox/.%2E/other/",
+            "https://[::1]:443/",
+            "https://[2001:db8:0:0:0:0:0:1]/link",
+            "https://[2001:0db8::1]/link",
+            "https://[1:0:0:2:0:0:0:3]/link",
+            "https://[::ffff:1.2.3.4]/link",
+            "https://[1::2::3]/link",
+            "https://[::12345]/link",
+            "https://[1:2:3:4:5:6:7:8:9]/link",
+            "https:///inbox/",
+            "https:/relay.example/inbox/",
+            "https:relay.example/inbox/",
+            "ftp://relay.example/inbox/",
+            "relay.example/inbox/",
+            "not a url",
+        )
+
+        unreadable.forEach { relay ->
+            assertNull(PubkyAuthRequest.displayRelay(relay), relay)
+            assertIs<PubkyAuthRequestError.InvalidUrl>(
+                PubkyAuthRequest.parse(
+                    rawUrl = authUrl("/pub/example.app/:rw"),
+                    clientId = "example.app",
+                    relay = relay,
+                    capabilities = "/pub/example.app/:rw",
+                ).exceptionOrNull(),
+                relay,
+            )
+        }
+    }
+
+    @Test
+    fun `relay is shown whenever a request has one`() {
+        val withoutRelay = PubkyAuthRequest.parseSignup(directSignupUrl("direct_signup")).getOrThrow()
+        val ringSignup = PubkyAuthRequest.parseSignup(ringSignupUrl()).getOrThrow()
+
+        assertEquals("", withoutRelay.relay)
+        assertNull(withoutRelay.relayDisplayUrl)
+        assertEquals("https://relay.example/inbox/", ringSignup.relayDisplayUrl)
+        assertIs<PubkyAuthRequestError.InvalidUrl>(
+            PubkyAuthRequest.parseSignup(
+                ringSignupUrl().replace("relay.example", "evil.example%5C%40relay.example"),
+            ).exceptionOrNull(),
+        )
+        assertIs<PubkyAuthRequestError.InvalidUrl>(
+            PubkyAuthRequest.parseSignup(ringSignupUrl().replace("relay.example", "rel%C3%A4y.example"))
+                .exceptionOrNull(),
+        )
+        listOf("inbox%2F..%2F..%2Fother%2F", "inbox%2F%252e%252e%2Fother%2F").forEach {
+            assertIs<PubkyAuthRequestError.InvalidUrl>(
+                PubkyAuthRequest.parseSignup(ringSignupUrl().replace("inbox%2F", it)).exceptionOrNull(),
+                it,
+            )
+        }
+    }
+
+    @Test
     fun `grant sign-in reads the pubky it must be approved with`() {
         assertEquals(52, SIGNER.length)
         assertNull(PubkyAuthRequest.parseExpectedSigner(grantSigninUrl()).getOrThrow())

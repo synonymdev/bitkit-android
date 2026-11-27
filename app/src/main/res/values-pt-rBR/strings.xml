@@ -342,6 +342,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">A Bitkit não conseguiu ler o progresso salvo desta transferência, então o reconstrói a partir da blockchain.</string>
     <string name="lightning__spark_exit__receive">Você recebe (estimativa)</string>
     <string name="lightning__spark_exit__savings_refused">Seu pagamento da poupança não foi concluído. Pague novamente ou financie de outra carteira.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Seu pagamento da poupança ainda não foi confirmado. Aguarde antes de pagar de outra carteira.</string>
     <string name="lightning__spark_exit__send_to_address">Enviar para o endereço</string>
     <string name="lightning__spark_exit__step_funding">Confirmação das taxas de emergência</string>
     <string name="lightning__spark_exit__step_publish">Publicação da transação de saída</string>
@@ -587,6 +588,7 @@
     <string name="profile__add_tag">Adicionar Tag</string>
     <string name="profile__auth_approval_authorize">Autorizar</string>
     <string name="profile__auth_approval_details">Detalhes</string>
+    <string name="profile__auth_approval_relay">Relay</string>
     <string name="profile__auth_approval_title">Autorizar</string>
     <string name="profile__auth_error_other_pubky">Esta solicitação é para %1$s, não para o pubky desta carteira.</string>
     <string name="profile__create_nav_title">Criar Perfil</string>
@@ -1365,7 +1367,11 @@
     <string name="contacts__edit_public_note">Observe que as informações de contato são armazenadas em arquivos públicos. As alterações que você fizer em um contato na Bitkit não atualizarão o perfil dele.</string>
     <string name="contacts__edit_save_error">Falha ao salvar contato</string>
     <string name="contacts__import_all">Importar Todos</string>
-    <string name="contacts__import_friends_count">%1$d amigos</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d amigo</item>
+        <item quantity="many">%1$d amigos</item>
+        <item quantity="other">%1$d amigos</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Perfil e contatos\n&lt;accent&gt;encontrados&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">A Bitkit encontrou dados de perfil e contatos vinculados à pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Selecionar</string>
@@ -1564,6 +1570,7 @@
     <string name="profile__edit_bio_placeholder">Nota curta. Conte um pouco sobre você.</string>
     <string name="profile__edit_changed_error">Seu perfil mudou no pubky.app. O Bitkit carregou a versão mais recente, então faça sua alteração de novo.</string>
     <string name="profile__edit_delete_section">EXCLUIR</string>
+    <string name="profile__edit_link_error">Corrija o link %1$s para salvar seu perfil.</string>
     <string name="profile__edit_name_placeholder">SEU NOME</string>
     <string name="profile__edit_public_note">Este é o seu perfil do pubky.app. Ele é público, e as alterações que você faz aqui também aparecem no pubky.app.</string>
     <string name="profile__edit_save_error">Falha ao salvar perfil</string>
@@ -1574,6 +1581,10 @@
     <string name="profile__empty_state">Não foi possível carregar seu perfil.</string>
     <string name="profile__intro_description">Com seu perfil portátil, seus contatos podem encontrar você e pagar você em qualquer lugar.</string>
     <string name="profile__intro_title">PERFIL\n&lt;accent&gt;PORTÁTIL&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">O rótulo deve ter no máximo 100 caracteres.</string>
+    <string name="profile__link_error_label_stored">Não é possível salvar o rótulo deste link. Remova o link e adicione-o novamente.</string>
+    <string name="profile__link_error_url_invalid">Insira um link da web válido, como example.com.</string>
+    <string name="profile__link_error_url_length">O link deve ter no máximo 300 caracteres.</string>
     <string name="profile__pay_contacts_description">Use a Bitkit com seus contatos para enviar pagamentos diretamente, a qualquer hora, em qualquer lugar.</string>
     <string name="profile__pay_contacts_headline">Deixe seus\ncontatos\n&lt;accent&gt;pagarem você&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pagar Contatos</string>

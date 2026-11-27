@@ -338,6 +338,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit no ha pogut llegir el progrés desat d\'aquesta transferència, així que el reconstrueix a partir de la cadena.</string>
     <string name="lightning__spark_exit__receive">Rebràs (estimació)</string>
     <string name="lightning__spark_exit__savings_refused">El teu pagament dels estalvis no s\'ha completat. Torna a pagar o finança des d\'un altre moneder.</string>
+    <string name="lightning__spark_exit__savings_unresolved">El teu pagament dels estalvis encara no s\'ha confirmat. Espera\'l abans de pagar des d\'un altre moneder.</string>
     <string name="lightning__spark_exit__send_to_address">Enviar a l\'adreça</string>
     <string name="lightning__spark_exit__step_funding">Confirmació de les comissions d\'emergència</string>
     <string name="lightning__spark_exit__step_publish">Publicació de la transacció de sortida</string>
@@ -582,6 +583,7 @@
     <string name="profile__add_link_note">Nota: Qualsevol enllaç que afegiu serà visible públicament.</string>
     <string name="profile__add_tag">Afegeix etiqueta</string>
     <string name="profile__auth_approval_details">Detalls</string>
+    <string name="profile__auth_approval_relay">Relé</string>
     <string name="profile__auth_error_other_pubky">Aquesta sol·licitud és per a %1$s, no per al pubky d\'aquesta cartera.</string>
     <string name="profile__create_nav_title">Crear perfil</string>
     <string name="profile__edit_nav_title">Editar perfil</string>
@@ -1356,7 +1358,11 @@
     <string name="contacts__edit_public_note">Tingues en compte que la informació dels contactes es desa en fitxers públics. Els canvis que facis a un contacte a Bitkit no actualitzaran el seu perfil.</string>
     <string name="contacts__edit_save_error">No s\'ha pogut desar el contacte</string>
     <string name="contacts__import_all">Importar-ho tot</string>
-    <string name="contacts__import_friends_count">%1$d amics</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d amic</item>
+        <item quantity="many">%1$d amics</item>
+        <item quantity="other">%1$d amics</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Perfil i contactes\n&lt;accent&gt;trobats&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit ha trobat dades de perfil i contactes vinculades al pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Seleccionar</string>
@@ -1561,6 +1567,7 @@
     <string name="profile__edit_bio_placeholder">Nota breu. Explica una mica sobre tu.</string>
     <string name="profile__edit_changed_error">El teu perfil ha canviat a pubky.app. Bitkit ha carregat la versió més recent, així que torna a fer la teva edició.</string>
     <string name="profile__edit_delete_section">ELIMINAR</string>
+    <string name="profile__edit_link_error">Corregeix l\'enllaç %1$s per desar el teu perfil.</string>
     <string name="profile__edit_name_placeholder">EL TEU NOM</string>
     <string name="profile__edit_public_note">Aquest és el teu perfil de pubky.app. És públic, i els canvis que hi facis aquí també es veuen a pubky.app.</string>
     <string name="profile__edit_save_error">No s\'ha pogut desar el perfil</string>
@@ -1571,6 +1578,10 @@
     <string name="profile__empty_state">No s\'ha pogut carregar el teu perfil.</string>
     <string name="profile__intro_description">Amb el teu perfil portable, els teus contactes et poden trobar i pagar a qualsevol lloc.</string>
     <string name="profile__intro_title">PERFIL\n&lt;accent&gt;PORTABLE&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">L\'etiqueta ha de tenir 100 caràcters o menys.</string>
+    <string name="profile__link_error_label_stored">No es pot desar l\'etiqueta d\'aquest enllaç. Elimina l\'enllaç i torna\'l a afegir.</string>
+    <string name="profile__link_error_url_invalid">Introdueix un enllaç web vàlid, com ara example.com.</string>
+    <string name="profile__link_error_url_length">L\'enllaç ha de tenir 300 caràcters o menys.</string>
     <string name="profile__pay_contacts_description">Utilitza Bitkit amb els teus contactes per enviar pagaments directament, en qualsevol moment i a qualsevol lloc.</string>
     <string name="profile__pay_contacts_headline">Deixa que els\nteus contactes\n&lt;accent&gt;et paguin&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Pagar contactes</string>

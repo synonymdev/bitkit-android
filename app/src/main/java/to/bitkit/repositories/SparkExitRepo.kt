@@ -311,7 +311,7 @@ class SparkExitRepo @Inject constructor(
         _state.update { it.copy(tipHeight = tip ?: it.tipHeight) }
         tip?.let { height -> sparkExitTip.height.update { height } }
         refreshNetworkFees(chain)
-        refreshFundingSeen(chain, current)
+        val seen = refreshFundingSeen(chain, current)
         if (current.isActive) noteSavingsSend(current)
         val store = store
         // A reconnect for the exit that failed left Spark ready but disconnected: the tick connects it again.
@@ -324,7 +324,11 @@ class SparkExitRepo @Inject constructor(
         rememberLostLeaves(updated)
         _state.update { it.copy(record = updated, lastError = null) }
         // A tick that changed the phase, such as a build short of fees, needs the funding state of the new phase.
-        if (updated.phase != current.phase) refreshFundingSeen(chain, updated)
+        // So does one that forgot the exit's own payment, which brings the ask back.
+        // A failed read then keeps the first: a short payment it saw still counts, so only the rest is asked for.
+        if (updated.phase != current.phase || updated.fundingPaymentTxid != current.fundingPaymentTxid) {
+            refreshFundingSeen(chain, updated, earlier = seen)
+        }
         // Spark's balance next to the exit's leaves shows value outside the exit.
         if (recovering != null) _state.update { it.copy(sparkBalanceSats = sparkRepo.state.value.balanceSats) }
         // A rebuild needs the SDK; every other running step can go out from the stored recovery without it. Steps
@@ -418,14 +422,21 @@ class SparkExitRepo @Inject constructor(
         _state.update { it.copy(networkFees = fees ?: it.networkFees) }
     }
 
-    private suspend fun refreshFundingSeen(chain: SparkExitChain, record: SparkExitRecord) {
-        val address = record.funding.firstOrNull()?.address ?: return
+    /** Reads the funding address for [record], or goes by [earlier] when the read fails; returns the UTXOs used. */
+    private suspend fun refreshFundingSeen(
+        chain: SparkExitChain,
+        record: SparkExitRecord,
+        earlier: List<EsploraUtxo>? = null,
+    ): List<EsploraUtxo>? {
+        val address = record.funding.firstOrNull()?.address ?: return null
         _state.update { it.copy(fundingAddress = address) }
         if (record.fundingShortfallSats == null) {
             _state.update { it.copy(fundingState = null) }
-            return
+            return null
         }
-        noteFundingSeen(record, runSuspendCatching { chain.utxos(address) }.getOrNull())
+        val utxos = runSuspendCatching { chain.utxos(address) }.getOrNull() ?: earlier
+        noteFundingSeen(record, utxos)
+        return utxos
     }
 
     /** What [utxos] at the funding address, null when unread, says the exit still needs. */
@@ -649,7 +660,11 @@ class SparkExitRepo @Inject constructor(
         // On a chain Spark does not read, the exit would never see the payment.
         require(option.extraSats == 0uL || sharesNodeChain()) { "Spark does not read the node's chain" }
         val txid = if (option.extraSats > 0uL) {
-            sendFunding(address, option.extraSats, option.feeRates, option.totalSats.safe() - option.extraSats.safe())
+            val approvedFeeSats = option.totalSats.safe() - option.extraSats.safe()
+            runSuspendCatching { sendFunding(address, option.extraSats, option.feeRates, approvedFeeSats) }.getOrElse {
+                // With no answer it may still go out: kept like a payment of unknown result.
+                pendingFundingTxid(it, address) ?: throw it
+            }
         } else {
             null
         }
@@ -676,6 +691,8 @@ class SparkExitRepo @Inject constructor(
                 it.copy(record = bumped, fundingState = SparkExitMath.fundingState(bumped, utxos = null))
             }
         }
+        // Progress says at once whether the payment may still land.
+        _state.value.record?.takeIf { it.isActive }?.let { noteSavingsSend(it) }
         if (_state.value.record?.needsDriving == true) work.schedulePeriodic()
         Logger.info(
             "Raised the Spark exit fee to '${option.rateSatPerVbyte}' sat/vB, paying '${option.extraSats}' sats",
@@ -871,8 +888,9 @@ class SparkExitRepo @Inject constructor(
                 runSuspendCatching {
                     payFunding(createdAt, key.address, savingsSats, pending.savingsFeeRates, pending.savingsFeeSats)
                 }
-                    // A refused payment shows on progress at once, with the offer to pay again.
-                    .onFailure { _state.value.record?.let { current -> noteSavingsSend(current) } }
+                    // A refused payment shows on progress at once, with the offer to pay again, and one that may
+                    // still land with its note.
+                    .also { _state.value.record?.let { current -> noteSavingsSend(current) } }
                     .getOrThrow()
             }
         }
@@ -947,16 +965,42 @@ class SparkExitRepo @Inject constructor(
                     // Refused by a node, or with no answer, it went out: its own retry or the exit's wait takes over.
                     if (it is OnchainSendPendingError || it is SparkExitError) noteSavingsRefusal(null)
                 }
-                .getOrThrow()
-            val record = _state.value.record ?: return@withLock
-            val paid = record.copy(fundingPaymentTxid = txid, savingsRefusal = null)
-            // Kept as paid even when the save fails, so progress never offers to pay it again; a later tick saves it.
-            runCatching { saveRecord(paid) }
-                .onFailure { Logger.error("Failed to save the Spark exit funding payment '$txid'", it, context = TAG) }
-            _state.update {
-                it.copy(record = paid, fundingState = SparkExitMath.fundingState(paid, utxos = null))
-            }
+                .getOrElse {
+                    pendingFundingTxid(it, address)?.let { pending -> keepFundingPayment(pending) }
+                    throw it
+                }
+            keepFundingPayment(txid)
         }
+    }
+
+    /**
+     * Keeps [txid] as the exit's savings payment: progress shows it paid, with no ask, until it lands or the
+     * own-payment wait forgets it. Kept even when the save fails, so progress never offers to pay it again; a later
+     * tick saves it.
+     */
+    private fun keepFundingPayment(txid: String) {
+        val record = _state.value.record ?: return
+        val paid = record.copy(fundingPaymentTxid = txid, savingsRefusal = null)
+        runCatching { saveRecord(paid) }
+            .onFailure { Logger.error("Failed to save the Spark exit funding payment '$txid'", it, context = TAG) }
+        _state.update {
+            it.copy(record = paid, fundingState = SparkExitMath.fundingState(paid, utxos = null))
+        }
+    }
+
+    /**
+     * The transaction of a savings payment to [address] with no answer yet: it may still go out, so it is kept like
+     * one of unknown result. From the error, or else from the send journal. A retry the journal rolled back to refused
+     * never went out, whatever txid its error names.
+     */
+    private suspend fun pendingFundingTxid(error: Throwable, address: String): String? {
+        if (error !is OnchainSendPendingError) return null
+        val attempt = runSuspendCatching { lightningRepo.currentOnchainSendAttempt() }.getOrNull()
+            ?.takeIf { it.address == address }
+        if (attempt?.evidence == OnchainSendEvidence.Rejected) return null
+        val isPending = attempt?.evidence == OnchainSendEvidence.Pending ||
+            attempt?.evidence == OnchainSendEvidence.Unknown
+        return error.txid ?: attempt?.takeIf { isPending }?.txid
     }
 
     private fun noteSavingsRefusal(sats: ULong, feeSats: ULong) =
@@ -1032,7 +1076,7 @@ class SparkExitRepo @Inject constructor(
                         }
                     }
                         // A payment that went out and failed shows as such, with its own retry.
-                        .onFailure { _state.value.record?.let { current -> noteSavingsSend(current) } }
+                        .also { _state.value.record?.let { current -> noteSavingsSend(current) } }
                         .recover { if (isKept) Unit else throw it }
                         .getOrThrow()
                 }
@@ -1119,18 +1163,14 @@ class SparkExitRepo @Inject constructor(
                             walletId = refused.walletId,
                             feeRateSatsPerVByte = refused.feeRateSatsPerVByte,
                         ) { check(it.attemptId == refused.attemptId && it.address == refused.address) }
-                            .getOrThrow()
-                        val txid = fundingTxid(outcome, refused.amountSats)
-                        val current = _state.value.record ?: return@withLock
-                        val paid = current.copy(fundingPaymentTxid = txid, savingsRefusal = null)
-                        saveRecord(paid)
-                        _state.update {
-                            it.copy(
-                                record = paid,
-                                fundingState = SparkExitMath.fundingState(paid, utxos = null),
-                                isSavingsPaymentRefused = false,
-                            )
-                        }
+                            .getOrElse {
+                                pendingFundingTxid(it, refused.address)?.let { pending -> keepFundingPayment(pending) }
+                                _state.value.record?.let { current -> noteSavingsSend(current) }
+                                throw it
+                            }
+                        keepFundingPayment(fundingTxid(outcome, refused.amountSats))
+                        _state.value.record?.let { current -> noteSavingsSend(current) }
+                        Unit
                     }
                 }
             } finally {

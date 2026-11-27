@@ -2021,6 +2021,39 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a withdrawal refused once its journal is written never leaves`() = test {
+        val sut = journaledSpark()
+        var isBlocked = false
+        whenever(cacheStore.update(any())).doSuspendableAnswer {
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+            // The contact is blocked while the journal is written.
+            if (cacheData.value.pendingSparkWithdrawal != null) isBlocked = true
+        }
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(contactWithdrawal())
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, null, recheckBeforeSend = { !isBlocked })
+
+        assertIs<ServiceError.PaymentStoppedAtSubmission>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any(), anyOrNull())
+        assertNull(cacheData.value.pendingSparkWithdrawal)
+    }
+
+    @Test
+    fun `a withdrawal refused once its journal is written stays refused when closing the journal fails`() = test {
+        val sut = journaledSpark()
+        whenever(cacheStore.update(any())).doSuspendableAnswer {
+            // The journal opens, then closing it fails.
+            if (cacheData.value.pendingSparkWithdrawal != null) throw IOException("disk full")
+            cacheData.update(it.getArgument<(AppCacheData) -> AppCacheData>(0))
+        }
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, null, recheckBeforeSend = { false })
+
+        assertIs<ServiceError.PaymentStoppedAtSubmission>(result.exceptionOrNull())
+        verify(sparkService, never()).send(any(), anyOrNull())
+    }
+
+    @Test
     fun `a withdrawal whose proof is starting reads as in flight before its journal is written`() = test {
         val sut = journaledSpark()
         var outcomeWhileStarting: SparkWithdrawalOutcome? = null
@@ -2103,6 +2136,35 @@ class SparkRepoTest : BaseUnitTest() {
         assertIs<SparkError.SendRefused>(result.exceptionOrNull())
         assertNull(cacheData.value.pendingSparkWithdrawal)
         verify(sparkService, never()).syncWallet()
+    }
+
+    @Test
+    fun `a withdrawal spark refuses for its balance stays refused when closing its journal fails`() = test {
+        val sut = journaledSpark()
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer {
+            whenever { cacheStore.update(any()) }.thenAnswer { throw IOException("disk full") }
+            throw SdkException.InsufficientFunds(null)
+        }
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact")
+
+        assertIs<SparkError.SendRefused>(result.exceptionOrNull())
+    }
+
+    @Test
+    fun `a withdrawal spark refuses for a fee rise stays refused when closing its journal fails`() = test {
+        val sut = journaledSpark()
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer {
+            whenever { cacheStore.update(any()) }.thenAnswer { throw IOException("disk full") }
+            throw SdkException.InvalidInput(
+                "The onchain fee rose to 900 sats at the slowest speed, above the 500 sats quoted for this payment. " +
+                    "Please re-prepare the payment.",
+            )
+        }
+
+        val result = sut.withdraw("bcrt1qcontact", 20_000uL, "pubkycontact")
+
+        assertIs<SparkError.SendRefused>(result.exceptionOrNull())
     }
 
     @Test
@@ -3489,7 +3551,7 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertIs<SparkError.InvoiceExpired>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
 
-        verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
+        verifyBlocking(cacheStore) { dropSparkUnsentSend("hash", true, null) }
     }
 
     @Test
@@ -3503,7 +3565,22 @@ class SparkRepoTest : BaseUnitTest() {
         val error = sut.payInvoice("lnbc1", 100uL).exceptionOrNull()
 
         assertIs<SparkError.SendRefused>(error)
-        verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
+        verifyBlocking(cacheStore) { dropSparkUnsentSend("hash", true, null) }
+    }
+
+    @Test
+    fun `a spark refusal stays a refusal when dropping the unsent send fails`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = prepared(feeSats = 0uL)
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw SdkException.InsufficientFunds(null) }
+        val diskFull = IOException("disk full")
+        whenever(cacheStore.dropSparkUnsentSend(any(), any(), anyOrNull())).thenAnswer { throw diskFull }
+        val sut = createSut()
+
+        val error = sut.payInvoice("lnbc1", 100uL).exceptionOrNull()
+
+        assertIs<SparkError.SendRefused>(error)
     }
 
     @Test
@@ -3951,8 +4028,7 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertIs<ServiceError.PaymentDeadlineExpired>(result.exceptionOrNull())
         verify(sparkService, never()).send(any(), anyOrNull())
-        verifyBlocking(cacheStore) { removeSparkUncertainSend("hash") }
-        verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
+        verifyBlocking(cacheStore) { dropSparkUnsentSend("hash", true, null) }
     }
 
     @Test
@@ -3972,9 +4048,7 @@ class SparkRepoTest : BaseUnitTest() {
 
         assertIs<ServiceError.PaymentStoppedAtSubmission>(result.exceptionOrNull())
         verify(sparkService, never()).send(any(), anyOrNull())
-        verifyBlocking(cacheStore) { removeSparkUncertainSend("hash") }
-        verifyBlocking(cacheStore) { removeSparkSendHash("hash") }
-        verifyBlocking(cacheStore) { restoreSparkSendAttempt("hash", null) }
+        verifyBlocking(cacheStore) { dropSparkUnsentSend("hash", true, null) }
     }
 
     @Test
@@ -3987,7 +4061,8 @@ class SparkRepoTest : BaseUnitTest() {
             isAuthorized = false
             Unit
         }
-        whenever(cacheStore.removeSparkSendHash(any())).thenAnswer { throw IllegalStateException("disk full") }
+        val diskFull = IllegalStateException("disk full")
+        whenever(cacheStore.dropSparkUnsentSend(any(), any(), anyOrNull())).thenAnswer { throw diskFull }
         val sut = createSut()
 
         val result = sut.payInvoice("lnbc1", 100uL, null, null) { isAuthorized }
@@ -5426,6 +5501,67 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark retry under the same key at another amount is refused`() = test {
+        val attempt = SparkSendAttempt(0, now.epochSeconds + 3_600, 50uL)
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkSendAttempts = mapOf("hash" to attempt))), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+
+        verify(sparkService, never()).send(any(), anyOrNull())
+        assertEquals(50uL, store.data.first().sparkSendAttempts["hash"]?.amountSats)
+    }
+
+    @Test
+    fun `a spark retry under the same key is refused when the invoice's amount differs from the kept one`() = test {
+        val attempt = SparkSendAttempt(0, now.epochSeconds + 3_600, 50uL)
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkSendAttempts = mapOf("hash" to attempt))), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val details = mock<Bolt11InvoiceDetails> {
+            on { paymentHash } doReturn "hash"
+            on { timestamp }.thenAnswer { now.epochSeconds }
+            on { expiry }.thenAnswer { 3_600L }
+            on { amountMsat } doReturn 100_000uL
+        }
+        val prepared = prepared(feeSats = 0uL).copy(paymentMethod = SendPaymentMethod.Bolt11Invoice(details, null, 0uL))
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", null).exceptionOrNull())
+
+        verify(sparkService, never()).send(any(), anyOrNull())
+    }
+
+    @Test
+    fun `a spark retry at another amount goes out under the next key once spark lists its attempt failed`() = test {
+        val attempt = SparkSendAttempt(0, now.epochSeconds + 3_600, 50uL)
+        val store = CacheStore(InMemoryDataStore(AppCacheData(sparkSendAttempts = mapOf("hash" to attempt))), clock)
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenReturn(sentPayment(fees = 0))
+        val failed = sentPayment(fees = 0).copy(id = "hash-0", status = PaymentStatus.FAILED)
+        whenever(sparkService.listPayments()).thenReturn(listOf(failed))
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+
+        sut.payInvoice("lnbc1", 100uL).getOrThrow()
+
+        assertEquals("hash-1", sentKey())
+        assertEquals(100uL, store.data.first().sparkSendAttempts["hash"]?.amountSats)
+    }
+
+    @Test
     fun `a spark retry takes the next attempt's key once spark lists its attempt failed`() = test {
         val kept = AppCacheData(sparkSendAttempts = mapOf("hash" to SparkSendAttempt(0, now.epochSeconds + 3_600)))
         val store = CacheStore(InMemoryDataStore(kept), clock)
@@ -5525,6 +5661,28 @@ class SparkRepoTest : BaseUnitTest() {
         assertIs<PaymentPendingException>(result.exceptionOrNull())
         verify(sparkService, times(1)).send(any(), anyOrNull())
         assertEquals(3, checks)
+    }
+
+    @Test
+    fun `a spark resend checks its deadline after its authorization check returns`() = test {
+        whenever(sparkService.isConnected).thenReturn(true)
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).thenAnswer { throw leafSelectionFailure() }
+        val sut = createSut(CacheStore(InMemoryDataStore(AppCacheData()), clock))
+        sut.start(0).getOrThrow()
+        advanceUntilIdle()
+        val deadline = now + 1.minutes
+        var checks = 0
+
+        // The retry's check returns allowed only after the deadline has passed.
+        val result = sut.payInvoice("lnbc1", 100uL, paymentDeadlineAt = deadline, onBeforeSend = {
+            if (++checks == 3) now = deadline + 1.minutes
+            true
+        })
+
+        assertIs<PaymentPendingException>(result.exceptionOrNull())
+        verify(sparkService, times(1)).send(any(), anyOrNull())
     }
 
     @Test
@@ -5710,6 +5868,28 @@ class SparkRepoTest : BaseUnitTest() {
         assertEquals(List(5) { "hash-0" }, keys)
         // A caller still waiting on the held send learns it paid.
         assertEquals(1, events.count { it is Event.PaymentSuccessful })
+    }
+
+    @Test
+    fun `a spark retry of a held send at another amount is refused and keeps the send held`() = test {
+        whenever(sparkService.isSupported).thenReturn(true)
+        whenever(sparkService.isConnected).thenReturn(true)
+        whenever(sparkService.getInfo()).thenAnswer { info(0uL).copy(lastSyncedAt = now.epochSeconds.toULong()) }
+        whenever(sparkService.listPayments()).thenReturn(emptyList())
+        val prepared = unexpiredPrepared()
+        whenever(sparkService.prepareSend(any(), anyOrNull(), anyOrNull())).thenReturn(prepared)
+        whenever(sparkService.send(any(), anyOrNull())).doSuspendableAnswer { throw leafSelectionFailure() }
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        val sut = createSut(store)
+        sut.start(0).getOrThrow()
+        assertIs<PaymentPendingException>(sut.payInvoice("lnbc1", 100uL).exceptionOrNull())
+        clearInvocations(sparkService)
+
+        assertIs<SparkError.SendRefused>(sut.payInvoice("lnbc1", 200uL).exceptionOrNull())
+
+        verify(sparkService, never()).send(any(), anyOrNull())
+        assertTrue("hash" in store.data.first().sparkUncertainSends)
+        assertEquals(100uL, store.data.first().sparkSendAttempts["hash"]?.amountSats)
     }
 
     @Test

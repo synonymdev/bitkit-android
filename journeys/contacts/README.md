@@ -132,3 +132,5 @@ public publication. Change the ordinary Receive address while backgrounded, then
 address must stay unchanged. An expired public invoice is refreshed on resume; explicit channel and payment updates
 keep their normal publication behavior. Counting publications and controlling invoice expiry require
 an instrumented fixture, not the standard journey runner.
+
+`import-friend-count.xml` checks that the import preview count uses plural forms: "1 friend" for one follow, "N friends" otherwise, and the locale's own forms in Russian. It is mirrored on the other platform and needs disposable identities that follow one and several profiles.

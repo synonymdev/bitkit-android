@@ -839,6 +839,7 @@ class WalletViewModel @Inject constructor(
             }
     }
 
+    private var openedReceivePresentationId: String? = null
     private var swapEventsCollected = false
     private var swapUpdatesJob: Job? = null
 
@@ -1005,8 +1006,11 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    fun updateBip21Invoice(amountSats: ULong? = walletState.value.bip21AmountSats) = viewModelScope.launch {
-        walletRepo.updateBip21Invoice(amountSats).onFailure { error ->
+    fun updateBip21Invoice(
+        amountSats: ULong? = walletState.value.bip21AmountSats,
+        description: String = walletState.value.bip21Description,
+    ) = viewModelScope.launch {
+        walletRepo.updateBip21Invoice(amountSats, description).onFailure { error ->
             ToastEventBus.send(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.wallet__error_invoice_update),
@@ -1033,6 +1037,18 @@ class WalletViewModel @Inject constructor(
                 description = error.message ?: context.getString(R.string.common__error_body)
             )
         }
+    }
+
+    /**
+     * Resets the receive request once per sheet [presentationId], so an activity recreation keeps the open one.
+     * Returns whether this call opened it.
+     */
+    fun openReceive(presentationId: String): Boolean {
+        if (openedReceivePresentationId == presentationId) return false
+        openedReceivePresentationId = presentationId
+        resetPreActivityMetadataTagsForCurrentInvoice()
+        refreshReceiveState()
+        return true
     }
 
     fun refreshReceiveState() = viewModelScope.launch {

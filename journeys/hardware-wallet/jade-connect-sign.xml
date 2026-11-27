@@ -1,0 +1,48 @@
+<journey name="Jade Connect, Receive and Send">
+  <description>
+    Pairs the Blockstream Jade emulator from `bitkit-docker` through the Hardware suggestion card,
+    verifies a receive address on the device and pays from the Jade through the normal Send flow.
+    Requires `./scripts/jade-emulator start` (seeded, PIN-locked device on port 30121), a regtest
+    debug build with the Jade emulator enabled (see the README), a wallet with no Jade paired, and
+    funds on the Jade's regtest addresses. The emulator enters its PIN and confirms every prompt
+    itself.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Scroll the home screen until the card titled "Hardware" with the text "Connect device" (testTag "Suggestion-hardware") is visible, and tap it
+    </action>
+    <action>
+      Tap "Continue" (testTag "HardwareWalletIntroContinue"); if the system asks for Nearby devices or Bluetooth permission, allow it
+    </action>
+    <action>
+      Verify the "Found Device" step (testTag "HardwareWalletFoundScreen") appears within 15 seconds, headed "Found Jade" with Jade device artwork and a "Connect" button
+    </action>
+    <action>
+      Tap "Connect" (testTag "HardwareWalletFoundConnect") and verify the hint "Enter your PIN on your Jade to unlock it." (testTag "HwFoundUnlockHint") shows while the device unlocks (on the emulator this can last under a second, so a missed hint is not a failure when the next step follows)
+    </action>
+    <action>
+      Verify the "Device Connected" step (testTag "HardwareWalletPairedScreen") headed "Paired Jade" appears within 30 seconds, with a balance and a "Label Funds" field (testTag "HardwareWalletLabelInput") reading "Jade"
+    </action>
+    <action>
+      Tap "Finish" (testTag "HardwareWalletPairedFinish") and verify the home screen shows the Jade tile (testTag "ActivityHardware") with a green connection indicator
+    </action>
+    <action>
+      Tap Receive (testTag "Receive"), select the "Jade" tab (testTag "Tab-hardware"), tap "Show Details" if the address is hidden behind it, then tap "Verify on Device" (testTag "HardwareVerifyAddress") and verify no error appears and the shown address starts with "bcrt1"
+    </action>
+    <action>
+      Close the receive sheet. Tap Send (testTag "Send"), enter a regtest address of the bitkit-docker node manually, and on the amount screen select the Jade as the funding source (testTag "AssetButton-switch")
+    </action>
+    <action>
+      Enter an amount below the Jade's available balance, tap Continue (testTag "ContinueAmount"), verify the FROM field (testTag "SendConfirmAssetButton") shows the Jade, and swipe to confirm
+    </action>
+    <action>
+      Verify the hardware sign screen shows the amount (testTag "HardwareSendAmount"), the destination address (testTag "HardwareSendAddress") and a "Sign With Jade" button (testTag "HardwareSendOpenTrezorConnect"), then tap it
+    </action>
+    <action>
+      Verify the payment broadcasts and the success screen (testTag "SendSuccess") appears within 30 seconds, then close it and verify the payment appears once in recent activity with the blue hardware-wallet icon
+    </action>
+  </actions>
+</journey>

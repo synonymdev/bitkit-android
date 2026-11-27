@@ -143,6 +143,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
                     createsIdentity = request.requiresIdentityCreation(identityPublicKey != null),
                     serviceName = serviceName,
                     permissions = request.permissions.toImmutableList(),
+                    relayUrl = request.relayDisplayUrl,
                     bitkitClaim = request.bitkitClaim,
                     profile = profile,
                     isUsdtEnabled = usdtEnabled,
@@ -255,7 +256,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         val approvalState = _uiState.value
         if (approvalState.authUrl != authUrl) return
         if (request.bitkitClaim != approvalState.bitkitClaim || request.clientId != approvalState.clientId ||
-            request.permissions != approvalState.permissions
+            request.permissions != approvalState.permissions || request.relayDisplayUrl != approvalState.relayUrl
         ) {
             handleApprovalFailure(PubkyAuthRequestError.RequesterChanged, authUrl)
             return
@@ -462,6 +463,7 @@ data class PubkyAuthApprovalUiState(
     val createsIdentity: Boolean = false,
     val serviceName: String = "",
     val permissions: ImmutableList<PubkyAuthPermission> = persistentListOf(),
+    val relayUrl: String? = null,
     val bitkitClaim: PubkyAuthClaim? = null,
     val profile: PubkyProfile? = null,
     val usdtAddress: String? = null,

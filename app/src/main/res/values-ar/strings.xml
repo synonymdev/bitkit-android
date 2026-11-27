@@ -334,6 +334,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">تعذّر على Bitkit قراءة التقدم المحفوظ لهذا التحويل، لذا يعيد بناءه من السلسلة.</string>
     <string name="lightning__spark_exit__receive">ستستلم (تقديريًا)</string>
     <string name="lightning__spark_exit__savings_refused">لم يكتمل دفعك من المدخرات. ادفع مرة أخرى، أو موّل من محفظة أخرى.</string>
+    <string name="lightning__spark_exit__savings_unresolved">لم يتأكد دفعك من المدخرات بعد. انتظره قبل أن تدفع من محفظة أخرى.</string>
     <string name="lightning__spark_exit__send_to_address">إرسال إلى العنوان</string>
     <string name="lightning__spark_exit__step_funding">تأكيد رسوم الطوارئ</string>
     <string name="lightning__spark_exit__step_publish">نشر معاملة الخروج</string>
@@ -576,6 +577,7 @@
     <string name="profile__add_tag">إضافة علامة</string>
     <string name="profile__auth_approval_details">التفاصيل</string>
     <string name="profile__auth_approval_ok">حسنًا</string>
+    <string name="profile__auth_approval_relay">المُرحّل</string>
     <string name="profile__auth_error_other_pubky">هذا الطلب موجّه إلى %1$s، وليس إلى pubky هذه المحفظة.</string>
     <string name="profile__create_nav_title">إنشاء ملف شخصي</string>
     <string name="profile__nav_title">الملف الشخصي</string>
@@ -1331,7 +1333,14 @@
     <string name="contacts__edit_public_note">يرجى ملاحظة أن معلومات جهات الاتصال مخزنة في ملفات عامة. التغييرات التي تجريها على جهة اتصال في Bitkit لن تحدّث ملفها الشخصي.</string>
     <string name="contacts__edit_save_error">فشل حفظ جهة الاتصال</string>
     <string name="contacts__import_all">استيراد الكل</string>
-    <string name="contacts__import_friends_count">%1$d أصدقاء</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="zero">%1$d أصدقاء</item>
+        <item quantity="one">%1$d صديق</item>
+        <item quantity="two">%1$d صديقان</item>
+        <item quantity="few">%1$d أصدقاء</item>
+        <item quantity="many">%1$d صديقًا</item>
+        <item quantity="other">%1$d صديق</item>
+    </plurals>
     <string name="contacts__import_overview_headline">تم العثور على\n&lt;accent&gt;ملف شخصي وجهات اتصال&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">عثر Bitkit على بيانات ملف شخصي وجهات اتصال مرتبطة بـ pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">تحديد</string>
@@ -1539,6 +1548,7 @@
     <string name="profile__edit_bio_placeholder">ملاحظة قصيرة. أخبرنا قليلاً عن نفسك.</string>
     <string name="profile__edit_changed_error">تغيّر ملفك الشخصي في pubky.app. حمّل Bitkit أحدث نسخة، لذا أعد إجراء تعديلك.</string>
     <string name="profile__edit_delete_section">حذف</string>
+    <string name="profile__edit_link_error">أصلح رابط %1$s لحفظ ملفك الشخصي.</string>
     <string name="profile__edit_name_placeholder">اسمك</string>
     <string name="profile__edit_nav_title">تعديل الملف الشخصي</string>
     <string name="profile__edit_public_note">هذا هو ملفك الشخصي على pubky.app. إنه عام، والتغييرات التي تجريها هنا تظهر أيضًا على pubky.app.</string>
@@ -1550,6 +1560,10 @@
     <string name="profile__empty_state">تعذر تحميل ملفك الشخصي.</string>
     <string name="profile__intro_description">مع ملفك الشخصي المحمول، يمكن لجهات اتصالك الوصول إليك والدفع لك في أي مكان.</string>
     <string name="profile__intro_title">ملف شخصي\n&lt;accent&gt;محمول&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">يجب ألا يزيد التصنيف عن 100 حرفًا.</string>
+    <string name="profile__link_error_label_stored">لا يمكن حفظ تصنيف هذا الرابط. احذف الرابط وأضفه مرة أخرى.</string>
+    <string name="profile__link_error_url_invalid">أدخل رابط ويب صالحًا، مثل example.com.</string>
+    <string name="profile__link_error_url_length">يجب ألا يزيد الرابط عن 300 حرفًا.</string>
     <string name="profile__pay_contacts_description">استخدم Bitkit مع جهات اتصالك لإرسال المدفوعات مباشرةً، في أي وقت وفي أي مكان.</string>
     <string name="profile__pay_contacts_headline">دع\nجهات اتصالك\n&lt;accent&gt;تدفع لك&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">الدفع لجهات الاتصال</string>

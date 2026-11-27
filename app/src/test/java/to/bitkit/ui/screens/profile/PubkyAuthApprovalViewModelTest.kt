@@ -319,6 +319,32 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `confirmAuthorize fails closed when the relay differs from the one shown`() = test {
+        val authUrl = "pubkyauth://signin?caps=/pub/current/:rw"
+        val capabilities = "/pub/current/:rw"
+        val shown = authRequest(authUrl, capabilities)
+        whenever(context.getString(R.string.profile__auth_error_invalid_url)).thenReturn("Invalid link")
+        whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
+            Result.success(shown),
+            Result.success(shown.copy(relay = "https://evil.example/inbox/")),
+        )
+        val sut = createSut()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        sut.load(authUrl)
+        advanceUntilIdle()
+        assertEquals("https://httprelay.pubky.app/inbox/", sut.uiState.value.relayUrl)
+        sut.confirmAuthorize(authUrl)
+        advanceUntilIdle()
+
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        assertEquals("Invalid link", toasts.single().description)
+        verifyBlocking(pubkyRepo, never()) { approveAuth(any(), any(), any()) }
+        toastJob.cancel()
+    }
+
+    @Test
     fun `ordinary authorization uses the requested capabilities`() = test {
         val authUrl = "pubkyauth://signin?caps=/pub/example/:rw"
         val capabilities = "/pub/example/:rw"
@@ -335,6 +361,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
         assertEquals(ApprovalState.Success, sut.uiState.value.state)
         assertEquals(clientId, sut.uiState.value.clientId)
+        assertEquals("https://httprelay.pubky.app/inbox/", sut.uiState.value.relayUrl)
         verifyBlocking(pubkyRepo) { approveAuth(authUrl, capabilities, clientId) }
         verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any(), any()) }
         verifyBlocking(watchOnlyAccountRepo, never()) { prepareUnsignedClaim(any(), any()) }
@@ -406,6 +433,47 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         verifyBlocking(pubkyRepo, never()) { approveAuth(any(), any(), any()) }
         verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any(), any()) }
         toastJob.cancel()
+    }
+
+    @Test
+    fun `expected signer and relay rules hold together`() = test {
+        val signer = "8um71us3fyw6h8wbcxb5ar3rwusy1a6u49956ikzojg3gcwd1dty"
+        val other = "5jsjx1o6fzu6aeeo697r3i5rx15zq41kikcye8wtwdqm4nb4tryo"
+        val relay = "https://httprelay.pubky.app/inbox/o'connor?token={abc}"
+        val capabilities = "/pub/example/:rw"
+        val matchingUrl = "pubkyauth://signin_grant?caps=/pub/example/:rw&spk=$signer"
+        val otherUrl = "pubkyauth://signin_grant?caps=/pub/example/:rw&spk=$other"
+        publicKeyFlow.value = "pubky$signer"
+        whenever(context.getString(R.string.profile__auth_error_other_pubky, "5jsj...tryo"))
+            .thenReturn("This request is for 5jsj...tryo, not this wallet's pubky.")
+        listOf(matchingUrl to signer, otherUrl to other).forEach { (url, expectedSigner) ->
+            val request = PubkyAuthRequest.parse(
+                rawUrl = url,
+                clientId = clientId,
+                relay = relay,
+                capabilities = capabilities,
+            ).getOrThrow()
+            assertEquals(expectedSigner, request.expectedSigner)
+            assertEquals(relay, request.relayDisplayUrl)
+            whenever { pubkyRepo.parseAuthUrl(url) }.thenReturn(Result.success(request))
+        }
+        val sut = createSut()
+
+        sut.load(matchingUrl)
+        advanceUntilIdle()
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        assertEquals(relay, sut.uiState.value.relayUrl)
+
+        sut.effects.test {
+            sut.load(otherUrl)
+            advanceUntilIdle()
+            assertEquals(PubkyAuthApprovalEffect.Dismiss, awaitItem())
+            sut.confirmAuthorize(otherUrl)
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        assertEquals(ApprovalState.Loading, sut.uiState.value.state)
+        verifyBlocking(pubkyRepo, never()) { approveAuth(any(), any(), any()) }
     }
 
     @Test

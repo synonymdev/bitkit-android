@@ -338,6 +338,7 @@
     <string name="lightning__spark_exit__rebuilt_from_chain">Bitkit kon de opgeslagen voortgang van deze overboeking niet lezen en bouwt die daarom opnieuw op vanaf de chain.</string>
     <string name="lightning__spark_exit__receive">Je ontvangt (schatting)</string>
     <string name="lightning__spark_exit__savings_refused">Je betaling uit spaargeld is niet gelukt. Betaal opnieuw of financier vanuit een andere wallet.</string>
+    <string name="lightning__spark_exit__savings_unresolved">Je betaling uit spaargeld is nog niet bevestigd. Wacht erop voordat je vanuit een andere wallet betaalt.</string>
     <string name="lightning__spark_exit__send_to_address">Naar adres sturen</string>
     <string name="lightning__spark_exit__step_funding">Bevestiging van noodkosten</string>
     <string name="lightning__spark_exit__step_publish">Exittransactie publiceren</string>
@@ -581,6 +582,7 @@
     <string name="profile__add_link_label_placeholder">Bijvoorbeeld \'Website\'</string>
     <string name="profile__add_link_note">Let op: Iedere link die u toevoegt is openbaar beschikbaar.</string>
     <string name="profile__add_tag">Tag toevoegen</string>
+    <string name="profile__auth_approval_relay">Relay</string>
     <string name="profile__auth_error_other_pubky">Dit verzoek is voor %1$s, niet voor de pubky van deze wallet.</string>
     <string name="profile__create_nav_title">Profiel aanmaken</string>
     <string name="profile__edit_nav_title">Profiel Bewerken</string>
@@ -1356,7 +1358,10 @@
     <string name="contacts__edit_public_note">Let op: contactgegevens worden opgeslagen in openbare bestanden. Wijzigingen die u in Bitkit aan een contact maakt, werken hun profiel niet bij.</string>
     <string name="contacts__edit_save_error">Contact opslaan mislukt</string>
     <string name="contacts__import_all">Alles importeren</string>
-    <string name="contacts__import_friends_count">%1$d vrienden</string>
+    <plurals name="contacts__import_friends_count">
+        <item quantity="one">%1$d vriend</item>
+        <item quantity="other">%1$d vrienden</item>
+    </plurals>
     <string name="contacts__import_overview_headline">Gevonden:\n&lt;accent&gt;profiel &amp; contacten&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit heeft profiel- en contactgegevens gevonden die gekoppeld zijn aan pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Selecteren</string>
@@ -1561,6 +1566,7 @@
     <string name="profile__edit_bio_placeholder">Korte notitie. Vertel iets over uzelf.</string>
     <string name="profile__edit_changed_error">Je profiel is gewijzigd in pubky.app. Bitkit heeft de nieuwste versie geladen, dus voer je wijziging opnieuw uit.</string>
     <string name="profile__edit_delete_section">VERWIJDEREN</string>
+    <string name="profile__edit_link_error">Corrigeer de link %1$s om je profiel op te slaan.</string>
     <string name="profile__edit_name_placeholder">UW NAAM</string>
     <string name="profile__edit_public_note">Dit is je pubky.app-profiel. Het is openbaar, en wijzigingen die je hier maakt, verschijnen ook op pubky.app.</string>
     <string name="profile__edit_save_error">Profiel opslaan mislukt</string>
@@ -1571,6 +1577,10 @@
     <string name="profile__empty_state">Kan uw profiel niet laden.</string>
     <string name="profile__intro_description">Met uw draagbare profiel kunnen uw contacten u overal bereiken en betalen.</string>
     <string name="profile__intro_title">DRAAGBAAR\n&lt;accent&gt;PROFIEL&lt;/accent&gt;</string>
+    <string name="profile__link_error_label_length">Het label mag maximaal 100 tekens bevatten.</string>
+    <string name="profile__link_error_label_stored">Het label van deze link kan niet worden opgeslagen. Verwijder de link en voeg hem opnieuw toe.</string>
+    <string name="profile__link_error_url_invalid">Voer een geldige weblink in, zoals example.com.</string>
+    <string name="profile__link_error_url_length">De link mag maximaal 300 tekens bevatten.</string>
     <string name="profile__pay_contacts_description">Gebruik Bitkit met uw contacten om direct betalingen te versturen, altijd en overal.</string>
     <string name="profile__pay_contacts_headline">Laat uw\ncontacten\n&lt;accent&gt;u betalen&lt;/accent&gt;</string>
     <string name="profile__pay_contacts_title">Contacten betalen</string>

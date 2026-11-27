@@ -1,0 +1,20 @@
+<journey name="profile link validation">
+  <description>
+    Precondition: a disposable wallet signed in to a Pubky profile with at most four links, PIN off and an English
+    device. This checks that the Add Link sheet in Edit Profile refuses links pubky.app would refuse, with an error on
+    the field that needs fixing, and still accepts a bare domain.
+  </description>
+  <actions>
+    <action>Open Profile using "ProfileButton" and wait for "ProfileViewName"</action>
+    <action>Tap "ProfileEdit" and wait for "ProfileEditName"</action>
+    <action>Tap "ProfileEditAddLink" and wait for "AddLinkLabel"</action>
+    <action>Enter "Website" in "AddLinkLabel" and "not a url" in "AddLinkUrl"</action>
+    <action>Verify "AddLinkUrlError" says "Enter a valid web link, such as example.com." and "AddLinkSave" is disabled</action>
+    <action>Replace the text in "AddLinkUrl" with "me@example.com"</action>
+    <action>Verify "AddLinkUrlError" is shown and "AddLinkSave" is disabled</action>
+    <action>Replace the text in "AddLinkUrl" with "example.com"</action>
+    <action>Verify "AddLinkUrlError" is gone and "AddLinkSave" is enabled</action>
+    <action>Tap "AddLinkSave" and verify a "Website" link with "example.com" appears in Edit Profile</action>
+    <action>Tap "ProfileEditSave" and wait for "ProfileUpdatedToast"</action>
+  </actions>
+</journey>

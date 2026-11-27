@@ -21,6 +21,7 @@ import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.FeeRates
+import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlAuthData
 import com.synonym.bitkitcore.LnurlChannelData
@@ -29,6 +30,7 @@ import com.synonym.bitkitcore.LnurlWithdrawData
 import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaykitEndpoint
 import com.synonym.bitkitcore.PaykitRoute
+import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PubkySwapRoutePayment
 import com.synonym.bitkitcore.PubkySwapRouteQuote
@@ -232,6 +234,7 @@ import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionDraft
 import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.repositories.PaykitUsdtPaymentRepo
+import to.bitkit.repositories.PaymentAbortedBeforeSend
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentNotification
 import to.bitkit.repositories.PendingPaymentRepo
@@ -297,6 +300,7 @@ import to.bitkit.utils.ClipboardPromptValidator
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.ServiceError
+import to.bitkit.utils.isStoppedAtSubmission
 import to.bitkit.utils.jsonLogOf
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
@@ -561,9 +565,32 @@ class AppViewModel @Inject constructor(
 
     private data class ReceiveSheetContext(
         val sheet: Sheet.Receive,
-        val bolt11: String,
-        val onchainAddress: String,
-    )
+        val cachedBolt11s: Set<String> = emptySet(),
+        val bolt11s: Set<String> = emptySet(),
+        val paymentHashes: Set<String> = emptySet(),
+        val onchainAddresses: Set<String> = emptySet(),
+    ) {
+        fun withRequest(bolt11: String, paymentHash: String, onchainAddress: String): ReceiveSheetContext {
+            // The invoice cached before this visit is replaced on open and never shown, so its payment is not ours
+            val isIssuedInVisit = bolt11.isNotEmpty() && bolt11 !in cachedBolt11s
+            return copy(
+                bolt11s = bolt11s + setOfNotNull(bolt11.takeIf { isIssuedInVisit }),
+                paymentHashes = paymentHashes + setOfNotNull(paymentHash.takeIf { isIssuedInVisit && it.isNotEmpty() }),
+                onchainAddresses = onchainAddresses + setOfNotNull(onchainAddress.takeIf { it.isNotEmpty() }),
+            )
+        }
+
+        fun isSettledBy(update: NodeEventUpdate): Boolean = when (val event = update.event) {
+            is Event.PaymentReceived ->
+                update.settledReceiveInvoice?.bolt11 in bolt11s || event.paymentHash in paymentHashes
+
+            is Event.OnchainTransactionReceived ->
+                update.settledReceiveAddress?.address in onchainAddresses ||
+                    event.details.outputs.any { it.scriptpubkeyAddress in onchainAddresses }
+
+            else -> false
+        }
+    }
 
     private data class SubscriptionNotificationTarget(
         val identity: String,
@@ -950,6 +977,7 @@ class AppViewModel @Inject constructor(
             }
         }
         observeReceiveSheetInvoice()
+        observeReceiveSheetClosed()
         observeLdkNodeEvents()
         observeLightningUsableChannels()
         observeSparkReady()
@@ -1001,16 +1029,44 @@ class AppViewModel @Inject constructor(
     private fun observeReceiveSheetInvoice() {
         viewModelScope.launch {
             walletRepo.walletState
-                .map { it.bolt11 }
+                .map { Triple(it.bolt11, it.bolt11PaymentHash, it.onchainAddress) }
                 .distinctUntilChanged()
-                .collect { bolt11 ->
-                    if (bolt11.isEmpty()) return@collect
+                .collect { (bolt11, paymentHash, onchainAddress) ->
                     val receiveSheet = _currentSheet.value as? Sheet.Receive ?: return@collect
-                    receiveSheetContext = receiveSheetContext
-                        ?.takeIf { it.sheet === receiveSheet }
-                        ?.copy(bolt11 = bolt11)
-                        ?: ReceiveSheetContext(receiveSheet, bolt11, walletRepo.getOnchainAddress())
+                    val context = receiveSheetContext?.takeIf { it.sheet === receiveSheet } ?: return@collect
+                    // Every request shown during this visit stays, so a late payment of a replaced one still closes it
+                    receiveSheetContext = context.withRequest(bolt11, paymentHash, onchainAddress)
                 }
+        }
+    }
+
+    private suspend fun newReceiveSheetContext(
+        sheet: Sheet.Receive,
+        replaced: ReceiveSheetContext?,
+    ): ReceiveSheetContext {
+        // A Receive sheet replacing another keeps the requests that one showed, so their payment still closes it
+        val shownBolt11s = replaced?.bolt11s.orEmpty()
+        // The cache can hold an invoice the wallet state has not loaded yet
+        val storedBolt11 = runSuspendCatching { cacheStore.data.first().bolt11 }.getOrDefault("")
+        return ReceiveSheetContext(
+            sheet = sheet,
+            cachedBolt11s = setOf(walletRepo.getBolt11(), storedBolt11),
+            bolt11s = shownBolt11s,
+            paymentHashes = replaced?.paymentHashes.orEmpty(),
+            onchainAddresses = replaced?.onchainAddresses.orEmpty(),
+        ).withRequest(bolt11 = "", paymentHash = "", onchainAddress = walletRepo.getOnchainAddress())
+    }
+
+    private fun observeReceiveSheetClosed() {
+        viewModelScope.launch {
+            var openReceiveSheet: Sheet.Receive? = null
+            _currentSheet.collect { sheet ->
+                val receiveSheet = sheet as? Sheet.Receive
+                val closed = openReceiveSheet?.takeIf { it.presentationId != receiveSheet?.presentationId }
+                // A refresh after the sheet is gone must not issue an invoice for its amount
+                if (closed != null) walletRepo.resetReceiveRequest()
+                openReceiveSheet = receiveSheet
+            }
         }
     }
 
@@ -2701,13 +2757,7 @@ class AppViewModel @Inject constructor(
         Logger.debug("LDK-node event received in $TAG: ${jsonLogOf(event)}", context = TAG)
 
         val receiveSheetToClose = receiveSheetContext?.takeIf { context ->
-            val matchesSettledRequest = when (event) {
-                is Event.PaymentReceived -> update.settledReceiveInvoice?.bolt11 == context.bolt11
-                is Event.OnchainTransactionReceived -> update.settledReceiveAddress?.address == context.onchainAddress
-                else -> false
-            }
-            matchesSettledRequest &&
-                _currentSheet.value === context.sheet
+            context.isSettledBy(update) && _currentSheet.value === context.sheet
         }
 
         viewModelScope.launch {
@@ -7124,6 +7174,7 @@ class AppViewModel @Inject constructor(
     private suspend fun proceedWithPayment(contactPaymentContext: ContactPaymentContext?) {
         val reviewedOnchainFeeSats = _sendUiState.value.onchainFeeUi.sats?.toULong() ?: 0uL
         val session = sendSession
+        val generation = sendStateGeneration
         delay(SCREEN_TRANSITION_DELAY) // wait for screen transitions when applicable
 
         if (showCommittedSwap()) return
@@ -7135,6 +7186,30 @@ class AppViewModel @Inject constructor(
                 it.copy(paykitSwapRoute = route.copy(quote = null, providerName = null), lightningFeeSats = 0)
             }
             setSendEffect(SendEffect.NavigateToAmount)
+            return
+        }
+        // Paying again an invoice already paid sends nothing: its earlier send of the same invoice is the receipt, with
+        // the amount it paid. A repeat nothing backs, as with another invoice sharing the payment hash, is refused.
+        val repeat = lightningRepeat(contactPaymentContext)
+        // A swipe from a send the user left neither pays nor shows a receipt or a refusal.
+        if (generation != sendStateGeneration) return
+        if (repeat != null) {
+            val earlierSentSats = repeat.earlierSentSats ?: run {
+                Logger.warn("Refused paying '${repeat.paymentHash}' again, no send of it backs it", context = TAG)
+                setSendEffect(SendEffect.NavigateToError(alreadyPaidFailure(repeat.bolt11)))
+                return
+            }
+            Logger.info("Showed the earlier send of '${repeat.paymentHash}' for paying it again", context = TAG)
+            onSendSuccess(
+                NewTransactionSheetDetails(
+                    type = NewTransactionSheetType.LIGHTNING,
+                    direction = NewTransactionSheetDirection.SENT,
+                    paymentHashOrTxId = repeat.paymentHash,
+                    sats = earlierSentSats.toLong(),
+                ),
+                allowDuplicateHash = true,
+                syncContact = false,
+            )
             return
         }
         if (!confirmSparkUpdateQuote()) return
@@ -7360,6 +7435,9 @@ class AppViewModel @Inject constructor(
                         requireNotNull(originalPayer),
                     ).getOrThrow()
                 }
+                incomingPaymentRequest?.let { paykitPaymentRequestRepo.ensurePaymentAllowed(it).getOrThrow() }
+            },
+            recheckBeforeSubmission = {
                 incomingPaymentRequest?.let { paykitPaymentRequestRepo.ensurePaymentAllowed(it).getOrThrow() }
             },
         ).onSuccess { outcome ->
@@ -8052,11 +8130,18 @@ class AppViewModel @Inject constructor(
     ) {
         uncertainSparkWithdrawal = null
         var earlierTxids: Set<String>? = null
+        var authorizationError: Throwable? = null
         val txid = paykitRouteRepo.payServiceLeg(
             leg,
             contactPaymentContext?.publicKey,
             _sendUiState.value.selectedTags,
             incomingPaymentRequest?.submissionDeadline(paykitPaymentTerms),
+            recheckBeforeSend = {
+                authorizationError = incomingPaymentRequest?.let {
+                    paykitPaymentRequestRepo.ensurePaymentAllowed(it).exceptionOrNull()
+                }
+                authorizationError == null
+            },
         ) {
             val earlier = lightningRepo.sparkWithdrawalTxidsTo(leg.endpoint.value)
             startSparkOnchainProof(
@@ -8071,6 +8156,7 @@ class AppViewModel @Inject constructor(
         }.getOrElse {
             handleServiceLegFailure(
                 error = it,
+                authorizationError = authorizationError,
                 leg = leg,
                 earlierTxids = earlierTxids,
                 incomingPaymentRequest = incomingPaymentRequest,
@@ -8103,6 +8189,7 @@ class AppViewModel @Inject constructor(
     @Suppress("LongParameterList")
     private suspend fun handleServiceLegFailure(
         error: Throwable,
+        authorizationError: Throwable?,
         leg: ServiceRouteLeg,
         earlierTxids: Set<String>?,
         incomingPaymentRequest: PaykitPaymentRequest?,
@@ -8112,9 +8199,13 @@ class AppViewModel @Inject constructor(
     ) {
         // Spark refuses a send past its deadline, or one its balance can't cover, before it sends and clears its
         // journal, so no listing is needed.
-        if (error is ServiceError.PaymentDeadlineExpired || error is SparkError.SendRefused) {
+        if (error is ServiceError.PaymentDeadlineExpired || error is SparkError.SendRefused ||
+            error is ServiceError.PaymentStoppedAtSubmission
+        ) {
             incomingPaymentRequest?.let { paykitPaymentProofRepo.releaseRefusedSparkOnchainProof(it) }
-            failServiceLegBeforeSend(error, preparedPaymentProofRequest, contactPaymentContext, allowanceAttemptId)
+            // A request refused at its last check shows why, as a refusal up front does.
+            val shown = authorizationError ?: error
+            failServiceLegBeforeSend(shown, preparedPaymentProofRequest, contactPaymentContext, allowanceAttemptId)
             return
         }
         incomingPaymentRequest?.let { paykitPaymentProofRepo.releaseUnsentSparkOnchainProof(it) }
@@ -8244,10 +8335,12 @@ class AppViewModel @Inject constructor(
             updateSpendingBalanceIfNeeded(decodedInvoice.bolt11, displayAmountSats).onFailure { updateFailed = true }
         }.fold(
             onSuccess = {
+                // A request's authorization has no side effects, so it is checked again right before submission.
                 sendLightning(
                     decodedInvoice.bolt11,
                     paymentAmount,
                     incomingPaymentRequest?.submissionDeadline(paykitPaymentTerms),
+                    rechecksAtSubmission = incomingPaymentRequest != null,
                 ) {
                     authorizationError = incomingPaymentRequest?.let {
                         paykitPaymentRequestRepo.ensurePaymentAllowed(it).exceptionOrNull()
@@ -8257,8 +8350,14 @@ class AppViewModel @Inject constructor(
             },
             onFailure = { Result.failure(it) },
         )
-        authorizationError?.let {
-            paykitPaymentProofRepo.failLightningPayment(paymentHash)
+        // A refusal ends the request only when nothing left: a Spark resend refused after an earlier try stays pending.
+        val sentNothing = result.exceptionOrNull()?.let { error ->
+            error === refusedBeforeUpdate ||
+                generateSequence(error) { it.cause }.any { it is PaymentAbortedBeforeSend } ||
+                error.isStoppedAtSubmission()
+        } == true
+        authorizationError?.takeIf { sentNothing }?.let {
+            paykitPaymentProofRepo.failLightningPayment(paymentHash, incomingPaymentRequest?.id)
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(proofRequest)
             finishManualAllowancePayment(allowanceAttemptId, succeeded = false)
@@ -8271,7 +8370,7 @@ class AppViewModel @Inject constructor(
             proofRequest = null
             Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
             // A repeat sends nothing, so it shows what the earlier payment sent, also when its amount was typed.
-            val sentSats = if (wasPaidBefore) earlierLightningSendSats(actualPaymentHash) else null
+            val sentSats = if (wasPaidBefore) earlierLightningSend(actualPaymentHash)?.value else null
             onSendSuccess(
                 NewTransactionSheetDetails(
                     type = NewTransactionSheetType.LIGHTNING,
@@ -8283,14 +8382,16 @@ class AppViewModel @Inject constructor(
             )
             lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
         }.onFailure { error ->
-            if (!clearFailedLightningPayment(paymentHash, error, incomingPaymentRequest != null, updateFailed)) {
+            if (!clearFailedLightningPayment(paymentHash, error, incomingPaymentRequest?.id, updateFailed)) {
                 val pendingHash = (error as? PaymentPendingException)?.paymentHash ?: paymentHash
                 proofRequest = null
                 Logger.info("Lightning payment pending", context = TAG)
                 pendingPaymentRepo.track(pendingHash)
                 preserveContactPaymentContext(pendingHash)
                 if (incomingPaymentRequest != null) refreshIncomingPaykitPaymentRequests()
-                setSendEffect(SendEffect.NavigateToPending(pendingHash, displayAmountSats.toLong()))
+                // A repeat of a pending payment shows what that payment sends, also when its amount was typed.
+                val pendingSats = earlierLightningSendSats(pendingHash) ?: displayAmountSats
+                setSendEffect(SendEffect.NavigateToPending(pendingHash, pendingSats.toLong()))
                 lnurlComment?.let { activityRepo.setLightningMessageIfEmpty(paymentHash, it) }
                 resolveSettledPendingSend(pendingHash)
                 return@onFailure
@@ -8317,10 +8418,43 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun earlierLightningSendSats(paymentHash: String): ULong? =
+    private suspend fun earlierLightningSendSats(paymentHash: String): ULong? {
+        val sent = (activityRepo.getActivity(paymentHash).getOrNull() as? Activity.Lightning)?.v1
+            ?.takeIf { it.txType == PaymentType.SENT && it.status != PaymentState.FAILED }
+        if (sent != null) return sent.value
+        val hash = paymentHash.lowercase()
+        val cache = cacheStore.data.first()
+        return cache.sparkSendAttempts[hash]?.amountSats?.takeIf { hash in cache.sparkUncertainSends }
+    }
+
+    private class LightningRepeat(val paymentHash: String, val bolt11: String, val earlierSentSats: ULong?)
+
+    private suspend fun lightningRepeat(contactPaymentContext: ContactPaymentContext?): LightningRepeat? {
+        if (contactPaymentContext != null) return null
+        val state = _sendUiState.value
+        if (state.payMethod != SendMethod.LIGHTNING || state.lnurl is LnurlParams.LnurlPay) return null
+        if (state.routedPaykitRoute?.serviceLeg != null || state.activePaykitSwapRoute != null) return null
+        val invoice = state.decodedInvoice ?: return null
+        val paymentHash = invoice.paymentHash.toHex()
+        // A send recorded without its invoice ("No invoice", "migrated:<id>") cannot tell which invoice it paid.
+        val earlierSend = earlierLightningSend(paymentHash)?.takeIf { it.invoice.startsWith("ln", ignoreCase = true) }
+        val wasPaidBefore = earlierSend != null ||
+            synchronized(processedPaymentsLock) { paymentHash in processedPayments }
+        if (!wasPaidBefore) return null
+        val earlierSentSats = earlierSend?.takeIf { it.invoice.equals(invoice.bolt11, ignoreCase = true) }?.value
+        return LightningRepeat(paymentHash, invoice.bolt11, earlierSentSats)
+    }
+
+    private suspend fun earlierLightningSend(paymentHash: String): LightningActivity? =
         (activityRepo.getActivity(paymentHash).getOrNull() as? Activity.Lightning)?.v1
-            ?.takeIf { it.txType == PaymentType.SENT }
-            ?.value
+            ?.takeIf { it.txType == PaymentType.SENT && it.status == PaymentState.SUCCEEDED }
+
+    private fun alreadyPaidFailure(bolt11: String) = SendFailureDetails(
+        message = context.getString(R.string.wallet__send_quickpay__already_paid),
+        failureType = "DuplicatePayment",
+        resetRoutingCachesOnRetry = false,
+        paymentRequest = bolt11,
+    )
 
     /**
      * Before a payment of [bolt11] for [amountSats] that fits only across the channels and Spark, moves the channels'
@@ -8429,17 +8563,17 @@ class AppViewModel @Inject constructor(
     private suspend fun clearFailedLightningPayment(
         paymentHash: String,
         error: Throwable,
-        isPaymentRequest: Boolean,
+        requestId: PaykitPaymentRequestId?,
         updateFailed: Boolean,
     ): Boolean = when (error) {
         is PaymentPendingException -> false
-        else if !isPaymentRequest -> true
+        else if requestId == null -> true
         // Any failed spending balance update happens before the invoice is paid, so nothing was sent.
         else if updateFailed || error is LightningPaymentFailedError -> {
-            paykitPaymentProofRepo.failLightningPayment(paymentHash)
+            paykitPaymentProofRepo.failLightningPayment(paymentHash, requestId)
             true
         }
-        else -> paykitPaymentProofRepo.failLightningPayment(paymentHash, error)
+        else -> paykitPaymentProofRepo.failLightningPayment(paymentHash, error, requestId)
     }
 
     private suspend fun prepareContactPayment(
@@ -8776,6 +8910,7 @@ class AppViewModel @Inject constructor(
         onBroadcast: suspend (Txid) -> Unit = {},
         approvedMiningFeeSats: ULong? = null,
         reviewHigherFee: (suspend (OnchainPreparedReceipt) -> Unit)? = null,
+        recheckBeforeSubmission: suspend () -> Unit = {},
     ): Result<OnchainSendOutcome> = lightningRepo.sendOnChain(
         address = address,
         sats = amount,
@@ -8793,20 +8928,27 @@ class AppViewModel @Inject constructor(
         onBroadcast = onBroadcast,
         approvedMiningFeeSats = approvedMiningFeeSats,
         reviewHigherFee = reviewHigherFee,
+        recheckBeforeSubmission = recheckBeforeSubmission,
     )
 
     private suspend fun sendLightning(
         bolt11: String,
         amount: ULong? = null,
         paymentDeadlineAt: Instant? = null,
+        rechecksAtSubmission: Boolean = false,
         onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> {
-        return lightningRepo.payInvoice(
-            bolt11 = bolt11,
-            sats = amount,
-            paymentDeadlineAt = paymentDeadlineAt,
-            onBeforeSend = onBeforeSend,
-        ).onSuccess { hash ->
+        val sent = if (rechecksAtSubmission) {
+            lightningRepo.payInvoiceRecheckedAtSubmission(
+                bolt11,
+                amount,
+                paymentDeadlineAt,
+                onBeforeSend = onBeforeSend
+            )
+        } else {
+            lightningRepo.payInvoice(bolt11, amount, paymentDeadlineAt, onBeforeSend)
+        }
+        return sent.onSuccess { hash ->
             fun outcome(event: Event): Result<PaymentId>? = when (event) {
                 is Event.PaymentSuccessful if event.paymentHash == hash -> Result.success(hash)
                 is Event.PaymentFailed if event.paymentHash == hash -> Result.failure(
@@ -9495,6 +9637,7 @@ class AppViewModel @Inject constructor(
             if (!canPresent()) return@launch
             timedSheetManager.cancelPendingCheck()
             if (sheetType !== paymentRequestPreparation.value?.sheet) clearPaymentRequestPreparation()
+            val replacedReceive = receiveSheetContext?.takeIf { _currentSheet.value === it.sheet }
             receiveSheetContext = null
             if (_currentSheet.value != null && !replacesSubscriptionReview(sheetType)) {
                 val replacesTimedSheet = _currentSheet.value is Sheet.TimedSheet
@@ -9503,13 +9646,7 @@ class AppViewModel @Inject constructor(
                 delay(SCREEN_TRANSITION_DELAY)
             }
             if (!canPresent()) return@launch
-            receiveSheetContext = (sheetType as? Sheet.Receive)?.let { receiveSheet ->
-                ReceiveSheetContext(
-                    sheet = receiveSheet,
-                    bolt11 = walletRepo.getBolt11(),
-                    onchainAddress = walletRepo.getOnchainAddress(),
-                )
-            }
+            receiveSheetContext = (sheetType as? Sheet.Receive)?.let { newReceiveSheetContext(it, replacedReceive) }
             if (!canPresent()) return@launch
             // A stale amount above inbound liquidity would hide the Auto tab until the receive state refreshes
             if (sheetType is Sheet.Receive) walletRepo.setBip21AmountSats(null)
