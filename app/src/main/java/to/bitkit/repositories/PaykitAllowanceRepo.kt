@@ -789,6 +789,8 @@ class PaykitAllowanceRepo @Inject constructor(
     suspend fun manualLightningPaymentSent(attemptId: String, paymentHash: String) =
         executor.manualLightningPaymentSent(attemptId, paymentHash)
 
+    suspend fun manualLightningPaymentRefused(attemptId: String) = executor.manualLightningPaymentRefused(attemptId)
+
     /** [succeeded] null = outcome unknown (pending). */
     suspend fun finishManualPayment(attemptId: String, succeeded: Boolean?, transactionId: String? = null) {
         val outcome = when (succeeded) {

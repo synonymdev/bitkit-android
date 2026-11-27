@@ -132,6 +132,9 @@ class PaykitAllowancePayer @Inject constructor(
         requestId: PaykitPaymentRequestId,
     ): Boolean = paymentProofRepo.failLightningPayment(paymentHash, error, requestId)
 
+    /** Whether [error] proves the payment never left. */
+    fun submissionSentNothing(error: Throwable): Boolean = paymentProofRepo.submissionSentNothing(error)
+
     suspend fun discardLightningProof(paymentHash: String, requestId: PaykitPaymentRequestId) =
         paymentProofRepo.failLightningPayment(paymentHash, requestId)
 
@@ -999,6 +1002,13 @@ class PaykitAllowanceExecutor @Inject constructor(
         ).onFailure {
             // Only an error that proves the payment never left releases the reservation; anything else stays open,
             // and the node's payment event records its outcome.
+            if (payer.submissionSentNothing(it)) {
+                // Saved before the cleanup, so recovery after a kill in between ends the attempt as unsent.
+                updateJournalEntry(attemptId, identity) {
+                    val settled = it.stage == Stage.SUCCEEDED || it.stage == Stage.FAILED
+                    if (settled) it else it.copy(stage = Stage.SUBMITTED)
+                }
+            }
             if (payer.failLightningPayment(paymentHash, it, request.id)) {
                 failUnsent(attemptId, identity)
                 throw it
@@ -1155,6 +1165,19 @@ class PaykitAllowanceExecutor @Inject constructor(
         withContext(ioDispatcher) {
             updateJournalEntry(attemptId, identity) {
                 it.copy(paymentHash = paymentHash.lowercase(), stage = Stage.SENT)
+            }
+        }
+    }
+
+    /**
+     * Called when the recheck before submission refuses a manual Lightning payment, before its proof is cleared, so
+     * recovery after a kill reads the attempt as unsent once the node has no payment for it.
+     */
+    suspend fun manualLightningPaymentRefused(attemptId: String) {
+        val identity = activeIdentity ?: return
+        withContext(ioDispatcher) {
+            updateJournalEntry(attemptId, identity) {
+                if (it.stage == Stage.SUCCEEDED || it.stage == Stage.FAILED) it else it.copy(stage = Stage.SUBMITTED)
             }
         }
     }

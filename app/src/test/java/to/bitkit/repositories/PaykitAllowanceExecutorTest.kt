@@ -1094,6 +1094,25 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a refused lightning payment is journaled unsent before its proof is cleared`() = test {
+        sut.activate(identity)
+        whenever(
+            payer.payLightning(any(), any(), anyOrNull(), anyOrNull(), any())
+        ).thenReturn(Result.failure(TestAllowanceError("refused")))
+        whenever(payer.submissionSentNothing(any())).thenReturn(true)
+        var stageAtCleanup: Stage? = null
+        whenever(payer.failLightningPayment(any(), any(), any())).doSuspendableAnswer {
+            stageAtCleanup = sut.localState(identity).journal.single().stage
+            true
+        }
+
+        sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        // Recovery after a kill here finds an unsent attempt and fails it.
+        assertEquals(Stage.SUBMITTED, stageAtCleanup)
+    }
+
+    @Test
     fun `a payment list given back by a failed send stays given back after the node's failure event`() = test {
         sut.activate(identity)
         whenever(
@@ -1892,6 +1911,33 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             emptyList(),
             recordedOutcomes.filter { it.attemptId == attemptId && it.outcome == PaymentOutcome.FAILED },
         )
+    }
+
+    @Test
+    fun `recovery fails a refused manual lightning payment whose outcome was not recorded`() = test {
+        sut.activate(identity)
+        val attemptId = checkNotNull(
+            sut.beginManualPayment(fixtures.paymentRequest(), fixtures.lightningIdentifier, PAYMENT_HASH).getOrThrow(),
+        )
+        sut.manualLightningPaymentSent(attemptId, PAYMENT_HASH)
+
+        // Killed after the refusal cleared the proof, before the failure reached the ledger.
+        sut.manualLightningPaymentRefused(attemptId)
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence(attemptId, PaymentExecutionStatus.SUBMITTED)),
+        )
+        recordedOutcomes.clear()
+        val restarted = PaykitAllowanceExecutor(
+            ioDispatcher = testDispatcher,
+            paykitSdkService = sdk,
+            store = PaykitAllowanceStore(keychain),
+            payer = payer,
+            clock = clock,
+            accountingAmount = { _, _ -> fixtures.accountingAmount("0.00001") },
+        )
+        restarted.recover(identity)
+
+        assertEquals(listOf(PaymentOutcomeReport(attemptId, PaymentOutcome.FAILED)), recordedOutcomes)
     }
 
     @Test

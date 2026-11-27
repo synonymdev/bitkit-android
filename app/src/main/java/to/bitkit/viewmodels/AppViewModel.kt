@@ -8376,6 +8376,7 @@ class AppViewModel @Inject constructor(
                 error.isStoppedAtSubmission()
         } == true
         authorizationError?.takeIf { sentNothing }?.let {
+            allowanceAttemptId?.let { paykitAllowanceRepo.manualLightningPaymentRefused(it) }
             paykitPaymentProofRepo.failLightningPayment(paymentHash, incomingPaymentRequest?.id)
             releasePrivatePaymentListIfNeeded(contactPaymentContext)
             cancelPaymentProofPreparation(proofRequest)
