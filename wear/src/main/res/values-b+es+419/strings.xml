@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="about__title">Acerca de</string>
+    <string name="common__next">Siguiente</string>
+    <string name="common__ok">OK</string>
+    <string name="common__retry">Re-intentar</string>
+    <string name="home__balance_hidden">Saldo oculto</string>
+    <string name="home__error">No se pudo cargar la billetera</string>
+    <string name="home__nfc_hint">Toca para pagar</string>
+    <string name="home__toggle_unit">Cambiar unidad</string>
+    <string name="onboarding__restore">Restaurar</string>
+    <string name="removed__title">Billetera eliminada</string>
+    <string name="restore__checksum_review">Revisar</string>
+    <string name="restore__checksum_title">Frase no válida</string>
+    <string name="restore__error_failed">No se pudo guardar la billetera</string>
+    <plurals name="restore__length_words">
+        <item quantity="one">%1$d palabra</item>
+        <item quantity="many">%1$d palabras</item>
+        <item quantity="other">%1$d palabras</item>
+    </plurals>
+    <string name="restore__passphrase_add">Agregar frase de acceso</string>
+    <string name="restore__passphrase_confirm">Restaurar</string>
+    <string name="restore__passphrase_placeholder">Frase de acceso</string>
+    <string name="restore__passphrase_skip">Continuar</string>
+    <string name="restore__passphrase_title">¿Frase de acceso?</string>
+    <string name="restore__title">¿Cuántas palabras?</string>
+    <string name="restore__word_no_match">Sin coincidencias</string>
+    <string name="restore__word_placeholder">Palabra %1$d</string>
+    <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="settings__remove_wallet">Eliminar billetera</string>
+    <string name="settings__remove_wallet_confirm_title">¿Eliminar billetera?</string>
+    <string name="settings__remove_wallet_failed">No se pudo eliminar la billetera</string>
+    <string name="settings__title">Ajustes</string>
+    <string name="unsupported__text">No hay Spark en esta red</string>
+    <string name="unsupported__title">No compatible</string>
+</resources>

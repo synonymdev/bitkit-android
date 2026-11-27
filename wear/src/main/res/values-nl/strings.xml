@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="about__title">Over</string>
+    <string name="common__next">Volgende</string>
+    <string name="common__ok">OK</string>
+    <string name="common__retry">Opnieuw proberen</string>
+    <string name="home__balance_hidden">Saldo verborgen</string>
+    <string name="home__error">Wallet laden mislukt</string>
+    <string name="home__nfc_hint">Tik om te betalen</string>
+    <string name="home__toggle_unit">Eenheid wisselen</string>
+    <string name="onboarding__restore">Herstellen</string>
+    <string name="removed__title">Wallet verwijderd</string>
+    <string name="restore__checksum_review">Controleren</string>
+    <string name="restore__checksum_title">Ongeldige zin</string>
+    <string name="restore__error_failed">Wallet opslaan mislukt</string>
+    <plurals name="restore__length_words">
+        <item quantity="one">%1$d woord</item>
+        <item quantity="other">%1$d woorden</item>
+    </plurals>
+    <string name="restore__passphrase_add">Wachtwoordzin toevoegen</string>
+    <string name="restore__passphrase_confirm">Herstellen</string>
+    <string name="restore__passphrase_placeholder">Wachtwoordzin</string>
+    <string name="restore__passphrase_skip">Doorgaan</string>
+    <string name="restore__passphrase_title">Wachtwoordzin?</string>
+    <string name="restore__title">Hoeveel woorden?</string>
+    <string name="restore__word_no_match">Geen overeenkomst</string>
+    <string name="restore__word_placeholder">Woord %1$d</string>
+    <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="settings__remove_wallet">Wallet verwijderen</string>
+    <string name="settings__remove_wallet_confirm_title">Wallet verwijderen?</string>
+    <string name="settings__remove_wallet_failed">Wallet verwijderen mislukt</string>
+    <string name="settings__title">Instellingen</string>
+    <string name="unsupported__text">Geen Spark op dit netwerk</string>
+    <string name="unsupported__title">Niet ondersteund</string>
+</resources>

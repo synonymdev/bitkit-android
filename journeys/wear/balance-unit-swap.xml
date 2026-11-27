@@ -1,0 +1,19 @@
+<journey name="wear balance unit swap">
+  <description>
+    A tap on the balance swaps the large and small units, and the choice survives an app restart. Emulator and
+    physical watch.
+
+    Precondition: Restored wallet, see journeys/wear/README.md › Restored wallet, with Bitcoin as the large unit.
+    Backend: hosted regtest. The fiat value needs the Blocktank rates, so the watch must be online.
+  </description>
+  <actions>
+    <action>Verify "WatchHomeBalanceSymbol" reads "₿", "WatchHomeBalance" reads the balance in sats ("1 000") and "WatchHomeBalanceSecondary" reads the fiat value</action>
+    <action>Tap the balance (tag "WatchHomeBalanceToggle")</action>
+    <action>Verify "WatchHomeBalanceSymbol" reads "$", "WatchHomeBalance" reads the fiat value and "WatchHomeBalanceSecondary" reads the sats amount</action>
+    <action>Restart the app (README › Restart)</action>
+    <action>Dump `android layout` every 5 s until it lists "WatchHomeBalance", for up to 1 minute</action>
+    <action>Verify "WatchHomeBalanceSymbol" still reads "$" and "WatchHomeBalance" reads the fiat value</action>
+    <action>Tap "WatchHomeBalanceToggle"</action>
+    <action>Verify "WatchHomeBalanceSymbol" reads "₿" again, which leaves the wallet as the precondition found it</action>
+  </actions>
+</journey>

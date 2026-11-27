@@ -1,0 +1,25 @@
+<journey name="wear restore 12 words">
+  <description>
+    Restoring the test wallet's 12-word phrase on the watch, one word per screen, opens Home on the Balance page with
+    the wallet's balance. Covers the word count choice, the progress, a suggestion chip, the rotary crown on the word
+    screen and the loading ring of the first sync. Emulator and physical watch.
+
+    Precondition: Fresh app, see journeys/wear/README.md › Fresh app. Backend: hosted regtest, where the test wallet
+    holds 1 000 sats (README › Backend). The first sync of a funded wallet takes about 3.5 minutes there. The word
+    screens block screenshots, so check them with `android layout` only.
+  </description>
+  <actions>
+    <action>Tap Restore (tag "WatchOnboardingRestore")</action>
+    <action>Verify the title (tag "RestoreTitle") reads "How many words?", then tap 12 (tag "RestoreWords12")</action>
+    <action>Verify the progress (tag "RestoreProgress") reads "1/12" and the word field (tag "RestoreWordInput") is empty</action>
+    <action>Type `ab` into "RestoreWordInput" without pressing Enter (README › Typing, steps 2 and 3)</action>
+    <action>Turn the crown down: `adb shell input rotaryencoder scroll --axis SCROLL,-3` (README › Watch gestures), then verify the sixth suggestion chip (tag "RestoreSuggestion-absent") is listed</action>
+    <action>Turn the crown back up with `SCROLL,3`, then tap the chip "RestoreSuggestion-abandon"</action>
+    <action>Verify "RestoreProgress" reads "2/12"</action>
+    <action>Type the remaining eleven words, ten times `abandon` then `about` (README › Typing several words, without the first word)</action>
+    <action>Verify the passphrase screen: the title (tag "RestorePassphraseTitle") reads "Passphrase?", with "RestorePassphraseAdd" and "RestorePassphraseSkip"</action>
+    <action>Tap Continue (tag "RestorePassphraseSkip"), then verify from a screenshot that the orange loading ring runs around the screen edge over a dimmed Bitkit mark</action>
+    <action>Dump `android layout` every 15 s until it lists "WatchHomeBalance", for up to 5 minutes</action>
+    <action>Verify "WatchHomeBalanceSymbol" reads "₿", "WatchHomeBalance" reads the wallet's balance ("1 000" on hosted regtest), and "WatchHomeBalanceSecondary" shows the fiat value</action>
+  </actions>
+</journey>

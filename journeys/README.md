@@ -137,6 +137,9 @@ journey PR, which is what made this file conflict on every merge.
 | LNURL pay, withdraw, channel and auth, and Lightning Addresses | the `bitkit-docker` `lnurl-server` on local regtest, with the app started by `just run docker`, which builds with `E2E=true` and forwards its ports over `adb reverse`; it issues memo invoices, so a check that needs a description-hash invoice needs another endpoint — [lnurl](lnurl) |
 | Spark connected (App Status Spark row, spending through Spark) | a dev build, which connects Spark to its hosted regtest with no key (the transfer also needs `ESPLORA_URL` from `scripts/spark-regtest-esplora.py`), or bitkit-docker's local `./spark` stack, built and forwarded as [spark-regtest](../.claude/plugins/spark-regtest/skills/spark-regtest/SKILL.md) says — [app status](settings/app-status-spark-row.xml), [transfer](transfer/spark-transfer-to-spending.xml) |
 | Deep links, addresses and invoices handed to the app | `adb shell am start -a android.intent.action.VIEW -d "<uri>"`; `bitkit://` screen and sheet routes sit behind the dev-mode gate — [Running a journey](#running-a-journey), [deeplinks](deeplinks) |
+| A watch to run the Wear OS app on | a Wear OS watch emulator (`Wear_Large_Round_API37`, `Wear_Small_Round_API34`), or a physical watch over Wi-Fi debugging — [wear](wear/README.md) |
+| Watch gestures: pager swipes, swipe-to-dismiss, rotary crown, ambient mode | `adb shell input swipe`, `adb shell input rotaryencoder scroll --axis SCROLL,<n>` and `KEYCODE_SLEEP`/`KEYCODE_WAKEUP` on the emulator; the real crown, bezel and wrist on a physical watch — [wear](wear/README.md#watch-gestures) |
+| Typing on the watch keyboard | `adb shell input text` after closing the Wear OS keyboard with Back, which otherwise swallows the input — [wear](wear/README.md#typing) |
 
 ## Cross-platform
 
@@ -215,6 +218,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `transfer/fast-transfer-relaunch.xml` | same file and steps — the Wait and Approve identifiers differ as in `spark-transfer-status.xml`, and each names its own unit tests |
 | `settings/quickpay-payment-pin.xml` | same file and steps, paired with synonymdev/bitkit-ios#1326 — on iOS the PIN pad is a sheet whose back control is `NavigationBack`, and a failed biometric check counts as not approved instead of falling back to the PIN pad |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
+| `wear/*` | not ported — Android only for now; bitkit-ios has no watch app yet, and the watch journeys port with that follow-up |
 
 ### Running one on iOS
 

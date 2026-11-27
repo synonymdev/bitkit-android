@@ -1,0 +1,21 @@
+<journey name="wear pager settings about">
+  <description>
+    Swiping left on Balance shows the Settings page; About shows the app version and network; swipe-to-dismiss returns
+    to Settings and a swipe right returns to Balance. Emulator and physical watch.
+
+    Precondition: Restored wallet, see journeys/wear/README.md › Restored wallet. Backend: hosted regtest. Gestures are
+    in README › Watch gestures.
+  </description>
+  <actions>
+    <action>Verify the Balance page: "WatchHomeBalanceToggle" and "WatchHomeBalance" are listed</action>
+    <action>Swipe the pager left: `adb shell input swipe 400 227 60 227 300`</action>
+    <action>Verify the Settings page: the text "Settings", About (tag "WatchSettingsAbout") and Remove wallet (tag "WatchSettingsRemoveWallet")</action>
+    <action>Tap About (tag "WatchSettingsAbout")</action>
+    <action>Run `adb shell dumpsys package to.bitkit.dev | grep -E 'versionName|versionCode'` and verify "WatchAboutVersion" reads "&lt;versionName&gt; (&lt;versionCode&gt;)", such as "0.1.0 (1)"</action>
+    <action>Verify "WatchAboutNetwork" reads "regtest"</action>
+    <action>Swipe to dismiss from the left edge: `adb shell input swipe 20 227 400 227 300`</action>
+    <action>Verify the Settings page again: "WatchSettingsAbout" is listed</action>
+    <action>Swipe the pager right: `adb shell input swipe 100 227 420 227 300`</action>
+    <action>Verify the Balance page: "WatchHomeBalance" is listed</action>
+  </actions>
+</journey>

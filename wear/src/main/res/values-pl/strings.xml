@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="about__title">O aplikacji</string>
+    <string name="common__next">Dalej</string>
+    <string name="common__ok">OK</string>
+    <string name="common__retry">Spróbuj ponownie</string>
+    <string name="home__balance_hidden">Saldo ukryte</string>
+    <string name="home__error">Nie udało się wczytać portfela</string>
+    <string name="home__nfc_hint">Dotknij, aby zapłacić</string>
+    <string name="home__toggle_unit">Zmień jednostkę</string>
+    <string name="onboarding__restore">Odzyskaj</string>
+    <string name="removed__title">Portfel usunięty</string>
+    <string name="restore__checksum_review">Sprawdź</string>
+    <string name="restore__checksum_title">Nieprawidłowa fraza</string>
+    <string name="restore__error_failed">Nie udało się zapisać portfela</string>
+    <plurals name="restore__length_words">
+        <item quantity="one">%1$d słowo</item>
+        <item quantity="few">%1$d słowa</item>
+        <item quantity="many">%1$d słów</item>
+        <item quantity="other">%1$d słowa</item>
+    </plurals>
+    <string name="restore__passphrase_add">Dodaj hasło</string>
+    <string name="restore__passphrase_confirm">Odzyskaj</string>
+    <string name="restore__passphrase_placeholder">Hasło</string>
+    <string name="restore__passphrase_skip">Dalej</string>
+    <string name="restore__passphrase_title">Hasło?</string>
+    <string name="restore__title">Ile słów?</string>
+    <string name="restore__word_no_match">Brak dopasowań</string>
+    <string name="restore__word_placeholder">Słowo %1$d</string>
+    <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="settings__remove_wallet">Usuń portfel</string>
+    <string name="settings__remove_wallet_confirm_title">Usunąć portfel?</string>
+    <string name="settings__remove_wallet_failed">Nie udało się usunąć portfela</string>
+    <string name="settings__title">Ustawienia</string>
+    <string name="unsupported__text">Brak Spark w tej sieci</string>
+    <string name="unsupported__title">Nieobsługiwane</string>
+</resources>

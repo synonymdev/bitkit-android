@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="about__title">حول</string>
+    <string name="common__next">التالي</string>
+    <string name="common__ok">حسنًا</string>
+    <string name="common__retry">إعادة المحاولة</string>
+    <string name="home__balance_hidden">الرصيد مخفي</string>
+    <string name="home__error">تعذّر تحميل المحفظة</string>
+    <string name="home__nfc_hint">انقر للدفع</string>
+    <string name="home__toggle_unit">تبديل الوحدة</string>
+    <string name="onboarding__restore">استعادة</string>
+    <string name="removed__title">تمت إزالة المحفظة</string>
+    <string name="restore__checksum_review">مراجعة</string>
+    <string name="restore__checksum_title">عبارة غير صالحة</string>
+    <string name="restore__error_failed">تعذّر حفظ المحفظة</string>
+    <plurals name="restore__length_words">
+        <item quantity="zero">%1$d كلمة</item>
+        <item quantity="one">%1$d كلمة</item>
+        <item quantity="two">%1$d كلمتان</item>
+        <item quantity="few">%1$d كلمات</item>
+        <item quantity="many">%1$d كلمة</item>
+        <item quantity="other">%1$d كلمة</item>
+    </plurals>
+    <string name="restore__passphrase_add">إضافة عبارة مرور</string>
+    <string name="restore__passphrase_confirm">استعادة</string>
+    <string name="restore__passphrase_placeholder">عبارة المرور</string>
+    <string name="restore__passphrase_skip">متابعة</string>
+    <string name="restore__passphrase_title">عبارة مرور؟</string>
+    <string name="restore__title">كم عدد الكلمات؟</string>
+    <string name="restore__word_no_match">لا تطابق</string>
+    <string name="restore__word_placeholder">الكلمة %1$d</string>
+    <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="settings__remove_wallet">إزالة المحفظة</string>
+    <string name="settings__remove_wallet_confirm_title">إزالة المحفظة؟</string>
+    <string name="settings__remove_wallet_failed">تعذّرت إزالة المحفظة</string>
+    <string name="settings__title">الإعدادات</string>
+    <string name="unsupported__text">لا يتوفر Spark على هذه الشبكة</string>
+    <string name="unsupported__title">غير مدعوم</string>
+</resources>

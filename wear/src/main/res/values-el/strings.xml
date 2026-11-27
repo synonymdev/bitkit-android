@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="about__title">Σχετικά</string>
+    <string name="common__next">Επόμενο</string>
+    <string name="common__ok">ΟΚ</string>
+    <string name="common__retry">Δοκιμάστε Ξανά</string>
+    <string name="home__balance_hidden">Κρυφό υπόλοιπο</string>
+    <string name="home__error">Αδυναμία φόρτωσης πορτοφολιού</string>
+    <string name="home__nfc_hint">Πατήστε για πληρωμή</string>
+    <string name="home__toggle_unit">Αλλαγή μονάδας</string>
+    <string name="onboarding__restore">Επαναφορά</string>
+    <string name="removed__title">Το πορτοφόλι αφαιρέθηκε</string>
+    <string name="restore__checksum_review">Έλεγχος</string>
+    <string name="restore__checksum_title">Μη έγκυρη φράση</string>
+    <string name="restore__error_failed">Αδυναμία αποθήκευσης πορτοφολιού</string>
+    <plurals name="restore__length_words">
+        <item quantity="one">%1$d λέξη</item>
+        <item quantity="other">%1$d λέξεις</item>
+    </plurals>
+    <string name="restore__passphrase_add">Προσθήκη κωδικής φράσης</string>
+    <string name="restore__passphrase_confirm">Επαναφορά</string>
+    <string name="restore__passphrase_placeholder">Κωδική φράση</string>
+    <string name="restore__passphrase_skip">Συνέχεια</string>
+    <string name="restore__passphrase_title">Κωδική φράση;</string>
+    <string name="restore__title">Πόσες λέξεις;</string>
+    <string name="restore__word_no_match">Καμία αντιστοιχία</string>
+    <string name="restore__word_placeholder">Λέξη %1$d</string>
+    <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="settings__remove_wallet">Αφαίρεση πορτοφολιού</string>
+    <string name="settings__remove_wallet_confirm_title">Αφαίρεση πορτοφολιού;</string>
+    <string name="settings__remove_wallet_failed">Αδυναμία αφαίρεσης πορτοφολιού</string>
+    <string name="settings__title">Ρυθμίσεις</string>
+    <string name="unsupported__text">Δεν υπάρχει Spark σε αυτό το δίκτυο</string>
+    <string name="unsupported__title">Δεν υποστηρίζεται</string>
+</resources>

@@ -1,0 +1,18 @@
+<journey name="wear ambient hides balance">
+  <description>
+    In ambient mode the balance is replaced by a dimmed Bitkit mark and the NFC hint is hidden; waking the watch
+    brings the balance back. Emulator and physical watch (on a watch, lowering the wrist or covering the screen with a
+    palm does the same as `KEYCODE_SLEEP`).
+
+    Precondition: Restored wallet, see journeys/wear/README.md › Restored wallet, on the Balance page with the loading
+    ring stopped, and the always-on screen on (README › Watch gestures). Backend: hosted regtest.
+  </description>
+  <actions>
+    <action>Verify "WatchHomeBalance" and "NfcHint" are listed</action>
+    <action>Run `adb shell input keyevent KEYCODE_SLEEP` and wait 3 s</action>
+    <action>Verify "WatchHomeBalanceHidden" is listed with the content-desc "Balance hidden", and "WatchHomeBalance", "WatchHomeBalanceSecondary" and "NfcHint" are not</action>
+    <action>Verify from a screenshot that the screen shows the time, a dimmed Bitkit mark and the page dots, and no amount</action>
+    <action>Run `adb shell input keyevent KEYCODE_WAKEUP` and wait 2 s</action>
+    <action>Verify "WatchHomeBalance" and "NfcHint" are listed again and "WatchHomeBalanceHidden" is not</action>
+  </actions>
+</journey>
