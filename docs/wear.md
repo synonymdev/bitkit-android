@@ -216,9 +216,9 @@ The watch holds the full recovery phrase and passphrase, because Breez needs the
   with a retry and no wallet opens. A launch, and every restore, also deletes what no stored seed owns: Spark
   storage, a seed key and a half-written seed file.
   - The note is an empty file, `wipe.pending`, beside the seed in the no-backup directory; the file existing is the
-    note. It and its directory are synced to disk, and a new note that cannot be synced is deleted again, so a note
-    that failed to be written never starts a wipe. It is not in the settings file, which is reset when it cannot be
-    read: a reset neither loses a wipe under way nor starts one.
+    note. It and its directory are synced to disk, and a new note that cannot be synced is deleted again when
+    possible, so a note that failed to be written does not start a wipe. It is not in the settings file, which is
+    reset when it cannot be read: a reset neither loses a wipe under way nor starts one.
   - The wallet counts as wiped once the seed file and the Spark storage are gone. A seed key that cannot be
     deleted, after a second try, does not fail the wipe: without its ciphertext it protects nothing, and each launch
     without a wallet tries the delete again. A Spark instance that cannot be disconnected, after a second try, fails

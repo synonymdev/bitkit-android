@@ -207,10 +207,17 @@ class WalletRepo @Inject constructor(
         }.onFailure {
             if (!sparkService.isCurrent(wipeToken)) {
                 Logger.info("Dropped wallet start that a wipe overtook", context = TAG)
+                markOvertakenByWipe()
                 return@onFailure
             }
             onStartFailure(it)
         }
+    }
+
+    private suspend fun markOvertakenByWipe() {
+        val hasSeed = runSuspendCatching { seedStore.exists() }.getOrDefault(true)
+        val status = if (hasSeed) WalletStatus.Error else WalletStatus.Missing
+        _walletState.update { if (it.status == WalletStatus.Connecting) it.copy(status = status) else it }
     }
 
     private suspend fun finishPendingWipe(): Result<Unit> = runSuspendCatching {
@@ -286,10 +293,10 @@ class WalletRepo @Inject constructor(
 
     private suspend fun lock() {
         // A disconnect that failed earlier left Spark connected under a disconnected status.
-        disconnectQuietly()
+        val isDisconnected = disconnectQuietly()
         if (_walletState.value.status in disconnectedStatuses) return
         markLocked()
-        Logger.info("Disconnected wallet because the watch locked", context = TAG)
+        if (isDisconnected) Logger.info("Disconnected wallet because the watch locked", context = TAG)
     }
 
     private fun markLocked() = _walletState.update {
@@ -375,8 +382,8 @@ class WalletRepo @Inject constructor(
      * the note runs even when an earlier one fails, and the first failure is returned, with
      * [WalletStatus.Error]. The wallet counts as wiped once the seed file and Spark's storage are gone. When the
      * process dies or a step fails, the note stays and [recover] finishes the wipe at the next launch or the next
-     * [start]. The wipe after a lost seed key ends in [WalletStatus.Removed] instead, and reports no other status
-     * on the way, so the wearer is told at once.
+     * [start]. The wipe after a lost seed key ends in [WalletStatus.Removed] instead, and reports no
+     * [WalletStatus.Missing] on the way, so the wearer is told at once.
      */
     suspend fun wipe(): Result<Unit> = wipe(isKeyLost = false, isNoteRequired = true)
 

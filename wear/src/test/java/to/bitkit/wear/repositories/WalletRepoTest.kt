@@ -290,9 +290,37 @@ class WalletRepoTest : BaseUnitTest() {
         val result = sut.start()
 
         assertIs<SparkError.WipeInProgress>(result.exceptionOrNull())
-        assertEquals(WalletStatus.Connecting, sut.walletState.value.status)
         sut.wipe()
         assertEquals(WalletState(WalletStatus.Missing), sut.walletState.value)
+    }
+
+    @Test
+    fun `a start that a wipe overtook before it connected ends missing, never left connecting`() = test {
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.connect(seed, 0)).thenAnswer {
+            whenever(sparkService.isCurrent(0)).thenReturn(false)
+            throw SparkError.WipeInProgress()
+        }
+
+        val result = sut.start()
+
+        assertIs<SparkError.WipeInProgress>(result.exceptionOrNull())
+        assertEquals(WalletStatus.Missing, sut.walletState.value.status)
+    }
+
+    @Test
+    fun `a start that a wipe overtook ends as an error when the seed is still stored`() = test {
+        whenever(seedStore.exists()).thenReturn(true)
+        whenever(seedStore.load()).thenReturn(Result.success(seed))
+        whenever(sparkService.connect(seed, 0)).thenAnswer {
+            whenever(sparkService.isCurrent(0)).thenReturn(false)
+            throw SparkError.WipeInProgress()
+        }
+
+        val result = sut.start()
+
+        assertIs<SparkError.WipeInProgress>(result.exceptionOrNull())
+        assertEquals(WalletStatus.Error, sut.walletState.value.status)
     }
 
     @Test
@@ -320,7 +348,7 @@ class WalletRepoTest : BaseUnitTest() {
         val result = sut.start()
 
         assertIs<SparkError.WipeInProgress>(result.exceptionOrNull())
-        assertEquals(WalletStatus.Connecting, sut.walletState.value.status)
+        assertEquals(WalletStatus.Missing, sut.walletState.value.status)
     }
 
     @Test
