@@ -16,7 +16,6 @@ import to.bitkit.R
 import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PubkyRepo
-import to.bitkit.services.PubkyRingAuthTimeoutError
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
@@ -32,17 +31,15 @@ class PubkyAuthApprovalRetryTest : BaseUnitTest() {
     }
 
     @Test
-    fun `relay timeout restores consent and requires local auth for retry`() = test {
+    fun `signup failure restores consent and requires local auth for retry`() = test {
         whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
         whenever(context.getString(R.string.profile__auth_approval_services_separator)).thenReturn(" and ")
         whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
-        val authUrl = "pubkyring://signup?hs=homeserver" +
-            "&relay=https://relay.example/inbox/&secret=secret&caps=/pub/example/:rw"
+        val authUrl = "pubkyauth://direct_signup?hs=homeserver"
         val request = PubkyAuthRequest.parseSignup(authUrl).getOrThrow()
-        whenever(context.getString(R.string.profile__auth_error_timeout)).thenReturn("Relay timed out")
         whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(Result.success(request))
         whenever(pubkyRepo.approveSignupAuth(request)).thenReturn(
-            Result.failure(AppError(PubkyRingAuthTimeoutError())),
+            Result.failure(AppError("Homeserver unavailable")),
             Result.success(Unit),
         )
         val sut =

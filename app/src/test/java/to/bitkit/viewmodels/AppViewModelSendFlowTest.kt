@@ -153,6 +153,7 @@ import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.PaykitAmount
 import to.bitkit.models.PaykitAsset
 import to.bitkit.models.PaykitRequestPricing
+import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
@@ -5353,6 +5354,39 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         clearInvocations(coreService)
 
         assertTrue(sut.canDecodeClipboard(setupUrl))
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `canDecodeClipboard rejects legacy Pubky signup links without core decode`() = test {
+        listOf(legacyAuthorizedSignupAuthUrl, signupAuthUrl).forEach {
+            whenever(pubkyRepo.parseAuthUrl(it)).thenReturn(PubkyAuthRequest.parseSignup(it))
+        }
+        clearInvocations(coreService)
+
+        assertFalse(sut.canDecodeClipboard(legacyAuthorizedSignupAuthUrl))
+        assertFalse(sut.canDecodeClipboard(signupAuthUrl))
+        assertFalse(sut.canDecodeClipboard("lightning:$grantSignupAuthUrl"))
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `canDecodeClipboard accepts plain and grant Pubky signup links without core decode`() = test {
+        whenever(pubkyRepo.parseAuthUrl(directSignupAuthUrl))
+            .thenReturn(PubkyAuthRequest.parseSignup(directSignupAuthUrl))
+        whenever(pubkyRepo.parseAuthUrl(grantSignupAuthUrl)).thenReturn(
+            PubkyAuthRequest.parseGrantSignup(
+                rawUrl = grantSignupAuthUrl,
+                clientId = "shop.pubky.app",
+                relay = "https://relay.example",
+                capabilities = "/pub/pubky.app/:rw",
+                homeserverPublicKey = "homeserver",
+            )
+        )
+        clearInvocations(coreService)
+
+        assertTrue(sut.canDecodeClipboard(directSignupAuthUrl))
+        assertTrue(sut.canDecodeClipboard(grantSignupAuthUrl))
         verify(coreService, never()).decode(any())
     }
 

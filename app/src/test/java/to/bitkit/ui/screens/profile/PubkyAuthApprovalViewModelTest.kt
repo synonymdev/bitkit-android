@@ -338,14 +338,9 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
     @Test
     fun `signup requires consent and local auth before registration`() = test {
-        listOf("pubkyauth://direct_signup", "pubkyauth://signup", "pubkyring://signup", "pubkyauth://signup_grant")
+        listOf("pubkyauth://direct_signup", "pubkyauth://signup", "pubkyauth://signup_grant")
             .forEach { prefix ->
-                val authUrl = "$prefix?hs=homeserver" +
-                    if (prefix.startsWith("pubkyring")) {
-                        "&relay=https://relay.example/inbox/&secret=secret&caps=/pub/example/:rw"
-                    } else {
-                        ""
-                    }
+                val authUrl = "$prefix?hs=homeserver"
                 val request = if (prefix.endsWith("signup_grant")) {
                     PubkyAuthRequest.parseGrantSignup(
                         rawUrl = authUrl,
@@ -478,26 +473,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
                 assertEquals(PubkyAuthApprovalEffect.RequestLocalAuth(authUrl), awaitItem())
             }
         }
-    }
-
-    @Test
-    fun `Ring signup delegates registration and authorization to Pubky repository`() = test {
-        val authUrl = "pubkyring://signup?hs=homeserver"
-        val request = authRequest(
-            authUrl = authUrl,
-            capabilities = "/pub/example/:rw",
-        )
-        whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(Result.success(request))
-        whenever(pubkyRepo.approveSignupAuth(request)).thenReturn(Result.success(Unit))
-        val sut = createSut()
-
-        sut.load(authUrl)
-        advanceUntilIdle()
-        sut.confirmAuthorize(authUrl)
-        advanceUntilIdle()
-
-        verifyBlocking(pubkyRepo) { approveSignupAuth(request) }
-        verifyBlocking(pubkyRepo, never()) { approveAuth(any(), any(), any()) }
     }
 
     @Test

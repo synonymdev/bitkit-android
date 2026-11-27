@@ -9869,9 +9869,11 @@ class AppViewModel @Inject constructor(
             (input.length == USDT_ADDRESS_LENGTH && input.startsWith("0x", ignoreCase = true))
 
     suspend fun canDecodeClipboard(text: String): Boolean = withContext(bgDispatcher) {
+        val unwrapped = text.removeLightningSchemes()
         when {
             isUsdtPaymentInput(text.trim()) ->
                 isUsdtEnabled.value && !hasActiveUsdtSend() && parseUsdtPaymentRequest(text.trim()).isSuccess
+            PubkyAuthRequest.isProtocolUrl(unwrapped) -> text == unwrapped && pubkyRepo.parseAuthUrl(text).isSuccess
             else -> SamRockSetupRequest.isProtocolUrl(text) ||
                 ClipboardPromptValidator.isSupported(text) { coreService.decode(it) }
         }
