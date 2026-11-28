@@ -7,6 +7,114 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-11-27
+
+### Added
+- Spending keeps Lightning without channels: transfers from Savings now fund a Spark wallet that sends and receives Lightning payments, with an emergency exit that moves its balance on-chain without the Spark operators. #1697
+- Paykit contacts and payment requests can be paid from Spark, including contacts and requests that only accept on-chain bitcoin. #1754
+- Move to Spark: move a Lightning connection's balance to Spark, then close the emptied connection to return its reserve to Savings. #1768
+- When a Paykit payment request you sent is paid, Bitkit now sends the payer a receipt and shows whether it was sent. #1789
+- Moving funds to Spark now shows as a Move to Spark entry in Activity and keeps going after you leave its screen. #1819
+- App Status shows Spark's connection, and Lightning Connection no longer reports an error while Spark carries Lightning payments. #1831
+- App Status shows an emergency exit while it runs. #1832
+- Pay by holding your phone near a payment terminal or another phone over NFC, and send or receive with nearby Bitkit wallets over Bluetooth. #1883
+
+### Changed
+- Contact payments are now always on while you have a profile, and their two toggles are gone from Settings. #1932
+- The terms of use now cover Pubky and Paykit in place of Slashtags, with an effective date of November 27, 2026. #1936
+- Moving the spending balance to Spark now runs from one Update modal, closes the channels it empties and lets a Lightning payment combine both balances with one swipe; the CJIT receive card is removed. #1946
+- Supported pubky.app profiles moved to the new social format, and showed each sent receipt as sent or failed from its actual delivery status. #1955
+- Redesigned Transfer to Savings and the Spark force transfer, which can now be paid from another wallet and skips the availability warning when only Spark funds move. #1960
+- Transfers to spending show the new fee breakdown with Fast and Normal speeds, a clearer Learn More, and an updated hardware wallet signing screen. #1963
+- Spark connection details and App Status show Spark's status, provider, balance and deposits, and a force transfer to savings on the Spark row. #1964
+- Moving the spending balance to Spark now takes one swipe for the whole balance, splitting it into smaller payments when needed. #1984
+
+### Fixed
+- Fixed max on-chain sends so the amount always matches the fee speed and recipient it is sent at. #1144
+- Fixed incorrect confirmation estimates for transactions boosted using Replace-by-Fee. #1429
+- Fixed Bitcoin payment URI validation and prevented automatic clipboard inspection from contacting payment endpoints before confirmation. #1454
+- Fixed the Pubky authorization screen not showing which relay receives the authorization. #1505
+- Fixed a rare crash when the Lightning node stops while background work is still running. #1536
+- The contact import overview now reads "1 friend" for a single contact and uses each language's plural forms. #1601
+- Fixed Bitcoin payments from Savings being sent with a higher network fee than the one shown on the confirmation: Bitkit now shows the actual fee and asks you to confirm again before sending. #1657
+- Fixed the contact Request or Pay sheet hiding its Pay and Request buttons on small screens and with large text. #1666
+- Show ordinary Lightning payment results without waiting for Paykit maintenance, preserve valid allowance acceptance during contact sync, and keep allowances stopped after switch-off or profile removal. #1684
+- Fixed a crash when the system blocks turning on Bluetooth while connecting a hardware wallet. #1694
+- Payment request amount entry keeps the number pad above Continue, and the Payment Requested sheet keeps OK at the bottom with the recipient above it. #1705
+- The Payment Request recipient picker now shows a loading row while it checks which contacts can receive a request, and says when that check failed instead of saying no contact can receive one. #1742
+- Fixed paid payment requests showing as payable again and restored wallets missing recent automatic payments, and sped up automatic payments. #1751
+- Lightning Connections now keeps showing your connections while the Lightning node restarts, with a syncing indicator, instead of a full-screen connecting view. #1756
+- Fixed Pubky sign-in requests meant for another pubky being signed; Bitkit now refuses them and names the pubky they are for. #1761
+- Scanning a Bitcoin or USDT payment request that already has an amount now opens the review screen directly instead of the amount screen. #1763
+- Hardware wallet sends now keep the signed transaction after an uncertain broadcast, so retrying cannot create a second payment without a warning. #1770
+- Payments to saved contacts that can be paid privately always stay private, and Bitkit explains that you both need to add each other as contacts while the private connection is set up. #1778
+- Automatic allowance payments now stay paused after a wallet restore until you resume them, and requests under an allowance with limits Bitkit does not check itself ask for your approval. #1779
+- Made payment requests funded from a hardware wallet ready to confirm sooner by composing the payment once. #1785
+- Show an insufficient funds message when a scanned Bitcoin request is more than a hardware wallet can pay after fees, instead of opening an amount screen that cannot continue. #1790
+- Bitkit no longer offers the pubky.app moderation account as a contact when importing a Pubky profile. #1794
+- Show the USDT received celebration for a receipt that confirms while the wallet is still syncing its history after launch or restore. #1799
+- Stopped re-uploading the activity backup after every wallet sync when nothing changed. #1800
+- Refresh the Lightning spending limit after receiving a payment so Send rejects amounts above the available balance immediately. #1808
+- Boosted Bitcoin sends now open the replacement transaction with the correct fee and payment history. #1813
+- Pending fee boosts keep their approved fee when you reopen the transaction and show feedback while replacement details load. #1821
+- Contact payment errors in toasts show a readable message instead of raw SDK details. #1851
+- Swiping back from a screen slides it out like the Back button does, and other apps can no longer open Bitkit's internal screens. #1853
+- Fixed force transfer progress offering no way to pay the emergency fees from savings after their fee rose before the payment went out. #1856
+- App Status no longer shows Lightning Connection as using Spark while an emergency exit runs. #1880
+- Fixed profile links that pubky.app would refuse blocking the profile save: the link sheet now shows what to fix before saving, and Edit Profile points to an existing link that needs fixing. #1882
+- Restoring a Pubky profile preserves its saved tags when the profile initially loads without them. #1884
+- Funds in transfer to spending through Spark follows the new design, and the Home transfer and Savings banners open the transfer or emergency exit in progress. #1901
+- QuickPay now asks for confirmation instead of paying automatically when an invoice is opened again after QuickPay was turned off. #1902
+- A fast transfer to spending keeps its speed, its changed-fee prompt and its early claim after the app is reopened, and the transfer banner opens it at once. #1905
+- Fixed contact payment requests with a Lightning invoice from a public node failing to open when the invoice carried no route hints. #1911
+- Profile edits save sooner while Bitkit updates contact payment details in the background. #1945
+- Profile edits save faster when payment details sync in the background. #1951
+- Payments now stop if QuickPay's wallet lock lapses, or a payment request's contact is blocked, while the send is being prepared, on Lightning and on-chain. #1962
+- An edited Receive amount and note now stay on the request when Bitkit returns from the background. #1971
+- Fixed the transfer to savings staying in progress forever after a force close that left only dust, and showing the channel size instead of your balance. #1973
+- Fixed wallet restores reporting Spark exit data as restored when Spark rejects it. #1976
+- Updating the spending balance now quotes its fee more closely, no longer reports success with a balance left or shows failed rows for parts it retried, and no longer fails a payment started during the update. #1989
+- Wallets that still used a retired Bitkit Electrum server, such as fulcrum.bitkit.blocktank.to, now switch to the current default, so the node starts again without resetting the server by hand. #1993
+- Fixed a graphics crash on some Android devices while the camera is open for scanning. #1994
+- Fixed a rare case where restarting the Lightning node could overwrite its newer backed-up state with older data. #2004
+- Fixed connecting Bitkit to Paykit Server failing with "The wallet must be running" right after returning from the browser. #2006
+- Fixed Spark payment retries so a retry stays pending until its own outcome, and a payment settled while the app was closed no longer shows its result again at launch. #2007
+- Fixed the Lightning node starting again after it was stopped while recovering from a failed server change. #2012
+- Fixed rare cases where a Lightning payment retried over Spark could be sent twice or show a stale outcome. #2014
+- Fixed rare cases where a Spark payment outcome could be missed after a storage error, or a retry of an invoice from before a restore was refused. #2015
+- Keep the payment confirm screen open while a swipe is paying, so leaving can't undo it silently. #2017
+- Fixed a Lightning invoice paid through Spark being paid twice when the app retried it after an interrupted send, and a payment made right after moving funds to Spark staying pending. #2019
+- Bitkit now asks you to update the app when a profile was saved by a newer version, instead of showing a raw error. #2022
+- The "Payment returned to Savings" notice now stays on screen until you close it. #2030
+- Fixed a camera or pasted scan on the Send screen opening its payment after you tapped Enter Manually. #2035
+- The custom fee screen now shows the current fee as selected, so typing replaces it instead of adding digits to it. #2038
+- The LNURL sign-in sheet now says whether a site asks you to log in, register, link your account or approve an action, instead of always asking to log in. #2039
+- Copying on the Receive screen now gives haptic feedback on Android. #2040
+- Fixed the send confirmation staying on its spinner when paying an invoice that was already paid. #2048
+- Fixed the wrong PIN message on the Found Jade step disappearing when the next scan found the same Jade. #2049
+- Fixed a Jade logged out on the device showing as busy: it now asks for its PIN and carries on. #2050
+- Fixed force transfer progress asking for the emergency fees while a payment of them from savings could still confirm. #2059
+- Lightning payments and withdrawals through Spark refused before sending now show why, even when clearing the attempt fails. #2060
+- Fixed the payment receipt shown when paying again an invoice that was already paid. #2061
+- A repeat of an invoice at another amount than its earlier Spark payment is refused, and a repeat of a pending payment shows the amount that payment sends. #2071
+- Fixed the round action buttons on the contact and profile screens to show a soft top highlight instead of a full ring, and drew the contact Activity icon at its designed weight. #2119
+- Fixed layouts that stretched, overlapped or were cut off on tablets, including the profile QR code, home suggestion cards, transfer intro screens and the drawer menu. #2127
+- Fixed a force transfer asking for its fees again, allowing a cancel, or paying them again from savings while a payment of them could still land or had already arrived. #2131
+- Fixed a savings payment a force transfer no longer needs blocking new on-chain sends; Send Pending now offers to cancel it instead of paying it again. #2136
+- Fixed connecting a Jade with no wallet showing a generic message instead of how to set it up. #2144
+- Fixed a valid Electrum or RGS server being rejected while the Lightning node was still saving its backup. #2147
+- Fixed the force transfer's fee request staying hidden or too large after a savings payment that never went out or failed, and a fee reminder sent while funding already covered the fees. #2151
+
+### Security
+- Update BouncyCastle to 1.86, which fixes certificate-validation and ASN.1 parsing vulnerabilities in the crypto provider the app installs. #1787
+- QuickPay now asks for your payment PIN before it can be turned on or its limits raised. #1909
+
+
+
+
+
+
+
 ## [3.1.1] - 2026-11-12
 
 ### Added
@@ -444,7 +552,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - About screen (content merged into Support) #857
 - Standalone General, Security, and Advanced settings screens (merged into tabs) #857
 
-[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v3.1.1...HEAD
+[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/synonymdev/bitkit-android/compare/v3.1.1...v3.2.0
 [3.1.1]: https://github.com/synonymdev/bitkit-android/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/synonymdev/bitkit-android/compare/v3.0.1...v3.1.0
 [3.0.1]: https://github.com/synonymdev/bitkit-android/compare/v3.0.0..v3.0.1
