@@ -1,0 +1,24 @@
+<journey name="wear quickpay on app start">
+  <description>
+    A payment link that starts the app is paid under QuickPay too, although the last import of the phone's settings
+    is too old by then: the send waits a moment for the import and the rates that the start brings, and then goes
+    out without the review and the hold. Emulator and physical watch.
+
+    Precondition: run quickpay-skips-hold.xml first, so the watch's last import has QuickPay on, and change nothing
+    on the phone since. Watch: the wallet of quickpay-skips-hold.xml on the local ./spark stack with at least 2 000
+    sats and a network on which the balance comes back within 20 s of a start. A wallet that needs more than 30 s
+    shows the review and the hold instead, which is as designed and fails this journey.
+  </description>
+  <actions>
+    <action>Run `adb shell am force-stop to.bitkit.dev`</action>
+    <action>Wait 16 minutes: the last import is then too old for QuickPay</action>
+    <action>Run `adb shell input keyevent KEYCODE_WAKEUP`</action>
+    <action>Run `../bitkit-docker/spark invoice 200` and note the BOLT11 invoice it prints as &lt;invoice&gt;</action>
+    <action>Run `adb logcat -c`</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;invoice&gt;" to.bitkit.dev`, which starts the app</action>
+    <action>Wait up to 40 s until "WatchSendSent" is listed, touching nothing</action>
+    <action>Verify "WatchSendResultAmount" reads "200"</action>
+    <action>Verify `adb logcat -d -s BitkitWear` lists "Imported the phone's settings"</action>
+    <action>Verify `adb logcat -d -s BitkitWear` lists "Skipped the hold to pay under QuickPay"</action>
+  </actions>
+</journey>

@@ -129,11 +129,18 @@ the command line. Run `receive-paid.xml` first: it funds the wallet the send jou
 | `quickpay-skips-hold.xml` | local, and a phone that wrote its settings | yes, 2 000 sats |
 | `quickpay-over-limit-holds.xml` | local, and a phone that wrote its settings | yes, 12 000 sats |
 | `quickpay-off-holds.xml` | local, and a phone that wrote its settings, after `quickpay-skips-hold.xml` | yes, 2 000 sats |
+| `settings-import-units.xml` | local, a private phrase, and a phone that wrote its settings | yes, any balance above 0 |
+| `settings-swap-survives-import.xml` | as `settings-import-units.xml`, after it | yes, any balance above 0 |
+| `quickpay-skips-hold.xml` | local, a private phrase, and a phone that wrote its settings | yes, 2 000 sats |
+| `quickpay-on-app-start.xml` | as `quickpay-skips-hold.xml`, after it | yes, 2 000 sats |
+| `quickpay-over-limit-holds.xml` | local, a private phrase, and a phone that wrote its settings | yes, 12 000 sats |
+| `quickpay-off-holds.xml` | as `quickpay-skips-hold.xml`, after it | yes, 2 000 sats |
 
-The four settings journeys read the phone's settings backup from Blocktank's hosted staging VSS, which every dev
+The six settings journeys read the phone's settings backup from Blocktank's hosted staging VSS, which every dev
 build uses whatever its Spark network is: a watch on the local `./spark` stack reads the same backup as one on hosted
 regtest. Nothing extra runs locally, no VSS and no LNURL-auth server. They need a phone app that wrote the backup
-first: see [Phone settings on VSS](#phone-settings-on-vss).
+first: see [Phone settings on VSS](#phone-settings-on-vss). They never run on the public test phrase, whose backup
+every other journey reads too: see [Private settings wallet](#private-settings-wallet).
 
 The daily QuickPay limit, an amount the wearer typed, a missing, unreadable or newer backup, and settings older than
 15 minutes have no journey: they depend on the exchange rate of the day, an amountless invoice the local stack does
@@ -163,7 +170,7 @@ regtest. A local wallet is new to that chain, so it starts at 0.
 ### Funding the test wallet
 
 On the local stack, `receive-paid.xml` funds the watch through its own receive QR. Otherwise, or for an on-chain
-deposit, take the deposit address or invoice from the phone app with the same recovery phrase: restore [the test wallet](#the-test-wallet) in a phone dev build on the same Spark network, read the
+deposit, take the deposit address or invoice from the phone app with the same recovery phrase: restore [the test wallet](#the-test-wallet) in a phone dev build on the same Spark network (and change none of its settings there, see [Private settings wallet](#private-settings-wallet)), read the
 Spark deposit address at Settings › Advanced › Lightning Connections › Spark (`SparkDepositAddress`), fund it, then
 close the phone app before you start the watch again. Two live Spark instances on one seed are unsafe (#2152), so never
 keep both open.
@@ -227,6 +234,35 @@ The test wallet restored with no passphrase, its balance loaded, Bitcoin as the 
 
 A wallet restored by an earlier journey can stay: only [Fresh app](#fresh-app) and `remove-wallet.xml` remove it.
 
+The watch imports the settings backup of whatever phrase it holds, so these journeys count on the public phrase's
+backup holding the phone's defaults (Bitcoin first, sats, USD, QuickPay off) or not existing. If the balance shows
+another currency or eight decimals, a phone app changed that backup: run the journeys with a private 12-word phrase
+of your own instead, which they support (see [The test wallet](#the-test-wallet)).
+
+### Private settings wallet
+
+Every journey that changes the phone's settings (`settings-*.xml`, `quickpay-*.xml`) runs on a wallet of its own,
+never on the public test phrase. That phrase's settings backup is one object on the hosted staging VSS, shared by
+hosted regtest and the local `./spark` stack and by everyone who restores the phrase: fiat first, euros or QuickPay
+written there would reach every other watch on that phrase and break the journeys that expect the defaults.
+
+1. Create a new wallet in a phone dev build, from its onboarding: a phrase nobody else has. Do not
+   reuse a phrase that holds or ever held real funds.
+2. Read its 12 words at Settings › Security › Back up your wallet (`BackupWallet`).
+3. Keep the words out of the repository, the journey files, logs, screenshots and pull requests. Hold them in a
+   shell variable for the session, read without echo:
+
+   ```bash
+   read -rs PHRASE    # paste the 12 words, separated by spaces, then Enter
+   ```
+
+4. Restore it on the watch as in [Restored wallet](#restored-wallet), typing `for w in $PHRASE; do … done` with the
+   loop of [Typing several words](#typing-several-words).
+5. On the local `./spark` stack, `receive-paid.xml` funds it on the watch.
+
+One private wallet serves all six journeys. Remove it from the watch (`remove-wallet.xml` or
+[Fresh app](#fresh-app)) before the journeys on the public phrase run again.
+
 ### Phone settings on VSS
 
 The watch never writes settings; it imports the ones a phone app backed up for the same recovery phrase
@@ -237,9 +273,9 @@ names this precondition:
    ([journeys/README.md](../README.md) has the phone setup). Install a plain dev build of the phone app there with
    `just install`: not an E2E build with `E2E_VSS_SERVER_URL` set, which would back up to a local server the watch
    never reads.
-2. Restore the wallet the watch uses in the phone app, or create a new wallet there and note its 12 words from
-   Settings › Security › Back up your wallet (`BackupWallet`), to restore on the watch. The recovery phrase and passphrase must be the same on
-   both, since they name the backup.
+2. Use the [Private settings wallet](#private-settings-wallet) in the phone app: the wallet created there, or the
+   same private phrase restored. Never restore the public test phrase in a phone app to change its settings. The
+   recovery phrase and passphrase must be the same on phone and watch, since they name the backup.
 3. Set what the journey asks for in the phone's Settings (`HeaderMenu`, `DrawerSettings`, `Tab-general`):
    - Default Unit (`UnitSettings`): Bitcoin or the currency first, and the denomination (`DenominationModern`,
      `DenominationClassic`).
@@ -251,16 +287,23 @@ names this precondition:
    Security › Data Backups (`BackupSettings`) lists Settings with the time of its last backup.
 5. Close the phone app (`adb shell am force-stop to.bitkit.dev` on the phone). The phone and the watch must never be
    open on the same Spark network with one recovery phrase at the same time (#2152).
-6. Start the watch again. It imports the settings when its wallet is ready, at every start, every 5 minutes, and at
-   once on a tap on `WatchSettingsSync` on the Settings page. Debug builds log `Imported the phone's settings`:
+6. Start the watch again. It imports the settings when its wallet is ready, at every start and every 5 minutes, but
+   not within a minute of the last import and not in ambient mode; a tap on `WatchSettingsSync` on the Settings page
+   imports at once, and shows `WatchSettingsSyncFailed` when it could not. Debug builds log
+   `Imported the phone's settings`:
 
    ```bash
    adb logcat -d -s BitkitWear | grep "SettingsSyncRepo"
    ```
 
-**Gotcha:** the public test phrase's backup belongs to everyone who restores it on a dev build, so its settings
-change without notice, and QuickPay may be on or off in it. For the QuickPay journeys use a private phrase: a new
-wallet created in the phone app. On the local `./spark` stack `receive-paid.xml` funds it on the watch.
+**Gotcha:** the public test phrase's backup belongs to everyone who restores it on a dev build, so its settings can
+change without notice. That is why no settings journey reads or writes it, and why a phone app that holds the public
+phrase, as for [Funding the test wallet](#funding-the-test-wallet), must leave its units, currency and QuickPay at
+their defaults.
+
+**Gotcha:** QuickPay pays only a link that the wearer is there for: the send has to be priced within 30 s of the
+link, with the watch unlocked, the app on screen and out of ambient mode all that time. A journey that sends its link
+to a watch that is asleep, locked or still connecting for longer gets the review and the hold instead.
 
 **Never install the phone app on the watch or the watch app on the phone:** they share one application id.
 `just install` and `just wear-install` each pick a device by `ANDROID_SERIAL`; set it before every install.

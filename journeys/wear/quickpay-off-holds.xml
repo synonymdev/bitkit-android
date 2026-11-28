@@ -4,8 +4,9 @@
     paid by itself now opens the review and waits for the hold. A watch that never imported the phone's settings
     behaves the same. Emulator and physical watch.
 
-    Precondition: run quickpay-skips-hold.xml first. Then, on the phone with the same recovery phrase, turn QuickPay
-    off, wait for the backup and close the phone app, see journeys/wear/README.md › Phone settings on VSS. Watch: the
+    Precondition: run quickpay-skips-hold.xml first, on its Private settings wallet and never the public test phrase.
+    Then, on the phone with the same recovery phrase, turn QuickPay off, wait for the backup and close the phone app,
+    see journeys/wear/README.md › Phone settings on VSS. Watch: the
     wallet of quickpay-skips-hold.xml on the local ./spark stack with at least 2 000 sats, the app open on the Balance
     page and the loading ring stopped. README › Holding to pay has the hold gesture.
   </description>
@@ -19,7 +20,7 @@
     <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;invoice&gt;" to.bitkit.dev`</action>
     <action>Wait up to 10 s until "WatchSendHold" is listed</action>
     <action>Verify "WatchSendAmount" reads "200"</action>
-    <action>Wait 5 s and verify "WatchSendSent" is not listed: nothing was paid</action>
+    <action>Verify "WatchSendSent" does not get listed within 5 s: nothing was paid</action>
     <action>Hold "WatchSendHold" for 2 s as in README › Holding to pay</action>
     <action>Wait up to 15 s until "WatchSendSent" is listed</action>
   </actions>
