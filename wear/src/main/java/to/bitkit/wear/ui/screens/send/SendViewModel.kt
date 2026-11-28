@@ -6,6 +6,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -38,6 +39,8 @@ import kotlin.time.Duration.Companion.seconds
  * The send flow for one payment input from a deeplink: it waits for the wallet, reads the input, asks for an amount
  * only when the input names none, prices the send and shows it for review. The send goes out only after the hold to
  * pay completes, unless [PaymentsRepo.skipConfirmation] says otherwise, and the result closes the flow by itself.
+ * The app pays only online: a wallet that is offline before the send starts ends the flow on [SendStep.Offline],
+ * and the request is dropped, not kept for when the network returns.
  */
 @HiltViewModel
 class SendViewModel @Inject constructor(
@@ -77,18 +80,17 @@ class SendViewModel @Inject constructor(
     private var request: SendRequest? = null
     private var prepared: PreparedSend? = null
 
+    /** Reads, prices and shows the request before the send; cancelled when the wallet goes offline. */
+    private var flow: Job? = null
+
     init {
+        flow = viewModelScope.launch { start() }
         viewModelScope.launch {
             walletRepo.walletState.collect { wallet ->
-                _uiState.update {
-                    it.copy(
-                        isWalletReady = wallet.status == WalletStatus.Ready,
-                        isOffline = wallet.status == WalletStatus.Offline,
-                    )
-                }
+                _uiState.update { it.copy(isWalletReady = wallet.status == WalletStatus.Ready) }
+                if (wallet.status == WalletStatus.Offline) dropOffline()
             }
         }
-        viewModelScope.launch { start() }
     }
 
     fun onAmountChange(text: String) {
@@ -107,7 +109,7 @@ class SendViewModel @Inject constructor(
             _uiState.update { it.copy(step = step.copy(isOutOfRange = true)) }
             return
         }
-        viewModelScope.launch { prepare(request, amount) }
+        flow = viewModelScope.launch { prepare(request, amount) }
     }
 
     /** Sends the reviewed payment once the hold to pay completes, while the wallet is ready. */
@@ -123,8 +125,26 @@ class SendViewModel @Inject constructor(
         _effects.trySend(SendEffect.Close)
     }
 
+    /**
+     * Ends a flow whose send has not started on [SendStep.Offline]: on arrival, while the input is read or priced,
+     * during the amount entry or on review. A send already under way keeps its own outcome.
+     */
+    private fun dropOffline() {
+        val step = _uiState.value.step
+        if (step !is SendStep.Loading && step !is SendStep.Amount && step !is SendStep.Review) return
+        Logger.info("Dropped a send request while offline", context = TAG)
+        flow?.cancel()
+        request = null
+        prepared = null
+        _uiState.update { it.copy(step = SendStep.Offline) }
+    }
+
+    /** Shows [step] unless the flow already ended on [SendStep.Offline]. */
+    private fun show(step: SendStep) {
+        _uiState.update { if (it.step is SendStep.Offline) it else it.copy(step = step) }
+    }
+
     private suspend fun start() {
-        _uiState.update { it.copy(step = SendStep.Loading) }
         walletRepo.walletState.first { it.status == WalletStatus.Ready }
         val parsed = paymentsRepo.parse(input).getOrElse {
             fail(it)
@@ -132,28 +152,29 @@ class SendViewModel @Inject constructor(
         }
         request = parsed
         if (parsed.fixedAmountSats == null) {
-            _uiState.update { it.copy(step = amountStep(parsed)) }
+            show(amountStep(parsed))
             return
         }
         prepare(parsed, amountSats = null)
     }
 
     private suspend fun prepare(request: SendRequest, amountSats: ULong?) {
-        _uiState.update { it.copy(step = SendStep.Loading) }
+        show(SendStep.Loading)
         val result = paymentsRepo.prepare(request, amountSats).getOrElse {
             if (it is SendError.AmountOutOfRange && request.fixedAmountSats == null) {
-                _uiState.update { state -> state.copy(step = amountStep(request).copy(isOutOfRange = true)) }
+                show(amountStep(request).copy(isOutOfRange = true))
             } else {
                 fail(it)
             }
             return
         }
+        if (_uiState.value.step is SendStep.Offline) return
         prepared = result
         if (paymentsRepo.skipConfirmation(result)) {
             send(result)
             return
         }
-        _uiState.update { it.copy(step = review(result, request)) }
+        show(review(result, request))
     }
 
     private suspend fun review(prepared: PreparedSend, request: SendRequest): SendStep.Review {
@@ -216,7 +237,7 @@ class SendViewModel @Inject constructor(
             finish(SendResult.Pending, amountSats = prepared?.amountSats ?: 0uL)
             return
         }
-        _uiState.update { it.copy(step = SendStep.Failed(SendFailure.of(error))) }
+        show(SendStep.Failed(SendFailure.of(error)))
     }
 
     private fun amountStep(request: SendRequest): SendStep.Amount = when (request) {
@@ -259,6 +280,9 @@ sealed interface SendStep {
 
     /** Nothing was sent, for [failure]. */
     data class Failed(val failure: SendFailure) : SendStep
+
+    /** Nothing was sent: the wallet went offline before the send started. The flow ends here. */
+    data object Offline : SendStep
 }
 
 enum class SendResult { Sent, Pending, Unknown }
@@ -303,7 +327,6 @@ data class SendUiState(
     val step: SendStep = SendStep.Loading,
     val amountText: String = "",
     val isWalletReady: Boolean = false,
-    val isOffline: Boolean = false,
 ) {
     /** Whether the hold to pay can start: only on review with the wallet ready. */
     val isHoldEnabled: Boolean get() = step is SendStep.Review && isWalletReady

@@ -54,11 +54,11 @@
     <string name="send__error_invalid">Invalid invoice</string>
     <string name="send__error_not_ready">Wallet not ready</string>
     <string name="send__error_out_of_range">Out of range</string>
+    <string name="send__error_offline">Can\'t pay offline</string>
     <string name="send__error_own_invoice">Can\'t pay own invoice</string>
     <string name="send__error_unsupported">Not supported</string>
     <string name="send__fee">Fee %1$s</string>
     <string name="send__hold">Hold to pay</string>
-    <string name="send__offline">Offline</string>
     <string name="send__pay">Pay</string>
     <string name="send__pending">Pending</string>
     <string name="send__sent">Sent</string>

@@ -54,11 +54,11 @@
     <string name="send__error_invalid">Ungültige Rechnung</string>
     <string name="send__error_not_ready">Wallet nicht bereit</string>
     <string name="send__error_out_of_range">Außerhalb des Bereichs</string>
+    <string name="send__error_offline">Offline nicht bezahlbar</string>
     <string name="send__error_own_invoice">Eigene Rechnung nicht bezahlbar</string>
     <string name="send__error_unsupported">Nicht unterstützt</string>
     <string name="send__fee">Gebühr %1$s</string>
     <string name="send__hold">Halten zum Bezahlen</string>
-    <string name="send__offline">Offline</string>
     <string name="send__pay">Bezahlen</string>
     <string name="send__pending">Ausstehend</string>
     <string name="send__sent">Gesendet</string>

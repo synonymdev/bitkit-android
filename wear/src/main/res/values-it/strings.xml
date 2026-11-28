@@ -55,11 +55,11 @@
     <string name="send__error_invalid">Fattura non valida</string>
     <string name="send__error_not_ready">Wallet non pronto</string>
     <string name="send__error_out_of_range">Fuori intervallo</string>
+    <string name="send__error_offline">Impossibile pagare offline</string>
     <string name="send__error_own_invoice">È la tua fattura</string>
     <string name="send__error_unsupported">Non supportato</string>
     <string name="send__fee">Commissione %1$s</string>
     <string name="send__hold">Tieni premuto per pagare</string>
-    <string name="send__offline">Offline</string>
     <string name="send__pay">Paga</string>
     <string name="send__pending">In sospeso</string>
     <string name="send__sent">Inviato</string>

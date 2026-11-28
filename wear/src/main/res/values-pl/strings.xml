@@ -56,11 +56,11 @@
     <string name="send__error_invalid">Nieprawidłowa faktura</string>
     <string name="send__error_not_ready">Portfel nie jest gotowy</string>
     <string name="send__error_out_of_range">Poza zakresem</string>
+    <string name="send__error_offline">Nie można płacić offline</string>
     <string name="send__error_own_invoice">Własna faktura</string>
     <string name="send__error_unsupported">Nieobsługiwane</string>
     <string name="send__fee">Opłata %1$s</string>
     <string name="send__hold">Przytrzymaj, aby zapłacić</string>
-    <string name="send__offline">Offline</string>
     <string name="send__pay">Zapłać</string>
     <string name="send__pending">Oczekuje</string>
     <string name="send__sent">Wysłano</string>

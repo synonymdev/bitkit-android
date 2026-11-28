@@ -199,8 +199,9 @@ On-screen copy stays short: a title or one line of at most about six words per s
   pays. `PaymentsRepo.parse` drops `lightning:`, `lnurl:` and `lnurlp:` before decoding, as the phone's scanner
   does, reads a LUD-17 `lnurlp://host/path` as `https://host/path` (`http` for an onion host) and lowercases an
   all-uppercase payload. A link opens the send flow above Home (`MainActivity` is `singleTop`, so a link reaches the
-  open app); without a wallet, during the restore, or while a send is under way, the link is dropped. The flow waits for the wallet to be ready
-  (the loading ring, with "Offline" while it is offline), reads the input and prices the send (see Payments), all before the hold. An input
+  open app); without a wallet, during the restore, or while a send is under way, the link is dropped. The flow waits
+  for the wallet to be ready (the loading ring), reads the input and prices the send (see Payments), all before the
+  hold. An input
   without an amount, an amountless invoice, a Spark address or an LNURL with a range, gets a minimal amount entry
   (the number keyboard, the LNURL range below it); Receive never has one.
   - Review: the amount in the balance's large style, fiat below in the small style, the fee only when it is at
@@ -208,8 +209,15 @@ On-screen copy stays short: a title or one line of at most about six words per s
     button, "Hold to pay" (`WatchSendHold`).
   - Hold to pay: holding the button fills a ring around the bezel (`HoldToPayRing`, the geometry of `BezelLoading`)
     over 1.2 s, with a light tick (`SegmentTick`) at each quarter and the confirm haptic at the end, and only then
-    the payment goes out. Releasing early empties the ring; a tap never pays. Offline, the button is disabled with
-    the line "Offline"; while the wallet connects, locks or pauses, it is disabled under the loading ring.
+    the payment goes out. Releasing early empties the ring; a tap never pays. While the wallet connects, locks or
+    pauses, the button is disabled under the loading ring.
+  - Offline: the app pays only online. A wallet that is offline (`WalletStatus.Offline`) while a request is open and
+    its send has not started (on arrival, while it is read or priced, on the amount entry or on review before the
+    hold completes) ends the flow on its own refusal, `SendStep.Offline`: the crossed-out cloud, "Can't pay
+    offline" (`WatchSendOfflineError`), the reject haptic and OK (`WatchSendClose`), which closes the flow. The
+    request is dropped, never kept to pay when the network returns, so nothing (QuickPay included) pays it later.
+    Once the hold completed and the send started, going offline changes nothing: the send keeps its pending or
+    unknown outcome.
     `PaymentsRepo.skipConfirmation` is asked before the hold; it is always false until QuickPay (PR 3).
   - Screen readers: a screen reader's wearer cannot hold, and the button's click pays nothing, so the button
     offers "Pay" as a custom accessibility action, picked from the actions menu, and as its long click (a double

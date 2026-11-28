@@ -56,11 +56,11 @@
     <string name="send__error_invalid">Neplatná faktura</string>
     <string name="send__error_not_ready">Peněženka není připravena</string>
     <string name="send__error_out_of_range">Mimo rozsah</string>
+    <string name="send__error_offline">Bez připojení nelze platit</string>
     <string name="send__error_own_invoice">Vlastní fakturu nelze zaplatit</string>
     <string name="send__error_unsupported">Nepodporováno</string>
     <string name="send__fee">Poplatek %1$s</string>
     <string name="send__hold">Podržte pro platbu</string>
-    <string name="send__offline">Offline</string>
     <string name="send__pay">Zaplatit</string>
     <string name="send__pending">Zpracovávání</string>
     <string name="send__sent">Odesláno</string>

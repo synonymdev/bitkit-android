@@ -56,11 +56,11 @@
     <string name="send__error_invalid">Неверный счёт</string>
     <string name="send__error_not_ready">Кошелёк не готов</string>
     <string name="send__error_out_of_range">Вне диапазона</string>
+    <string name="send__error_offline">Нельзя платить офлайн</string>
     <string name="send__error_own_invoice">Это ваш счёт</string>
     <string name="send__error_unsupported">Не поддерживается</string>
     <string name="send__fee">Комиссия %1$s</string>
     <string name="send__hold">Удерживайте для оплаты</string>
-    <string name="send__offline">Офлайн</string>
     <string name="send__pay">Оплатить</string>
     <string name="send__pending">В ожидании</string>
     <string name="send__sent">Отправлено</string>

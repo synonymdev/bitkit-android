@@ -80,7 +80,6 @@ class SendReviewTest {
                         payee = null,
                     ),
                     isHoldEnabled = isHoldEnabled,
-                    isOffline = false,
                     isConnecting = !isHoldEnabled,
                     onHoldComplete = { pays++ },
                 )

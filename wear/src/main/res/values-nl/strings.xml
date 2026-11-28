@@ -54,11 +54,11 @@
     <string name="send__error_invalid">Ongeldige factuur</string>
     <string name="send__error_not_ready">Wallet niet gereed</string>
     <string name="send__error_out_of_range">Buiten bereik</string>
+    <string name="send__error_offline">Betalen kan niet offline</string>
     <string name="send__error_own_invoice">Eigen factuur</string>
     <string name="send__error_unsupported">Niet ondersteund</string>
     <string name="send__fee">Kosten %1$s</string>
     <string name="send__hold">Houd vast om te betalen</string>
-    <string name="send__offline">Offline</string>
     <string name="send__pay">Betalen</string>
     <string name="send__pending">In behandeling</string>
     <string name="send__sent">Verzonden</string>

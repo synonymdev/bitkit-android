@@ -58,11 +58,11 @@
     <string name="send__error_invalid">فاتورة غير صالحة</string>
     <string name="send__error_not_ready">المحفظة غير جاهزة</string>
     <string name="send__error_out_of_range">خارج النطاق</string>
+    <string name="send__error_offline">لا يمكن الدفع دون اتصال</string>
     <string name="send__error_own_invoice">لا يمكن دفع فاتورتك</string>
     <string name="send__error_unsupported">غير مدعوم</string>
     <string name="send__fee">الرسوم %1$s</string>
     <string name="send__hold">اضغط مطولًا للدفع</string>
-    <string name="send__offline">غير متصل</string>
     <string name="send__pay">ادفع</string>
     <string name="send__pending">معلق</string>
     <string name="send__sent">تم الإرسال</string>

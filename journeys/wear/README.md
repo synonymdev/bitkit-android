@@ -121,6 +121,7 @@ the command line. Run `receive-paid.xml` first: it funds the wallet the send jou
 | `send-ambient-hides-amount.xml` | local | yes, 2 000 sats |
 | `send-insufficient.xml` | local | yes, less than 10 000 000 sats |
 | `send-own-invoice-guard.xml` | local | yes, any balance above 0 |
+| `send-offline-error.xml` | local | yes, any balance above 0 |
 | `activity-list.xml` | local | yes, after `receive-paid.xml` and `send-deeplink-bolt11.xml` |
 | `receive-paid-ambient.xml` | local | no, it funds the wallet with 1 000 sats |
 | `tile-balance.xml` | hosted or local | no |

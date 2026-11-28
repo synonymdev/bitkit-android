@@ -1,0 +1,26 @@
+<journey name="wear send offline error">
+  <description>
+    The app pays only online: a payment link opened while the watch is offline ends on its own refusal, a crossed-out
+    cloud and "Can't pay offline" with the reject haptic and OK, before any review or hold (docs/wear.md › Send ›
+    Offline). OK closes the flow, and the request is dropped: it is not paid when the network returns. Emulator and
+    physical watch (on a watch, turn on airplane mode in its settings).
+
+    Precondition: Restored wallet on the local ./spark stack with a balance above 0, see
+    journeys/wear/README.md › Local ./spark stack, on the Balance page with the loading ring stopped. Offline recipe:
+    README › Offline. Turn airplane mode off again if the journey stops early.
+  </description>
+  <actions>
+    <action>From the bitkit-docker checkout, run `./spark invoice 1000` (README › Local invoices) and note the invoice as &lt;invoice&gt;</action>
+    <action>Run `adb shell cmd connectivity airplane-mode enable` and wait 5 s</action>
+    <action>Dump `android layout` every 5 s until it lists "WatchHomeOffline", for up to 1 minute</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;invoice&gt;" to.bitkit.dev`</action>
+    <action>Wait up to 10 s until "WatchSendOfflineError" is listed</action>
+    <action>Verify "WatchSendOfflineError" reads "Can't pay offline"</action>
+    <action>Verify "WatchSendHold" and "WatchSendLoading" are not listed</action>
+    <action>Verify from a screenshot that a crossed-out cloud sits above the line, with one OK button below it</action>
+    <action>Tap "WatchSendClose"</action>
+    <action>Verify Home is back: "WatchHomeBalance" is listed</action>
+    <action>Run `adb shell cmd connectivity airplane-mode disable`</action>
+    <action>Dump `android layout` every 5 s until it no longer lists "WatchHomeOffline", for up to 1 minute, then verify "WatchSendOfflineError" and "WatchSendSending" are not listed</action>
+  </actions>
+</journey>

@@ -54,11 +54,11 @@
     <string name="send__error_invalid">Μη έγκυρο τιμολόγιο</string>
     <string name="send__error_not_ready">Το πορτοφόλι δεν είναι έτοιμο</string>
     <string name="send__error_out_of_range">Εκτός ορίων</string>
+    <string name="send__error_offline">Δεν γίνεται πληρωμή εκτός σύνδεσης</string>
     <string name="send__error_own_invoice">Δικό σου τιμολόγιο</string>
     <string name="send__error_unsupported">Δεν υποστηρίζεται</string>
     <string name="send__fee">Χρέωση %1$s</string>
     <string name="send__hold">Κράτα για πληρωμή</string>
-    <string name="send__offline">Εκτός σύνδεσης</string>
     <string name="send__pay">Πληρωμή</string>
     <string name="send__pending">Εκκρεμεί</string>
     <string name="send__sent">Στάλθηκε</string>

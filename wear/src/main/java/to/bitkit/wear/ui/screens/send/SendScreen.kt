@@ -62,7 +62,7 @@ import to.bitkit.wear.ui.components.rememberHoldToPayState
 import to.bitkit.wear.ui.screens.home.DisplayAmount
 import to.bitkit.wear.ui.theme.Colors
 
-/** The size of the icon that tops a status: the check, the cross, the clock and the bolt while loading. */
+/** The size of the icon that tops a status: the check, the cross, the clock, the cloud and the bolt while loading. */
 private val STATUS_ICON_SIZE = 48.dp
 
 /** The opacity of the bolt that shows while the send is loading or under way. */
@@ -70,8 +70,9 @@ private const val LOADING_ICON_ALPHA = 0.4f
 
 /**
  * The send flow of a deeplink: review with the hold to pay, the send under way, and its result, which closes the
- * flow by itself ([onClose]). The amount entry shows only for an input that names no amount. While a send is under
- * way the screen stays on and cannot be left ([onBusyChange]). In ambient mode a step with an amount hides behind a
+ * flow by itself ([onClose]). The amount entry shows only for an input that names no amount. Offline before the
+ * send starts, the flow ends on a refusal of its own. While a send is under way the screen stays on and cannot be
+ * left ([onBusyChange]). In ambient mode a step with an amount hides behind a
  * dimmed bolt, as no amount shows on the always-on screen.
  */
 @Composable
@@ -96,11 +97,11 @@ fun SendScreen(
     // A screen that leaves while busy must not leave the swipe to dismiss off for every other screen.
     DisposableEffect(Unit) { onDispose { currentOnBusyChange(false) } }
     val step = uiState.step
-    LaunchedEffect(step is SendStep.Done, step is SendStep.Failed) {
+    LaunchedEffect(step is SendStep.Done, step is SendStep.Failed, step is SendStep.Offline) {
         when (step) {
             is SendStep.Done if step.result == SendResult.Sent ->
                 haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-            is SendStep.Failed -> haptic.performHapticFeedback(HapticFeedbackType.Reject)
+            is SendStep.Failed, SendStep.Offline -> haptic.performHapticFeedback(HapticFeedbackType.Reject)
             else -> Unit
         }
     }
@@ -133,7 +134,7 @@ private fun Content(
         return
     }
     when (step) {
-        SendStep.Loading -> Loading(isOffline = uiState.isOffline, modifier = modifier)
+        SendStep.Loading -> Loading(modifier = modifier)
         is SendStep.Amount -> Amount(
             step = step,
             text = uiState.amountText,
@@ -144,14 +145,26 @@ private fun Content(
         is SendStep.Review -> Review(
             step = step,
             isHoldEnabled = uiState.isHoldEnabled,
-            isOffline = uiState.isOffline,
-            isConnecting = !uiState.isWalletReady && !uiState.isOffline,
+            isConnecting = !uiState.isWalletReady,
             onHoldComplete = onHoldComplete,
             modifier = modifier
         )
         is SendStep.Sending -> Sending(isWaiting = step.isWaiting, modifier = modifier)
         is SendStep.Done -> Done(step = step, modifier = modifier)
-        is SendStep.Failed -> Failed(failure = step.failure, onCloseClick = onCloseClick, modifier = modifier)
+        is SendStep.Failed -> Refusal(
+            icon = R.drawable.ic_close,
+            text = stringResource(step.failure.text),
+            textTag = "WatchSendError",
+            onCloseClick = onCloseClick,
+            modifier = modifier
+        )
+        SendStep.Offline -> Refusal(
+            icon = R.drawable.ic_cloud_off,
+            text = stringResource(R.string.send__error_offline),
+            textTag = "WatchSendOfflineError",
+            onCloseClick = onCloseClick,
+            modifier = modifier
+        )
     }
 }
 
@@ -167,10 +180,7 @@ private fun Hidden(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun Loading(
-    isOffline: Boolean,
-    modifier: Modifier = Modifier,
-) {
+private fun Loading(modifier: Modifier = Modifier) {
     CenteredScreen(
         overlay = { BezelLoading() },
         modifier = modifier
@@ -180,7 +190,6 @@ private fun Loading(
             tint = Colors.White.copy(alpha = LOADING_ICON_ALPHA),
             modifier = Modifier.testTag("WatchSendLoading")
         )
-        if (isOffline) OfflineLine()
     }
 }
 
@@ -282,7 +291,6 @@ private fun AmountField(
 internal fun Review(
     step: SendStep.Review,
     isHoldEnabled: Boolean,
-    isOffline: Boolean,
     isConnecting: Boolean,
     onHoldComplete: () -> Unit,
     modifier: Modifier = Modifier,
@@ -340,10 +348,7 @@ internal fun Review(
                 modifier = Modifier.testTag("WatchSendFee")
             )
         }
-        when {
-            isOffline -> OfflineLine()
-            step.payee != null -> Line(text = step.payee, modifier = Modifier.testTag("WatchSendPayee"))
-        }
+        step.payee?.let { Line(text = it, modifier = Modifier.testTag("WatchSendPayee")) }
     }
 }
 
@@ -405,19 +410,22 @@ private fun Done(
     }
 }
 
+/** Nothing was sent: [icon] and the one line [text], with the one action that closes the flow. */
 @Composable
-private fun Failed(
-    failure: SendFailure,
+private fun Refusal(
+    @DrawableRes icon: Int,
+    text: String,
+    textTag: String,
     onCloseClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     CenteredScreen(modifier = modifier) {
-        StatusIcon(icon = R.drawable.ic_close, tint = MaterialTheme.colorScheme.error)
+        StatusIcon(icon = icon, tint = MaterialTheme.colorScheme.error)
         Text(
-            text = stringResource(failure.text),
+            text = text,
             style = MaterialTheme.typography.titleSmall,
             textAlign = TextAlign.Center,
-            modifier = Modifier.testTag("WatchSendError")
+            modifier = Modifier.testTag(textTag)
         )
         FilledTonalIconButton(
             onClick = onCloseClick,
@@ -444,11 +452,6 @@ private fun StatusIcon(
         tint = tint,
         modifier = modifier.size(STATUS_ICON_SIZE)
     )
-}
-
-@Composable
-private fun OfflineLine(modifier: Modifier = Modifier) {
-    Line(text = stringResource(R.string.send__offline), modifier = modifier.testTag("WatchSendOffline"))
 }
 
 @Composable
@@ -485,10 +488,10 @@ private fun PreviewReview() {
 
 @WearPreviewDevices
 @Composable
-private fun PreviewReviewOffline() {
+private fun PreviewOffline() {
     WearPreview {
         Content(
-            uiState = SendUiState(step = PreviewReviewStep, isOffline = true),
+            uiState = SendUiState(step = SendStep.Offline),
             isAmbient = false,
             onAmountChange = {},
             onAmountConfirm = {},

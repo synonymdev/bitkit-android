@@ -55,11 +55,11 @@
     <string name="send__error_invalid">Factura no válida</string>
     <string name="send__error_not_ready">Wallet no lista</string>
     <string name="send__error_out_of_range">Fuera de rango</string>
+    <string name="send__error_offline">No se puede pagar sin conexión</string>
     <string name="send__error_own_invoice">Es tu propia factura</string>
     <string name="send__error_unsupported">No compatible</string>
     <string name="send__fee">Comisión %1$s</string>
     <string name="send__hold">Mantén para pagar</string>
-    <string name="send__offline">Sin conexión</string>
     <string name="send__pay">Pagar</string>
     <string name="send__pending">Pendiente</string>
     <string name="send__sent">Enviado</string>

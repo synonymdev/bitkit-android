@@ -128,17 +128,73 @@ class SendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `offline disables the hold and a completed hold sends nothing`() = test {
+    fun `a request that arrives offline ends on the offline error without being read`() = test {
+        walletState.update { it.copy(status = WalletStatus.Offline) }
+        stubInvoice(prepared())
+
+        val sut = createSut()
+
+        assertEquals(SendStep.Offline, sut.uiState.value.step)
+        assertFalse(sut.uiState.value.isHoldEnabled)
+        verify(paymentsRepo, never()).parse(any())
+    }
+
+    @Test
+    fun `going offline on review ends on the offline error and a completed hold sends nothing`() = test {
         stubInvoice(prepared())
         val sut = createSut()
+        assertIs<SendStep.Review>(sut.uiState.value.step)
 
         walletState.update { it.copy(status = WalletStatus.Offline) }
 
+        assertEquals(SendStep.Offline, sut.uiState.value.step)
         assertFalse(sut.uiState.value.isHoldEnabled)
-        assertTrue(sut.uiState.value.isOffline)
         sut.onHoldComplete()
         verify(paymentsRepo, never()).send(any())
-        assertIs<SendStep.Review>(sut.uiState.value.step)
+    }
+
+    @Test
+    fun `going offline while pricing drops the request`() = test {
+        whenever(paymentsRepo.parse(INPUT)).thenReturn(Result.success(INVOICE))
+        whenever(paymentsRepo.prepare(INVOICE, null)).doSuspendableAnswer { awaitCancellation() }
+        val sut = createSut()
+        assertEquals(SendStep.Loading, sut.uiState.value.step)
+
+        walletState.update { it.copy(status = WalletStatus.Offline) }
+
+        assertEquals(SendStep.Offline, sut.uiState.value.step)
+    }
+
+    @Test
+    fun `the network coming back does not bring an offline request back`() = test {
+        walletState.update { it.copy(status = WalletStatus.Offline) }
+        stubInvoice(prepared())
+        val sut = createSut()
+
+        sut.effects.test {
+            walletState.update { it.copy(status = WalletStatus.Ready) }
+
+            assertEquals(SendStep.Offline, sut.uiState.value.step)
+            verify(paymentsRepo, never()).parse(any())
+            verify(paymentsRepo, never()).send(any())
+            sut.onHoldComplete()
+            sut.onCloseClick()
+            assertEquals(SendEffect.Close, awaitItem())
+        }
+        verify(paymentsRepo, never()).send(any())
+    }
+
+    @Test
+    fun `going offline once the send started keeps its outcome`() = test {
+        val prepared = prepared()
+        stubInvoice(prepared)
+        whenever(paymentsRepo.send(prepared)).doSuspendableAnswer { awaitCancellation() }
+        val sut = createSut()
+        sut.onHoldComplete()
+
+        walletState.update { it.copy(status = WalletStatus.Offline) }
+
+        assertIs<SendStep.Sending>(sut.uiState.value.step)
     }
 
     @Test
