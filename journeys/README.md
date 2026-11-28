@@ -139,6 +139,7 @@ journey PR, which is what made this file conflict on every merge.
 | Deep links, addresses and invoices handed to the app | `adb shell am start -a android.intent.action.VIEW -d "<uri>"`; `bitkit://` screen and sheet routes sit behind the dev-mode gate — [Running a journey](#running-a-journey), [deeplinks](deeplinks) |
 | A watch to run the Wear OS app on | a Wear OS watch emulator (`Wear_Large_Round_API37`, `Wear_Small_Round_API34`), or a physical watch over Wi-Fi debugging — [wear](wear/README.md) |
 | Watch gestures: pager swipes, swipe-to-dismiss, rotary crown, ambient mode | `adb shell input swipe`, `adb shell input rotaryencoder scroll --axis SCROLL,<n>` and `KEYCODE_SLEEP`/`KEYCODE_WAKEUP` on the emulator; the real crown, bezel and wrist on a physical watch — [wear](wear/README.md#watch-gestures) |
+| The phone's settings on the watch (units, currency, QuickPay) | a phone dev build with the same recovery phrase writes them to the hosted staging VSS, and the watch imports them; nothing runs locally — [wear](wear/README.md#phone-settings-on-vss) |
 | Typing on the watch keyboard | `adb shell input text` after closing the Wear OS keyboard with Back, which otherwise swallows the input — [wear](wear/README.md#typing) |
 
 ## Cross-platform

@@ -1,0 +1,28 @@
+<journey name="wear quickpay skips hold">
+  <description>
+    With QuickPay on in the phone's settings, an invoice under the phone's QuickPay amount is paid without the review
+    and without the hold: the link goes straight to sending and the same "Sent" check, and the flow closes by itself.
+    Emulator and physical watch.
+
+    Precondition: Phone settings on VSS, see journeys/wear/README.md › Phone settings on VSS, with QuickPay on at $1
+    and the daily limit at 5× on the phone, and the phone app closed. Then Restored wallet on the watch with the same
+    recovery phrase on the local ./spark stack with at least 2 000 sats (run receive-paid.xml first), see README ›
+    Local ./spark stack, with the app open on the Balance page and the loading ring stopped. The watch reads the
+    phone's settings from the hosted staging VSS whatever Spark network it is on. 200 sats are under $1 while a bitcoin
+    costs less than $500 000.
+  </description>
+  <actions>
+    <action>Swipe left three times to the Settings page (README › Watch gestures)</action>
+    <action>Verify "WatchSettingsSyncTime" reads a time of at most 5 minutes ago; if it does not, tap "WatchSettingsSync" and wait 10 s</action>
+    <action>Swipe right three times to the Balance page and wait until "WatchHomeBalanceSecondary" reads a fiat value, for up to 1 minute: QuickPay needs the rates</action>
+    <action>Run `../bitkit-docker/spark invoice 200` and note the BOLT11 invoice it prints as &lt;invoice&gt;</action>
+    <action>Run `adb logcat -c`</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;invoice&gt;" to.bitkit.dev`</action>
+    <action>Wait up to 20 s until "WatchSendSent" is listed, touching nothing</action>
+    <action>Verify "WatchSendResultAmount" reads "200"</action>
+    <action>Verify `adb logcat -d -s BitkitWear` lists "Skipped the hold to pay under QuickPay"</action>
+    <action>Wait 4 s</action>
+    <action>Verify the Balance page: "WatchHomeBalance" is listed</action>
+    <action>Verify "WatchSendHold" is not listed</action>
+  </actions>
+</journey>

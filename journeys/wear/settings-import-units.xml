@@ -1,0 +1,29 @@
+<journey name="wear settings import units">
+  <description>
+    The watch adopts the phone's units and currency from the phone's settings backup: fiat first, euros, and bitcoin
+    written with eight decimals. The Settings page shows when the phone's settings were last imported, and a tap on
+    that row imports them again. Emulator and physical watch.
+
+    Precondition: Phone settings on VSS, see journeys/wear/README.md › Phone settings on VSS, with Default Unit set to
+    the currency, Denomination set to Classic and Local Currency set to EUR on the phone, and the phone app closed.
+    Then Restored wallet on the watch with the same recovery phrase, see README › Restored wallet, with a balance above
+    0. Backend: hosted regtest.
+  </description>
+  <actions>
+    <action>Restart the app (README › Restart)</action>
+    <action>Dump `android layout` every 5 s until "WatchHomeBalanceSymbol" reads "€", for up to 1 minute: the import follows the first sync, and the rates load after the balance</action>
+    <action>Verify "WatchHomeBalanceSecondary" reads the balance in bitcoin with eight decimals, such as "0.00050000"</action>
+    <action>Swipe left three times to the Settings page (README › Watch gestures)</action>
+    <action>Verify "WatchSettingsSync" is listed and reads "Phone settings"</action>
+    <action>Verify "WatchSettingsSyncTime" reads a time of at most a few minutes ago, such as "0 min. ago"</action>
+    <action>Run `adb logcat -c`</action>
+    <action>Tap "WatchSettingsSync"</action>
+    <action>Wait up to 15 s until `adb logcat -d -s BitkitWear` lists "Imported the phone's settings"</action>
+    <action>Swipe right three times to the Balance page</action>
+    <action>Tap "WatchHomeBalanceToggle"</action>
+    <action>Verify "WatchHomeBalanceSymbol" reads "₿" and "WatchHomeBalance" reads the balance with eight decimals</action>
+    <action>Restart the app (README › Restart)</action>
+    <action>Wait 30 s after "WatchHomeBalance" is listed, so the import ran</action>
+    <action>Verify "WatchHomeBalanceSymbol" still reads "₿": the wearer's swap lasts while the phone's setting stays the same</action>
+  </actions>
+</journey>

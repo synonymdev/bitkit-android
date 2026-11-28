@@ -125,6 +125,20 @@ the command line. Run `receive-paid.xml` first: it funds the wallet the send jou
 | `activity-list.xml` | local | yes, after `receive-paid.xml` and `send-deeplink-bolt11.xml` |
 | `receive-paid-ambient.xml` | local | no, it funds the wallet with 1 000 sats |
 | `tile-balance.xml` | hosted or local | no |
+| `settings-import-units.xml` | hosted, and a phone that wrote its settings | yes, any balance above 0 |
+| `quickpay-skips-hold.xml` | local, and a phone that wrote its settings | yes, 2 000 sats |
+| `quickpay-over-limit-holds.xml` | local, and a phone that wrote its settings | yes, 12 000 sats |
+| `quickpay-off-holds.xml` | local, and a phone that wrote its settings, after `quickpay-skips-hold.xml` | yes, 2 000 sats |
+
+The four settings journeys read the phone's settings backup from Blocktank's hosted staging VSS, which every dev
+build uses whatever its Spark network is: a watch on the local `./spark` stack reads the same backup as one on hosted
+regtest. Nothing extra runs locally, no VSS and no LNURL-auth server. They need a phone app that wrote the backup
+first: see [Phone settings on VSS](#phone-settings-on-vss).
+
+The daily QuickPay limit, an amount the wearer typed, a missing, unreadable or newer backup, and settings older than
+15 minutes have no journey: they depend on the exchange rate of the day, an amountless invoice the local stack does
+not make, or a backup only a broken phone would write. `QuickPayRepoTest.kt`, `PaymentsRepoTest.kt`,
+`SettingsSyncRepoTest.kt` and `PhoneSettingsParserTest.kt` cover them.
 
 Paying an LNURL-pay link or a Lightning address has no journey: the local stack's LNURL server serves only the
 Lightning addresses its Spark wallets registered, over plain HTTP, and nothing in it registers one. It is covered by
@@ -212,6 +226,44 @@ The test wallet restored with no passphrase, its balance loaded, Bitcoin as the 
 6. If `WatchHomeBalanceSymbol` reads `$`, tap `WatchHomeBalanceToggle` once, so it reads `₿`.
 
 A wallet restored by an earlier journey can stay: only [Fresh app](#fresh-app) and `remove-wallet.xml` remove it.
+
+### Phone settings on VSS
+
+The watch never writes settings; it imports the ones a phone app backed up for the same recovery phrase
+(Settings sync in [docs/wear.md](../../docs/wear.md)). So a phone has to write them first, once per journey that
+names this precondition:
+
+1. Stop the watch emulator if this machine runs one emulator at a time, and start a phone emulator or connect a phone
+   ([journeys/README.md](../README.md) has the phone setup). Install a plain dev build of the phone app there with
+   `just install`: not an E2E build with `E2E_VSS_SERVER_URL` set, which would back up to a local server the watch
+   never reads.
+2. Restore the wallet the watch uses in the phone app, or create a new wallet there and note its 12 words from
+   Settings › Security › Back up your wallet (`BackupWallet`), to restore on the watch. The recovery phrase and passphrase must be the same on
+   both, since they name the backup.
+3. Set what the journey asks for in the phone's Settings (`HeaderMenu`, `DrawerSettings`, `Tab-general`):
+   - Default Unit (`UnitSettings`): Bitcoin or the currency first, and the denomination (`DenominationModern`,
+     `DenominationClassic`).
+   - Local Currency (`CurrenciesSettings`).
+   - QuickPay (`QuickpaySettings`, past `QuickpayIntro-button` the first time): the switch (`QuickpayToggle`), the
+     amount (`QuickpayAmountSlider`, stops $1 to $50) and the daily limit (`QuickpayDailyLimitSlider`, 1× to 50×).
+     Tap the slider track above a stop's label, as in `settings/quickpay-payment-pin.xml`.
+4. Keep the phone app open and online for 20 s: it uploads the settings about 5 s after the last change. Settings ›
+   Security › Data Backups (`BackupSettings`) lists Settings with the time of its last backup.
+5. Close the phone app (`adb shell am force-stop to.bitkit.dev` on the phone). The phone and the watch must never be
+   open on the same Spark network with one recovery phrase at the same time (#2152).
+6. Start the watch again. It imports the settings when its wallet is ready, at every start, every 5 minutes, and at
+   once on a tap on `WatchSettingsSync` on the Settings page. Debug builds log `Imported the phone's settings`:
+
+   ```bash
+   adb logcat -d -s BitkitWear | grep "SettingsSyncRepo"
+   ```
+
+**Gotcha:** the public test phrase's backup belongs to everyone who restores it on a dev build, so its settings
+change without notice, and QuickPay may be on or off in it. For the QuickPay journeys use a private phrase: a new
+wallet created in the phone app. On the local `./spark` stack `receive-paid.xml` funds it on the watch.
+
+**Never install the phone app on the watch or the watch app on the phone:** they share one application id.
+`just install` and `just wear-install` each pick a device by `ANDROID_SERIAL`; set it before every install.
 
 ### Restart
 
