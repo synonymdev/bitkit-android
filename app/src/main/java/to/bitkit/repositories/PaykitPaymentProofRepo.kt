@@ -968,13 +968,20 @@ class PaykitPaymentProofRepo @Inject constructor(
         submissionError: Throwable,
         requestId: PaykitPaymentRequestId? = null,
     ): Boolean {
+        if (!submissionSentNothing(submissionError)) return false
+        failLightningPayment(paymentHash, requestId)
+        return true
+    }
+
+    /** Whether [submissionError] proves the payment never left. */
+    fun submissionSentNothing(submissionError: Throwable): Boolean {
         val error = generateSequence(submissionError) { it.cause }
             .firstOrNull {
                 it is ServiceError.PaymentDeadlineExpired || it is SparkError.SendRefused ||
                     it is ServiceError.PaymentStoppedAtSubmission || it is PaymentAbortedBeforeSend
             }
             ?: submissionError.asNodeException() ?: submissionError
-        when (error) {
+        return when (error) {
             is SparkError.SendRefused,
             is ServiceError.PaymentStoppedAtSubmission,
             is PaymentAbortedBeforeSend,
@@ -986,10 +993,9 @@ class PaykitPaymentProofRepo @Inject constructor(
             is NodeException.NotRunning,
             is NodeException.InvalidInvoice,
             is NodeException.InvalidAmount,
-            is NodeException.PaymentSendingFailed -> failLightningPayment(paymentHash, requestId)
-            else -> return false
+            is NodeException.PaymentSendingFailed -> true
+            else -> false
         }
-        return true
     }
 
     suspend fun retainHardwareOnchainCandidate(

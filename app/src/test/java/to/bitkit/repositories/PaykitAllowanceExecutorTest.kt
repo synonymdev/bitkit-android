@@ -250,6 +250,7 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             payer.payLightning(any(), any(), anyOrNull(), anyOrNull(), any())
         ).thenReturn(Result.success(PAYMENT_HASH))
         whenever(payer.failLightningPayment(any(), any(), any())).thenReturn(true)
+        whenever(payer.discardLightningProof(any(), any())).thenReturn(Result.success(Unit))
         whenever(payer.lightningPaymentStatus(any())).thenAnswer { nodeStatuses[it.getArgument<String>(0)] }
         whenever(payer.canListLightningPayments()).thenAnswer { nodeListsPayments }
     }
@@ -1094,6 +1095,25 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a refused lightning payment is journaled unsent before its proof is cleared`() = test {
+        sut.activate(identity)
+        whenever(
+            payer.payLightning(any(), any(), anyOrNull(), anyOrNull(), any())
+        ).thenReturn(Result.failure(TestAllowanceError("refused")))
+        whenever(payer.submissionSentNothing(any())).thenReturn(true)
+        var stageAtCleanup: Stage? = null
+        whenever(payer.failLightningPayment(any(), any(), any())).doSuspendableAnswer {
+            stageAtCleanup = sut.localState(identity).journal.single().stage
+            true
+        }
+
+        sut.autoPay(fixtures.paymentRequest(), listOf(fixtures.allowance()), identity)
+
+        // Recovery after a kill here finds an unsent attempt and fails it.
+        assertEquals(Stage.SUBMITTED, stageAtCleanup)
+    }
+
+    @Test
     fun `a payment list given back by a failed send stays given back after the node's failure event`() = test {
         sut.activate(identity)
         whenever(
@@ -1892,6 +1912,69 @@ class PaykitAllowanceExecutorTest : BaseUnitTest() {
             emptyList(),
             recordedOutcomes.filter { it.attemptId == attemptId && it.outcome == PaymentOutcome.FAILED },
         )
+    }
+
+    @Test
+    fun `recovery fails a refused manual lightning payment whose outcome was not recorded`() = test {
+        sut.activate(identity)
+        val attemptId = checkNotNull(
+            sut.beginManualPayment(fixtures.paymentRequest(), fixtures.lightningIdentifier, PAYMENT_HASH).getOrThrow(),
+        )
+        sut.manualLightningPaymentSent(attemptId, PAYMENT_HASH)
+
+        // Killed after the refusal cleared the proof, before the failure reached the ledger.
+        sut.manualLightningPaymentRefused(attemptId)
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence(attemptId, PaymentExecutionStatus.SUBMITTED)),
+        )
+        recordedOutcomes.clear()
+        val restarted = PaykitAllowanceExecutor(
+            ioDispatcher = testDispatcher,
+            paykitSdkService = sdk,
+            store = PaykitAllowanceStore(keychain),
+            payer = payer,
+            clock = clock,
+            accountingAmount = { _, _ -> fixtures.accountingAmount("0.00001") },
+        )
+        restarted.recover(identity)
+
+        assertEquals(listOf(PaymentOutcomeReport(attemptId, PaymentOutcome.FAILED)), recordedOutcomes)
+        val order = inOrder(sdk, payer)
+        order.verify(payer).discardLightningProof(eq(PAYMENT_HASH), any())
+        order.verify(sdk).recordPaymentOutcome(PaymentOutcomeReport(attemptId, PaymentOutcome.FAILED))
+    }
+
+    @Test
+    fun `recovery discards the started proof of a refused automatic payment`() = test {
+        val request = fixtures.paymentRequest()
+        // Killed after the refusal was journaled as unsent, before its started proof was discarded.
+        seedJournal(journalEntry(AUTOMATIC_ATTEMPT_ID, request, Stage.SUBMITTED, PAYMENT_HASH))
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence(AUTOMATIC_ATTEMPT_ID, PaymentExecutionStatus.SUBMITTED)),
+        )
+
+        sut.recover(identity)
+
+        assertEquals(listOf(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED)), recordedOutcomes)
+        val order = inOrder(sdk, payer)
+        order.verify(payer).discardLightningProof(PAYMENT_HASH, request.id)
+        order.verify(sdk).recordPaymentOutcome(PaymentOutcomeReport(AUTOMATIC_ATTEMPT_ID, PaymentOutcome.FAILED))
+    }
+
+    @Test
+    fun `recovery leaves a refused payment open when its proof cannot be discarded`() = test {
+        val request = fixtures.paymentRequest()
+        seedJournal(journalEntry(AUTOMATIC_ATTEMPT_ID, request, Stage.SUBMITTED, PAYMENT_HASH))
+        accountingState = fixtures.accountingState(
+            occurrences = listOf(occurrence(AUTOMATIC_ATTEMPT_ID, PaymentExecutionStatus.SUBMITTED)),
+        )
+        whenever(payer.discardLightningProof(any(), any())).thenReturn(Result.failure(TestAllowanceError("store")))
+
+        sut.recover(identity)
+
+        // The next recovery discards the proof and fails the attempt.
+        assertEquals(emptyList(), recordedOutcomes)
+        assertEquals(listOf(Stage.SUBMITTED), sut.localState(identity).journal.map { it.stage })
     }
 
     @Test

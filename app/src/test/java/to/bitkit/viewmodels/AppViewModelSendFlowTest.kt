@@ -24367,6 +24367,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo).releasePrivatePaymentList(testPublicKey, privateContext)
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
         verify(paykitAllowanceRepo).finishManualPayment("refused-attempt", false, null)
+        // Journaled unsent before the cleanup, so recovery after a kill in between fails the attempt.
+        val order = inOrder(paykitAllowanceRepo, paykitPaymentProofRepo)
+        order.verify(paykitAllowanceRepo).manualLightningPaymentRefused("refused-attempt")
+        order.verify(paykitPaymentProofRepo).failLightningPayment(paymentHash, request.id)
     }
 
     @Test

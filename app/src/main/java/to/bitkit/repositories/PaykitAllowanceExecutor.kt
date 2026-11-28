@@ -132,6 +132,9 @@ class PaykitAllowancePayer @Inject constructor(
         requestId: PaykitPaymentRequestId,
     ): Boolean = paymentProofRepo.failLightningPayment(paymentHash, error, requestId)
 
+    /** Whether [error] proves the payment never left. */
+    fun submissionSentNothing(error: Throwable): Boolean = paymentProofRepo.submissionSentNothing(error)
+
     suspend fun discardLightningProof(paymentHash: String, requestId: PaykitPaymentRequestId) =
         paymentProofRepo.failLightningPayment(paymentHash, requestId)
 
@@ -475,9 +478,12 @@ class PaykitAllowanceExecutor @Inject constructor(
                             entry?.let { journalOutcome(it) }
                                 ?: PaymentOutcome.UNKNOWN.takeIf { attempt.status == PaymentExecutionStatus.SUBMITTED }
                         }
-                        outcome?.let { record(attempt.attemptId, it, identity) }
+                        // Left open when the proof could not be discarded, so the next recovery tries again.
+                        val settles = outcome != PaymentOutcome.FAILED ||
+                            discardUnsentLightningProof(attempt.attemptId, identity)
+                        if (settles) outcome?.let { record(attempt.attemptId, it, identity) }
                         // One that paid nothing gives the payee's list back, as a live failure does.
-                        if (outcome == PaymentOutcome.FAILED && entry?.isAutomatic == true) {
+                        if (settles && outcome == PaymentOutcome.FAILED && entry?.isAutomatic == true) {
                             releasePaymentList(entry, identity)
                         }
                     }
@@ -619,6 +625,17 @@ class PaykitAllowanceExecutor @Inject constructor(
         (entry.stage == Stage.PREPARED || entry.stage == Stage.SUBMITTED) &&
             entry.paymentHash != null &&
             !payer.canListLightningPayments()
+
+    /**
+     * A failed payment has no proof to deliver, and a started proof left in place hides its request from the pending
+     * list. Discarded before the outcome is saved, so a kill in between leaves the attempt open for the next recovery.
+     */
+    private suspend fun discardUnsentLightningProof(attemptId: String, identity: String): Boolean {
+        val entry = localState(identity).journal.firstOrNull { it.attemptId == attemptId } ?: return true
+        if (entry.stage == Stage.SUCCEEDED || entry.stage == Stage.FAILED) return true
+        val paymentHash = entry.paymentHash ?: return true
+        return payer.discardLightningProof(paymentHash, entry.requestId).isSuccess
+    }
 
     private suspend fun record(attemptId: String, outcome: PaymentOutcome, identity: String) {
         paykitSdkService.recordPaymentOutcome(PaymentOutcomeReport(attemptId, outcome))
@@ -999,6 +1016,13 @@ class PaykitAllowanceExecutor @Inject constructor(
         ).onFailure {
             // Only an error that proves the payment never left releases the reservation; anything else stays open,
             // and the node's payment event records its outcome.
+            if (payer.submissionSentNothing(it)) {
+                // Saved before the cleanup, so recovery after a kill in between ends the attempt as unsent.
+                updateJournalEntry(attemptId, identity) {
+                    val settled = it.stage == Stage.SUCCEEDED || it.stage == Stage.FAILED
+                    if (settled) it else it.copy(stage = Stage.SUBMITTED)
+                }
+            }
             if (payer.failLightningPayment(paymentHash, it, request.id)) {
                 failUnsent(attemptId, identity)
                 throw it
@@ -1155,6 +1179,19 @@ class PaykitAllowanceExecutor @Inject constructor(
         withContext(ioDispatcher) {
             updateJournalEntry(attemptId, identity) {
                 it.copy(paymentHash = paymentHash.lowercase(), stage = Stage.SENT)
+            }
+        }
+    }
+
+    /**
+     * Called when the recheck before submission refuses a manual Lightning payment, before its proof is cleared, so
+     * recovery after a kill reads the attempt as unsent once the node has no payment for it.
+     */
+    suspend fun manualLightningPaymentRefused(attemptId: String) {
+        val identity = activeIdentity ?: return
+        withContext(ioDispatcher) {
+            updateJournalEntry(attemptId, identity) {
+                if (it.stage == Stage.SUCCEEDED || it.stage == Stage.FAILED) it else it.copy(stage = Stage.SUBMITTED)
             }
         }
     }
