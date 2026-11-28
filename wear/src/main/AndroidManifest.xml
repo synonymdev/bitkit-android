@@ -70,8 +70,18 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
-                <data android:scheme="lightning" />
+                <!-- Schemes match case-sensitively, and QR codes often use the uppercase ones. Withdraw
+                     (lnurlw) and channel (lnurlc) links are not taken: the watch only pays. -->
                 <data android:scheme="bitcoin" />
+                <data
+                    android:scheme="BITCOIN"
+                    tools:ignore="AppLinkUrlError" />
+                <data android:scheme="lightning" />
+                <data
+                    android:scheme="LIGHTNING"
+                    tools:ignore="AppLinkUrlError" />
+                <data android:scheme="lnurl" />
+                <data android:scheme="lnurlp" />
                 <data android:scheme="spark" />
             </intent-filter>
         </activity>

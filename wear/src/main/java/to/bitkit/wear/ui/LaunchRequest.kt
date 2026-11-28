@@ -4,7 +4,7 @@ import android.content.Intent
 
 /** What an intent that opened the app asks for, beyond showing it. */
 sealed interface LaunchRequest {
-    /** Pay the payment input of a `lightning:`, `bitcoin:` or `spark:` link. */
+    /** Pay the payment input of a `bitcoin:`, `lightning:`, `lnurl:`, `lnurlp:` or `spark:` link, in any case. */
     data class Send(val input: String) : LaunchRequest
 
     /** Show the receive QR, as from the tile. */
@@ -15,7 +15,8 @@ sealed interface LaunchRequest {
         const val EXTRA_OPEN = "to.bitkit.wear.OPEN"
         const val OPEN_RECEIVE = "receive"
 
-        private val SEND_SCHEMES = setOf("lightning", "bitcoin", "spark")
+        /** The manifest's link schemes, lowercased. `lnurlw` and `lnurlc` are left out: the watch only pays. */
+        private val SEND_SCHEMES = setOf("bitcoin", "lightning", "lnurl", "lnurlp", "spark")
 
         /** The request of an intent with [action], [data] and the [open] extra, or null for a plain launch. */
         fun from(action: String?, data: String?, open: String?): LaunchRequest? {

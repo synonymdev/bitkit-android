@@ -94,7 +94,7 @@ On-screen copy stays short: a title or one line of at most about six words per s
 - **Home pager.** Home is a horizontal pager (`HorizontalPagerScaffold` with a page indicator) that opens on the
   Balance page; Receive, Activity and Settings follow, in that order. `HOME_PAGES` in `HomePage.kt` lists the pages in swipe order, so a page
   is added in one line. The pager leaves the left edge of the first page to swipe-to-dismiss, which leaves the app.
-  There is no Send page or button: a send starts from outside the app (phone handoff, NFC or a `lightning:` link).
+  There is no Send page or button: a send starts from outside the app (phone handoff, NFC or a payment link).
   The pager composes only the page on screen, so Home itself, above the pager, leaves for onboarding or the Wallet
   removed notice when the wallet's state says the wallet is gone. A removal therefore reaches the wearer on any
   page, also when the Settings page that asked for it was swiped away meanwhile.
@@ -193,9 +193,13 @@ On-screen copy stays short: a title or one line of at most about six words per s
   - The tile picker shows `tile_preview` (a drawing of the balance and the Receive button, no real amount).
     `tile_logo` and `tile_logo_dim` are the mark's letters and dot without its black outline, the dim one at 40%
     opacity baked into its colours, since a tile image cannot be drawn half transparent or tinted per path.
-- **Send.** There is no Send page or button. A `lightning:`, `bitcoin:` or `spark:` link opens the app
-  (`MainActivity` is `singleTop`, so a link reaches the open app) and the send flow above Home; without a wallet,
-  during the restore, or while a send is under way, the link is dropped. The flow waits for the wallet to be ready
+- **Send.** There is no Send page or button. A `bitcoin:`, `BITCOIN:`, `lightning:`, `LIGHTNING:`, `lnurl:`,
+  `lnurlp:` or `spark:` link opens the app, as on the phone (Android matches schemes case-sensitively, and QR codes
+  often use the uppercase ones). `lnurlw:` and `lnurlc:` (LNURL withdraw and channel) are not taken: the watch only
+  pays. `PaymentsRepo.parse` drops `lightning:`, `lnurl:` and `lnurlp:` before decoding, as the phone's scanner
+  does, reads a LUD-17 `lnurlp://host/path` as `https://host/path` (`http` for an onion host) and lowercases an
+  all-uppercase payload. A link opens the send flow above Home (`MainActivity` is `singleTop`, so a link reaches the
+  open app); without a wallet, during the restore, or while a send is under way, the link is dropped. The flow waits for the wallet to be ready
   (the loading ring, with "Offline" while it is offline), reads the input and prices the send (see Payments), all before the hold. An input
   without an amount, an amountless invoice, a Spark address or an LNURL with a range, gets a minimal amount entry
   (the number keyboard, the LNURL range below it); Receive never has one.

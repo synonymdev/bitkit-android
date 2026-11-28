@@ -93,6 +93,30 @@ class PaymentsRepo @Inject constructor(
         private val SPARK_ADDRESS = Regex("^(spark|sp)(rt|t|s|l)?1[02-9ac-hj-np-z]+$", RegexOption.IGNORE_CASE)
         private const val SPARK_SCHEME = "spark:"
 
+        /** The schemes the decoder reads an input without, as the phone's scanner strips them. */
+        private val STRIPPED_SCHEMES = setOf("lightning", "lnurl", "lnurlp")
+        private val URI_SCHEME = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*$")
+        private const val ONION_TLD = ".onion"
+
+        /**
+         * [input] as the decoder reads it. The scheme is lowercased, and `lightning:`, `lnurl:` and `lnurlp:` are
+         * dropped, as the phone's scanner does. A LUD-17 `lnurlp://host/path` link becomes the LNURL-pay URL
+         * `https://host/path` (`http` for an onion host). A payload without a lowercase letter, as an uppercase QR
+         * code has, is lowercased: bech32 is read in one case, and BIP21 keys are matched lowercase.
+         */
+        internal fun decoderInput(input: String): String {
+            val text = input.trim()
+            val scheme = text.substringBefore(':', missingDelimiterValue = "").takeIf { URI_SCHEME.matches(it) }
+                ?.lowercase()
+            val payload = if (scheme == null) text else text.substringAfter(':')
+            if (scheme == "lnurlp" && payload.startsWith("//")) {
+                val host = payload.drop(2).substringBefore('/').substringBefore('?').substringBefore(':')
+                return (if (host.endsWith(ONION_TLD, ignoreCase = true)) "http:" else "https:") + payload
+            }
+            val oneCase = if (payload.none { it.isLowerCase() }) payload.lowercase() else payload
+            return if (scheme == null || scheme in STRIPPED_SCHEMES) oneCase else "$scheme:$oneCase"
+        }
+
         /** [input] without its `spark:` scheme when it has the shape of a Spark address, or null. */
         internal fun sparkAddressOrNull(input: String): String? {
             val text = if (input.startsWith(SPARK_SCHEME, ignoreCase = true)) input.drop(SPARK_SCHEME.length) else input
@@ -169,14 +193,15 @@ class PaymentsRepo @Inject constructor(
 
     /**
      * Reads a payment input: a BOLT11 invoice, an LNURL-pay link, a Lightning address, a BIP21 URI with a
-     * `lightning` parameter or a Spark address, each with or without its URI scheme. An LNURL or a Lightning address
+     * `lightning` parameter or a Spark address, each with or without its URI scheme, in either case (see
+     * [decoderInput]). An LNURL or a Lightning address
      * is fetched from its host. Fails with a [SendError]: [SendError.Invalid], [SendError.Unsupported],
      * [SendError.Expired], and [SendError.OwnInvoice] when the wallet is ready to tell. A Spark address needs the
      * wallet ready ([SendError.NotReady]); the other inputs are read without it, and [prepare] checks them again.
      */
     suspend fun parse(input: String): Result<SendRequest> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val text = input.trim()
+            val text = decoderInput(input)
             val sparkAddress = sparkAddressOrNull(text)
             val request = if (sparkAddress != null) SendRequest.SparkAddress(sparkAddress) else decode(text)
             when (request) {
@@ -199,8 +224,10 @@ class PaymentsRepo @Inject constructor(
             is Scanner.Lightning -> scanned.invoice.toRequest()
             is Scanner.LnurlPay -> scanned.data.toRequest(text)
             is Scanner.OnChain -> {
-                val bolt11 = scanned.invoice.params?.get("lightning") ?: throw SendError.Unsupported()
-                val invoice = runSuspendCatching { inputDecoder.decode(bolt11) as? Scanner.Lightning }
+                val bolt11 = scanned.invoice.params?.entries
+                    ?.firstOrNull { it.key.equals("lightning", ignoreCase = true) }
+                    ?.value ?: throw SendError.Unsupported()
+                val invoice = runSuspendCatching { inputDecoder.decode(decoderInput(bolt11)) as? Scanner.Lightning }
                     .getOrElse { throw SendError.Invalid(it) }
                 invoice?.invoice?.toRequest() ?: throw SendError.Unsupported()
             }

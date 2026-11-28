@@ -201,7 +201,7 @@ class PaymentsRepoTest : BaseUnitTest() {
 
     @Test
     fun `an invoice is read with its amount, and without one when it is amountless`() = test {
-        decoder.inputs["lightning:$BOLT11"] = lightning(BOLT11, amountSats = 500uL, description = "Coffee")
+        decoder.inputs[BOLT11] = lightning(BOLT11, amountSats = 500uL, description = "Coffee")
         decoder.inputs["amountless"] = lightning(BOLT11, amountSats = 0uL, description = "")
 
         assertEquals(SendRequest.Invoice(BOLT11, 500uL, "Coffee"), sut.parse(" lightning:$BOLT11 ").getOrThrow())
@@ -233,12 +233,48 @@ class PaymentsRepoTest : BaseUnitTest() {
     @Test
     fun `a lightning address is named by its address, and a fixed lnurl amount is fixed`() = test {
         val fixed = Scanner.LnurlPay(lnurl(minMsat = 21_000uL, maxMsat = 21_000uL))
-        decoder.inputs["lightning:satoshi@pay.example"] = fixed
+        decoder.inputs["satoshi@pay.example"] = fixed
 
         val request = sut.parse("lightning:satoshi@pay.example").getOrThrow()
 
         assertEquals("satoshi@pay.example", request.payee)
         assertEquals(21uL, request.fixedAmountSats)
+        assertEquals("satoshi@pay.example", sut.parse("LIGHTNING:SATOSHI@PAY.EXAMPLE").getOrThrow().payee)
+    }
+
+    @Test
+    fun `an lnurl link loses its scheme, and an uppercase one is read lowercase`() = test {
+        decoder.inputs["lnurl1abc"] = Scanner.LnurlPay(lnurl())
+
+        for (link in listOf("lnurl:lnurl1abc", "lnurl:LNURL1ABC", "LIGHTNING:LNURL1ABC", "lnurlp:lnurl1abc")) {
+            assertIs<SendRequest.Lnurl>(sut.parse(link).getOrThrow(), link)
+        }
+        assertEquals(List(4) { "lnurl1abc" }, decoder.decoded)
+    }
+
+    @Test
+    fun `an lnurlp link is read as its https lnurl-pay url, and an onion one as http`() = test {
+        decoder.inputs["https://pay.example/lnurlp/satoshi?tag=1"] = Scanner.LnurlPay(lnurl())
+        decoder.inputs["http://payabc.onion/lnurlp/satoshi"] = Scanner.LnurlPay(lnurl())
+
+        val request = assertIs<SendRequest.Lnurl>(sut.parse("lnurlp://pay.example/lnurlp/satoshi?tag=1").getOrThrow())
+        assertEquals("pay.example", request.payee)
+        assertIs<SendRequest.Lnurl>(sut.parse("LNURLP://payabc.onion/lnurlp/satoshi").getOrThrow())
+    }
+
+    @Test
+    fun `an uppercase bitcoin uri is paid by its LIGHTNING invoice`() = test {
+        val upper = "BITCOIN:BCRT1Q?LIGHTNING=${BOLT11.uppercase()}"
+        decoder.inputs["bitcoin:bcrt1q?lightning=$BOLT11"] = onchain(mapOf("lightning" to BOLT11))
+        decoder.inputs["bitcoin:bcrt1q?LIGHTNING=${BOLT11.uppercase()}"] =
+            onchain(mapOf("LIGHTNING" to BOLT11.uppercase()))
+        decoder.inputs[BOLT11] = lightning(BOLT11, amountSats = 500uL)
+
+        assertEquals(SendRequest.Invoice(BOLT11, 500uL, null), sut.parse(upper).getOrThrow())
+        assertEquals(
+            SendRequest.Invoice(BOLT11, 500uL, null),
+            sut.parse("bitcoin:bcrt1q?LIGHTNING=${BOLT11.uppercase()}").getOrThrow(),
+        )
     }
 
     @Test
