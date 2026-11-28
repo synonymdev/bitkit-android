@@ -123,6 +123,7 @@ the command line. Run `receive-paid.xml` first: it funds the wallet the send jou
 | `send-own-invoice-guard.xml` | local | yes, any balance above 0 |
 | `activity-list.xml` | local | yes, after `receive-paid.xml` and `send-deeplink-bolt11.xml` |
 | `receive-paid-ambient.xml` | local | no, it funds the wallet with 1 000 sats |
+| `tile-balance.xml` | hosted or local | no |
 
 Paying an LNURL-pay link or a Lightning address has no journey: the local stack's LNURL server serves only the
 Lightning addresses its Spark wallets registered, over plain HTTP, and nothing in it registers one. It is covered by
@@ -305,6 +306,25 @@ watch's invoices are amountless). Hand an invoice to the watch as a link, never 
 ```bash
 adb shell am start -a android.intent.action.VIEW -d "lightning:<invoice>" to.bitkit.dev
 ```
+
+## Tiles
+
+The system draws a tile, so `android layout` does not list what it shows; check it from a screenshot. Add, show and
+remove the Bitkit tile with the Wear OS debug broadcasts:
+
+```bash
+adb shell am broadcast -a com.google.android.wearable.app.DEBUG_SURFACE --es operation add-tile \
+  --ecn component to.bitkit.dev/to.bitkit.wear.tile.BalanceTileService
+adb shell am broadcast -a com.google.android.wearable.app.DEBUG_SYSUI --es operation show-tile --ei index 0
+adb shell am broadcast -a com.google.android.wearable.app.DEBUG_SURFACE --es operation remove-tile \
+  --ecn component to.bitkit.dev/to.bitkit.wear.tile.BalanceTileService
+```
+
+`add-tile` prints the index the tile took; pass that one to `show-tile` when other tiles are added.
+Wait about 5 s after `show-tile` before a screenshot: an earlier one can catch the watch face mid-transition. The
+Receive edge button is at about (227, 400) on the large screen. Adding the tile again (remove, then add) makes the
+system ask the app for it at once; the app also asks the system to redraw it whenever the balance or the wallet's
+status changes.
 
 ## Watch gestures
 

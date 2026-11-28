@@ -46,8 +46,8 @@ Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only
 - **Play services components.** The Breez SDK's dependencies bring Play services' sign-in and credential
   components into the manifest: three activities and two services, one of them exported
   (`RevocationBoundService`). The watch app uses none of them, so its manifest removes them
-  (`tools:node="remove"`), and the merged manifest lists only `MainActivity` and the androidx startup and profile
-  components. The libraries themselves stay on the classpath, since Breez's classes load them.
+  (`tools:node="remove"`), and the merged manifest lists only `MainActivity`, the balance tile's service and the
+  androidx startup and profile components. The libraries themselves stay on the classpath, since Breez's classes load them.
 - **Main thread.** Nothing reads the disk, the network or a system service on the main thread at launch or while
   a screen composes. `NetworkMonitor`, `DeviceLock` and `NfcMonitor` are created empty and register with the system
   on the IO dispatcher; the HTTP client, the settings file and the seed directory are opened on first use there.
@@ -75,10 +75,12 @@ Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only
   client, `NetworkMonitor` (`ConnectivityManager`'s default network, online once the system validated it),
   `NfcMonitor` (the NFC adapter's state) and `ForegroundMonitor` (the process lifecycle: whether the app is on
   screen).
+- `tile`: `BalanceTileService` (the balance tile), `TileState` (what it shows) and `TileUpdates` (asks the system
+  to draw it again). See Tile below.
 - `ui`: one `MainActivity` with `testTagsAsResourceId`, a `SwipeDismissableNavHost` with the routes Onboarding,
   the Restore graph, Wallet removed, Home, About, Receive QR, Send, Activity detail and Not supported, and the M3
   Expressive theme (black background, Brand orange, Inter Tight). `LaunchRequest` reads what an intent asks for
-  beyond opening the app: a payment link. The splash screen stays while the first screen is picked, for at most about a second;
+  beyond opening the app: a payment link or the tile's Receive. The splash screen stays while the first screen is picked, for at most about a second;
   after that the loading ring shows until it is. When the wallet storage cannot be recovered at launch, the start
   error (`WatchStartError` with `WatchStartRetry`) shows instead of a first screen.
 
@@ -170,6 +172,27 @@ On-screen copy stays short: a title or one line of at most about six words per s
   a dimmed QR icon (`WatchReceiveHidden`), and an invoice paid meanwhile shows the check dimmed and without the
   amount, with the same haptic, so the always-on screen shows no amount; the amount shows once the watch wakes. Debug builds log each invoice shown (`Showing invoice`), which is how the
   journeys read it.
+- **Tile.** The Bitkit tile (`BalanceTileService`) uses the tiles and ProtoLayout Material 3 libraries: a primary
+  layout with the balance in the main slot and an edge button below. With a wallet it shows the balance in bitcoin
+  (white, as on the Balance page) and a round Brand orange edge button with the QR icon ("Receive" to accessibility
+  services), which opens the app on the receive QR: the launch intent carries the extra `to.bitkit.wear.OPEN` with
+  `receive`, which `LaunchRequest` reads as `Receive`, and the receive QR opens above Home, as a payment link's send
+  does. Without a wallet it shows the Bitkit mark and a "Restore" edge button that opens the app. Tiles cannot use
+  the app's fonts, so the balance is in the system font.
+  - The tile only reads `WalletRepo`'s state in memory and never starts the wallet, so the balance shows only once
+    the app loaded it in this process and a sync confirmed it, as on the Balance page; until then, and while the
+    watch is locked, the dimmed mark stands in for it. A removed wallet shows the signed-out tile at once.
+  - `TileUpdates`, started by `WearApp`, asks the system to draw the tile again whenever the balance shown or the
+    wallet's status changes, and once when the process starts, so a tile drawn by an earlier process drops a balance
+    the new one has not loaded. Each tile is fresh for 15 min, after which the system asks again; a tile drawn just
+    before the process died can show the last balance until then.
+  - Privacy: the tile shows the balance on the tile carousel, so it hides it while the wallet is disconnected
+    because the watch locked (`WalletStatus.Locked`). Tiles have no ambient mode: in ambient the system shows the watch face, so the app's rule that the always-on screen
+    shows no amount holds without code in the tile. The tile carries no secret: the receive invoice is made by the
+    app after the tap, never by the tile.
+  - The tile picker shows `tile_preview` (a drawing of the balance and the Receive button, no real amount).
+    `tile_logo` and `tile_logo_dim` are the mark's letters and dot without its black outline, the dim one at 40%
+    opacity baked into its colours, since a tile image cannot be drawn half transparent or tinted per path.
 - **Send.** There is no Send page or button. A `lightning:`, `bitcoin:` or `spark:` link opens the app
   (`MainActivity` is `singleTop`, so a link reaches the open app) and the send flow above Home; without a wallet,
   during the restore, or while a send is under way, the link is dropped. The flow waits for the wallet to be ready
