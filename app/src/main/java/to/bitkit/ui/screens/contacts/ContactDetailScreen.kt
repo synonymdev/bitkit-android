@@ -1,5 +1,7 @@
 package to.bitkit.ui.screens.contacts
 
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,7 +39,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.Job
@@ -88,31 +93,62 @@ fun ContactDetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
+    val activity = LocalActivity.current
+
     DisposableEffect(viewModel) {
-        onDispose { viewModel.dismissRequestOrPaySheet() }
+        onDispose { viewModel.onScreenDisposed(isChangingConfigurations = activity?.isChangingConfigurations == true) }
+    }
+
+    // A payment opens only while this screen is the settled, resumed destination: one that resolves while the screen is
+    // being left or the app is in the background waits, and is cancelled when the screen goes away.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(viewModel, lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            viewModel.pendingPayments.collect {
+                if (viewModel.claimPendingPayment(it)) {
+                    val scanJob = onPayContact(it.paymentRequest, it.publicKey, it.privatePaymentContext, it.endpoints)
+                    viewModel.onPaymentOpening(scanJob)
+                }
+            }
+        }
+    }
+
+    BackHandler(enabled = uiState.isPayLoading && !uiState.showRequestOrPaySheet) {
+        viewModel.dismissRequestOrPaySheet()
+        onBackClick()
     }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
-            when (it) {
-                is ContactDetailEffect.OpenPayment -> {
-                    val scanJob = onPayContact(it.paymentRequest, it.publicKey, it.privatePaymentContext, it.endpoints)
-                    viewModel.onPaymentOpening(scanJob)
-                }
-                ContactDetailEffect.ContactDeleted -> onContactDeleted()
+            if (it is ContactDetailEffect.ContactDeleted) {
+                viewModel.dismissRequestOrPaySheet()
+                onContactDeleted()
             }
         }
     }
 
     Content(
         uiState = uiState,
-        onBackClick = onBackClick,
-        onClickEdit = { uiState.profile?.publicKey?.let { onEditContact(it) } },
+        onBackClick = {
+            viewModel.dismissRequestOrPaySheet()
+            onBackClick()
+        },
+        onClickEdit = {
+            uiState.profile?.publicKey?.let {
+                viewModel.dismissRequestOrPaySheet()
+                onEditContact(it)
+            }
+        },
         showDeleteAction = showDeleteAction,
         onClickDelete = { viewModel.showDeleteConfirmation() },
         onClickCopy = { viewModel.copyPublicKey() },
         onClickPay = { viewModel.onClickPay() },
-        onClickActivity = { uiState.profile?.publicKey?.let { onActivityClick(it) } },
+        onClickActivity = {
+            uiState.profile?.publicKey?.let {
+                viewModel.dismissRequestOrPaySheet()
+                onActivityClick(it)
+            }
+        },
         onClickShare = { uiState.profile?.publicKey?.let { shareText(context, it) } },
         onClickRetry = { viewModel.loadContact() },
         onAddTag = { viewModel.showAddTagSheet() },

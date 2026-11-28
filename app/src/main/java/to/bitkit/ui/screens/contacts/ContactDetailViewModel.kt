@@ -14,11 +14,13 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -77,6 +79,10 @@ class ContactDetailViewModel @Inject constructor(
     val uiState: StateFlow<ContactDetailUiState> = _uiState.asStateFlow()
 
     private val _effects = MutableSharedFlow<ContactDetailEffect>(extraBufferCapacity = 1)
+    private val pendingPayment = MutableStateFlow<ContactDetailEffect.OpenPayment?>(null)
+
+    /** Replays the resolved payment until [claimPendingPayment] takes it, so a recreated or resumed screen gets it. */
+    val pendingPayments: Flow<ContactDetailEffect.OpenPayment> = pendingPayment.filterNotNull()
     val effects = _effects.asSharedFlow()
 
     private var contactLoad: Job? = null
@@ -147,8 +153,19 @@ class ContactDetailViewModel @Inject constructor(
 
     fun dismissRequestOrPaySheet() {
         if (_uiState.value.isPayLoading) cancelPendingPayment()
+        pendingPayment.update { null }
         _uiState.update { it.copy(isPayLoading = false, showRequestOrPaySheet = false) }
     }
+
+    /** Activity recreation keeps the pending payment for the next screen; leaving the screen cancels it. */
+    fun onScreenDisposed(isChangingConfigurations: Boolean) {
+        if (isChangingConfigurations) return
+        dismissRequestOrPaySheet()
+    }
+
+    /** Hands a resolved payment to the screen once; returns false if it was already opened or cancelled. */
+    fun claimPendingPayment(payment: ContactDetailEffect.OpenPayment): Boolean =
+        pendingPayment.compareAndSet(payment, null)
 
     override fun onCleared() {
         paymentScanJob?.cancel()
@@ -233,14 +250,14 @@ class ContactDetailViewModel @Inject constructor(
                 when (it) {
                     is PublicPaykitPaymentResult.Opened -> {
                         isOpened = true
-                        _effects.emit(
+                        pendingPayment.update { _ ->
                             ContactDetailEffect.OpenPayment(
                                 it.paymentRequest,
                                 publicKey,
                                 it.privatePaymentContext,
                                 it.endpoints,
                             )
-                        )
+                        }
                     }
                     PublicPaykitPaymentResult.NoEndpoint ->
                         showPayError(R.string.slashtags__error_pay_empty_msg)

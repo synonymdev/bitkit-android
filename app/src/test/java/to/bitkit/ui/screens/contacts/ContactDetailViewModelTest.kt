@@ -301,7 +301,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             advanceUntilIdle()
 
@@ -339,7 +339,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         now += 10.seconds
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             advanceUntilIdle()
 
@@ -412,7 +412,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         eligibleTargets.value = emptyList()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             advanceUntilIdle()
 
@@ -457,7 +457,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         sut.onClickPay()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.payContact()
             paymentStarted.await()
             eligibleTargets.value = emptyList()
@@ -492,7 +492,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         sut.onClickPay()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.payContact()
             advanceUntilIdle()
             assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
@@ -524,7 +524,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         sut.onClickPay()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.payContact()
             paymentStarted.await()
             assertTrue(sut.uiState.value.isPayLoading)
@@ -551,12 +551,12 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             paymentStarted.await()
             assertTrue(sut.uiState.value.isPayLoading)
 
-            sut.dismissRequestOrPaySheet()
+            sut.onScreenDisposed(isChangingConfigurations = false)
             advanceUntilIdle()
 
             assertFalse(sut.uiState.value.isPayLoading)
@@ -574,18 +574,206 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             advanceUntilIdle()
             assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
             val scanJob = Job()
             sut.onPaymentOpening(scanJob)
 
-            sut.dismissRequestOrPaySheet()
+            sut.onScreenDisposed(isChangingConfigurations = false)
             advanceUntilIdle()
 
             assertTrue(scanJob.isCancelled)
             assertFalse(sut.uiState.value.isPayLoading)
+        }
+    }
+
+    @Test
+    fun `activity recreation while paying keeps the payment and opens it once`() = test {
+        val paymentStarted = CompletableDeferred<Unit>()
+        val paymentResult = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(target)))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY)).doSuspendableAnswer {
+            paymentStarted.complete(Unit)
+            paymentResult.await()
+        }
+        eligibleTargets.value = listOf(target)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onClickPay()
+        advanceUntilIdle()
+
+        sut.pendingPayments.test {
+            sut.payContact()
+            paymentStarted.await()
+            cancelAndIgnoreRemainingEvents()
+        }
+        sut.onScreenDisposed(isChangingConfigurations = true)
+        paymentResult.complete(Result.success(openedPayment))
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.isPayLoading)
+        assertTrue(sut.uiState.value.showRequestOrPaySheet)
+        sut.pendingPayments.test {
+            val payment = assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
+            assertEquals(openedPayment.paymentRequest, payment.paymentRequest)
+            assertTrue(sut.claimPendingPayment(payment))
+            assertFalse(sut.claimPendingPayment(payment))
+            sut.onPaymentOpening(null)
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        sut.pendingPayments.test { expectNoEvents() }
+        assertFalse(sut.uiState.value.isPayLoading)
+        assertFalse(sut.uiState.value.showRequestOrPaySheet)
+        verify(privatePaykitRepo, times(1)).beginSavedContactPayment(TEST_PUBLIC_KEY)
+    }
+
+    @Test
+    fun `activity recreation while the amount screen opens keeps the scan`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(null)))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(openedPayment))
+        val sut = createSut()
+        advanceUntilIdle()
+        val scanJob = Job()
+
+        sut.pendingPayments.test {
+            sut.onClickPay()
+            advanceUntilIdle()
+            assertTrue(sut.claimPendingPayment(assertIs<ContactDetailEffect.OpenPayment>(awaitItem())))
+            sut.onPaymentOpening(scanJob)
+        }
+        sut.onScreenDisposed(isChangingConfigurations = true)
+        advanceUntilIdle()
+
+        assertFalse(scanJob.isCancelled)
+        assertTrue(sut.uiState.value.isPayLoading)
+        sut.pendingPayments.test { expectNoEvents() }
+
+        scanJob.complete()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isPayLoading)
+    }
+
+    @Test
+    fun `payment resolved during recreation is dropped when the screen is then left`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(null)))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(openedPayment))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.onScreenDisposed(isChangingConfigurations = true)
+        sut.onClickPay()
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.isPayLoading)
+
+        sut.onScreenDisposed(isChangingConfigurations = false)
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isPayLoading)
+        sut.pendingPayments.test { expectNoEvents() }
+    }
+
+    @Test
+    fun `dismissing after the payment resolved keeps it from being claimed`() = test {
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(null)))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(openedPayment))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.pendingPayments.test {
+            sut.onClickPay()
+            advanceUntilIdle()
+            val payment = assertIs<ContactDetailEffect.OpenPayment>(awaitItem())
+
+            sut.dismissRequestOrPaySheet()
+
+            assertFalse(sut.claimPendingPayment(payment))
+            assertFalse(sut.uiState.value.isPayLoading)
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun `dismissing the sheet after recreation cancels the payment`() = test {
+        val paymentStarted = CompletableDeferred<Unit>()
+        var isPaymentCancelled = false
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(target)))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY)).doSuspendableAnswer {
+            paymentStarted.complete(Unit)
+            try {
+                awaitCancellation()
+            } finally {
+                isPaymentCancelled = true
+            }
+        }
+        eligibleTargets.value = listOf(target)
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onClickPay()
+        advanceUntilIdle()
+        sut.payContact()
+        paymentStarted.await()
+
+        sut.onScreenDisposed(isChangingConfigurations = true)
+        advanceUntilIdle()
+        assertFalse(isPaymentCancelled)
+
+        sut.pendingPayments.test {
+            sut.dismissRequestOrPaySheet()
+            advanceUntilIdle()
+
+            assertTrue(isPaymentCancelled)
+            assertFalse(sut.uiState.value.isPayLoading)
+            assertFalse(sut.uiState.value.showRequestOrPaySheet)
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun `failed resolution after recreation shows the error and can be retried`() = test {
+        val paymentResult = CompletableDeferred<Result<PublicPaykitPaymentResult>>()
+        whenever(context.getString(any())).thenReturn("")
+        whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
+        whenever(paykitPaymentRequestRepo.refreshEligibleTarget(TEST_PUBLIC_KEY))
+            .thenReturn(Result.success(targetCheck(null)))
+        whenever(privatePaykitRepo.beginSavedContactPayment(TEST_PUBLIC_KEY))
+            .doSuspendableAnswer { paymentResult.await() }
+            .thenReturn(Result.success(openedPayment))
+        val sut = createSut()
+        advanceUntilIdle()
+        sut.onClickPay()
+        advanceUntilIdle()
+
+        sut.onScreenDisposed(isChangingConfigurations = true)
+        paymentResult.complete(Result.success(PublicPaykitPaymentResult.NotOpened))
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isPayLoading)
+        verify(context).getString(R.string.slashtags__error_pay_not_opened_msg)
+        sut.pendingPayments.test {
+            expectNoEvents()
+
+            sut.onClickPay()
+            advanceUntilIdle()
+
+            assertTrue(sut.claimPendingPayment(assertIs<ContactDetailEffect.OpenPayment>(awaitItem())))
+            verify(privatePaykitRepo, times(2)).beginSavedContactPayment(TEST_PUBLIC_KEY)
         }
     }
 
@@ -606,7 +794,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         val check = checkStarted.await()
 
         try {
-            sut.effects.test {
+            sut.pendingPayments.test {
                 sut.onClickPay()
                 advanceTimeBy(2.seconds)
 
@@ -643,7 +831,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             advanceUntilIdle()
 
@@ -670,7 +858,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         val sut = createSut()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.onClickPay()
             advanceUntilIdle()
             sut.payContact()
@@ -707,7 +895,7 @@ class ContactDetailViewModelTest : BaseUnitTest() {
         sut.onClickPay()
         advanceUntilIdle()
 
-        sut.effects.test {
+        sut.pendingPayments.test {
             sut.payContact()
             advanceUntilIdle()
 
