@@ -352,5 +352,5 @@ required features, so `nfc-required.xml` reads them from the installed APK with 
 build tools installed:
 
 ```bash
-AAPT2="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)aapt2"
+AAPT2="$(ls -d "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"/build-tools/*/ | sort -V | tail -n 1)aapt2"
 ```

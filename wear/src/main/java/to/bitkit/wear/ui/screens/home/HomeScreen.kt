@@ -1,6 +1,7 @@
 package to.bitkit.wear.ui.screens.home
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
@@ -13,6 +14,8 @@ import androidx.wear.compose.foundation.pager.rememberPagerState
 import androidx.wear.compose.material3.AnimatedPage
 import androidx.wear.compose.material3.HorizontalPagerScaffold
 import kotlinx.collections.immutable.ImmutableList
+import to.bitkit.wear.ui.components.LocalListBottomInset
+import to.bitkit.wear.ui.components.PageIndicatorPadding
 import to.bitkit.wear.ui.screens.settings.SettingsScreen
 
 /**
@@ -41,9 +44,11 @@ fun HomeScreen(
     HorizontalPagerScaffold(pagerState = pagerState, modifier = modifier) {
         HorizontalPager(state = pagerState, modifier = Modifier.testTag("WatchHomePager")) { page ->
             AnimatedPage(pageIndex = page, pagerState = pagerState) {
-                when (pages[page]) {
-                    HomePage.Balance -> BalancePage(viewModel = viewModel)
-                    HomePage.Settings -> SettingsScreen(onAboutClick = onAboutClick)
+                CompositionLocalProvider(LocalListBottomInset provides PageIndicatorPadding) {
+                    when (pages[page]) {
+                        HomePage.Balance -> BalancePage(viewModel = viewModel)
+                        HomePage.Settings -> SettingsScreen(onAboutClick = onAboutClick)
+                    }
                 }
             }
         }
