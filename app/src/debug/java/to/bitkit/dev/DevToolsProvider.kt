@@ -14,8 +14,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import to.bitkit.async.ServiceQueue
 import to.bitkit.models.msatCeilOf
+import to.bitkit.nfc.NfcDevOverride
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.ProbeOutcome
+import to.bitkit.ui.shared.effects.NfcState
 import to.bitkit.utils.Logger
 import kotlin.time.Duration.Companion.seconds
 import to.bitkit.repositories.ProbeReadiness as NodeProbeReadiness
@@ -42,6 +44,8 @@ class DevToolsProvider : ContentProvider() {
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle {
         check(Binder.getCallingUid() == SHELL_UID) { "Only ADB shell callers are allowed" }
         return runCatching {
+            // Needs no node, so it does not wait behind LDK work.
+            if (method == OverrideNfc.METHOD) return@runCatching OverrideNfc.execute(arg)
             val command = requireNotNull(DevCommand.parse(method, arg)) { "Unknown command: '$method'" }
             ServiceQueue.LDK.blocking { command.execute(deps) }
         }.getOrElse {
@@ -56,6 +60,21 @@ class DevToolsProvider : ContentProvider() {
     override fun delete(uri: Uri, sel: String?, args: Array<String>?) = 0
     override fun update(uri: Uri, values: ContentValues?, sel: String?, args: Array<String>?) = 0
     override fun query(uri: Uri, proj: Array<String>?, sel: String?, args: Array<String>?, sort: String?) = null
+}
+
+private object OverrideNfc {
+    const val METHOD = "overrideNfc"
+
+    /** Null fields clear the override. */
+    @Serializable
+    data class Args(val adapterState: NfcState? = null, val cameraStopsPolling: Boolean? = null)
+
+    fun execute(arg: String?): DevResult {
+        val args = arg.deserialize<Args>()
+        Logger.info("Overriding NFC '$args' via devtools", context = TAG)
+        NfcDevOverride.set(args.adapterState, args.cameraStopsPolling)
+        return DevResult.Ack()
+    }
 }
 
 private sealed interface DevCommand {

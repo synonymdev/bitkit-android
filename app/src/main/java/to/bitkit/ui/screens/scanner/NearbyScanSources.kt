@@ -51,11 +51,13 @@ import to.bitkit.ui.shared.effects.nearbyPermissions
 import to.bitkit.ui.shared.effects.openNfcSettings
 import to.bitkit.ui.shared.effects.rememberBluetoothState
 import to.bitkit.ui.shared.effects.rememberNfcState
+import to.bitkit.ui.shared.effects.rememberNfcStoppedByCamera
 import to.bitkit.ui.theme.Colors
 
 /**
  * NFC and Bluetooth availability on a payment scanner, with the actions that turn each one on.
- * While [isPaused], neither source reads, so neither counts as active.
+ * While [isPaused], neither source reads, so neither counts as active. NFC does not count while
+ * [isNfcStoppedByCamera]: the phone stops polling while a camera is open, though NFC stays on.
  */
 @Stable
 data class NearbyScanSources(
@@ -64,8 +66,9 @@ data class NearbyScanSources(
     val onEnableNfc: () -> Unit,
     val onEnableBluetooth: () -> Unit,
     val isPaused: Boolean = false,
+    val isNfcStoppedByCamera: Boolean = false,
 ) {
-    val isNfcActive get() = nfcState == NfcState.ON && !isPaused
+    val isNfcActive get() = nfcState == NfcState.ON && !isPaused && !isNfcStoppedByCamera
     val isBluetoothActive get() = bluetoothState == BluetoothState.ON && !isPaused
     val canEnableNfc get() = nfcState == NfcState.OFF
     val canEnableBluetooth
@@ -95,6 +98,7 @@ fun rememberNearbyScanSources(
     val isPaused = isNearbyPaused()
     var refreshKey by remember { mutableIntStateOf(0) }
     val nfcState = rememberNfcState()
+    val isNfcStoppedByCamera = rememberNfcStoppedByCamera(nfcState)
     val bluetoothState = rememberBluetoothState(NearbyRole.SCAN, refreshKey)
 
     var permissionRequested by remember { mutableStateOf(false) }
@@ -123,6 +127,7 @@ fun rememberNearbyScanSources(
         nfcState = nfcState,
         bluetoothState = bluetoothState,
         isPaused = isPaused,
+        isNfcStoppedByCamera = isNfcStoppedByCamera,
         onEnableNfc = { context.openNfcSettings() },
         onEnableBluetooth = {
             when (bluetoothState) {
