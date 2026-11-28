@@ -23,7 +23,7 @@ sealed interface TileState {
 fun tileState(hasWallet: Boolean, wallet: WalletState, locale: Locale = Locale.getDefault()): TileState {
     if (!hasWallet || wallet.status in walletGoneStatuses) return TileState.SignedOut
     val sats = wallet.balanceSats?.takeIf { wallet.hasSynced && wallet.status != WalletStatus.Locked }?.toLong()
-    return TileState.Wallet(sats?.let { bitcoinAmount(it, locale) })
+    return TileState.Wallet(sats?.let { bitcoinAmount(it, locale = locale) })
 }
 
 private val walletGoneStatuses = setOf(WalletStatus.Removed, WalletStatus.Missing)

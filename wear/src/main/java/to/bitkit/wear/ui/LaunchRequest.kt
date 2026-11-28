@@ -32,7 +32,7 @@ sealed interface LaunchRequest {
 }
 
 /**
- * Whether an intent with [flags] is one Android replays from Recents: the link that once opened the app, sent again
- * long after the wearer saw it. Such an intent is a plain launch.
+ * Whether an intent with [flags] is one Android replays from Recents: the link or the tile's request that once
+ * opened the app, sent again long after the wearer saw it. Such an intent is a plain launch, whatever it asks for.
  */
 fun isReplayedLaunch(flags: Int): Boolean = flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
