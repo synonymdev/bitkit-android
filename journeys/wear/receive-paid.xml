@@ -9,12 +9,15 @@
   </description>
   <actions>
     <action>Swipe the pager left once: `adb shell input swipe 400 227 60 227 300`</action>
-    <action>Tap "WatchReceiveOpen" and wait up to 10 s until `adb shell uiautomator dump` lists "WatchReceiveQr" (README, top)</action>
+    <action>Tap "WatchReceiveOpen"</action>
+    <action>Wait up to 10 s until `adb shell uiautomator dump` lists "WatchReceiveQr" (README, top)</action>
     <action>Read the invoice from the log as in README › Reading the receive invoice and note it as &lt;invoice&gt;</action>
     <action>Run `../bitkit-docker/spark pay &lt;invoice&gt; 50000` from this repo's parent checkout</action>
     <action>Wait up to 20 s until "WatchReceivePaid" is listed</action>
     <action>Verify "WatchReceivePaidAmount" reads "50 000"</action>
-    <action>Tap "WatchReceivePaid" and wait up to 10 s until `adb shell uiautomator dump` lists "WatchReceiveQr"</action>
-    <action>Read the invoice from the log again and verify it differs from &lt;invoice&gt;</action>
+    <action>Tap "WatchReceivePaid"</action>
+    <action>Wait up to 10 s until `adb shell uiautomator dump` lists "WatchReceiveQr"</action>
+    <action>Read the invoice from the log again as &lt;next&gt;</action>
+    <action>Verify &lt;next&gt; differs from &lt;invoice&gt;</action>
   </actions>
 </journey>

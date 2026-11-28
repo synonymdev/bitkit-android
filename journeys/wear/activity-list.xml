@@ -8,13 +8,17 @@
     with the loading ring stopped. Gestures are written for the 454 px screen.
   </description>
   <actions>
-    <action>Swipe the pager left twice: `adb shell input swipe 400 227 60 227 300`, wait 1 s, and again</action>
+    <action>Swipe the pager left to Receive: `adb shell input swipe 400 227 60 227 300`</action>
+    <action>Wait up to 5 s until "WatchReceiveOpen" is listed</action>
+    <action>Swipe the pager left to Activity: `adb shell input swipe 400 227 60 227 300`</action>
     <action>Wait up to 10 s until "WatchActivityItem-0" is listed</action>
-    <action>Verify "WatchActivityItem-0" shows "- ₿ 1 000" and a relative time such as "1 min. ago"</action>
+    <action>Verify "WatchActivityItem-0" shows "- ₿ 1 000"</action>
+    <action>Verify "WatchActivityItem-0" shows a relative time such as "1 min. ago"</action>
     <action>Verify "WatchActivityItem-1" shows "+ ₿ 50 000"</action>
     <action>Tap "WatchActivityItem-0"</action>
     <action>Verify "WatchActivityDetailAmount" reads "1 000"</action>
-    <action>Verify "WatchActivityDetailStatus" reads "Completed" and "WatchActivityDetailTime" shows today's date</action>
+    <action>Verify "WatchActivityDetailStatus" reads "Completed"</action>
+    <action>Verify "WatchActivityDetailTime" shows today's date</action>
     <action>Swipe to dismiss from the left edge: `adb shell input swipe 20 227 400 227 300`</action>
     <action>Verify "WatchActivityItem-0" is listed again</action>
   </actions>

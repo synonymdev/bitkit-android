@@ -10,13 +10,14 @@
   </description>
   <actions>
     <action>Swipe the pager left once: `adb shell input swipe 400 227 60 227 300`</action>
-    <action>Tap "WatchReceiveOpen" and wait up to 10 s until `adb shell uiautomator dump` lists "WatchReceiveQr" (README, top)</action>
+    <action>Tap "WatchReceiveOpen"</action>
+    <action>Wait up to 10 s until `adb shell uiautomator dump` lists "WatchReceiveQr" (README, top)</action>
     <action>Read the invoice from the log as in README › Reading the receive invoice and note it as &lt;invoice&gt;</action>
     <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;invoice&gt;" to.bitkit.dev`</action>
     <action>Wait up to 10 s until "WatchSendError" is listed</action>
     <action>Verify "WatchSendError" reads "Can't pay own invoice"</action>
     <action>Verify "WatchSendHold" is not listed</action>
     <action>Tap "WatchSendClose"</action>
-    <action>Verify the Balance page: "WatchHomeBalance" is listed</action>
+    <action>Verify Home is back on the Receive page it was left on: "WatchReceiveOpen" is listed</action>
   </actions>
 </journey>

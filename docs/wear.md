@@ -157,15 +157,17 @@ On-screen copy stays short: a title or one line of at most about six words per s
   screen (1/√2 of its width). Each module is one bitmap pixel scaled up without smoothing (zxing, as on the phone).
   While the QR shows, the screen stays on at full brightness; both end when it leaves. The invoice is made once the
   wallet is ready, under the loading ring; a failure shows one line and a retry (`WatchReceiveError`,
-  `WatchReceiveRetry`). An invoice is replaced by a new one a minute before it expires. Paid, the QR turns into a
+  `WatchReceiveRetry`). An invoice is replaced by a new one a minute before it expires, and it stays on screen until
+  the new one exists; when the wallet is not ready by then, the loading ring takes its place as it expires. An
+  invoice shows for at least 30 s, also when the watch's clock runs ahead. Paid, the QR turns into a
   check with the amount (`WatchReceivePaid`, `WatchReceivePaidAmount`) and a firm click (the `LongPress` haptic), unlike
   the confirm pattern that ends a send; a tap on the check shows a new invoice. In ambient mode the QR is replaced by
   a dimmed QR icon (`WatchReceiveHidden`). Debug builds log each invoice shown (`Showing invoice`), which is how the
   journeys read it.
 - **Send.** There is no Send page or button. A `lightning:`, `bitcoin:` or `spark:` link opens the app
   (`MainActivity` is `singleTop`, so a link reaches the open app) and the send flow above Home; without a wallet,
-  or during the restore, the link is dropped. The flow waits for the wallet to be ready (the loading ring, with
-  "Offline" while it is offline), reads the input and prices the send (see Payments), all before the hold. An input
+  during the restore, or while a send is under way, the link is dropped. The flow waits for the wallet to be ready
+  (the loading ring, with "Offline" while it is offline), reads the input and prices the send (see Payments), all before the hold. An input
   without an amount, an amountless invoice, a Spark address or an LNURL with a range, gets a minimal amount entry
   (the number keyboard, the LNURL range below it); Receive never has one.
   - Review: the amount in the balance's large style, fiat below in the small style, the fee only when it is at
@@ -173,22 +175,30 @@ On-screen copy stays short: a title or one line of at most about six words per s
     button, "Hold to pay" (`WatchSendHold`).
   - Hold to pay: holding the button fills a ring around the bezel (`HoldToPayRing`, the geometry of `BezelLoading`)
     over 1.2 s, with a light tick (`SegmentTick`) at each quarter and the confirm haptic at the end, and only then
-    the payment goes out. Releasing early empties the ring; a tap never pays. Offline, or with the wallet not ready,
-    the button is disabled with the line "Offline". `PaymentsRepo.skipConfirmation` is asked before the hold; it is
-    always false until QuickPay (PR 3).
+    the payment goes out. Releasing early empties the ring; a tap never pays. Offline, the button is disabled with
+    the line "Offline"; while the wallet connects, locks or pauses, it is disabled under the loading ring.
+    `PaymentsRepo.skipConfirmation` is asked before the hold; it is always false until QuickPay (PR 3).
+  - Screen readers: a screen reader's wearer cannot hold, and the button's click pays nothing, so the button
+    offers "Pay" as a custom accessibility action, picked from the actions menu. The Receive button reads
+    "Receive".
+  - Ambient: the amount entry, the review and the result are replaced by a dimmed bolt (`WatchSendHidden`), so
+    the always-on screen shows no amount; the hold starts over when the watch wakes.
   - Sending: the loading ring, with "Waiting for network" after 3 s. The screen stays on and the flow cannot be
     swiped away or left with Back while the send runs.
   - Result: sent shows a check, "Sent" and the amount with the confirm haptic, and closes after 2 s. A payment that
-    did not settle in time shows a clock and "Pending"; an outcome Spark could not report shows "Check activity",
-    never a failure; both close after 3 s. A refusal or a failure shows a cross, one line of at most four words and
+    did not settle in time, or one that was already under way, from the watch or the phone, shows a clock and
+    "Pending"; an outcome Spark could not report shows "Check activity", never a failure; both close after 3 s. The
+    amount is the one Spark paid. A refusal or a failure shows a cross, one line of at most four words and
     an OK button (`WatchSendError`, `WatchSendClose`), with the reject haptic. Insufficient funds, an expired or
     unreadable invoice and an own invoice end there before any hold.
 - **Activity.** The Activity page lists the newest 20 payments from Spark's local list: a direction icon (or a
   clock for pending, a cross for failed), the amount with its sign and how long ago (`WatchActivityItem-0` onwards).
   It is read when Spark connects and after every payment or sync, and the last list stays while Spark is
-  disconnected. A tap opens the detail: the amount, the fee of a send, the date and time and the status
-  (`WatchActivityDetailAmount`, `…Fee`, `…Time`, `…Status`); Spark's list carries no payee or description. With no
-  payments it shows a dimmed icon and "No activity" (`WatchActivityEmpty`). Ambient mode hides the amounts.
+  disconnected, with its times counted again every minute. A tap opens the detail: the amount, the fee of a send, the
+  date and time and the status (`WatchActivityDetailAmount`, `…Fee`, `…Time`, `…Status`); Spark's list carries no payee or description. With no
+  payments it shows a dimmed icon and "No activity" (`WatchActivityEmpty`). A detail whose payment the list does not
+  hold, while it loads or after newer payments pushed it out, shows the dimmed icon (`WatchActivityDetailMissing`).
+  Ambient mode hides the amounts.
 - **Settings.** A short list of icon rows: About and Remove wallet. The unit has no setting: tapping the balance is
   the only way to switch it, and the choice is kept in the settings store across restarts. Remove wallet asks with a
   one-line title and the two round ✕/✓ buttons.
@@ -221,10 +231,13 @@ in any other state.
 - **Pricing.** Before the hold to pay, a send is priced by Spark and checked: the amount (an amountless invoice
   and a Spark address need one, an LNURL amount has to be in the service's range), expiry, the self-send guard, and
   the balance against the amount plus its fee. The invoice an LNURL service returns has to be for exactly the
-  amount asked.
-- **Sending.** The send call cannot be cancelled by the screen that started it, and one send runs at a time. It
-  returns when Spark has the payment; the result then waits up to a minute for it to settle and reports it as
-  pending after that. The send screen keeps the screen on, so the app stays on screen and connected while it waits.
+  amount asked, to the millisat as Spark reads it.
+- **Sending.** A send runs in the repository's own scope, so the screen that started it cannot cancel it, also not
+  by closing, and one send runs at a time. An invoice's send first syncs with Spark, for up to 20 s, and is
+  refused when the sync does not reach Spark. The call returns when Spark has the payment; a call that stalls for
+  a minute ends as an unknown outcome, and nothing else is sent until Spark returns that call. The result then waits
+  up to a minute for the payment to settle and reports it as pending after that. A lock, a pause or a wipe waits up to 10 s for a send Spark is taking before it
+  disconnects. The send screen keeps the screen on, so the app stays on screen and connected while it waits.
   **Known gap:** a wearer who leaves the app during that wait pauses the wallet 10 s later (see Background); the
   settlement is then not seen and the send reports pending after the minute, although it may have completed. The
   activity list shows the real state once the app is back.
@@ -233,12 +246,31 @@ in any other state.
 - **Paying once.** An invoice is sent under an idempotency key derived from the wallet seed, the payment hash and
   the attempt number (`SparkSendKey`, the same derivation as the phone and iOS). Spark makes one transfer per key,
   so the same invoice sent from the watch and the phone, or twice from the watch, is paid once. Before each send
-  Spark's payment list is read: an invoice it shows paid or pending is not sent again, and each attempt it shows
-  failed moves the send to the next key. A list that cannot be read refuses the send. The watch keeps no record of
-  its own; Spark's list is the record.
-- **Unknown outcome.** When the send call fails after Spark may have taken the payment and Spark's list does not
-  show it, the result is "unknown", never "failed". The activity list tells once Spark lists it, and sending the
-  invoice again cannot pay twice.
+  the wallet syncs and Spark's payment list is read: an invoice it shows paid or pending is not sent again, and
+  each attempt it shows failed moves the send to the next key. A sync that does not reach Spark, or a list that
+  cannot be read, refuses the send.
+- **Spark addresses.** A Spark address has no payment hash to derive a key from, so its transfer goes out under a
+  random key. `UncertainSendStore`, in the settings file the wipe clears, notes every send before it goes out and
+  drops it once Spark shows its payment or refuses it unsent. A transfer whose outcome was never learned, also
+  because the app was closed during it, keeps its key there: the next send to the same address syncs and asks
+  Spark's list. A transfer the list shows completed is not sent again ("Already paid", once), one it shows pending
+  is "Pending", one it shows failed makes way for a new key, and one it does not show goes out again under the
+  same key, which pays once. Without a sync that reaches Spark, nothing is sent to that address.
+- **Unknown outcome.** When the send call fails or stalls after Spark may have taken the payment and Spark's list
+  does not show it, the result is "unknown", never "failed". The activity list tells once Spark lists it, and
+  sending the same request again from the watch goes out under the same key, so it cannot pay twice. A refusal
+  (expired, not enough funds) that follows an attempt of unknown outcome under the same key is "unknown" too, also
+  after the app was closed: the earlier attempt may have paid. An invoice's note is kept until a day after the
+  invoice expired.
+- **Known gap: the phone's attempts.** The phone picks an invoice's attempt number from its own record of sends
+  plus Spark's list; the watch has Spark's list alone and cannot read the phone's record until the two are paired
+  (PR 4). The two agree whenever the watch's synced list shows the phone's sends, which is why a send needs a sync
+  that reached Spark. Should Spark's operators not report an attempt of the phone, the watch can derive another
+  attempt number than the phone: when the phone's attempt failed before it reached the operators and its next
+  attempt is in flight, unseen by the watch's sync, the watch's send under the first key is a second payment of
+  the invoice. The same holds the other way round for a send of unknown outcome on the watch that the phone's list
+  does not show. A transfer to a Spark address has no shared key at all: the phone and the watch each pay it when
+  asked. Pairing closes both by sharing the send records.
 - **QuickPay.** `PaymentsRepo.skipConfirmation` is the one place that decides whether a send skips the hold to
   pay. It is always false until the watch has QuickPay settings (PR 3).
 
@@ -252,7 +284,9 @@ refuse with "Cannot Pay Own Invoice". Two checks recognise such a request:
   channel id 17592187092992000001 (`16000000x16000000x1`) when the wallet that made it had the SDK's
   `preferSparkOverLightning` on.
 - **Payment hash.** Each device remembers the payment hashes of the invoices it created on Spark until they
-  expire, at most 200, and refuses to pay them. The watch keeps them in its settings file, which the wallet's wipe
+  expire, at most 200 on the watch and 2 000 on the phone, whose invoices live a day, and refuses to pay them. An
+  invoice that cannot be remembered is not handed out, and the phone refuses an invoice while it cannot read the
+  ones it remembers. The watch keeps them in its settings file, which the wallet's wipe
   clears (`OwnInvoiceStore`); the phone keeps them in its cache store (`sparkOwnInvoices`).
 
 The second check exists because Bitkit creates its invoices with `preferSparkOverLightning` off: such an invoice
