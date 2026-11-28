@@ -116,13 +116,13 @@ the command line. Run `receive-paid.xml` first: it funds the wallet the send jou
 | `receive-qr.xml` | local | no |
 | `receive-qr-rests.xml` | local | no |
 | `receive-paid.xml` | local | no, it funds the wallet with 50 000 sats |
-| `receive-paid-ambient.xml` | local | no |
 | `send-deeplink-bolt11.xml` | local | yes, 2 000 sats |
 | `send-hold-cancel.xml` | local | yes, 2 000 sats |
 | `send-ambient-hides-amount.xml` | local | yes, 2 000 sats |
 | `send-insufficient.xml` | local | yes, less than 10 000 000 sats |
 | `send-own-invoice-guard.xml` | local | yes, any balance above 0 |
 | `activity-list.xml` | local | yes, after `receive-paid.xml` and `send-deeplink-bolt11.xml` |
+| `receive-paid-ambient.xml` | local | no, it funds the wallet with 1 000 sats |
 
 Paying an LNURL-pay link or a Lightning address has no journey: the local stack's LNURL server serves only the
 Lightning addresses its Spark wallets registered, over plain HTTP, and nothing in it registers one. It is covered by
