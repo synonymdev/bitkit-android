@@ -78,7 +78,7 @@ Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only
 - `ui`: one `MainActivity` with `testTagsAsResourceId`, a `SwipeDismissableNavHost` with the routes Onboarding,
   the Restore graph, Wallet removed, Home, About, Receive QR, Send, Activity detail and Not supported, and the M3
   Expressive theme (black background, Brand orange, Inter Tight). `LaunchRequest` reads what an intent asks for
-  beyond opening the app: a payment link or the tile's Receive. The splash screen stays while the first screen is picked, for at most about a second;
+  beyond opening the app: a payment link. The splash screen stays while the first screen is picked, for at most about a second;
   after that the loading ring shows until it is. When the wallet storage cannot be recovered at launch, the start
   error (`WatchStartError` with `WatchStartRetry`) shows instead of a first screen.
 
