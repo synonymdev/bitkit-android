@@ -18,7 +18,9 @@ import to.bitkit.wear.data.ConnectivityNetworkMonitor
 import to.bitkit.wear.data.ForegroundMonitor
 import to.bitkit.wear.data.NetworkMonitor
 import to.bitkit.wear.data.NfcMonitor
+import to.bitkit.wear.data.OwnInvoiceStore
 import to.bitkit.wear.data.ProcessForegroundMonitor
+import to.bitkit.wear.data.SettingsOwnInvoiceStore
 import to.bitkit.wear.data.WipeMarker
 import to.bitkit.wear.data.settingsDataStore
 import to.bitkit.wear.env.Env
@@ -30,6 +32,10 @@ import to.bitkit.wear.security.KeyguardDeviceLock
 import to.bitkit.wear.security.KeystoreSeedStore
 import to.bitkit.wear.security.SeedKey
 import to.bitkit.wear.security.SeedStore
+import to.bitkit.wear.services.CoreInputDecoder
+import to.bitkit.wear.services.InputDecoder
+import to.bitkit.wear.services.SelfSendGuard
+import to.bitkit.wear.services.WalletSelfSendGuard
 import java.io.File
 import javax.inject.Singleton
 
@@ -59,6 +65,18 @@ abstract class SecurityModule {
     @Binds
     @Singleton
     abstract fun bindBip39(bip39: CoreBip39): Bip39
+
+    @Binds
+    @Singleton
+    abstract fun bindInputDecoder(decoder: CoreInputDecoder): InputDecoder
+
+    @Binds
+    @Singleton
+    abstract fun bindOwnInvoiceStore(store: SettingsOwnInvoiceStore): OwnInvoiceStore
+
+    @Binds
+    @Singleton
+    abstract fun bindSelfSendGuard(guard: WalletSelfSendGuard): SelfSendGuard
 
     companion object {
         private const val SEED_DIR = "seed"
