@@ -1,18 +1,22 @@
 package to.bitkit.wear.repositories
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.never
+import org.mockito.kotlin.timeout
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoMoreInteractions
@@ -31,16 +35,21 @@ import to.bitkit.wear.services.SparkError
 import to.bitkit.wear.services.WatchSparkService
 import to.bitkit.wear.test.BaseUnitTest
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsSyncRepoTest : BaseUnitTest() {
     private companion object {
         const val NOW = 1_795_867_200_000L
         const val TOKEN = 4
+        const val WAIT_SECS = 10L
         val SEED = WalletSeed("abandon about", passphrase = "pass")
         val BACKUP = """
             {"version":1,"createdAt":1,"settings":{"primaryDisplay":"FIAT","displayUnit":"CLASSIC",
@@ -211,13 +220,64 @@ class SettingsSyncRepoTest : BaseUnitTest() {
 
     @Test
     fun `a read that takes too long is given up and changes nothing`() = test {
-        read = { awaitCancellation() }
+        var isReadEnded = false
+        read = {
+            try {
+                awaitCancellation()
+            } finally {
+                isReadEnded = true
+            }
+        }
 
         val result = async { sut.sync() }
         testScheduler.advanceTimeBy(SettingsSyncRepo.READ_TIMEOUT.inWholeMilliseconds + 1)
 
         assertIs<SettingsSyncError.Timeout>(result.await().exceptionOrNull())
+        assertTrue(isReadEnded)
         verifyNoMoreInteractions(settingsStore)
+    }
+
+    @Test
+    fun `a read that blocks its thread holds back neither the import nor its caller`() {
+        val isReading = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val isReadEnded = CountDownLatch(1)
+        val blocking = SettingsSyncRepo(
+            Dispatchers.IO,
+            seedStore,
+            { _, _ ->
+                isReading.countDown()
+                release.await()
+                isReadEnded.countDown()
+                BACKUP
+            },
+            settingsStore,
+            sparkService,
+            walletRepo,
+            { elapsedMs },
+            { NOW },
+        )
+        try {
+            runBlocking {
+                val result = async(Dispatchers.Default) { blocking.sync() }
+                assertTrue(isReading.await(WAIT_SECS, TimeUnit.SECONDS))
+
+                // The wallet stops being ready: the import answers though the read is stuck.
+                walletState.update { it.copy(status = WalletStatus.Locked) }
+                val failure = withTimeout(WAIT_SECS.seconds) { result.await() }.exceptionOrNull()
+                assertIs<SettingsSyncError.NotReady>(failure)
+
+                // So does a caller that stops waiting, as a payment does after its 5 s.
+                walletState.update { it.copy(status = WalletStatus.Ready) }
+                val waited = withTimeout(WAIT_SECS.seconds) { withTimeoutOrNull(50) { blocking.sync(isForced = true) } }
+                assertNull(waited)
+            }
+        } finally {
+            release.countDown()
+        }
+        // The second import was only left waiting, so it lands once its read ends.
+        assertTrue(isReadEnded.await(WAIT_SECS, TimeUnit.SECONDS))
+        runBlocking { verify(settingsStore, timeout(WAIT_SECS * 1_000)).applyPhoneSettings(SETTINGS, NOW) }
     }
 
     @Test
@@ -264,13 +324,22 @@ class SettingsSyncRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a caller that goes away mid-read writes nothing`() = test {
-        read = { awaitCancellation() }
+    fun `an import whose caller stopped waiting still lands, and the next call finds it`() = test {
+        val gate = CompletableDeferred<Unit>()
+        read = {
+            gate.await()
+            BACKUP
+        }
 
         val result = async { sut.sync() }
         result.cancel()
+        verifyNoMoreInteractions(settingsStore)
+        val next = async { sut.sync() }
+        gate.complete(Unit)
 
-        verify(settingsStore, never()).applyPhoneSettings(any(), any())
+        assertTrue(next.await().isSuccess)
+        assertEquals(1, reads.size)
+        verify(settingsStore).applyPhoneSettings(SETTINGS, NOW)
         verifyNoMoreInteractions(settingsStore)
     }
 

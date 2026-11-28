@@ -79,9 +79,10 @@ class QuickPayRepo internal constructor(
      * Brings what [reserve] reads up to date before it is asked, for a payment that arrives as the app starts or
      * returns: the import and the rates are then on their way but not in yet. When the last import has QuickPay on
      * and is older than [MAX_SETTINGS_AGE], it waits for an import, joining one that runs; when the rates are missing
-     * or older than [MAX_RATES_AGE], it fetches them. Both together take at most [INPUTS_TIMEOUT]. It decides
-     * nothing: whatever is still missing or old afterwards makes [reserve] answer no. A watch whose last import has
-     * QuickPay off, or that has none, never waits here.
+     * or older than [MAX_RATES_AGE], it fetches them. Both together take at most [INPUTS_TIMEOUT]: only the wait
+     * ends then, and an import still under way goes on and lands for the next payment. It decides nothing:
+     * whatever is still missing or old afterwards makes [reserve] answer no. A watch whose last import has QuickPay
+     * off, or that has none, never waits here.
      */
     suspend fun awaitInputs(): Unit = withContext(ioDispatcher) {
         runSuspendCatching {

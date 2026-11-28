@@ -52,7 +52,9 @@ import kotlin.time.Duration.Companion.seconds
  * QuickPay is asked only for a send the wearer is there for: one priced within [QUICKPAY_WINDOW] of its link, with
  * the app on screen, out of ambient mode and the watch unlocked all the while. A link that waited longer for the
  * wallet, as without a network, or across a lock, a pause or ambient mode, always ends on the review and the hold,
- * so nothing is ever paid long after the wearer looked away.
+ * so nothing is ever paid long after the wearer looked away. Only the first flow of a link asks: one that Android
+ * builds again for the same link, as after the process was killed and the back stack restored, finds its mark in the
+ * saved state and ends on the review.
  */
 @HiltViewModel
 class SendViewModel @Inject constructor(
@@ -88,6 +90,9 @@ class SendViewModel @Inject constructor(
          * connects and syncs as the link opens the app, and short enough that the wearer still looks at it.
          */
         val QUICKPAY_WINDOW = 30.seconds
+
+        /** The saved state's mark that a flow already ran for this link, so a rebuilt one never asks QuickPay. */
+        const val KEY_STARTED = "send_started"
     }
 
     private val input: String = savedStateHandle.get<String>(Routes.SEND_INPUT).orEmpty()
@@ -108,13 +113,17 @@ class SendViewModel @Inject constructor(
     /** When the link arrived, on [clock]. */
     private val arrivedAtMs = clock.nowMs()
 
-    /** Whether the wearer was away at some time since the link arrived: see [isAttended]. It never turns back. */
-    private var wasAway = false
+    /**
+     * Whether the wearer was away at some time since the link arrived: see [isAttended]. It never turns back, and a
+     * flow rebuilt for a link that already had one starts with it set, however long ago the link arrived.
+     */
+    private var wasAway = savedStateHandle.get<Boolean>(KEY_STARTED) == true
 
     /** Whether the wallet was seen out of [WalletStatus.Paused], which it may be in only while the app returns. */
     private var hasLeftPause = false
 
     init {
+        savedStateHandle[KEY_STARTED] = true
         flow = viewModelScope.launch { start() }
         viewModelScope.launch {
             combine(

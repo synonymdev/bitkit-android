@@ -1,13 +1,14 @@
 package to.bitkit.wear.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.wear.data.ElapsedClock
 import to.bitkit.wear.data.SettingsStore
@@ -49,7 +50,7 @@ class SettingsSyncRepo internal constructor(
         /** The key of the phone's settings backup, the name of its `BackupCategory.SETTINGS`. */
         const val SETTINGS_KEY = "SETTINGS"
 
-        /** How long signing in to VSS and reading the backup may take. */
+        /** How long an import waits for signing in to VSS and reading the backup. */
         val READ_TIMEOUT = 30.seconds
 
         /**
@@ -79,6 +80,12 @@ class SettingsSyncRepo internal constructor(
         System::currentTimeMillis,
     )
 
+    /**
+     * Where imports and their reads run. Nothing cancels it, so an import lands whoever stopped waiting for it, and
+     * a read that was given up ends by itself.
+     */
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
+
     private val mutex = Mutex()
 
     /** The wipe token and the [clock] time of the last read that reached the backup. Guarded by [mutex]. */
@@ -88,16 +95,25 @@ class SettingsSyncRepo internal constructor(
      * Reads the phone's settings backup and adopts it, for a wallet that is ready. A backup that is missing, cannot
      * be decrypted or read, or has a newer layout keeps the watch's display values and turns QuickPay off. A read
      * that fails, as without a network, changes nothing: QuickPay then stops by itself once the last import is too
-     * old ([QuickPayRepo.MAX_SETTINGS_AGE]). The read is given up as soon as the wallet stops being ready, as on a
-     * lock or a pause, so nothing derived from the seed outlives either. An import that a wallet wipe overtook is
-     * taken out again, so nothing of a removed wallet's settings stays.
+     * old ([QuickPayRepo.MAX_SETTINGS_AGE]). An import that a wallet wipe overtook is taken out again, so nothing of a
+     * removed wallet's settings stays.
+     *
+     * The import runs in the repo's own scope and the caller only waits for it: a caller that is cancelled or
+     * timed out returns at once, and the import goes on and lands for the next one to find. The import itself stops
+     * waiting for its read after [READ_TIMEOUT], or as soon as the wallet stops being ready, as on a lock or a
+     * pause, and then writes nothing. The VSS library blocks its thread for each of its HTTP calls, so a read that
+     * was given up is not over at once: it ends with the call it is in, and only then is its client, with the keys
+     * derived from the seed, shut down.
      *
      * A call that waited for another import joins it: within [MIN_READ_GAP] of a read of this wallet's backup
      * nothing is read again and the call succeeds, unless [isForced], as for the wearer's own tap.
      */
-    suspend fun sync(isForced: Boolean = false): Result<Unit> = withContext(ioDispatcher) {
-        runSuspendCatching { mutex.withLock { syncLocked(isForced) } }
-            .onFailure { Logger.warn("Failed to import the phone's settings", it, context = TAG) }
+    suspend fun sync(isForced: Boolean = false): Result<Unit> = runSuspendCatching {
+        val import = scope.async {
+            runSuspendCatching { mutex.withLock { syncLocked(isForced) } }
+                .onFailure { Logger.warn("Failed to import the phone's settings", it, context = TAG) }
+        }
+        import.await().getOrThrow()
     }
 
     private suspend fun syncLocked(isForced: Boolean) {
@@ -106,32 +122,29 @@ class SettingsSyncRepo internal constructor(
         if (!isForced && isReadRecently(wipeToken)) return
         val seed = seedStore.load().getOrThrow()
         val backup = withTimeoutOrNull(READ_TIMEOUT) { readWhileReady(seed) } ?: throw SettingsSyncError.Timeout()
-        // From here the outcome is written whole, also when the caller goes away.
-        withContext(NonCancellable) {
-            val parsed = backup.fold(
-                onSuccess = { bytes -> runSuspendCatching { bytes?.let { PhoneSettingsParser.parse(it) } } },
-                onFailure = { if (it is PhoneBackupUnreadable) Result.failure(it) else throw it },
-            )
-            val settings = parsed.getOrNull()
-            when {
-                parsed.isFailure -> {
-                    Logger.warn("Failed to read the phone's settings backup", parsed.exceptionOrNull(), context = TAG)
-                    settingsStore.clearQuickPay()
-                }
-                settings == null -> {
-                    Logger.info("Found no settings backup of the phone", context = TAG)
-                    settingsStore.clearQuickPay()
-                }
-                else -> {
-                    settingsStore.applyPhoneSettings(settings, nowMs())
-                    Logger.info("Imported the phone's settings", context = TAG)
-                }
+        val parsed = backup.fold(
+            onSuccess = { bytes -> runSuspendCatching { bytes?.let { PhoneSettingsParser.parse(it) } } },
+            onFailure = { if (it is PhoneBackupUnreadable) Result.failure(it) else throw it },
+        )
+        val settings = parsed.getOrNull()
+        when {
+            parsed.isFailure -> {
+                Logger.warn("Failed to read the phone's settings backup", parsed.exceptionOrNull(), context = TAG)
+                settingsStore.clearQuickPay()
             }
-            lastRead = wipeToken to clock.nowMs()
-            if (!sparkService.isCurrent(wipeToken)) {
-                settingsStore.clearPhoneSettings()
-                throw SparkError.WipeInProgress()
+            settings == null -> {
+                Logger.info("Found no settings backup of the phone", context = TAG)
+                settingsStore.clearQuickPay()
             }
+            else -> {
+                settingsStore.applyPhoneSettings(settings, nowMs())
+                Logger.info("Imported the phone's settings", context = TAG)
+            }
+        }
+        lastRead = wipeToken to clock.nowMs()
+        if (!sparkService.isCurrent(wipeToken)) {
+            settingsStore.clearPhoneSettings()
+            throw SparkError.WipeInProgress()
         }
     }
 
@@ -142,15 +155,24 @@ class SettingsSyncRepo internal constructor(
 
     /**
      * Reads the settings backup, or fails with [SettingsSyncError.NotReady] the moment the wallet is not ready any
-     * more. Either way the reader has shut its client down when this returns.
+     * more. The read runs apart in [scope], since it blocks its thread and cannot be interrupted: this returns as
+     * soon as either side answers or the caller's time is up, and a read that lost is cancelled, which it follows
+     * at the end of its HTTP call, shutting its client down.
      */
-    private suspend fun readWhileReady(seed: WalletSeed): Result<ByteArray?> = channelFlow {
-        launch { send(runSuspendCatching { backupReader.read(seed, SETTINGS_KEY) }) }
-        launch {
-            walletRepo.walletState.first { it.status != WalletStatus.Ready }
-            send(Result.failure(SettingsSyncError.NotReady()))
+    private suspend fun readWhileReady(seed: WalletSeed): Result<ByteArray?> {
+        val read = scope.async { runSuspendCatching { backupReader.read(seed, SETTINGS_KEY) } }
+        try {
+            return channelFlow {
+                launch { send(read.await()) }
+                launch {
+                    walletRepo.walletState.first { it.status != WalletStatus.Ready }
+                    send(Result.failure(SettingsSyncError.NotReady()))
+                }
+            }.first()
+        } finally {
+            read.cancel()
         }
-    }.first()
+    }
 }
 
 sealed class SettingsSyncError(message: String) : AppError(message) {

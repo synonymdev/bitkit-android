@@ -39,6 +39,10 @@ class PhoneBackupUnreadable : AppError("The phone's backup cannot be decrypted")
  * sign in as another type, so a get error is an unreadable backup. The library keeps one client for the
  * process, holding keys derived from the seed, so each read builds it and shuts it down again: nothing of a wallet
  * stays behind for a lock, a pause or a wipe to clean up.
+ *
+ * The library runs each call to its end on the calling thread, so a read cannot be interrupted: one that is
+ * cancelled goes on until its HTTP call returns and only then shuts the client down. A caller that must not wait
+ * that long runs the read apart and stops waiting for it, as `SettingsSyncRepo` does.
  */
 @Singleton
 class VssPhoneBackupReader @Inject constructor() : PhoneBackupReader {

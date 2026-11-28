@@ -63,8 +63,10 @@ class SendViewModelTest : BaseUnitTest() {
         whenever { paymentsRepo.skipConfirmation(any()) }.thenReturn(false)
     }
 
-    private fun createSut() = SendViewModel(
-        SavedStateHandle(mapOf(Routes.SEND_INPUT to INPUT)),
+    private fun createSut(
+        savedState: SavedStateHandle = SavedStateHandle(mapOf(Routes.SEND_INPUT to INPUT)),
+    ) = SendViewModel(
+        savedState,
         paymentsRepo,
         walletRepo,
         currencyRepo,
@@ -181,6 +183,32 @@ class SendViewModelTest : BaseUnitTest() {
         }
         verify(paymentsRepo, never()).skipConfirmation(any())
         verify(paymentsRepo, never()).send(any())
+    }
+
+    @Test
+    fun `a flow rebuilt for a link that already had one is reviewed and held, never paid under quickpay`() = test {
+        val prepared = prepared()
+        stubInvoice(prepared)
+        whenever(paymentsRepo.skipConfirmation(prepared)).thenReturn(true)
+        whenever(paymentsRepo.send(prepared)).doSuspendableAnswer { awaitCancellation() }
+        // The first flow ends on the review, as when the watch dimmed, and the wearer leaves without paying.
+        ambientMonitor.set(true)
+        val savedState = SavedStateHandle(mapOf(Routes.SEND_INPUT to INPUT))
+        assertIs<SendStep.Review>(createSut(savedState).uiState.value.step)
+        ambientMonitor.set(false)
+
+        // The process is killed and the back stack restored: a new flow on what the first one saved.
+        val restored = SavedStateHandle(savedState.keys().associateWith { savedState.get<Any?>(it) })
+        val sut = createSut(restored)
+
+        assertIs<SendStep.Review>(sut.uiState.value.step)
+        assertTrue(sut.uiState.value.isHoldEnabled)
+        verify(paymentsRepo, never()).skipConfirmation(any())
+        verify(paymentsRepo, never()).send(any())
+
+        sut.onHoldComplete()
+
+        verify(paymentsRepo).send(prepared)
     }
 
     @Test

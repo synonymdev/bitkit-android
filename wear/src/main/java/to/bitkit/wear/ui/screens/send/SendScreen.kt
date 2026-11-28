@@ -345,6 +345,8 @@ internal fun Review(
         step.fee?.let {
             Line(
                 text = stringResource(R.string.send__fee, "${it.symbol} ${it.text}"),
+                // The fee is never cut: in bitcoin with its eight decimals a long translation wraps instead.
+                maxLines = 2,
                 modifier = Modifier.testTag("WatchSendFee")
             )
         }
@@ -459,13 +461,14 @@ private fun Line(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = Colors.White64,
+    maxLines: Int = 1,
 ) {
     Text(
         text = text,
         style = MaterialTheme.typography.bodySmall,
         color = color,
         textAlign = TextAlign.Center,
-        maxLines = 1,
+        maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
         modifier = modifier
     )
