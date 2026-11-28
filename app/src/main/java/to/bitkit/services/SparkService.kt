@@ -425,6 +425,9 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
     class WipeInProgress : SparkError("Spark wallet cannot connect while the wallet is wiped")
     class WipeFailed(path: String) : SparkError("Failed to delete Spark storage at '$path'")
 
+    /** An invoice Spark created that its own parser cannot read, so it cannot be remembered as the wallet's own. */
+    class InvoiceUnreadable : SparkError("Spark invoice cannot be read")
+
     /** Stored exit data Spark can never import: an exit state version it doesn't support, or one it can't read. */
     class ExitStateUnimportable(cause: Throwable? = null) : SparkError("Spark can't import the exit data", cause)
 

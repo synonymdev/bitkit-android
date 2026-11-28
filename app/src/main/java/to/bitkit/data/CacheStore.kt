@@ -34,8 +34,11 @@ import kotlin.time.Clock
  */
 internal const val MAX_SPARK_SEND_HASHES = 100
 
-/** How many unexpired invoices of the wallet's own are remembered; the ones that expire last are kept. */
-internal const val MAX_SPARK_OWN_INVOICES = 200
+/**
+ * How many unexpired invoices of the wallet's own are remembered; the ones that expire last are kept. Far above what
+ * a day of receive, contact and transfer invoices makes, as a dropped one could be paid by its own wallet.
+ */
+internal const val MAX_SPARK_OWN_INVOICES = 2_000
 
 /**
  * How long past its invoice's expiry a send no listing shows may still be pending: no send starts after the expiry,
@@ -177,10 +180,12 @@ class CacheStore internal constructor(
      */
     suspend fun addSparkOwnInvoice(paymentHash: String, expiresAt: Long, now: Long) {
         store.updateData { data ->
-            val invoices = (data.sparkOwnInvoices + (paymentHash.lowercase() to expiresAt)).entries
+            val unexpired = (data.sparkOwnInvoices + (paymentHash.lowercase() to expiresAt)).entries
                 .filter { it.value > now }
-                .sortedByDescending { it.value }
-                .take(MAX_SPARK_OWN_INVOICES)
+            if (unexpired.size > MAX_SPARK_OWN_INVOICES) {
+                Logger.warn("Dropped '${unexpired.size - MAX_SPARK_OWN_INVOICES}' unexpired own Spark invoices")
+            }
+            val invoices = unexpired.sortedByDescending { it.value }.take(MAX_SPARK_OWN_INVOICES)
             data.copy(sparkOwnInvoices = invoices.associate { it.key to it.value })
         }
     }
