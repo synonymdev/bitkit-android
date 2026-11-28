@@ -243,7 +243,27 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
         nodeMovableSats = 20_000uL
         lastSettled.complete(Result.failure(MoveToSparkError.PaymentFailed(null)))
 
-        assertEquals(MoveToSparkUiState.Confirm(plan), sut.uiState.value)
+        assertEquals(
+            MoveToSparkUiState.Confirm(plan, lastAttempt = MoveToSparkLastAttempt(30_000uL, leftSats = 0uL)),
+            sut.uiState.value,
+        )
+    }
+
+    @Test
+    fun `a last part that settles late with a rest left counts the earlier parts as moved`() = test {
+        lightningState.value = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
+        val lastPart = MoveToSparkOutcome.InFlight(20_000uL, "hash_3", "id_3", earlierSats = 30_000uL)
+        val lastSettled = CompletableDeferred<Result<MoveToSparkOutcome.Moved>>()
+        whenever(moveToSparkRepo.movableSats()).thenAnswer { 0L }
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.success(lastPart))
+        whenever { moveToSparkRepo.awaitSettled(eq(lastPart)) }.doSuspendableAnswer { lastSettled.await() }
+        val sut = createViewModel()
+        sut.move()
+
+        whenever(moveToSparkRepo.movableSatsSettled()).thenAnswer { 20_000L }
+        lastSettled.complete(Result.success(MoveToSparkOutcome.Moved(20_000uL, feeSats = 10uL)))
+
+        assertEquals(50_000uL, assertIs<MoveToSparkUiState.Confirm>(sut.uiState.value).lastAttempt?.movedSats)
     }
 
     @Test
@@ -264,7 +284,10 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
 
         sut.move()
 
-        assertEquals(MoveToSparkUiState.Confirm(plan), sut.uiState.value)
+        assertEquals(
+            MoveToSparkUiState.Confirm(plan, lastAttempt = MoveToSparkLastAttempt(50_000uL, leftSats = 0uL)),
+            sut.uiState.value,
+        )
         verify(moveToSparkRepo, times(2)).quoteAll()
     }
 
@@ -276,7 +299,10 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
 
         firstSettled.complete(Result.success(moved))
 
-        assertEquals(MoveToSparkUiState.Confirm(plan), sut.uiState.value)
+        assertEquals(
+            MoveToSparkUiState.Confirm(plan, lastAttempt = MoveToSparkLastAttempt(50_000uL, leftSats = 0uL)),
+            sut.uiState.value,
+        )
     }
 
     @Test
@@ -377,9 +403,51 @@ class MoveToSparkViewModelTest : BaseUnitTest() {
 
         sut.move()
 
-        assertEquals(MoveToSparkUiState.Confirm(plan), sut.uiState.value)
+        val confirm = assertIs<MoveToSparkUiState.Confirm>(sut.uiState.value)
+        assertEquals(plan, confirm.plan)
+        assertEquals(30_000uL, confirm.lastAttempt?.movedSats)
         verify(moveToSparkRepo, times(2)).quoteAll()
         verify(closeChannelUseCase).closeEmptiedByMove(eq(listOf(openChannel)), anyOrNull())
+    }
+
+    @Test
+    fun `a move that moved nothing before its fee rose says so with what the channel holds`() = test {
+        val channel = openChannel.copy(isUsable = true, outboundCapacityMsat = 26_510_000uL)
+        lightningState.value = LightningState(channels = persistentListOf(channel))
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.failure(MoveToSparkError.FeeRose(0uL)))
+        val sut = createViewModel()
+
+        sut.move()
+
+        assertEquals(
+            MoveToSparkUiState.Confirm(plan, lastAttempt = MoveToSparkLastAttempt(0uL, leftSats = 26_510uL)),
+            sut.uiState.value,
+        )
+    }
+
+    @Test
+    fun `quoting the rest after a stopped move keeps saying what it did`() = test {
+        val requote = CompletableDeferred<Result<MoveToSparkPlan>>()
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.failure(MoveToSparkError.FeeRose(0uL)))
+        val sut = createViewModel()
+        whenever(moveToSparkRepo.quoteAll()).doSuspendableAnswer { requote.await() }
+
+        sut.move()
+
+        assertEquals(0uL, assertIs<MoveToSparkUiState.Quoting>(sut.uiState.value).lastAttempt?.movedSats)
+        requote.complete(Result.success(plan))
+    }
+
+    @Test
+    fun `reopening the modal after a stopped move still says what it did`() = test {
+        whenever(moveToSparkRepo.moveAll(eq(plan))).thenReturn(Result.failure(MoveToSparkError.FeeRose(0uL)))
+        val sut = createViewModel()
+        sut.move()
+
+        sut.close()
+        sut.open()
+
+        assertEquals(0uL, assertIs<MoveToSparkUiState.Confirm>(sut.uiState.value).lastAttempt?.movedSats)
     }
 
     @Test

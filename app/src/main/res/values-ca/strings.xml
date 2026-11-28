@@ -178,8 +178,10 @@
     <string name="lightning__move_to_spark__in_flight_text">El pagament està en camí i apareixerà a Spark quan es completi. Si falla, l\'import es queda a la teva connexió.</string>
     <string name="lightning__move_to_spark__in_flight_title">Movent a\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__nav_title">Moure a Spark</string>
+    <string name="lightning__move_to_spark__retry_moved">S\'han mogut %1$s a Spark. %2$s continua a la teva connexió.</string>
+    <string name="lightning__move_to_spark__retry_none">No s\'han mogut fons. %1$s continua a la teva connexió.</string>
     <string name="lightning__move_to_spark__update">Actualitzar</string>
-    <string name="lightning__move_to_spark__update_fee">Comissió d’actualització: %1$s</string>
+    <string name="lightning__move_to_spark__update_fee">Comissió d’actualització: fins a %1$s</string>
     <string name="lightning__move_to_spark__update_nav_title">Actualitzar el saldo de despesa</string>
     <string name="lightning__move_to_spark__update_text">Bitkit està canviant de proveïdor Lightning. Actualitza el teu saldo de despesa per continuar fent pagaments instantanis i barats.</string>
     <string name="lightning__move_to_spark__update_title">Actualitzar\n&lt;accent&gt;saldo de despesa&lt;/accent&gt;</string>

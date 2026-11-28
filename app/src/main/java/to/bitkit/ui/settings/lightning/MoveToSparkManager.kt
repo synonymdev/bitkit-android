@@ -13,6 +13,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.PaymentDetails
 import to.bitkit.async.appScope
 import to.bitkit.di.BgDispatcher
+import to.bitkit.models.safe
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.MoveToSparkError
 import to.bitkit.repositories.MoveToSparkMath
@@ -43,7 +44,7 @@ class MoveToSparkManager @Inject constructor(
 
     private val scope = appScope(bgDispatcher, TAG)
 
-    private val _uiState = MutableStateFlow<MoveToSparkUiState>(MoveToSparkUiState.Quoting)
+    private val _uiState = MutableStateFlow<MoveToSparkUiState>(MoveToSparkUiState.Quoting())
     val uiState: StateFlow<MoveToSparkUiState> = _uiState.asStateFlow()
 
     /** Counts quotes, moves and resets; a quote or move writes its result only while it is still the latest. */
@@ -73,6 +74,14 @@ class MoveToSparkManager @Inject constructor(
     private var movedBeforeRest: MoveToSparkOutcome.Moved? = null
 
     /**
+     * What the last move moved when it stopped with a balance left, so the next quote says what that Update did.
+     * Kept when the modal closes, so reopening it does not ask again without it; a new move or a finished one
+     * clears it.
+     */
+    @Volatile
+    private var lastMovedSats: ULong? = null
+
+    /**
      * Opens the screen: quotes a new move, unless one is quoting or a move is running or still shows its outcome.
      * Returns the screen's token for [reset].
      */
@@ -96,7 +105,7 @@ class MoveToSparkManager @Inject constructor(
         quoteJob?.cancel()
         keepsOutcome = false
         movedBeforeRest = null
-        _uiState.update { MoveToSparkUiState.Quoting }
+        _uiState.update { MoveToSparkUiState.Quoting(lastAttempt()) }
     }
 
     /** Drops the move, its outcome and any quote when the wallet is wiped, so the next wallet starts on a new quote. */
@@ -107,7 +116,8 @@ class MoveToSparkManager @Inject constructor(
         keepsOutcome = false
         isMoveInFlight = false
         movedBeforeRest = null
-        _uiState.update { MoveToSparkUiState.Quoting }
+        lastMovedSats = null
+        _uiState.update { MoveToSparkUiState.Quoting() }
     }
 
     /** Quotes moving everything the channels can send, in parts when one payment does not route. */
@@ -117,11 +127,11 @@ class MoveToSparkManager @Inject constructor(
         val moved = movedNow ?: movedBeforeRest
         val quoteGeneration = generation.incrementAndGet()
         keepsOutcome = false
-        _uiState.update { MoveToSparkUiState.Quoting }
+        _uiState.update { MoveToSparkUiState.Quoting(lastAttempt()) }
         quoteJob?.cancel()
         quoteJob = scope.launch {
             val quoted = moveToSparkRepo.quoteAll().fold(
-                onSuccess = { MoveToSparkUiState.Confirm(it) },
+                onSuccess = { MoveToSparkUiState.Confirm(it, lastAttempt = lastAttempt()) },
                 onFailure = {
                     // A rest that no longer routes ends the move; any other failure leaves a rest to try again.
                     val restStops = it is MoveToSparkError.TooLarge || it is MoveToSparkError.NothingToMove
@@ -133,6 +143,7 @@ class MoveToSparkManager @Inject constructor(
                 },
             )
             if (generation.get() != quoteGeneration) return@launch
+            if (quoted is MoveToSparkUiState.Done) lastMovedSats = null
             keepsOutcome = quoted is MoveToSparkUiState.Done
             movedBeforeRest = moved.takeIf { quoted is MoveToSparkUiState.Failed }
             _uiState.update { quoted }
@@ -147,7 +158,8 @@ class MoveToSparkManager @Inject constructor(
         val moveGeneration = generation.incrementAndGet()
         keepsOutcome = true
         isMoveInFlight = true
-        _uiState.update { MoveToSparkUiState.Confirm(plan, isMoving = true) }
+        lastMovedSats = null
+        _uiState.update { confirm.copy(isMoving = true) }
         moveJob = scope.launch {
             val paymentsBefore = lightningRepo.listPaymentsOrNull()
             try {
@@ -206,7 +218,14 @@ class MoveToSparkManager @Inject constructor(
     private fun requote(moveGeneration: Int, moved: MoveToSparkOutcome.Moved?) {
         if (generation.get() != moveGeneration) return
         isMoveInFlight = false
+        lastMovedSats = moved?.amountSats ?: 0uL
         quote(moved)
+    }
+
+    private fun lastAttempt(): MoveToSparkLastAttempt? = lastMovedSats?.let { movedSats ->
+        val heldMsat = lightningRepo.lightningState.value.channels.filter { it.isUsable }
+            .fold(0uL) { total, channel -> total.safe() + channel.outboundCapacityMsat.safe() }
+        MoveToSparkLastAttempt(movedSats, leftSats = heldMsat / 1000uL)
     }
 
     private fun closeEmptied(channelsBefore: List<ChannelDetails>, paymentsBefore: List<PaymentDetails>?) {
@@ -219,8 +238,8 @@ class MoveToSparkManager @Inject constructor(
         moveGeneration: Int,
     ) {
         if (generation.get() != moveGeneration || !uiState.value.isInFlight()) return
-        val moved = settled.getOrNull() ?: earlierSats.takeIf { it > 0uL }
-            ?.let { MoveToSparkOutcome.Moved(it, feeSats = 0uL) }
+        val moved = settled.getOrNull()?.let { it.copy(amountSats = it.amountSats.safe() + earlierSats.safe()) }
+            ?: earlierSats.takeIf { it > 0uL }?.let { MoveToSparkOutcome.Moved(it, feeSats = 0uL) }
         val late = if (moved == null) {
             // Try Again quotes from the channels, which still hold the failed part until they are read again.
             refreshChannels()

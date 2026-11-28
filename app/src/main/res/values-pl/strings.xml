@@ -110,8 +110,10 @@
     <string name="lightning__move_to_spark__in_flight_text">Płatność jest w drodze i pojawi się w Spark po rozliczeniu. Jeśli się nie powiedzie, kwota pozostanie w Twoim połączeniu.</string>
     <string name="lightning__move_to_spark__in_flight_title">Przenoszenie do\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__nav_title">Przenieś do Spark</string>
+    <string name="lightning__move_to_spark__retry_moved">Przeniesiono %1$s do Spark. %2$s pozostaje w Twoim połączeniu.</string>
+    <string name="lightning__move_to_spark__retry_none">Nie przeniesiono żadnych środków. %1$s pozostaje w Twoim połączeniu.</string>
     <string name="lightning__move_to_spark__update">Aktualizuj</string>
-    <string name="lightning__move_to_spark__update_fee">Opłata za aktualizację: %1$s</string>
+    <string name="lightning__move_to_spark__update_fee">Opłata za aktualizację: do %1$s</string>
     <string name="lightning__move_to_spark__update_nav_title">Aktualizuj saldo wydatków</string>
     <string name="lightning__move_to_spark__update_text">Bitkit zmienia dostawcę Lightning. Zaktualizuj saldo wydatków, aby dalej płacić natychmiast i tanio.</string>
     <string name="lightning__move_to_spark__update_title">Aktualizuj\n&lt;accent&gt;saldo wydatków&lt;/accent&gt;</string>

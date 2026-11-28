@@ -174,7 +174,8 @@ class MoveToSparkRepo internal constructor(
      * Spark does not show in time, fails with [MoveToSparkError.UpdateUnsettled]; the funds then reach Spark on their
      * own. [onMove] gets the move's outcome as soon as the move returns, before the wait. A quote whose amount, with
      * Spark's balance, would not cover the payment of [bolt11] and Spark's fee for it, or a fee nothing can price,
-     * fails with [MoveToSparkError.UpdateFallsShort] before any move. When another move, such as the modal's, took
+     * fails with [MoveToSparkError.UpdateFallsShort] before any move; one that covers it only without the fee's
+     * headroom is quoted again without it, at no more than the fee shown. When another move, such as the modal's, took
      * the channels' balance before this one could pay, it moves nothing and calls no [onMove]: it returns once Spark
      * covers the payment with its fee, or fails with [MoveToSparkError.UpdateFallsShort] when Spark does not in time.
      */
@@ -188,10 +189,13 @@ class MoveToSparkRepo internal constructor(
             runSuspendCatching {
                 val feeSats = feeAfterUpdateOrNull(bolt11, amountSats)
                     ?: throw MoveToSparkError.UpdateFallsShort(amountSats)
-                if (!MoveToSparkMath.coversPayment(quote, sparkRepo.state.value, amountSats, feeSats)) {
-                    throw MoveToSparkError.UpdateFallsShort(amountSats)
+                val covers = { candidate: MoveToSparkQuote ->
+                    MoveToSparkMath.coversPayment(candidate, sparkRepo.state.value, amountSats, feeSats)
                 }
-                val outcome = moveUnlessCovered(quote, amountSats, feeSats)
+                val sized = quote.takeIf(covers)
+                    ?: quote(withHeadroom = false).getOrNull()?.takeIf { it.feeSats <= quote.feeSats && covers(it) }
+                    ?: throw MoveToSparkError.UpdateFallsShort(amountSats)
+                val outcome = moveUnlessCovered(sized, amountSats, feeSats)
                     ?: return@runSuspendCatching MoveToSparkOutcome.Moved(0uL, 0uL)
                 onMove(outcome)
                 val moved = outcome as? MoveToSparkOutcome.Moved ?: throw MoveToSparkError.UpdateUnsettled()
@@ -253,9 +257,13 @@ class MoveToSparkRepo internal constructor(
 
     /**
      * Quotes moving [targetSats], or everything the channels can send, to a new Spark invoice.
-     * The amount leaves room for the routing fee, which the quote carries and the move caps the payment at.
+     * The amount leaves room for the routing fee, which the quote carries and the move caps the payment at; without
+     * [withHeadroom], that fee is the estimate and its margin alone.
      */
-    suspend fun quote(targetSats: ULong? = null): Result<MoveToSparkQuote> = withContext(bgDispatcher) {
+    suspend fun quote(
+        targetSats: ULong? = null,
+        withHeadroom: Boolean = true,
+    ): Result<MoveToSparkQuote> = withContext(bgDispatcher) {
         runSuspendCatching {
             val limitSats = movableSats()
             val wantedSats = targetSats?.coerceAtMost(limitSats) ?: limitSats
@@ -274,8 +282,12 @@ class MoveToSparkRepo internal constructor(
                     fitting?.let { quote -> return@runSuspendCatching quote }
                     throw if (it.isNoRoute()) MoveToSparkError.TooLarge(amountSats, it) else it
                 }
-                val feeSats = MoveToSparkMath.quotedFeeSats(estimateSats)
-                val nextSats = minOf(wantedSats, MoveToSparkMath.amountAfterFee(limitSats, estimateSats))
+                val feeSats = if (withHeadroom) {
+                    MoveToSparkMath.cappedFeeSats(estimateSats, limitSats)
+                } else {
+                    MoveToSparkMath.quotedFeeSats(estimateSats)
+                }
+                val nextSats = minOf(wantedSats, limitSats.safe() - feeSats.safe())
                 if (amountSats.safe() + feeSats.safe() <= limitSats) {
                     fitting = MoveToSparkQuote(invoice, amountSats, feeSats)
                     if (nextSats <= amountSats) return@runSuspendCatching checkNotNull(fitting)
@@ -333,16 +345,16 @@ class MoveToSparkRepo internal constructor(
             }
         }
         var estimateSats: ULong = probedSats
-        val firstSats = minOf(amountSats, MoveToSparkMath.amountAfterFee(limitSats, estimateSats))
+        val firstSats = minOf(amountSats, MoveToSparkMath.amountAfterCappedFee(limitSats, estimateSats))
         if (firstSats < MoveToSparkMath.MIN_MOVE_SATS) return null
-        var fitting = MoveToSparkQuote(invoice, firstSats, MoveToSparkMath.quotedFeeSats(estimateSats))
+        var fitting = MoveToSparkQuote(invoice, firstSats, MoveToSparkMath.cappedFeeSats(estimateSats, limitSats))
         if (isHalved) return fitting
         repeat(MAX_QUOTE_ROUNDS) {
-            val grownSats = minOf(wantedSats, MoveToSparkMath.amountAfterFee(limitSats, estimateSats))
+            val grownSats = minOf(wantedSats, MoveToSparkMath.amountAfterCappedFee(limitSats, estimateSats))
             if (grownSats <= fitting.amountSats) return fitting
             estimateSats = lightningRepo.estimateLdkRoutingFeesForAmount(invoice, grownSats).getOrNull()
                 ?: return fitting
-            val feeSats = MoveToSparkMath.quotedFeeSats(estimateSats)
+            val feeSats = MoveToSparkMath.cappedFeeSats(estimateSats, limitSats)
             if (grownSats.safe() + feeSats.safe() <= limitSats) fitting = MoveToSparkQuote(invoice, grownSats, feeSats)
         }
         return fitting
@@ -609,6 +621,12 @@ object MoveToSparkMath {
     /** Room left above the quoted fee, in sats, for the fee moving between the quote and the payment. */
     private const val FEE_MARGIN_SATS = 2uL
 
+    /**
+     * Room above twice the estimate, in sats, for a costlier route when the cheapest one fails at a hop; also LDK's
+     * default base for its fee cap.
+     */
+    private const val FEE_HEADROOM_SATS = 50uL
+
     fun movableSats(channels: List<ChannelDetails>?): ULong = channels.totalNextOutboundHtlcLimitSats()
 
     /** Whether Spark can take a move; every Move to Spark check goes through here. */
@@ -633,6 +651,23 @@ object MoveToSparkMath {
 
     /** The routing fee to show for an estimate: the estimate and its margin, which also covers its rounding down. */
     fun quotedFeeSats(estimateSats: ULong): ULong = estimateSats.safe() + FEE_MARGIN_SATS.safe()
+
+    /**
+     * The most a part may pay in routing fees for an estimate under [limitSats], shown as "up to": twice the estimate
+     * and [FEE_HEADROOM_SATS], so a costlier route still fits when the cheapest one fails at a hop. At most LDK's
+     * default cap (1% and [FEE_HEADROOM_SATS]), and never so much that less than [MIN_MOVE_SATS] is left to move; at
+     * least [quotedFeeSats]. Only the route's real fee is paid.
+     */
+    fun cappedFeeSats(estimateSats: ULong, limitSats: ULong): ULong {
+        val headroomSats = (estimateSats.safe() * 2uL.safe()).safe() + FEE_HEADROOM_SATS.safe()
+        val ldkCapSats = (limitSats / 100uL).safe() + FEE_HEADROOM_SATS.safe()
+        val keepsMinSats = limitSats.safe() - MIN_MOVE_SATS.safe()
+        return maxOf(quotedFeeSats(estimateSats), minOf(headroomSats, ldkCapSats, keepsMinSats))
+    }
+
+    /** The amount that fits under [limitSats] together with the fee [cappedFeeSats] allows for [estimateSats]. */
+    fun amountAfterCappedFee(limitSats: ULong, estimateSats: ULong): ULong =
+        limitSats.safe() - cappedFeeSats(estimateSats, limitSats).safe()
 
     /** The routing fee cap for the payment: exactly the quoted fee, so it never pays more than shown. */
     fun feeCapMsat(feeSats: ULong): ULong = feeSats.safe() * 1000uL.safe()

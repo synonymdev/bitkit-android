@@ -174,8 +174,10 @@
     <string name="lightning__move_to_spark__in_flight_text">Η πληρωμή βρίσκεται καθ\'οδόν και θα εμφανιστεί στο Spark μόλις διακανονιστεί. Αν αποτύχει, το ποσό παραμένει στη σύνδεσή σου.</string>
     <string name="lightning__move_to_spark__in_flight_title">Μεταφορά στο\n&lt;accent&gt;Spark&lt;/accent&gt;</string>
     <string name="lightning__move_to_spark__nav_title">Μεταφορά στο Spark</string>
+    <string name="lightning__move_to_spark__retry_moved">Μεταφέρθηκαν %1$s στο Spark. Το ποσό %2$s παραμένει στη σύνδεσή σου.</string>
+    <string name="lightning__move_to_spark__retry_none">Δεν μεταφέρθηκαν κεφάλαια. Το ποσό %1$s παραμένει στη σύνδεσή σου.</string>
     <string name="lightning__move_to_spark__update">Ενημέρωση</string>
-    <string name="lightning__move_to_spark__update_fee">Χρέωση ενημέρωσης: %1$s</string>
+    <string name="lightning__move_to_spark__update_fee">Χρέωση ενημέρωσης: έως %1$s</string>
     <string name="lightning__move_to_spark__update_nav_title">Ενημέρωση υπολοίπου δαπανών</string>
     <string name="lightning__move_to_spark__update_text">Το Bitkit αλλάζει πάροχο Lightning. Ενημερώστε το υπόλοιπο δαπανών σας για να συνεχίσετε να κάνετε άμεσες, φθηνές πληρωμές.</string>
     <string name="lightning__move_to_spark__update_title">Ενημέρωση\n&lt;accent&gt;υπολοίπου δαπανών&lt;/accent&gt;</string>
