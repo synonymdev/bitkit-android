@@ -59,19 +59,31 @@ fun ActivityScreen(
     viewModel: ActivityViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    // The relative times move on while the page stays open and Spark reports nothing new.
-    val nowSecs by produceState(uiState.nowSecs, uiState.nowSecs) {
-        while (true) {
-            delay(RELATIVE_TIME_TICK)
-            value = Instant.now().epochSecond
-        }
-    }
     Content(
-        uiState = uiState.copy(nowSecs = nowSecs),
+        uiState = uiState.copy(nowSecs = rememberNowSecs(loadedSecs = uiState.nowSecs)),
         isAmbient = isAmbient(),
         onPaymentClick = onPaymentClick,
         modifier = modifier
     )
+}
+
+/**
+ * The time the relative times count from, in epoch seconds: when the list was read ([loadedSecs]), moved on by a
+ * tick of [clock] every minute, so the times also move while the page stays open and Spark reports nothing new. A
+ * list read after the last tick counts from its own time at once.
+ */
+@Composable
+internal fun rememberNowSecs(
+    loadedSecs: Long,
+    clock: () -> Long = { Instant.now().epochSecond },
+): Long {
+    val tickSecs by produceState(initialValue = clock()) {
+        while (true) {
+            delay(RELATIVE_TIME_TICK)
+            value = clock()
+        }
+    }
+    return maxOf(tickSecs, loadedSecs)
 }
 
 @Composable

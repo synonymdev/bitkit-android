@@ -22,6 +22,7 @@
     <string name="receive__hidden">QR amagat</string>
     <string name="receive__new">Nova factura</string>
     <string name="receive__paid">Pagat</string>
+    <string name="receive__show">Mostra el QR</string>
     <string name="receive__title">Rebre</string>
     <string name="removed__title">Cartera eliminada</string>
     <string name="restore__checksum_review">Revisa</string>
@@ -47,6 +48,7 @@
     <string name="send__amount_placeholder">Import</string>
     <string name="send__amount_range">%1$s – %2$s</string>
     <string name="send__error_already_paid">Ja pagada</string>
+    <string name="send__error_busy">Wallet ocupada</string>
     <string name="send__error_expired">Factura caducada</string>
     <string name="send__error_failed">El pagament ha fallat</string>
     <string name="send__error_insufficient">Fons insuficients</string>

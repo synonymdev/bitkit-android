@@ -30,6 +30,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -278,7 +279,7 @@ private fun AmountField(
 }
 
 @Composable
-private fun Review(
+internal fun Review(
     step: SendStep.Review,
     isHoldEnabled: Boolean,
     isOffline: Boolean,
@@ -300,14 +301,15 @@ private fun Review(
                     .testTag("WatchSendHold")
                     .semantics {
                         // A screen reader cannot hold, and its double tap is the click that pays nothing, so paying
-                        // is a named action its wearer picks from the actions menu.
+                        // is a named action its wearer picks from the actions menu, or its long click: a double tap
+                        // and hold.
                         if (isHoldEnabled) {
-                            customActions = listOf(
-                                CustomAccessibilityAction(payLabel) {
-                                    onHoldComplete()
-                                    true
-                                },
-                            )
+                            val pay = {
+                                onHoldComplete()
+                                true
+                            }
+                            customActions = listOf(CustomAccessibilityAction(payLabel, pay))
+                            onLongClick(label = payLabel, action = pay)
                         }
                     }
             ) {

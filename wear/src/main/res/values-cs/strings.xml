@@ -22,6 +22,7 @@
     <string name="receive__hidden">QR skryt</string>
     <string name="receive__new">Nová faktura</string>
     <string name="receive__paid">Zaplaceno</string>
+    <string name="receive__show">Zobrazit QR</string>
     <string name="receive__title">Přijmout</string>
     <string name="removed__title">Peněženka odebrána</string>
     <string name="restore__checksum_review">Zkontrolovat</string>
@@ -48,6 +49,7 @@
     <string name="send__amount_placeholder">Částka</string>
     <string name="send__amount_range">%1$s – %2$s</string>
     <string name="send__error_already_paid">Již zaplaceno</string>
+    <string name="send__error_busy">Peněženka je zaneprázdněna</string>
     <string name="send__error_expired">Faktura vypršela</string>
     <string name="send__error_failed">Platba selhala</string>
     <string name="send__error_insufficient">Nedostatek prostředků</string>

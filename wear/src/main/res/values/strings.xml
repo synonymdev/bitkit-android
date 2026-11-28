@@ -22,6 +22,7 @@
     <string name="receive__hidden">QR hidden</string>
     <string name="receive__new">New invoice</string>
     <string name="receive__paid">Paid</string>
+    <string name="receive__show">Show QR</string>
     <string name="receive__title">Receive</string>
     <string name="removed__title">Wallet removed</string>
     <string name="restore__checksum_review">Review</string>
@@ -46,6 +47,7 @@
     <string name="send__amount_placeholder">Amount</string>
     <string name="send__amount_range">%1$s – %2$s</string>
     <string name="send__error_already_paid">Already paid</string>
+    <string name="send__error_busy">Wallet busy</string>
     <string name="send__error_expired">Invoice expired</string>
     <string name="send__error_failed">Payment failed</string>
     <string name="send__error_insufficient">Not enough funds</string>

@@ -216,6 +216,24 @@ class WatchSparkServiceTest {
         stalled.join()
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a disconnect waits for a send that holds the connection before the sdk has its call`() = runTest {
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
+        val sdk = connectedSdk()
+        sut.connectWith(assertNotNull(sut.wipeToken())) { sdk }
+
+        sut.holdSend()
+        val disconnecting = launch { sut.disconnect() }
+        runCurrent()
+        verify(sdk, never()).disconnect()
+
+        sut.releaseSend()
+        disconnecting.join()
+        verify(sdk).disconnect()
+        assertEquals(0, testScheduler.currentTime)
+    }
+
     @Test
     fun `payments are listed newest first, up to the limit`() = runTest {
         val sut = WatchSparkService(mock<Context>(), FakeBip39())

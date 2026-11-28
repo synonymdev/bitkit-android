@@ -22,6 +22,7 @@
     <string name="receive__hidden">QR ukryty</string>
     <string name="receive__new">Nowa faktura</string>
     <string name="receive__paid">Opłacono</string>
+    <string name="receive__show">Pokaż QR</string>
     <string name="receive__title">Odbierz</string>
     <string name="removed__title">Portfel usunięty</string>
     <string name="restore__checksum_review">Sprawdź</string>
@@ -48,6 +49,7 @@
     <string name="send__amount_placeholder">Kwota</string>
     <string name="send__amount_range">%1$s – %2$s</string>
     <string name="send__error_already_paid">Już opłacona</string>
+    <string name="send__error_busy">Portfel jest zajęty</string>
     <string name="send__error_expired">Faktura wygasła</string>
     <string name="send__error_failed">Płatność nieudana</string>
     <string name="send__error_insufficient">Za mało środków</string>

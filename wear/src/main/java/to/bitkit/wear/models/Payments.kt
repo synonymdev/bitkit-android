@@ -64,11 +64,14 @@ class PreparedSend internal constructor(
     internal val paymentHash: String?,
     /** When the invoice expires, in epoch seconds, or null for a Spark address. */
     internal val expiresAtSecs: ULong?,
-    /** The Spark address a transfer pays, or null for an invoice. */
-    internal val sparkAddress: String?,
     /**
-     * The idempotency key a transfer to [sparkAddress] goes out under, made once so a repeated send pays once,
-     * unless an earlier transfer to the address is still in doubt: then its key is used again.
+     * The Spark identity public key, in hex, of the wallet a transfer to a Spark address pays, or null for an
+     * invoice. Every spelling of a wallet's address encodes the same key.
+     */
+    internal val sparkPayee: String?,
+    /**
+     * The idempotency key a transfer to [sparkPayee] goes out under, made once so a repeated send pays once,
+     * unless an earlier transfer to that wallet is still in doubt: then its key is used again.
      */
     internal val transferKey: String,
 ) {
@@ -119,8 +122,14 @@ sealed class SendError(message: String, cause: Throwable? = null) : AppError(mes
     /** This wallet already paid the invoice, or an earlier transfer to the Spark address went through after all. */
     class AlreadyPaid : SendError("The request is already paid")
 
-    /** A send of this request is still under way, from the watch or the phone. */
+    /** A send of this request is still under way, from the watch or the phone: Spark lists it as pending. */
     class InFlight : SendError("A payment of this request is under way")
+
+    /**
+     * Another send holds the wallet: one that is running, or one whose call Spark has not returned yet. Nothing of
+     * this request was sent, and it can be tried again once that send is over.
+     */
+    class Busy : SendError("The wallet is busy with another payment")
 
     /** Spark refused or failed the payment. */
     class Failed(cause: Throwable? = null) : SendError("The payment failed", cause)

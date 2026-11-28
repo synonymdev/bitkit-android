@@ -24,6 +24,7 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -782,7 +783,7 @@ class PaymentsRepoTest : BaseUnitTest() {
         assertEquals(PaymentsRepo.SEND_TIMEOUT.inWholeMilliseconds, testScheduler.currentTime)
         assertEquals(setOf("key-0"), uncertainSends.sends.keys)
 
-        assertIs<SendError.InFlight>(sut.send(prepared).exceptionOrNull())
+        assertIs<SendError.Busy>(sut.send(prepared).exceptionOrNull())
         verify(sparkService).send(any(), any())
 
         val stalled = answer
@@ -799,7 +800,7 @@ class PaymentsRepoTest : BaseUnitTest() {
         val caller = launch { sut.send(prepared) }
 
         caller.cancel()
-        assertIs<SendError.InFlight>(sut.send(prepared).exceptionOrNull())
+        assertIs<SendError.Busy>(sut.send(prepared).exceptionOrNull())
         release.complete(payment("key-0", PaymentStatus.COMPLETED))
 
         assertTrue(uncertainSends.sends.isEmpty())
@@ -824,10 +825,86 @@ class PaymentsRepoTest : BaseUnitTest() {
         whenever(sparkService.send(any(), any())).doSuspendableAnswer { release.await() }
         val first = async { sut.send(preparedSend()) }
 
-        assertIs<SendError.InFlight>(sut.send(preparedSend()).exceptionOrNull())
+        assertIs<SendError.Busy>(sut.send(preparedSend()).exceptionOrNull())
 
         release.complete(payment("key-0", PaymentStatus.COMPLETED))
         assertTrue(first.await().isSuccess)
+    }
+
+    @Test
+    fun `while a stalled send call lives, another request is busy, not under way, and leaves no note`() = test {
+        val other = "lnbcrt1other"
+        val otherHash = "cd".repeat(32)
+        whenever(sparkService.parse(other)).thenReturn(invoiceInput(other, otherHash))
+        whenever(sparkService.prepareSend(eq(other), anyOrNull())).thenReturn(prepared())
+        val otherPrepared = sut.prepare(SendRequest.Invoice(other, 500uL, null)).getOrThrow()
+        whenever(sparkService.send(any(), any())).doSuspendableAnswer { CompletableDeferred<Payment>().await() }
+        assertIs<SendError.Unknown>(sut.send(preparedSend()).exceptionOrNull())
+
+        assertIs<SendError.Busy>(sut.send(otherPrepared).exceptionOrNull())
+
+        verify(sparkService).send(any(), any())
+        assertEquals(setOf("key-0"), uncertainSends.sends.keys)
+    }
+
+    @Test
+    fun `a wallet that disconnects after the note and before the sdk call sent nothing`() = test {
+        whenever(sparkService.send(any(), any())).doSuspendableAnswer { throw SparkError.NotConnected() }
+
+        assertIs<SendError.NotReady>(sut.send(preparedSend()).exceptionOrNull())
+
+        assertTrue(uncertainSends.sends.isEmpty())
+    }
+
+    @Test
+    fun `a disconnect before the sdk call keeps the note of an earlier attempt of unknown outcome`() = test {
+        var error: Throwable = SdkException.NetworkException("reset")
+        whenever(sparkService.send(any(), any())).doSuspendableAnswer { throw error }
+        assertIs<SendError.Unknown>(sut.send(preparedSend()).exceptionOrNull())
+
+        error = SparkError.NotConnected()
+        assertIs<SendError.NotReady>(sut.send(preparedSend()).exceptionOrNull())
+
+        assertEquals(setOf("key-0"), uncertainSends.sends.keys)
+    }
+
+    @Test
+    fun `a send holds the connection from its note until spark returns the call`() = test {
+        val order = mutableListOf<String>()
+        doAnswer { order += "hold:${uncertainSends.sends.size}" }.whenever(sparkService).holdSend()
+        doAnswer { order += "release" }.whenever(sparkService).releaseSend()
+        whenever(sparkService.send(any(), any())).doSuspendableAnswer {
+            order += "send"
+            payment("key-0", PaymentStatus.COMPLETED)
+        }
+
+        sut.send(preparedSend()).getOrThrow()
+
+        assertEquals(listOf("hold:0", "send", "release"), order)
+    }
+
+    @Test
+    fun `a send noted while the wallet is wiped is not sent and leaves no note`() = test {
+        val prepared = preparedSend()
+        var isWiping = false
+        whenever(sparkService.isWiping).thenAnswer { isWiping }
+        doAnswer { isWiping = true }.whenever(sparkService).holdSend()
+
+        assertIs<SendError.NotReady>(sut.send(prepared).exceptionOrNull())
+
+        verify(sparkService, never()).send(any(), any())
+        assertTrue(uncertainSends.sends.isEmpty())
+    }
+
+    @Test
+    fun `a send noted after the wallet stopped being ready is not sent and leaves no note`() = test {
+        val prepared = preparedSend()
+        doAnswer { walletState.update { it.copy(status = WalletStatus.Idle) } }.whenever(sparkService).holdSend()
+
+        assertIs<SendError.NotReady>(sut.send(prepared).exceptionOrNull())
+
+        verify(sparkService, never()).send(any(), any())
+        assertTrue(uncertainSends.sends.isEmpty())
     }
 
     @Test
@@ -884,6 +961,47 @@ class PaymentsRepoTest : BaseUnitTest() {
         sut.send(second)
 
         assertEquals(1, keys.distinct().size)
+    }
+
+    @Test
+    fun `the other spelling of a payee's spark address is sent under the key of its uncertain transfer`() = test {
+        val keys = stubTransfer()
+        val otherSpelling = "sprt1pgssy6vty7krpze82ecm8j39gd35v35aqjjmhftc4culawsavkyh564u2uv8v0"
+        whenever(sparkService.parse(otherSpelling))
+            .thenReturn(sparkAddressInput(OTHER_IDENTITY.uppercase(), otherSpelling))
+        whenever(sparkService.prepareSend(otherSpelling, 500uL)).thenReturn(preparedTransfer())
+        whenever(sparkService.send(any(), any())).thenAnswer {
+            keys += it.arguments[1] as String
+            throw SdkException.NetworkException("reset")
+        }
+        sut.send(sut.prepare(SendRequest.SparkAddress(SPARK_ADDRESS), 500uL).getOrThrow())
+
+        sut.send(sut.prepare(SendRequest.SparkAddress(otherSpelling), 500uL).getOrThrow())
+
+        assertEquals(2, keys.size)
+        assertEquals(1, keys.distinct().size)
+        assertEquals(OTHER_IDENTITY, uncertainSends.sends.values.single().sparkPayee)
+    }
+
+    @Test
+    fun `a failed transfer whose note could not be dropped never hides the uncertain one after it`() = test {
+        val keys = stubTransfer()
+        whenever(sparkService.send(any(), any())).thenAnswer {
+            keys += it.arguments[1] as String
+            throw SdkException.NetworkException("reset")
+        }
+        val request = SendRequest.SparkAddress(SPARK_ADDRESS)
+        sut.send(sut.prepare(request, 500uL).getOrThrow())
+        val failed = keys.single()
+        // The failed transfer's note stays, as after a settings write that failed, beside the next transfer's.
+        val uncertain = "00000000-0000-4000-8000-000000000002"
+        uncertainSends.sends[uncertain] = UncertainSend(uncertain, sparkPayee = OTHER_IDENTITY)
+        whenever(sparkService.listPayments(anyOrNull()))
+            .thenReturn(listOf(payment(failed, PaymentStatus.FAILED, paymentHash = null)))
+
+        sut.send(sut.prepare(request, 500uL).getOrThrow())
+
+        assertEquals(listOf(failed, uncertain), keys)
     }
 
     @Test

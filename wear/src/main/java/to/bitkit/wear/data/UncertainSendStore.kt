@@ -9,12 +9,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * A send this watch handed to Spark under the idempotency [key], whose outcome it has not learned. [sparkAddress] is
- * set for a transfer to a Spark address, and [expiresAtSecs] for an invoice: its expiry in epoch seconds.
+ * A send this watch handed to Spark under the idempotency [key], whose outcome it has not learned. [sparkPayee] is
+ * set for a transfer to a Spark address: the Spark identity public key the address encodes, in hex, which is the
+ * same for every spelling of a wallet's address. [expiresAtSecs] is set for an invoice: its expiry in epoch seconds.
  */
 data class UncertainSend(
     val key: String,
-    val sparkAddress: String? = null,
+    val sparkPayee: String? = null,
     val expiresAtSecs: ULong? = null,
 )
 
@@ -30,8 +31,11 @@ interface UncertainSendStore {
     /** Drops the send under [key], whose outcome is known. */
     suspend fun settle(key: String)
 
-    /** The key of the noted transfer to [sparkAddress], in either case, or null when there is none. */
-    suspend fun transferKey(sparkAddress: String): String?
+    /**
+     * The keys of the noted transfers to the wallet with the identity key [sparkPayee], in either case, the newest
+     * first. More than one is noted only when an earlier one could not be dropped.
+     */
+    suspend fun transferKeys(sparkPayee: String): List<String>
 }
 
 /**
@@ -68,7 +72,7 @@ class SettingsUncertainSendStore internal constructor(
             if (wasNoted) return@edit
             prefs[key] = sends
                 .filter { it.send.expiresAtSecs?.let { expiresAt -> expiresAt + EXPIRED_KEPT_SECS > now } != false }
-                .plus(Entry(send.copy(sparkAddress = send.sparkAddress?.lowercase()), now))
+                .plus(Entry(send.copy(sparkPayee = send.sparkPayee?.lowercase()), now))
                 .sortedByDescending { it.startedAtSecs }
                 .take(MAX_SENDS)
                 .mapTo(HashSet()) { it.encode() }
@@ -84,15 +88,18 @@ class SettingsUncertainSendStore internal constructor(
         }
     }
 
-    override suspend fun transferKey(sparkAddress: String): String? {
-        val address = sparkAddress.lowercase()
-        return decode(dataStore.data.first()[key]).firstOrNull { it.send.sparkAddress == address }?.send?.key
+    override suspend fun transferKeys(sparkPayee: String): List<String> {
+        val payee = sparkPayee.lowercase()
+        return decode(dataStore.data.first()[key])
+            .filter { it.send.sparkPayee == payee }
+            .sortedByDescending { it.startedAtSecs }
+            .map { it.send.key }
     }
 
     private class Entry(val send: UncertainSend, val startedAtSecs: ULong) {
         fun encode(): String = listOf(
             send.key,
-            send.sparkAddress.orEmpty(),
+            send.sparkPayee.orEmpty(),
             send.expiresAtSecs?.toString().orEmpty(),
             startedAtSecs.toString(),
         ).joinToString(SEPARATOR.toString())
@@ -103,7 +110,7 @@ class SettingsUncertainSendStore internal constructor(
         val startedAt = fields[3].toULongOrNull() ?: return@mapNotNull null
         val send = UncertainSend(
             key = fields[0],
-            sparkAddress = fields[1].takeIf { it.isNotEmpty() },
+            sparkPayee = fields[1].takeIf { it.isNotEmpty() },
             expiresAtSecs = fields[2].toULongOrNull(),
         )
         Entry(send, startedAt)

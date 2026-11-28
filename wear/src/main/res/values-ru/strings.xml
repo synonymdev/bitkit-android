@@ -22,6 +22,7 @@
     <string name="receive__hidden">QR скрыт</string>
     <string name="receive__new">Новый счёт</string>
     <string name="receive__paid">Оплачено</string>
+    <string name="receive__show">Показать QR</string>
     <string name="receive__title">Получить</string>
     <string name="removed__title">Кошелёк удалён</string>
     <string name="restore__checksum_review">Проверить</string>
@@ -48,6 +49,7 @@
     <string name="send__amount_placeholder">Сумма</string>
     <string name="send__amount_range">%1$s – %2$s</string>
     <string name="send__error_already_paid">Уже оплачен</string>
+    <string name="send__error_busy">Кошелёк занят</string>
     <string name="send__error_expired">Счёт истёк</string>
     <string name="send__error_failed">Платёж не прошёл</string>
     <string name="send__error_insufficient">Недостаточно средств</string>

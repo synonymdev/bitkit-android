@@ -1,5 +1,7 @@
 package to.bitkit.wear.ui.screens.receive
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -8,9 +10,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -26,6 +35,7 @@ import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.IconButtonDefaults
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
+import kotlinx.coroutines.delay
 import to.bitkit.wear.R
 import to.bitkit.wear.ui.components.BezelLoading
 import to.bitkit.wear.ui.components.CenteredScreen
@@ -38,6 +48,7 @@ import to.bitkit.wear.ui.components.isAmbient
 import to.bitkit.wear.ui.modifiers.clickableAlpha
 import to.bitkit.wear.ui.screens.home.DisplayAmount
 import to.bitkit.wear.ui.theme.Colors
+import kotlin.time.Duration.Companion.minutes
 
 /** The QR's side as a share of the screen: the largest square inside the round screen (1/√2). */
 private const val QR_SIZE_FRACTION = 0.707f
@@ -48,9 +59,14 @@ private val MARK_SIZE = 56.dp
 /** The opacity of the QR icon that stands in for the hidden QR in ambient mode. */
 private const val HIDDEN_ALPHA = 0.4f
 
+/** How long the QR keeps the screen on at full brightness without a touch, before it rests. */
+internal val QR_AWAKE_LIMIT = 2.minutes
+
 /**
  * The receive QR, as large as the round screen allows, at full brightness and with the screen kept on while it
- * shows. Ambient mode hides it. A paid invoice turns into a check with the amount and its own haptic; a tap on the
+ * shows. After [QR_AWAKE_LIMIT] without a touch it rests: the QR hides behind a dimmed icon and the screen may turn
+ * off again, so a forgotten QR does not drain the battery; a tap, or waking the watch from ambient mode, shows it
+ * again. Ambient mode hides it. A paid invoice turns into a check with the amount and its own haptic; a tap on the
  * check makes a new invoice.
  */
 @Composable
@@ -65,9 +81,23 @@ fun ReceiveQrScreen(
         // A firm click, unlike the confirm pattern a send ends with, so the two never feel alike.
         if (isPaid) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
     }
+    val isAmbient = isAmbient()
+    var isResting by remember { mutableStateOf(false) }
+    var touches by remember { mutableIntStateOf(0) }
+    val isQrShown = uiState.qrContent != null && !isPaid && !isAmbient && !isResting
+    LaunchedEffect(isQrShown, touches) {
+        if (!isQrShown) return@LaunchedEffect
+        delay(QR_AWAKE_LIMIT)
+        isResting = true
+    }
+    // A watch that wakes from ambient mode shows the QR again, and so does the invoice after a paid one.
+    LaunchedEffect(isAmbient, isPaid) { if (isAmbient || isPaid) isResting = false }
     Content(
         uiState = uiState,
-        isAmbient = isAmbient(),
+        isAmbient = isAmbient,
+        isResting = isResting,
+        onQrTouch = { touches++ },
+        onShowClick = { isResting = false },
         onRefreshClick = viewModel::onRefreshClick,
         modifier = modifier
     )
@@ -79,13 +109,17 @@ private fun Content(
     isAmbient: Boolean,
     onRefreshClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isResting: Boolean = false,
+    onQrTouch: () -> Unit = {},
+    onShowClick: () -> Unit = {},
 ) {
     val qrContent = uiState.qrContent
     val paidAmount = uiState.paidAmount
     when {
         paidAmount != null -> Paid(amount = paidAmount, onClick = onRefreshClick, modifier = modifier)
         qrContent != null && isAmbient -> Hidden(modifier = modifier)
-        qrContent != null -> Qr(content = qrContent, modifier = modifier)
+        qrContent != null && isResting -> Hidden(onClick = onShowClick, modifier = modifier)
+        qrContent != null -> Qr(content = qrContent, onTouch = onQrTouch, modifier = modifier)
         uiState.isError -> Error(onRetryClick = onRefreshClick, modifier = modifier)
         else -> CenteredScreen(
             overlay = { BezelLoading() },
@@ -99,12 +133,22 @@ private fun Content(
 @Composable
 private fun Qr(
     content: String,
+    onTouch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val currentOnTouch by rememberUpdatedState(onTouch)
     ScreenAwake(isBright = true)
     BoxWithConstraints(
         contentAlignment = Alignment.Center,
-        modifier = modifier.fillMaxSize()
+        modifier = modifier
+            .fillMaxSize()
+            // Any touch counts as the wearer still using the QR; it is only watched, never consumed.
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    currentOnTouch()
+                }
+            }
     ) {
         QrCode(
             content = content,
@@ -117,11 +161,16 @@ private fun Qr(
 }
 
 @Composable
-private fun Hidden(modifier: Modifier = Modifier) {
+private fun Hidden(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
     val description = stringResource(R.string.receive__hidden)
+    val showLabel = stringResource(R.string.receive__show)
     CenteredScreen(modifier = modifier) {
         QrIcon(
             modifier = Modifier
+                .clickableAlpha(onClickLabel = showLabel, enabled = onClick != null, onClick = { onClick?.invoke() })
                 .semantics { contentDescription = description }
                 .testTag("WatchReceiveHidden")
         )
@@ -221,6 +270,19 @@ private fun PreviewAmbient() {
             uiState = ReceiveUiState(qrContent = PREVIEW_INVOICE),
             isAmbient = true,
             onRefreshClick = {},
+        )
+    }
+}
+
+@WearPreviewDevices
+@Composable
+private fun PreviewResting() {
+    WearPreview {
+        Content(
+            uiState = ReceiveUiState(qrContent = PREVIEW_INVOICE),
+            isAmbient = false,
+            onRefreshClick = {},
+            isResting = true,
         )
     }
 }

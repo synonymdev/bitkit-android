@@ -4,7 +4,12 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,6 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.wear.env.Env
 import to.bitkit.wear.models.ReceiveInvoice
+import to.bitkit.wear.models.WatchPayment
 import to.bitkit.wear.repositories.PaymentsRepo
 import to.bitkit.wear.repositories.WalletRepo
 import to.bitkit.wear.repositories.WalletStatus
@@ -26,8 +32,8 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * The receive QR: an amountless invoice made once the wallet is ready, shown until it is paid or nearly expired.
- * A nearly expired invoice is replaced by a new one; a paid one turns into a check until the wearer asks for a new
- * invoice.
+ * A nearly expired invoice is replaced by a new one and still watched until it expires; a paid one, shown or
+ * replaced, turns into a check until the wearer asks for a new invoice.
  */
 @HiltViewModel
 class ReceiveViewModel internal constructor(
@@ -46,6 +52,9 @@ class ReceiveViewModel internal constructor(
          * does not make invoices one after another.
          */
         val MIN_LIFETIME = 30.seconds
+
+        /** How long after a failure the replacement of an invoice that is still valid is tried again. */
+        val RETRY_DELAY = 5.seconds
     }
 
     @Inject
@@ -70,31 +79,59 @@ class ReceiveViewModel internal constructor(
         job?.cancel()
         job = viewModelScope.launch {
             _uiState.update { ReceiveUiState(isLoading = true) }
-            while (true) {
-                // The invoice on screen stays until its replacement exists, or until it is about to expire.
-                val isShowing = _uiState.value.qrContent != null
-                val replaced = if (isShowing) withTimeoutOrNull(EXPIRY_MARGIN) { create() } else null
-                val created = replaced ?: run {
-                    _uiState.update { ReceiveUiState(isLoading = true) }
-                    create()
-                }
-                val invoice = created.getOrElse {
-                    _uiState.update { ReceiveUiState(isError = true) }
-                    return@launch
-                }
-                if (Env.isDebug) Logger.debug("Showing invoice '${invoice.bolt11}'", context = TAG)
-                _uiState.update { ReceiveUiState(qrContent = invoice.bolt11.uppercase()) }
-                val lifetime = (invoice.expiresAtSecs.toLong() - nowSecs()).seconds - EXPIRY_MARGIN
-                val paid = withTimeoutOrNull(lifetime.coerceAtLeast(MIN_LIFETIME)) { paymentsRepo.awaitPaid(invoice) }
-                if (paid != null) {
-                    Logger.info("Received payment '${paid.id}'", context = TAG)
-                    _uiState.update { ReceiveUiState(paidAmount = bitcoinAmount(paid.amountSats.toLong())) }
-                    return@launch
-                }
-                Logger.debug("Replacing invoice '${invoice.paymentHash}' before it expires", context = TAG)
-                _uiState.update { it.copy(isLoading = true) }
-            }
+            val paid = CompletableDeferred<WatchPayment>()
+            val watcherScope = this
+            val rotation = launch { rotate(watcherScope, paid) }
+            val payment = paid.await()
+            rotation.cancelAndJoin()
+            coroutineContext.cancelChildren()
+            Logger.info("Received payment '${payment.id}'", context = TAG)
+            _uiState.update { ReceiveUiState(paidAmount = bitcoinAmount(payment.amountSats.toLong())) }
         }
+    }
+
+    /**
+     * Shows one invoice after another, each replaced shortly before it expires. Every invoice is watched in
+     * [watcherScope] until it expires, also after its replacement shows, so a payer who scanned the earlier QR
+     * still completes [paid].
+     */
+    private suspend fun rotate(watcherScope: CoroutineScope, paid: CompletableDeferred<WatchPayment>) {
+        while (true) {
+            // The invoice on screen stays until its replacement exists, or until it is about to expire.
+            val isShowing = _uiState.value.qrContent != null
+            val created = (if (isShowing) replace() else null) ?: run {
+                _uiState.update { ReceiveUiState(isLoading = true) }
+                create()
+            }
+            val invoice = created.getOrElse {
+                _uiState.update { ReceiveUiState(isError = true) }
+                return
+            }
+            if (Env.isDebug) Logger.debug("Showing invoice '${invoice.bolt11}'", context = TAG)
+            _uiState.update { ReceiveUiState(qrContent = invoice.bolt11.uppercase()) }
+            val expiresIn = (invoice.expiresAtSecs.toLong() - nowSecs()).seconds
+            val lifetime = (expiresIn - EXPIRY_MARGIN).coerceAtLeast(MIN_LIFETIME)
+            watcherScope.launch {
+                withTimeoutOrNull(expiresIn.coerceAtLeast(lifetime + EXPIRY_MARGIN)) { paymentsRepo.awaitPaid(invoice) }
+                    ?.let { paid.complete(it) }
+            }
+            delay(lifetime)
+            Logger.debug("Replacing invoice '${invoice.paymentHash}' before it expires", context = TAG)
+            _uiState.update { it.copy(isLoading = true) }
+        }
+    }
+
+    /**
+     * Makes the invoice that replaces the one on screen, trying again after a failure for as long as that one is
+     * valid. Null when none could be made within [EXPIRY_MARGIN].
+     */
+    private suspend fun replace(): Result<ReceiveInvoice>? = withTimeoutOrNull(EXPIRY_MARGIN) {
+        var created = create()
+        while (created.isFailure) {
+            delay(RETRY_DELAY)
+            created = create()
+        }
+        created
     }
 
     /** Makes an invoice once the wallet is ready. */

@@ -11,7 +11,6 @@ import to.bitkit.wear.test.BaseUnitTest
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** An [UncertainSendStore] in memory. */
@@ -21,7 +20,7 @@ class FakeUncertainSendStore : UncertainSendStore {
 
     override suspend fun begin(send: UncertainSend): Boolean {
         failure?.let { throw it }
-        return sends.put(send.key, send.copy(sparkAddress = send.sparkAddress?.lowercase())) != null
+        return sends.put(send.key, send.copy(sparkPayee = send.sparkPayee?.lowercase())) != null
     }
 
     override suspend fun settle(key: String) {
@@ -29,16 +28,16 @@ class FakeUncertainSendStore : UncertainSendStore {
         sends.remove(key)
     }
 
-    override suspend fun transferKey(sparkAddress: String): String? {
+    override suspend fun transferKeys(sparkPayee: String): List<String> {
         failure?.let { throw it }
-        return sends.values.firstOrNull { it.sparkAddress == sparkAddress.lowercase() }?.key
+        return sends.values.filter { it.sparkPayee == sparkPayee.lowercase() }.map { it.key }.reversed()
     }
 }
 
 /** The store against the real settings file, in a temporary directory. Each [open] is a new process. */
 class UncertainSendStoreTest : BaseUnitTest() {
     private companion object {
-        const val ADDRESS = "sparkrt1pgssy6vty7krpze82ecm8j39gd35v35aqjjmhftc4culawsavkyh564u2uv8v0"
+        const val PAYEE = "03a1b2c3d4e5f60718293a4b5c6d7e8f9001122334455667788990aabbccddeeff"
     }
 
     @get:Rule
@@ -49,14 +48,25 @@ class UncertainSendStoreTest : BaseUnitTest() {
     private var now = 1_000uL
 
     @Test
-    fun `a noted transfer keeps its key for its address in either case, also after a restart`() = test {
-        assertFalse(open().first.begin(UncertainSend("key-a", sparkAddress = ADDRESS)))
+    fun `a noted transfer keeps its key for its payee in either case, also after a restart`() = test {
+        assertFalse(open().first.begin(UncertainSend("key-a", sparkPayee = PAYEE)))
         close()
         val sut = open().first
 
-        assertEquals("key-a", sut.transferKey(ADDRESS))
-        assertEquals("key-a", sut.transferKey(ADDRESS.uppercase()))
-        assertNull(sut.transferKey("sparkrt1other"))
+        assertEquals(listOf("key-a"), sut.transferKeys(PAYEE))
+        assertEquals(listOf("key-a"), sut.transferKeys(PAYEE.uppercase()))
+        assertTrue(sut.transferKeys("02other").isEmpty())
+        close()
+    }
+
+    @Test
+    fun `every transfer noted for one payee is told, the newest first`() = test {
+        val sut = open().first
+        sut.begin(UncertainSend("key-a", sparkPayee = PAYEE))
+        now += 10uL
+        sut.begin(UncertainSend("key-b", sparkPayee = PAYEE.uppercase()))
+
+        assertEquals(listOf("key-b", "key-a"), sut.transferKeys(PAYEE))
         close()
     }
 
@@ -75,14 +85,14 @@ class UncertainSendStoreTest : BaseUnitTest() {
     @Test
     fun `a settled send is forgotten`() = test {
         val sut = open().first
-        sut.begin(UncertainSend("key-a", sparkAddress = ADDRESS))
+        sut.begin(UncertainSend("key-a", sparkPayee = PAYEE))
         sut.begin(UncertainSend("key-0", expiresAtSecs = 2_000uL))
 
         sut.settle("key-a")
         sut.settle("key-0")
         sut.settle("unknown")
 
-        assertNull(sut.transferKey(ADDRESS))
+        assertTrue(sut.transferKeys(PAYEE).isEmpty())
         assertFalse(sut.begin(UncertainSend("key-0", expiresAtSecs = 2_000uL)))
         close()
     }
@@ -91,7 +101,7 @@ class UncertainSendStoreTest : BaseUnitTest() {
     fun `an invoice's send is kept for a day after the invoice expired, and a transfer for good`() = test {
         val sut = open().first
         sut.begin(UncertainSend("key-0", expiresAtSecs = 2_000uL))
-        sut.begin(UncertainSend("key-a", sparkAddress = ADDRESS))
+        sut.begin(UncertainSend("key-a", sparkPayee = PAYEE))
 
         now = 2_000uL + SettingsUncertainSendStore.EXPIRED_KEPT_SECS - 1uL
         sut.begin(UncertainSend("other-1", expiresAtSecs = now + 10uL))
@@ -100,7 +110,7 @@ class UncertainSendStoreTest : BaseUnitTest() {
         now = 2_000uL + SettingsUncertainSendStore.EXPIRED_KEPT_SECS
         sut.begin(UncertainSend("other-2", expiresAtSecs = now + 10uL))
         assertFalse(sut.begin(UncertainSend("key-0", expiresAtSecs = 2_000uL)))
-        assertEquals("key-a", sut.transferKey(ADDRESS))
+        assertEquals(listOf("key-a"), sut.transferKeys(PAYEE))
         close()
     }
 
@@ -111,23 +121,23 @@ class UncertainSendStoreTest : BaseUnitTest() {
 
         repeat(count) {
             now = 1_000uL + it.toULong()
-            sut.begin(UncertainSend("key-$it", sparkAddress = "sparkrt1address$it"))
+            sut.begin(UncertainSend("key-$it", sparkPayee = "02payee$it"))
         }
 
-        assertNull(sut.transferKey("sparkrt1address0"))
-        assertEquals("key-1", sut.transferKey("sparkrt1address1"))
-        assertEquals("key-${count - 1}", sut.transferKey("sparkrt1address${count - 1}"))
+        assertTrue(sut.transferKeys("02payee0").isEmpty())
+        assertEquals(listOf("key-1"), sut.transferKeys("02payee1"))
+        assertEquals(listOf("key-${count - 1}"), sut.transferKeys("02payee${count - 1}"))
         close()
     }
 
     @Test
     fun `the wallet's wipe forgets the sends with the settings`() = test {
         val (sut, settings) = open()
-        sut.begin(UncertainSend("key-a", sparkAddress = ADDRESS))
+        sut.begin(UncertainSend("key-a", sparkPayee = PAYEE))
 
         settings.finishWipe()
 
-        assertNull(sut.transferKey(ADDRESS))
+        assertTrue(sut.transferKeys(PAYEE).isEmpty())
         close()
     }
 

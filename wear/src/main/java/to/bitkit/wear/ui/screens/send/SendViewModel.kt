@@ -207,7 +207,10 @@ class SendViewModel @Inject constructor(
         _effects.send(SendEffect.Close)
     }
 
-    /** Shows why nothing was sent. A payment that is already under way is no failure: it shows as pending. */
+    /**
+     * Shows why nothing was sent. A payment of this request that Spark lists as under way is no failure: it shows as
+     * pending. A wallet busy with another send is a failure, as nothing of this request went out.
+     */
     private suspend fun fail(error: Throwable?) {
         if (error is SendError.InFlight) {
             finish(SendResult.Pending, amountSats = prepared?.amountSats ?: 0uL)
@@ -270,6 +273,7 @@ enum class SendFailure(@StringRes val text: Int) {
     OutOfRange(R.string.send__error_out_of_range),
     Insufficient(R.string.send__error_insufficient),
     AlreadyPaid(R.string.send__error_already_paid),
+    Busy(R.string.send__error_busy),
     Failed(R.string.send__error_failed),
     ;
 
@@ -283,6 +287,7 @@ enum class SendFailure(@StringRes val text: Int) {
             is SendError.AmountOutOfRange -> OutOfRange
             is SendError.InsufficientBalance -> Insufficient
             is SendError.AlreadyPaid -> AlreadyPaid
+            is SendError.Busy -> Busy
             else -> Failed
         }
     }

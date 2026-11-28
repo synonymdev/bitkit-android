@@ -211,6 +211,18 @@ class SendViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a wallet busy with another send is a failure, never pending`() = test {
+        val prepared = prepared()
+        stubInvoice(prepared)
+        whenever(paymentsRepo.send(prepared)).thenReturn(Result.failure(SendError.Busy()))
+        val sut = createSut()
+
+        sut.onHoldComplete()
+
+        assertEquals(SendStep.Failed(SendFailure.Busy), sut.uiState.value.step)
+    }
+
+    @Test
     fun `a request found under way before the review shows as pending and closes`() = test {
         whenever(paymentsRepo.parse(INPUT)).thenReturn(Result.success(INVOICE))
         whenever(paymentsRepo.prepare(INVOICE, null)).thenReturn(Result.failure(SendError.InFlight()))
@@ -319,7 +331,7 @@ class SendViewModelTest : BaseUnitTest() {
         response = mock<PrepareSendPaymentResponse>(),
         paymentHash = "ab12",
         expiresAtSecs = 1_800_003_600uL,
-        sparkAddress = null,
+        sparkPayee = null,
         transferKey = "transfer",
     )
 

@@ -1,6 +1,7 @@
 package to.bitkit.wear.ui.screens.receive
 
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -119,6 +120,95 @@ class ReceiveViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a payment of the replaced invoice still shows the check, until that invoice expires`() = test {
+        val paid = CompletableDeferred<WatchPayment>()
+        val first = invoice()
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(first))
+        whenever(paymentsRepo.awaitPaid(any())).doSuspendableAnswer {
+            if (it.arguments[0] == first) paid.await() else awaitCancellation()
+        }
+        val sut = createSut()
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice("lnbcrt1next", hash = "cd34")))
+
+        testScheduler.advanceTimeBy(LIFETIME.seconds - ReceiveViewModel.EXPIRY_MARGIN + 30.seconds)
+        assertEquals("LNBCRT1NEXT", sut.uiState.value.qrContent)
+
+        paid.complete(payment(21_000uL))
+
+        assertEquals(DisplayAmount("₿", "21 000"), sut.uiState.value.paidAmount)
+        assertNull(sut.uiState.value.qrContent)
+    }
+
+    @Test
+    fun `a payment that arrives while the replacement is being made shows the check`() = test {
+        val paid = CompletableDeferred<WatchPayment>()
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice()))
+        whenever(paymentsRepo.awaitPaid(any())).doSuspendableAnswer { paid.await() }
+        val sut = createSut()
+        walletState.update { it.copy(status = WalletStatus.Offline) }
+
+        testScheduler.advanceTimeBy(LIFETIME.seconds - ReceiveViewModel.EXPIRY_MARGIN + 10.seconds)
+        paid.complete(payment(21_000uL))
+
+        assertEquals(DisplayAmount("₿", "21 000"), sut.uiState.value.paidAmount)
+    }
+
+    @Test
+    fun `a replaced invoice is no longer watched once it expired`() = test {
+        var watched = 0
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice()))
+        whenever(paymentsRepo.awaitPaid(any())).doSuspendableAnswer {
+            watched++
+            try {
+                awaitCancellation()
+            } finally {
+                watched--
+            }
+        }
+        createSut()
+        whenever(paymentsRepo.createInvoice())
+            .thenReturn(Result.success(invoice("lnbcrt1next", lifetime = 2 * LIFETIME)))
+
+        testScheduler.advanceTimeBy(LIFETIME.seconds - 1.seconds)
+        assertEquals(2, watched)
+
+        testScheduler.advanceTimeBy(2.seconds)
+        assertEquals(1, watched)
+    }
+
+    @Test
+    fun `a replacement that fails is tried again while the invoice on screen is valid`() = test {
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice()))
+        whenever(paymentsRepo.awaitPaid(any())).doSuspendableAnswer { awaitCancellation() }
+        val sut = createSut()
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.failure(ReceiveError.NotReady()))
+
+        testScheduler.advanceTimeBy(LIFETIME.seconds - ReceiveViewModel.EXPIRY_MARGIN + 1.seconds)
+        assertEquals(BOLT11.uppercase(), sut.uiState.value.qrContent)
+        assertFalse(sut.uiState.value.isError)
+
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice("lnbcrt1next")))
+        testScheduler.advanceTimeBy(ReceiveViewModel.RETRY_DELAY)
+
+        assertEquals("LNBCRT1NEXT", sut.uiState.value.qrContent)
+    }
+
+    @Test
+    fun `a replacement that keeps failing shows the error only once the invoice is about to expire`() = test {
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice()))
+        whenever(paymentsRepo.awaitPaid(any())).doSuspendableAnswer { awaitCancellation() }
+        val sut = createSut()
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.failure(ReceiveError.NotReady()))
+
+        testScheduler.advanceTimeBy(LIFETIME.seconds - 1.seconds)
+        assertEquals(BOLT11.uppercase(), sut.uiState.value.qrContent)
+
+        testScheduler.advanceTimeBy(2.seconds)
+        assertTrue(sut.uiState.value.isError)
+        assertNull(sut.uiState.value.qrContent)
+    }
+
+    @Test
     fun `an invoice that expires before the wallet is ready again leaves the screen`() = test {
         whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice()))
         whenever(paymentsRepo.awaitPaid(any())).doSuspendableAnswer { awaitCancellation() }
@@ -160,8 +250,8 @@ class ReceiveViewModelTest : BaseUnitTest() {
         assertEquals(BOLT11.uppercase(), sut.uiState.value.qrContent)
     }
 
-    private fun invoice(bolt11: String = BOLT11, lifetime: Long = LIFETIME) =
-        ReceiveInvoice(bolt11, PAYMENT_HASH, (NOW + lifetime).toULong())
+    private fun invoice(bolt11: String = BOLT11, lifetime: Long = LIFETIME, hash: String = PAYMENT_HASH) =
+        ReceiveInvoice(bolt11, hash, (NOW + lifetime).toULong())
 
     private fun payment(amountSats: ULong) = WatchPayment(
         id = "receipt",

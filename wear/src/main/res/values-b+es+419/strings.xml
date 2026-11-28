@@ -22,6 +22,7 @@
     <string name="receive__hidden">QR oculto</string>
     <string name="receive__new">Nueva factura</string>
     <string name="receive__paid">Pagado</string>
+    <string name="receive__show">Mostrar QR</string>
     <string name="receive__title">Recibir</string>
     <string name="removed__title">Billetera eliminada</string>
     <string name="restore__checksum_review">Revisar</string>
@@ -47,6 +48,7 @@
     <string name="send__amount_placeholder">Monto</string>
     <string name="send__amount_range">%1$s – %2$s</string>
     <string name="send__error_already_paid">Ya pagada</string>
+    <string name="send__error_busy">Wallet ocupada</string>
     <string name="send__error_expired">Factura vencida</string>
     <string name="send__error_failed">Pago fallido</string>
     <string name="send__error_insufficient">Fondos insuficientes</string>

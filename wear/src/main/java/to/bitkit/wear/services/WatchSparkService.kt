@@ -134,7 +134,7 @@ class WatchSparkService @Inject constructor(
     @Volatile
     private var sendKeySecret: ByteArray? = null
 
-    /** How many [send] calls the SDK is running. */
+    /** How many sends hold the connection: those between [holdSend] and [releaseSend], and running [send] calls. */
     private val runningSends = MutableStateFlow(0)
 
     private val _events = MutableSharedFlow<SdkEvent>(extraBufferCapacity = 64)
@@ -251,10 +251,10 @@ class WatchSparkService @Inject constructor(
     }
 
     /**
-     * Disconnects the SDK as one step that its caller cannot cancel, after waiting up to [SEND_GRACE] for a running
-     * [send] to return. A listener that cannot be removed does not stop the disconnect. When the disconnect itself
-     * fails, it throws and the SDK stays referenced, so the next [disconnect] reaches it again; a listener already
-     * removed is not removed twice.
+     * Disconnects the SDK as one step that its caller cannot cancel, after waiting up to [SEND_GRACE] for a send that
+     * holds the connection ([holdSend]) or runs in the SDK ([send]). A listener that cannot be removed does not stop
+     * the disconnect. When the disconnect itself fails, it throws and the SDK stays referenced, so the next
+     * [disconnect] reaches it again; a listener already removed is not removed twice.
      */
     suspend fun disconnect() = withContext(NonCancellable) {
         withTimeoutOrNull(SEND_GRACE) { runningSends.first { it == 0 } }
@@ -337,6 +337,14 @@ class WatchSparkService @Inject constructor(
         val secret = sendKeySecret ?: throw SparkError.NotConnected()
         return SparkSendKey.key(secret, paymentHash, attempt)
     }
+
+    /**
+     * Holds the connection for a send that is about to go out, so a [disconnect] waits up to [SEND_GRACE] for it
+     * also before the SDK has the call. [releaseSend] must follow.
+     */
+    fun holdSend() = runningSends.update { it + 1 }
+
+    fun releaseSend() = runningSends.update { it - 1 }
 
     /**
      * Sends [prepared] as one step that its caller cannot cancel, so a send is never dropped halfway. Spark makes

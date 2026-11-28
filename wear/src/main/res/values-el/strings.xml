@@ -22,6 +22,7 @@
     <string name="receive__hidden">QR κρυφό</string>
     <string name="receive__new">Νέο τιμολόγιο</string>
     <string name="receive__paid">Πληρώθηκε</string>
+    <string name="receive__show">Εμφάνιση QR</string>
     <string name="receive__title">Λήψη</string>
     <string name="removed__title">Το πορτοφόλι αφαιρέθηκε</string>
     <string name="restore__checksum_review">Έλεγχος</string>
@@ -46,6 +47,7 @@
     <string name="send__amount_placeholder">Ποσό</string>
     <string name="send__amount_range">%1$s – %2$s</string>
     <string name="send__error_already_paid">Ήδη πληρωμένο</string>
+    <string name="send__error_busy">Το πορτοφόλι είναι απασχολημένο</string>
     <string name="send__error_expired">Το τιμολόγιο έληξε</string>
     <string name="send__error_failed">Η πληρωμή απέτυχε</string>
     <string name="send__error_insufficient">Ανεπαρκές υπόλοιπο</string>

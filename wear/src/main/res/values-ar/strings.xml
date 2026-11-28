@@ -22,6 +22,7 @@
     <string name="receive__hidden">رمز QR مخفي</string>
     <string name="receive__new">فاتورة جديدة</string>
     <string name="receive__paid">مدفوع</string>
+    <string name="receive__show">إظهار رمز QR</string>
     <string name="receive__title">استلام</string>
     <string name="removed__title">تمت إزالة المحفظة</string>
     <string name="restore__checksum_review">مراجعة</string>
@@ -50,6 +51,7 @@
     <string name="send__amount_placeholder">المبلغ</string>
     <string name="send__amount_range">%1$s – %2$s</string>
     <string name="send__error_already_paid">مدفوعة مسبقًا</string>
+    <string name="send__error_busy">المحفظة مشغولة</string>
     <string name="send__error_expired">انتهت صلاحية الفاتورة</string>
     <string name="send__error_failed">فشل الدفع</string>
     <string name="send__error_insufficient">رصيد غير كافٍ</string>
