@@ -7,11 +7,22 @@ import breez_sdk_spark.Config
 import breez_sdk_spark.EventListener
 import breez_sdk_spark.GetInfoRequest
 import breez_sdk_spark.GetInfoResponse
+import breez_sdk_spark.InputType
+import breez_sdk_spark.ListPaymentsRequest
 import breez_sdk_spark.MaxFee
 import breez_sdk_spark.MaxOnchainFee
+import breez_sdk_spark.Payment
+import breez_sdk_spark.PaymentRequest
+import breez_sdk_spark.PrepareSendPaymentRequest
+import breez_sdk_spark.PrepareSendPaymentResponse
+import breez_sdk_spark.ReceivePaymentMethod
+import breez_sdk_spark.ReceivePaymentRequest
 import breez_sdk_spark.SdkBuilder
 import breez_sdk_spark.SdkEvent
 import breez_sdk_spark.Seed
+import breez_sdk_spark.SendPaymentMethod
+import breez_sdk_spark.SendPaymentOptions
+import breez_sdk_spark.SendPaymentRequest
 import breez_sdk_spark.SyncWalletRequest
 import breez_sdk_spark.defaultConfig
 import breez_sdk_spark.parseSparkConfig
@@ -27,10 +38,12 @@ import to.bitkit.wear.env.Env
 import to.bitkit.wear.env.LocalSparkSettings
 import to.bitkit.wear.env.WalletNetwork
 import to.bitkit.wear.ext.runSuspendCatching
+import to.bitkit.wear.security.Bip39
 import to.bitkit.wear.security.WalletSeed
 import to.bitkit.wear.utils.AppError
 import to.bitkit.wear.utils.Logger
 import java.io.File
+import java.math.BigInteger
 import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -44,6 +57,7 @@ import breez_sdk_spark.Network as SparkNetwork
 @Singleton
 class WatchSparkService @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val bip39: Bip39,
 ) {
     companion object {
         private const val TAG = "WatchSparkService"
@@ -93,6 +107,13 @@ class WatchSparkService @Inject constructor(
             WalletNetwork.REGTEST -> SparkNetwork.REGTEST
             else -> null
         }
+
+        /**
+         * Returns as soon as the payment starts, as on the phone, so the call is short and the payment's completion
+         * arrives as an event.
+         */
+        internal fun bolt11SendOptions(prefersSpark: Boolean): SendPaymentOptions =
+            SendPaymentOptions.Bolt11Invoice(preferSpark = prefersSpark, completionTimeoutSecs = null)
     }
 
     private val mutex = Mutex()
@@ -100,6 +121,10 @@ class WatchSparkService @Inject constructor(
     @Volatile
     private var sdk: BreezSdkInterface? = null
     private var listenerId: String? = null
+
+    /** The connected wallet's [SparkSendKey.secret], derived from its seed at [connect]. */
+    @Volatile
+    private var sendKeySecret: ByteArray? = null
 
     private val _events = MutableSharedFlow<SdkEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<SdkEvent> = _events.asSharedFlow()
@@ -111,6 +136,12 @@ class WatchSparkService @Inject constructor(
     }
 
     val isSupported: Boolean get() = sparkNetwork(Env.network, Env.breezApiKey) != null
+
+    /**
+     * On regtest, an invoice that carries a Spark address is paid as a Spark transfer, as on the phone. Bitkit's own
+     * invoices carry none, so they are paid over Lightning through Spark's provider, as on mainnet.
+     */
+    val prefersSpark: Boolean get() = Env.network == WalletNetwork.REGTEST
 
     /** Whether a wallet wipe is running: nothing connects during it. */
     @Volatile
@@ -149,10 +180,19 @@ class WatchSparkService @Inject constructor(
      * cannot be disconnected either, stays referenced without a listener, so the next [disconnect] reaches it and a
      * wipe never deletes the storage under it.
      */
-    suspend fun connect(seed: WalletSeed, wipeToken: Int): Boolean = connectWith(wipeToken) { build(seed) }
+    suspend fun connect(seed: WalletSeed, wipeToken: Int): Boolean {
+        val secret = SparkSendKey.secret(bip39.toSeed(seed.mnemonic, seed.passphrase))
+        return connectWith(wipeToken, secret) { build(seed) }
+    }
 
-    internal suspend fun connectWith(wipeToken: Int, build: suspend () -> BreezSdkInterface): Boolean = mutex.withLock {
+    internal suspend fun connectWith(
+        wipeToken: Int,
+        sendKeySecret: ByteArray? = null,
+        build: suspend () -> BreezSdkInterface,
+    ): Boolean = mutex.withLock {
         if (!isCurrent(wipeToken)) throw SparkError.WipeInProgress()
+        // The secret comes before the SDK, so a send that finds the wallet connected can derive its key.
+        sendKeySecret?.let { this.sendKeySecret = it }
         sdk?.let {
             if (listenerId == null) listenerId = it.addEventListener(listener)
             return@withLock false
@@ -213,6 +253,7 @@ class WatchSparkService @Inject constructor(
             current.disconnect()
             sdk = null
             listenerId = null
+            sendKeySecret = null
             Logger.info("Disconnected Spark wallet", context = TAG)
         }
     }
@@ -241,6 +282,65 @@ class WatchSparkService @Inject constructor(
     }
 
     suspend fun getInfo(): GetInfoResponse = requireSdk().getInfo(GetInfoRequest(ensureSynced = false))
+
+    /** The wallet's Spark identity public key, in hex: what its Spark address encodes. Read from local state. */
+    suspend fun identityPubkey(): String = getInfo().identityPubkey
+
+    /** Creates a BOLT11 invoice paid into the Spark balance; amountless without [amountSats]. */
+    suspend fun receiveBolt11(amountSats: ULong?, description: String, expirySecs: UInt): String {
+        val method = ReceivePaymentMethod.Bolt11Invoice(
+            description = description,
+            amountSats = amountSats,
+            expirySecs = expirySecs,
+            paymentHash = null,
+            receiverIdentityPublicKey = null,
+            preimage = null,
+        )
+        return requireSdk().receivePayment(ReceivePaymentRequest(method)).paymentRequest
+    }
+
+    /**
+     * Reads [input] with the SDK's own parser. Only for a BOLT11 invoice or a Spark address, which it reads without
+     * a network call: anything else could be sent to a name server or an LNURL host.
+     */
+    suspend fun parse(input: String): InputType = requireSdk().parse(input)
+
+    /** Prices a send of [paymentRequest], a BOLT11 invoice or a Spark address; [amountSats] when it names none. */
+    suspend fun prepareSend(paymentRequest: String, amountSats: ULong?): PrepareSendPaymentResponse =
+        requireSdk().prepareSendPayment(
+            PrepareSendPaymentRequest(
+                paymentRequest = PaymentRequest.Input(input = paymentRequest),
+                amount = amountSats?.let { BigInteger.valueOf(it.toLong()) },
+                tokenIdentifier = null,
+                conversionOptions = null,
+                feePolicy = null,
+            ),
+        )
+
+    /** The idempotency key of attempt [attempt] at paying the invoice with [paymentHash], see [SparkSendKey]. */
+    fun sendKey(paymentHash: String, attempt: Int): String {
+        val secret = sendKeySecret ?: throw SparkError.NotConnected()
+        return SparkSendKey.key(secret, paymentHash, attempt)
+    }
+
+    /**
+     * Sends [prepared] as one step that its caller cannot cancel, so a send is never dropped halfway. Spark makes
+     * one payment per [idempotencyKey], a UUID that becomes the payment's id.
+     */
+    suspend fun send(prepared: PrepareSendPaymentResponse, idempotencyKey: String): Payment {
+        val options = when (prepared.paymentMethod) {
+            is SendPaymentMethod.Bolt11Invoice -> bolt11SendOptions(prefersSpark)
+            else -> null
+        }
+        val current = requireSdk()
+        return withContext(NonCancellable) {
+            current.sendPayment(SendPaymentRequest(prepared, options, idempotencyKey)).payment
+        }
+    }
+
+    /** The wallet's payments from Spark's local list, newest first; at most [limit] when given. */
+    suspend fun listPayments(limit: UInt? = null): List<Payment> =
+        requireSdk().listPayments(ListPaymentsRequest(limit = limit, sortAscending = false)).payments
 
     private fun requireSdk(): BreezSdkInterface = sdk ?: throw SparkError.NotConnected()
 }

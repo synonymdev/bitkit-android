@@ -4,8 +4,20 @@ import android.content.Context
 import breez_sdk_spark.BreezSdkInterface
 import breez_sdk_spark.ChainApiType
 import breez_sdk_spark.Config
+import breez_sdk_spark.FeePolicy
 import breez_sdk_spark.LeafOptimizationConfig
+import breez_sdk_spark.ListPaymentsRequest
+import breez_sdk_spark.ListPaymentsResponse
 import breez_sdk_spark.Network
+import breez_sdk_spark.PaymentStatus
+import breez_sdk_spark.PrepareSendPaymentResponse
+import breez_sdk_spark.ReceivePaymentMethod
+import breez_sdk_spark.ReceivePaymentRequest
+import breez_sdk_spark.ReceivePaymentResponse
+import breez_sdk_spark.SendPaymentMethod
+import breez_sdk_spark.SendPaymentOptions
+import breez_sdk_spark.SendPaymentRequest
+import breez_sdk_spark.SendPaymentResponse
 import breez_sdk_spark.TokenOptimizationConfig
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -24,7 +36,9 @@ import org.mockito.kotlin.whenever
 import to.bitkit.wear.env.Env
 import to.bitkit.wear.env.LocalSparkSettings
 import to.bitkit.wear.env.WalletNetwork
+import to.bitkit.wear.security.FakeBip39
 import java.io.File
+import java.math.BigInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -84,8 +98,102 @@ class WatchSparkServiceTest {
     }
 
     @Test
+    fun `a send key needs the connected wallet's secret and is gone after the disconnect`() = runTest {
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
+        val sdk = connectedSdk()
+        assertFailsWith<SparkError.NotConnected> { sut.sendKey(SparkFixtures.PAYMENT_HASH, 0) }
+
+        sut.connectWith(assertNotNull(sut.wipeToken()), sendKeySecret = ByteArray(32) { 1 }) { sdk }
+
+        val key = sut.sendKey(SparkFixtures.PAYMENT_HASH, 0)
+        assertEquals(SparkSendKey.key(ByteArray(32) { 1 }, SparkFixtures.PAYMENT_HASH, 0), key)
+        assertTrue(key != sut.sendKey(SparkFixtures.PAYMENT_HASH, 1))
+
+        sut.disconnect()
+        assertFailsWith<SparkError.NotConnected> { sut.sendKey(SparkFixtures.PAYMENT_HASH, 0) }
+    }
+
+    @Test
+    fun `a receive invoice is asked of spark without an amount, a hash or another receiver`() = runTest {
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
+        val sdk = connectedSdk()
+        whenever(sdk.receivePayment(any())).thenReturn(ReceivePaymentResponse("lnbcrt1invoice", BigInteger.ZERO, null))
+        sut.connectWith(assertNotNull(sut.wipeToken())) { sdk }
+
+        assertEquals("lnbcrt1invoice", sut.receiveBolt11(amountSats = null, description = "", expirySecs = 3_600u))
+
+        val expected = ReceivePaymentMethod.Bolt11Invoice("", null, 3_600u, null, null, null)
+        verify(sdk).receivePayment(ReceivePaymentRequest(expected))
+    }
+
+    @Test
+    fun `a send carries its idempotency key and returns once the payment starts`() = runTest {
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
+        val sdk = connectedSdk()
+        val prepared = PrepareSendPaymentResponse(
+            SendPaymentMethod.Bolt11Invoice(SparkFixtures.invoice(), null, 4uL),
+            BigInteger.valueOf(500),
+            null,
+            null,
+            FeePolicy.FEES_EXCLUDED,
+        )
+        val payment = SparkFixtures.payment("key", PaymentStatus.PENDING)
+        whenever(sdk.sendPayment(any())).thenReturn(SendPaymentResponse(payment))
+        sut.connectWith(assertNotNull(sut.wipeToken())) { sdk }
+
+        assertEquals(payment, sut.send(prepared, "key"))
+
+        val options = SendPaymentOptions.Bolt11Invoice(preferSpark = sut.prefersSpark, completionTimeoutSecs = null)
+        verify(sdk).sendPayment(SendPaymentRequest(prepared, options, "key"))
+    }
+
+    @Test
+    fun `a send whose caller gives up still reaches spark`() = runTest {
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
+        val sdk = connectedSdk()
+        val prepared = PrepareSendPaymentResponse(
+            SendPaymentMethod.Bolt11Invoice(SparkFixtures.invoice(), null, 4uL),
+            BigInteger.valueOf(500),
+            null,
+            null,
+            FeePolicy.FEES_EXCLUDED,
+        )
+        lateinit var caller: Job
+        var isSent = false
+        whenever(sdk.sendPayment(any())).doSuspendableAnswer {
+            caller.cancel()
+            yield()
+            isSent = true
+            SendPaymentResponse(SparkFixtures.payment("key", PaymentStatus.PENDING))
+        }
+        sut.connectWith(assertNotNull(sut.wipeToken())) { sdk }
+
+        caller = launch { sut.send(prepared, "key") }
+        caller.join()
+
+        assertTrue(isSent)
+    }
+
+    @Test
+    fun `payments are listed newest first, up to the limit`() = runTest {
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
+        val sdk = connectedSdk()
+        whenever(sdk.listPayments(any())).thenReturn(ListPaymentsResponse(emptyList()))
+        sut.connectWith(assertNotNull(sut.wipeToken())) { sdk }
+
+        sut.listPayments(20u)
+
+        verify(sdk).listPayments(ListPaymentsRequest(limit = 20u, sortAscending = false))
+    }
+
+    private suspend fun connectedSdk(): BreezSdkInterface = mock<BreezSdkInterface>().also {
+        whenever(it.addEventListener(any())).thenReturn("listener")
+        whenever(it.removeEventListener(any())).thenReturn(true)
+    }
+
+    @Test
     fun `no wipe token is handed out while a wipe runs, and one read before a wipe is refused after it`() = runTest {
-        val sut = WatchSparkService(mock<Context>())
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
         val before = assertNotNull(sut.wipeToken())
         assertTrue(sut.isCurrent(before))
 
@@ -102,7 +210,7 @@ class WatchSparkServiceTest {
 
     @Test
     fun `a current token connects once`() = runTest {
-        val sut = WatchSparkService(mock<Context>())
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
         val sdk = mock<BreezSdkInterface>()
         whenever(sdk.addEventListener(any())).thenReturn("listener")
         whenever(sdk.removeEventListener(any())).thenReturn(true)
@@ -118,7 +226,7 @@ class WatchSparkServiceTest {
 
     @Test
     fun `a connect whose caller gives up after the sdk is built keeps it, so it is disconnected later`() = runTest {
-        val sut = WatchSparkService(mock<Context>())
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
         val sdk = mock<BreezSdkInterface>()
         lateinit var caller: Job
         whenever(sdk.addEventListener(any())).doSuspendableAnswer {
@@ -139,7 +247,7 @@ class WatchSparkServiceTest {
 
     @Test
     fun `an sdk whose listener cannot be added is disconnected at once`() = runTest {
-        val sut = WatchSparkService(mock<Context>())
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
         val sdk = mock<BreezSdkInterface>()
         whenever(sdk.addEventListener(any())).thenAnswer { throw SparkError.NotConnected() }
         val token = assertNotNull(sut.wipeToken())
@@ -152,7 +260,7 @@ class WatchSparkServiceTest {
 
     @Test
     fun `an sdk built while a wipe began is disconnected and never used`() = runTest {
-        val sut = WatchSparkService(mock<Context>())
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
         val sdk = mock<BreezSdkInterface>()
         val token = assertNotNull(sut.wipeToken())
 
@@ -170,7 +278,7 @@ class WatchSparkServiceTest {
 
     @Test
     fun `an sdk that gets no listener and cannot be disconnected is kept for the next disconnect`() = runTest {
-        val sut = WatchSparkService(mock<Context>())
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
         val sdk = mock<BreezSdkInterface>()
         var failures = 1
         whenever(sdk.addEventListener(any())).thenAnswer { throw SparkError.NotConnected() }
@@ -187,7 +295,7 @@ class WatchSparkServiceTest {
 
     @Test
     fun `an sdk built during a wipe that cannot be disconnected fails the wipe, which keeps the storage`() = runTest {
-        val sut = WatchSparkService(context())
+        val sut = WatchSparkService(context(), FakeBip39())
         val sdk = mock<BreezSdkInterface>()
         val storage = storage()
         whenever(sdk.disconnect()).thenAnswer { throw SparkError.NotConnected() }
@@ -208,7 +316,7 @@ class WatchSparkServiceTest {
 
     @Test
     fun `a stale token is refused over an sdk kept by a disconnect that failed, which gets no listener`() = runTest {
-        val sut = WatchSparkService(mock<Context>())
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
         val sdk = connected(sut)
         whenever(sdk.disconnect()).thenAnswer { throw SparkError.NotConnected() }
         val token = assertNotNull(sut.wipeToken())
@@ -222,7 +330,7 @@ class WatchSparkServiceTest {
 
     @Test
     fun `a listener that cannot be removed does not stop the disconnect`() = runTest {
-        val sut = WatchSparkService(mock<Context>())
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
         val sdk = connected(sut)
         whenever(sdk.removeEventListener(any())).thenAnswer { throw SparkError.NotConnected() }
 
@@ -234,7 +342,7 @@ class WatchSparkServiceTest {
 
     @Test
     fun `a disconnect that fails keeps the sdk, so the next one reaches it`() = runTest {
-        val sut = WatchSparkService(mock<Context>())
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
         val sdk = connected(sut)
         var failures = 1
         whenever(sdk.disconnect()).thenAnswer { if (failures-- > 0) throw SparkError.NotConnected() }
@@ -250,7 +358,7 @@ class WatchSparkServiceTest {
 
     @Test
     fun `a listener removed by a disconnect that failed is not removed twice`() = runTest {
-        val sut = WatchSparkService(mock<Context>())
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
         val sdk = connected(sut)
         var failures = 1
         whenever(sdk.disconnect()).thenAnswer { if (failures-- > 0) throw SparkError.NotConnected() }
@@ -263,7 +371,7 @@ class WatchSparkServiceTest {
 
     @Test
     fun `an sdk kept by a disconnect that failed gets its listener back when it connects again`() = runTest {
-        val sut = WatchSparkService(mock<Context>())
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
         val sdk = connected(sut)
         whenever(sdk.disconnect()).thenAnswer { throw SparkError.NotConnected() }
         assertFailsWith<SparkError.NotConnected> { sut.disconnect() }
@@ -276,7 +384,7 @@ class WatchSparkServiceTest {
 
     @Test
     fun `a wipe tries a disconnect that failed again, then deletes the storage`() = runTest {
-        val sut = WatchSparkService(context())
+        val sut = WatchSparkService(context(), FakeBip39())
         val sdk = connected(sut)
         val storage = storage()
         var failures = 1
@@ -291,7 +399,7 @@ class WatchSparkServiceTest {
 
     @Test
     fun `a wipe that cannot disconnect spark fails, and keeps the sdk and its storage`() = runTest {
-        val sut = WatchSparkService(context())
+        val sut = WatchSparkService(context(), FakeBip39())
         val sdk = connected(sut)
         val storage = storage()
         whenever(sdk.disconnect()).thenAnswer { throw SparkError.NotConnected() }
@@ -305,7 +413,7 @@ class WatchSparkServiceTest {
 
     @Test
     fun `a disconnect whose caller is cancelled still disconnects`() = runTest {
-        val sut = WatchSparkService(mock<Context>())
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
         val sdk = connected(sut)
         lateinit var caller: Job
         whenever(sdk.removeEventListener(any())).doSuspendableAnswer {
