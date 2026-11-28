@@ -364,9 +364,11 @@ usual result screens, only when every one of these holds:
 - QuickPay is on in the settings last imported from the phone. They count however long ago the import was, as the
   phone's own settings do on the phone.
 - The amount, without the fee, is no more than the phone's QuickPay amount. As on the phone, the QuickPay amount is
-  turned into sats at the dollar rate, rounded half up, and the invoice's sats are compared with that.
+  turned into sats at the dollar rate, rounded half up, and the invoice's sats are compared with that. The
+  invoice's unrounded dollar value is compared with the QuickPay amount too, which is the phone's check when it
+  pays: where the sats rounded up, the last sat is worth a fraction of a cent too much and is reviewed.
 - Today's QuickPay payments from this watch, with this one, stay within the daily limit. The payment counts as its
-  dollar value in cents, rounded half up, at least one cent and at most the QuickPay amount, as on the phone.
+  dollar value in cents, rounded half up and at least one cent, as on the phone.
 - The wearer is there: the first of the two differences below.
 
 The rate is the last one the watch fetched, whatever its age: the phone has no age limit on its rates either. The
@@ -402,8 +404,9 @@ or a count that cannot be read.
 - **Daily limit.** `QuickPaySpendStore` keeps one day and its spend in cents in the settings file, which the wipe
   clears. A payment is counted when QuickPay lets it out, before it is sent. As on the phone, it is taken out
   again when it did not go out, as when the wearer turned out to have looked away meanwhile, and when it failed
-  (`PaymentsRepo.send`). It stays counted when it was paid, when it is still pending and when its outcome is
-  unknown. The phone goes on to take out a pending payment that fails later, from its ledger; the watch keeps no
+  (`PaymentsRepo.send`), and when the send flow was closed while QuickPay was decided. It stays counted when it
+  was paid, when it is still pending, when its outcome is unknown and when the send ended in an error the watch
+  does not know. The phone goes on to take out a pending payment that fails later, from its ledger; the watch keeps no
   ledger, so that one stays counted, and so does a payment the app was closed during. The count can only run ahead
   of what was paid, never behind. The day is the watch's local date; a date earlier than the one last counted
   starts no new count, so setting the watch's clock back frees nothing.

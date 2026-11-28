@@ -367,6 +367,11 @@ their defaults.
 link, with the watch unlocked, the app on screen and out of ambient mode all that time. A journey that sends its link
 to a watch that is asleep, locked or still connecting for longer gets the review and the hold instead.
 
+**Gotcha:** the daily limit is counted per watch and per day on the watch's date, and every run of a paying QuickPay
+journey adds to it. After about a dozen runs on one day the next one gets the review and the hold, and
+`WatchSendSent` never shows. `remove-wallet.xml` or clearing the watch app's data clears the count; so does the next
+day.
+
 **Never install the phone app on the watch or the watch app on the phone:** they share one application id.
 `just install` and `just wear-install` each pick a device by `ANDROID_SERIAL`; set it before every install.
 
