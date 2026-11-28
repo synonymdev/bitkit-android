@@ -66,8 +66,9 @@ internal val QR_AWAKE_LIMIT = 2.minutes
  * The receive QR, as large as the round screen allows, at full brightness and with the screen kept on while it
  * shows. After [QR_AWAKE_LIMIT] without a touch it rests: the QR hides behind a dimmed icon and the screen may turn
  * off again, so a forgotten QR does not drain the battery; a tap, or waking the watch from ambient mode, shows it
- * again. Ambient mode hides it. A paid invoice turns into a check with the amount and its own haptic; a tap on the
- * check makes a new invoice.
+ * again, as does a tap anywhere on the resting screen. Ambient mode hides it. A paid invoice turns into a check with
+ * the amount and its own haptic; a tap on the check makes a new invoice. In ambient mode the check shows without
+ * the amount, as the always-on screen shows no amount.
  */
 @Composable
 fun ReceiveQrScreen(
@@ -92,7 +93,7 @@ fun ReceiveQrScreen(
     }
     // A watch that wakes from ambient mode shows the QR again, and so does the invoice after a paid one.
     LaunchedEffect(isAmbient, isPaid) { if (isAmbient || isPaid) isResting = false }
-    Content(
+    ReceiveQrContent(
         uiState = uiState,
         isAmbient = isAmbient,
         isResting = isResting,
@@ -104,7 +105,7 @@ fun ReceiveQrScreen(
 }
 
 @Composable
-private fun Content(
+internal fun ReceiveQrContent(
     uiState: ReceiveUiState,
     isAmbient: Boolean,
     onRefreshClick: () -> Unit,
@@ -116,7 +117,11 @@ private fun Content(
     val qrContent = uiState.qrContent
     val paidAmount = uiState.paidAmount
     when {
-        paidAmount != null -> Paid(amount = paidAmount, onClick = onRefreshClick, modifier = modifier)
+        paidAmount != null -> Paid(
+            amount = paidAmount.takeUnless { isAmbient },
+            onClick = onRefreshClick,
+            modifier = modifier
+        )
         qrContent != null && isAmbient -> Hidden(modifier = modifier)
         qrContent != null && isResting -> Hidden(onClick = onShowClick, modifier = modifier)
         qrContent != null -> Qr(content = qrContent, onTouch = onQrTouch, modifier = modifier)
@@ -167,13 +172,13 @@ private fun Hidden(
 ) {
     val description = stringResource(R.string.receive__hidden)
     val showLabel = stringResource(R.string.receive__show)
-    CenteredScreen(modifier = modifier) {
-        QrIcon(
-            modifier = Modifier
-                .clickableAlpha(onClickLabel = showLabel, enabled = onClick != null, onClick = { onClick?.invoke() })
-                .semantics { contentDescription = description }
-                .testTag("WatchReceiveHidden")
-        )
+    CenteredScreen(
+        modifier = modifier
+            .clickableAlpha(onClickLabel = showLabel, enabled = onClick != null, onClick = { onClick?.invoke() })
+            .semantics { contentDescription = description }
+            .testTag("WatchReceiveHidden")
+    ) {
+        QrIcon()
     }
 }
 
@@ -189,10 +194,11 @@ private fun QrIcon(modifier: Modifier = Modifier) {
 
 @Composable
 private fun Paid(
-    amount: DisplayAmount,
+    amount: DisplayAmount?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isDimmed = amount == null
     CenteredScreen(modifier = modifier) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -204,10 +210,10 @@ private fun Paid(
             Icon(
                 painter = painterResource(R.drawable.ic_check),
                 contentDescription = stringResource(R.string.receive__paid),
-                tint = Colors.Brand,
+                tint = if (isDimmed) Colors.White.copy(alpha = HIDDEN_ALPHA) else Colors.Brand,
                 modifier = Modifier.size(MARK_SIZE)
             )
-            SmallAmountRow(amount = amount, amountTag = "WatchReceivePaidAmount")
+            amount?.let { SmallAmountRow(amount = it, amountTag = "WatchReceivePaidAmount") }
         }
     }
 }
@@ -242,7 +248,7 @@ private fun Error(
 @Composable
 private fun Preview() {
     WearPreview {
-        Content(
+        ReceiveQrContent(
             uiState = ReceiveUiState(qrContent = PREVIEW_INVOICE),
             isAmbient = false,
             onRefreshClick = {},
@@ -254,7 +260,7 @@ private fun Preview() {
 @Composable
 private fun PreviewPaid() {
     WearPreview {
-        Content(
+        ReceiveQrContent(
             uiState = ReceiveUiState(paidAmount = DisplayAmount(symbol = "₿", text = "21 000")),
             isAmbient = false,
             onRefreshClick = {},
@@ -264,9 +270,21 @@ private fun PreviewPaid() {
 
 @WearPreviewDevices
 @Composable
+private fun PreviewPaidAmbient() {
+    WearPreview {
+        ReceiveQrContent(
+            uiState = ReceiveUiState(paidAmount = DisplayAmount(symbol = "₿", text = "21 000")),
+            isAmbient = true,
+            onRefreshClick = {},
+        )
+    }
+}
+
+@WearPreviewDevices
+@Composable
 private fun PreviewAmbient() {
     WearPreview {
-        Content(
+        ReceiveQrContent(
             uiState = ReceiveUiState(qrContent = PREVIEW_INVOICE),
             isAmbient = true,
             onRefreshClick = {},
@@ -278,7 +296,7 @@ private fun PreviewAmbient() {
 @Composable
 private fun PreviewResting() {
     WearPreview {
-        Content(
+        ReceiveQrContent(
             uiState = ReceiveUiState(qrContent = PREVIEW_INVOICE),
             isAmbient = false,
             onRefreshClick = {},
@@ -291,7 +309,7 @@ private fun PreviewResting() {
 @Composable
 private fun PreviewError() {
     WearPreview {
-        Content(
+        ReceiveQrContent(
             uiState = ReceiveUiState(isError = true),
             isAmbient = false,
             onRefreshClick = {},

@@ -122,12 +122,15 @@ sealed class SendError(message: String, cause: Throwable? = null) : AppError(mes
     /** This wallet already paid the invoice, or an earlier transfer to the Spark address went through after all. */
     class AlreadyPaid : SendError("The request is already paid")
 
-    /** A send of this request is still under way, from the watch or the phone: Spark lists it as pending. */
+    /**
+     * A send of this request is still under way, from the watch or the phone: Spark lists it as pending, or Spark
+     * has not returned the watch's own call of it yet.
+     */
     class InFlight : SendError("A payment of this request is under way")
 
     /**
-     * Another send holds the wallet: one that is running, or one whose call Spark has not returned yet. Nothing of
-     * this request was sent, and it can be tried again once that send is over.
+     * Another send holds the wallet: one that is running, or one of another request whose call Spark has not
+     * returned yet. Nothing of this request was sent, and it can be tried again once that send is over.
      */
     class Busy : SendError("The wallet is busy with another payment")
 

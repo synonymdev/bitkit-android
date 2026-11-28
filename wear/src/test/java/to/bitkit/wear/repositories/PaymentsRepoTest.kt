@@ -774,7 +774,7 @@ class PaymentsRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a send call that stalls ends as unknown, and nothing else is sent until spark returns it`() = test {
+    fun `a send call that stalls ends as unknown, and its request is under way until spark returns it`() = test {
         val prepared = preparedSend()
         var answer = CompletableDeferred<Payment>()
         whenever(sparkService.send(any(), any())).doSuspendableAnswer { answer.await() }
@@ -783,13 +783,31 @@ class PaymentsRepoTest : BaseUnitTest() {
         assertEquals(PaymentsRepo.SEND_TIMEOUT.inWholeMilliseconds, testScheduler.currentTime)
         assertEquals(setOf("key-0"), uncertainSends.sends.keys)
 
-        assertIs<SendError.Busy>(sut.send(prepared).exceptionOrNull())
+        assertIs<SendError.InFlight>(sut.send(prepared).exceptionOrNull())
         verify(sparkService).send(any(), any())
+        assertEquals(setOf("key-0"), uncertainSends.sends.keys)
 
         val stalled = answer
         answer = CompletableDeferred(payment("key-0", PaymentStatus.COMPLETED))
         stalled.completeExceptionally(SdkException.NetworkException("reset"))
         assertTrue(sut.send(prepared).isSuccess)
+    }
+
+    @Test
+    fun `a transfer to the payee of a stalled transfer is under way, by either review, and sends nothing`() = test {
+        stubTransfer()
+        whenever(sparkService.send(any(), any())).doSuspendableAnswer { CompletableDeferred<Payment>().await() }
+        val request = SendRequest.SparkAddress(SPARK_ADDRESS)
+        val first = sut.prepare(request, 500uL).getOrThrow()
+        assertIs<SendError.Unknown>(sut.send(first).exceptionOrNull())
+        val noted = uncertainSends.sends.keys.toSet()
+
+        assertIs<SendError.InFlight>(sut.send(first).exceptionOrNull())
+        assertIs<SendError.InFlight>(sut.send(sut.prepare(request, 500uL).getOrThrow()).exceptionOrNull())
+        assertIs<SendError.Busy>(sut.send(preparedSend()).exceptionOrNull())
+
+        verify(sparkService).send(any(), any())
+        assertEquals(noted, uncertainSends.sends.keys)
     }
 
     @Test
@@ -836,7 +854,7 @@ class PaymentsRepoTest : BaseUnitTest() {
         val other = "lnbcrt1other"
         val otherHash = "cd".repeat(32)
         whenever(sparkService.parse(other)).thenReturn(invoiceInput(other, otherHash))
-        whenever(sparkService.prepareSend(eq(other), anyOrNull())).thenReturn(prepared())
+        whenever(sparkService.prepareSend(eq(other), anyOrNull())).thenReturn(prepared(paymentHash = otherHash))
         val otherPrepared = sut.prepare(SendRequest.Invoice(other, 500uL, null)).getOrThrow()
         whenever(sparkService.send(any(), any())).doSuspendableAnswer { CompletableDeferred<Payment>().await() }
         assertIs<SendError.Unknown>(sut.send(preparedSend()).exceptionOrNull())
@@ -1128,9 +1146,13 @@ class PaymentsRepoTest : BaseUnitTest() {
         return mutableListOf()
     }
 
-    private fun prepared(sparkTransferFeeSats: ULong? = null, amountMsat: ULong? = null) = PrepareSendPaymentResponse(
+    private fun prepared(
+        sparkTransferFeeSats: ULong? = null,
+        amountMsat: ULong? = null,
+        paymentHash: String = PAYMENT_HASH,
+    ) = PrepareSendPaymentResponse(
         paymentMethod = SendPaymentMethod.Bolt11Invoice(
-            SparkFixtures.invoice(BOLT11, amountMsat = amountMsat),
+            SparkFixtures.invoice(BOLT11, paymentHash, amountMsat = amountMsat),
             sparkTransferFeeSats,
             FEE,
         ),

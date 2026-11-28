@@ -108,6 +108,9 @@ class PaymentsRepo @Inject constructor(
     /** The SDK's send call of the last send, which can outlive it when it stalls. Guarded by [sendMutex]. */
     private var sendCall: Job? = null
 
+    /** The request [sendCall] pays: its invoice's payment hash or its Spark payee. Guarded by [sendMutex]. */
+    private var sendCallRequest: String? = null
+
     /** Emits whenever Spark reports a payment or a sync, so the activity list reads [recentPayments] again. */
     val paymentChanges: Flow<Unit> get() = sparkService.events.map { }
 
@@ -356,9 +359,10 @@ class PaymentsRepo @Inject constructor(
      * when Spark took it and it did not settle within [SETTLE_TIMEOUT]. The send does not run in the caller's scope:
      * a caller that goes away neither cancels it nor loses its bookkeeping. Fails with a [SendError]:
      * [SendError.NotReady], also when Spark cannot be reached to bring its list up to date, [SendError.AlreadyPaid],
-     * [SendError.InFlight], [SendError.Busy] while another send runs or Spark still holds the call of one that
-     * stalled, [SendError.Expired], [SendError.InsufficientBalance], [SendError.Failed], and [SendError.Unknown] when
-     * the payment may have gone out.
+     * [SendError.InFlight], also while Spark still holds the stalled call of this same request, [SendError.Busy]
+     * while another send runs or Spark holds the stalled call of another request, [SendError.Expired],
+     * [SendError.InsufficientBalance], [SendError.Failed], and [SendError.Unknown] when the payment may have gone
+     * out.
      *
      * An invoice is sent under the idempotency key the phone derives for it too, so Spark pays it once however often
      * and from whichever device it is sent; each attempt Spark lists as failed moves to the next key. A Spark address
@@ -372,7 +376,11 @@ class PaymentsRepo @Inject constructor(
             // Another send holds the wallet: nothing of this request is sent, so it is not reported as under way.
             if (!sendMutex.tryLock()) throw SendError.Busy()
             try {
-                if (sendCall?.isActive == true) throw SendError.Busy()
+                if (sendCall?.isActive == true) {
+                    // The stalled call is this request's own and may still pay, so it is under way, not refused.
+                    val request = prepared.requestId()
+                    throw if (request != null && request == sendCallRequest) SendError.InFlight() else SendError.Busy()
+                }
                 if (!isReady()) throw SendError.NotReady()
                 val sparkPayee = prepared.sparkPayee
                 val key = if (sparkPayee != null) {
@@ -491,6 +499,7 @@ class PaymentsRepo @Inject constructor(
             // The SDK call cannot be cancelled, so it runs beside this wait, which gives up on a call that stalls.
             val call = sendScope.async { runSuspendCatching { sparkService.send(prepared.response, key) } }
             sendCall = call
+            sendCallRequest = prepared.requestId()
             val result = withTimeoutOrNull(SEND_TIMEOUT) { call.await() }
                 ?: Result.failure(SendError.Unknown())
             return result.getOrElse { recoverSend(it, key, wasUncertain) }
@@ -521,6 +530,8 @@ class PaymentsRepo @Inject constructor(
         }
         throw SendError.Unknown(error)
     }
+
+    private fun PreparedSend.requestId(): String? = paymentHash?.lowercase() ?: sparkPayee
 
     /** Drops the note of the send under [key]. A note that stays only makes a later send more careful. */
     private suspend fun settle(key: String) {
