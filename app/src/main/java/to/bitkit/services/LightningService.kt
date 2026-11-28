@@ -438,9 +438,11 @@ class LightningService internal constructor(
             val vssStoreId = vssStoreIdProvider.getVssStoreId(walletIndex)
             val vssUrl = Env.vssServerUrl
             val lnurlAuthServerUrl = Env.lnurlAuthServerUrl
+            val lnurlAuthKeyDomain = Env.lnurlAuthKeyDomain
             val fixedHeaders = emptyMap<String, String>()
             Logger.verbose(
-                "Building node with \n\t vssUrl: '$vssUrl'\n\t lnurlAuthServerUrl: '$lnurlAuthServerUrl'",
+                "Building node with \n\t vssUrl: '$vssUrl'\n\t lnurlAuthServerUrl: '$lnurlAuthServerUrl'" +
+                    "\n\t keyDomain: '${lnurlAuthKeyDomain.orEmpty()}'",
                 context = TAG,
             )
 
@@ -448,6 +450,15 @@ class LightningService internal constructor(
                 throw ServiceError.VssAuthRequired()
             }
 
+            if (lnurlAuthKeyDomain != null) {
+                return builder.buildWithVssStoreAndLnurlAuthKeyDomain(
+                    vssUrl,
+                    vssStoreId,
+                    lnurlAuthServerUrl,
+                    lnurlAuthKeyDomain,
+                    fixedHeaders,
+                )
+            }
             return builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
         } finally {
             // TODO: cleanup sensitive data after implementing a `SecureString` value holder for Keychain return values

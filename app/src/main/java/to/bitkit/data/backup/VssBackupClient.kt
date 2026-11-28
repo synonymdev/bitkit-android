@@ -62,6 +62,7 @@ class VssBackupClient @Inject constructor(
                         mnemonic = mnemonic,
                         passphrase = passphrase,
                         lnurlAuthServerUrl = lnurlAuthServerUrl,
+                        keyDomain = Env.lnurlAuthKeyDomain,
                     )
                     gate.complete(Unit)
                     Logger.info("VSS client setup with server: '$vssUrl'", context = TAG)
