@@ -133,14 +133,8 @@ internal fun homeUiState(
 ): HomeUiState {
     // A balance no sync confirmed this session, such as 0 for a wallet restored offline, is never shown.
     val sats = wallet.balanceSats?.takeIf { wallet.hasSynced }?.toLong()
-    val bitcoin = sats?.let { DisplayAmount(BITCOIN_SYMBOL, it.formatToModernDisplay(locale)) }
-    val fiat = sats?.let { amount ->
-        rates.rateFor(settings.selectedCurrency)?.let { rate ->
-            fiatValue(amount, rate)?.let {
-                DisplayAmount(rate.currencySymbol, it.formatCurrency(locale), isSymbolSuffix(rate.quote))
-            }
-        }
-    }
+    val bitcoin = sats?.let { bitcoinAmount(it, locale) }
+    val fiat = sats?.let { fiatAmount(it, rates, settings.selectedCurrency, locale) }
     val showsFiatFirst = settings.primaryDisplay == PrimaryDisplay.FIAT && fiat != null
     return HomeUiState(
         isReady = wallet.status == WalletStatus.Ready,
@@ -154,6 +148,22 @@ internal fun homeUiState(
         secondaryAmount = if (showsFiatFirst) bitcoin else fiat,
         nfc = nfc,
     )
+}
+
+/** [sats] in bitcoin, as the balance shows it. */
+fun bitcoinAmount(sats: Long, locale: Locale = Locale.getDefault()): DisplayAmount =
+    DisplayAmount(BITCOIN_SYMBOL, sats.formatToModernDisplay(locale))
+
+/** [sats] in [currency] at its rate in [rates], or null without that rate. */
+fun fiatAmount(
+    sats: Long,
+    rates: List<FxRate>,
+    currency: String,
+    locale: Locale = Locale.getDefault(),
+): DisplayAmount? {
+    val rate = rates.rateFor(currency) ?: return null
+    val value = fiatValue(sats, rate) ?: return null
+    return DisplayAmount(rate.currencySymbol, value.formatCurrency(locale), isSymbolSuffix(rate.quote))
 }
 
 @Immutable
