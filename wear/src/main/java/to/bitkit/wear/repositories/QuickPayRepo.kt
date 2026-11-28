@@ -80,7 +80,8 @@ class QuickPayRepo internal constructor(
     /**
      * Whether a payment of [amountSats], its fee not counted, may skip the hold to pay; if so it is counted against
      * today's limit and returned as what [release] takes back. It may when QuickPay is on in the last import, the
-     * amount is no more than the phone's QuickPay amount in sats at the dollar rate, and today's QuickPay payments
+     * amount is no more than the phone's QuickPay amount, in sats and in unrounded dollars at the dollar rate (the
+     * phone checks the one when it offers QuickPay and the other when it pays), and today's QuickPay payments
      * from this watch stay within the phone's daily limit with it. Any failure to read or count answers null.
      */
     suspend fun reserve(amountSats: ULong): QuickPayReservation? = withContext(ioDispatcher) {
@@ -104,7 +105,10 @@ class QuickPayRepo internal constructor(
         val rate = currencyRepo.rates.value.rateFor(USD) ?: return null
         val thresholdSats = thresholdSats(quickPay, rate) ?: return null
         if (thresholdSats == 0uL || amountSats > thresholdSats) return null
-        val cents = reserveCents(amountSats, rate, quickPay) ?: return null
+        val fiatCents = fiatValue(amountSats.toLong(), rate)?.movePointRight(CENTS_SCALE) ?: return null
+        // The threshold in sats may have rounded up, so its last sat can be worth a fraction of a cent too much.
+        if (fiatCents > BigDecimal.valueOf(quickPay.thresholdCents)) return null
+        val cents = fiatCents.setScale(0, RoundingMode.HALF_UP).toLong().coerceAtLeast(1L)
         val today = Instant.ofEpochMilli(nowMs()).atZone(zone()).toLocalDate().toString()
         val dayKey = spendStore.reserve(today, cents, quickPay.dailyCapCents) ?: return null
         return QuickPayReservation(dayKey, cents)
@@ -117,12 +121,6 @@ class QuickPayRepo internal constructor(
             .multiply(BigDecimal(SATS_IN_BTC))
             .setScale(0, RoundingMode.HALF_UP)
         return runCatching { sats.longValueExact().toULong() }.getOrNull()
-    }
-
-    private fun reserveCents(amountSats: ULong, rate: FxRate, quickPay: QuickPayLimits): Long? {
-        val fiat = fiatValue(amountSats.toLong(), rate) ?: return null
-        val cents = fiat.movePointRight(CENTS_SCALE).setScale(0, RoundingMode.HALF_UP).toLong()
-        return minOf(cents, quickPay.thresholdCents).coerceAtLeast(1L)
     }
 }
 

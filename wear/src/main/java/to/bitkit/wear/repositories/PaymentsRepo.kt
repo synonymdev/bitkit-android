@@ -12,10 +12,12 @@ import breez_sdk_spark.SendPaymentMethod
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.Scanner
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -156,23 +158,33 @@ class PaymentsRepo @Inject constructor(
      *   see `SendViewModel`.
      *
      * A yes counts the payment against today's QuickPay limit, so ask once per send and only when about to [send],
-     * which takes it out again when nothing was paid. A no counts nothing. Anything that cannot be told answers no,
-     * and the wearer holds to pay.
+     * which takes it out again when nothing was paid. A no counts nothing, and neither does a caller that is
+     * cancelled before it hears the yes. Anything that cannot be told answers no, and the wearer holds to pay.
      */
-    suspend fun skipConfirmation(prepared: PreparedSend, canSend: () -> Boolean): Boolean =
+    suspend fun skipConfirmation(prepared: PreparedSend, canSend: () -> Boolean): Boolean = try {
         withContext(ioDispatcher) {
             if (!isReady() || sparkService.isWiping) return@withContext false
             if (!prepared.isAmountFixed) return@withContext false
             quickPayRepo.awaitRate()
-            val reservation = quickPayRepo.reserve(prepared.amountSats) ?: return@withContext false
-            // The wallet may have locked, paused or been wiped, or the wearer left, while the limit was read.
-            if (!isReady() || sparkService.isWiping || !canSend()) {
-                quickPayRepo.release(reservation)
-                return@withContext false
+            // A caller that goes away meanwhile does not stop this halfway, with a count that nothing takes out.
+            withContext(NonCancellable) {
+                val reservation = quickPayRepo.reserve(prepared.amountSats) ?: return@withContext false
+                // The wallet may have locked, paused or been wiped, or the wearer left, while the limit was read.
+                if (!isReady() || sparkService.isWiping || !canSend()) {
+                    quickPayRepo.release(reservation)
+                    return@withContext false
+                }
+                quickPayReservations[prepared.transferKey] = reservation
+                true
             }
-            quickPayReservations[prepared.transferKey] = reservation
-            true
         }
+    } catch (e: CancellationException) {
+        // The caller went away and never hears the yes, so it sends nothing.
+        withContext(NonCancellable) {
+            quickPayReservations.remove(prepared.transferKey)?.let { quickPayRepo.release(it) }
+        }
+        throw e
+    }
 
     /**
      * Creates an amountless BOLT11 invoice paid into the Spark balance, valid for [INVOICE_EXPIRY_SECS], and
@@ -438,7 +450,7 @@ class PaymentsRepo @Inject constructor(
      * during, is never read as nothing sent.
      *
      * A send that [skipConfirmation] counted against the QuickPay limit is taken out of the count again when it
-     * fails with anything but [SendError.Unknown].
+     * fails with a [SendError] other than [SendError.Unknown].
      */
     suspend fun send(prepared: PreparedSend): Result<WatchPayment> = sendScope.async {
         runSuspendCatching {
@@ -466,9 +478,10 @@ class PaymentsRepo @Inject constructor(
             Logger.error("Failed to send a payment", it, context = TAG)
         }.also { result ->
             // As on the phone, a QuickPay payment that did not go out or failed is not counted. One whose outcome
-            // is unknown may have been paid, so it stays counted.
+            // is unknown may have been paid, so it stays counted, and so does one that failed in a way not foreseen.
             val reservation = quickPayReservations.remove(prepared.transferKey)
-            if (reservation != null && result.isFailure && result.exceptionOrNull() !is SendError.Unknown) {
+            val error = result.exceptionOrNull()
+            if (reservation != null && error is SendError && error !is SendError.Unknown) {
                 quickPayRepo.release(reservation)
             }
         }

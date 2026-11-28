@@ -710,6 +710,37 @@ class PaymentsRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a quickpay send that ends in an error the watch does not know stays counted`() = test {
+        whenever(quickPayRepo.reserve(any())).thenReturn(RESERVATION)
+        whenever(sparkService.send(any(), any())).thenReturn(payment("key-0", PaymentStatus.COMPLETED))
+        whenever(sparkService.releaseSend()).thenThrow(IllegalStateException("released twice"))
+        val prepared = preparedSend()
+        sut.skipConfirmation(prepared) { true }
+
+        assertIs<IllegalStateException>(sut.send(prepared).exceptionOrNull())
+
+        verify(quickPayRepo, never()).release(any())
+    }
+
+    @Test
+    fun `a quickpay yes that its caller no longer waits for is taken out of the day's count`() = test {
+        val reserved = CompletableDeferred<QuickPayReservation>()
+        whenever(quickPayRepo.reserve(any())).doSuspendableAnswer { reserved.await() }
+        val prepared = preparedSend()
+        val asking = launch { sut.skipConfirmation(prepared) { true } }
+
+        asking.cancel()
+        reserved.complete(RESERVATION)
+        asking.join()
+
+        verify(quickPayRepo, times(1)).release(RESERVATION)
+        // Nothing is left for a later send of it to take out a second time.
+        whenever(sparkService.send(any(), any())).thenReturn(payment("key-0", PaymentStatus.FAILED))
+        sut.send(prepared)
+        verify(quickPayRepo, times(1)).release(any())
+    }
+
+    @Test
     fun `a send that was held for releases nothing when it fails`() = test {
         whenever(sparkService.send(any(), any())).thenReturn(payment("key-0", PaymentStatus.FAILED))
 

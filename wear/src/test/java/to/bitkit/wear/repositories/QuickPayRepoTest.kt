@@ -122,6 +122,19 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `the last sat of an amount that rounded up is worth more than the phone's amount and holds`() = test {
+        // 1 dollar is 1 030.9 sats, rounded up to 1 031, which are worth 1.00007 dollars.
+        rates.update { listOf(rate("97000")) }
+        settings.update { it.copy(quickPay = LIMITS.copy(amountUsd = 1)) }
+
+        assertNull(sut.reserve(1_031uL))
+        assertEquals(0L, spend.spentCents)
+
+        assertNotNull(sut.reserve(1_030uL))
+        assertEquals(100L, spend.spentCents)
+    }
+
+    @Test
     fun `the smallest payment skips the hold and counts as a whole cent`() = test {
         assertNotNull(sut.reserve(1uL))
 
@@ -170,12 +183,12 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `a payment counts for no more than the phone's amount`() = test {
+    fun `a payment worth more than the phone's amount holds, so none counts for more`() = test {
         // At 3 000 000 dollars a bitcoin 5 dollars round up to 167 sats, which are worth 501 cents.
         rates.update { listOf(rate("3000000")) }
 
-        assertEquals(500L, sut.reserve(167uL)?.cents)
-        assertNull(sut.reserve(168uL))
+        assertNull(sut.reserve(167uL))
+        assertEquals(498L, sut.reserve(166uL)?.cents)
     }
 
     @Test
