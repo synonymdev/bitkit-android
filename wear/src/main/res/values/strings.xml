@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="about__title">About</string>
+    <string name="common__next">Next</string>
+    <string name="common__ok">OK</string>
+    <string name="common__retry">Retry</string>
+    <string name="home__balance_hidden">Balance hidden</string>
+    <string name="home__error">Couldn\'t load wallet</string>
+    <string name="home__nfc_hint">Tap to pay</string>
+    <string name="home__nfc_off">NFC off</string>
+    <string name="home__offline">Offline</string>
+    <string name="home__toggle_unit">Switch unit</string>
+    <string name="onboarding__restore">Restore</string>
+    <string name="removed__title">Wallet removed</string>
+    <string name="restore__checksum_review">Review</string>
+    <string name="restore__checksum_title">Invalid phrase</string>
+    <string name="restore__error_failed">Couldn\'t save wallet</string>
+    <string name="restore__error_insecure">No secure hardware</string>
+    <plurals name="restore__length_words">
+        <item quantity="one">%1$d word</item>
+        <item quantity="other">%1$d words</item>
+    </plurals>
+    <string name="restore__passphrase_add">Add passphrase</string>
+    <string name="restore__passphrase_confirm">Restore</string>
+    <string name="restore__passphrase_placeholder">Passphrase</string>
+    <string name="restore__passphrase_skip">Continue</string>
+    <string name="restore__passphrase_title">Passphrase?</string>
+    <string name="restore__passphrase_too_long">Too long</string>
+    <string name="restore__title">How many words?</string>
+    <string name="restore__word_no_match">No match</string>
+    <string name="restore__word_placeholder">Word %1$d</string>
+    <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="settings__remove_wallet">Remove wallet</string>
+    <string name="settings__remove_wallet_confirm_title">Remove wallet?</string>
+    <string name="settings__remove_wallet_failed">Couldn\'t remove wallet</string>
+    <string name="settings__title">Settings</string>
+    <string name="unsupported__text">No Spark on this network</string>
+    <string name="unsupported__text_mainnet">Not on mainnet yet</string>
+    <string name="unsupported__title">Not supported</string>
+</resources>

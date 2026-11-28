@@ -1,10 +1,10 @@
 # Screens map
 
-Every `*Screen.kt` under `app/src/main/java`, grouped by feature package, with the frame that renders it on the `Bitkit - Handoff vNN` page of the Bitkit Figma file (`ltqvnKiejWj0JQiqtDf2JJ`, always the highest `vNN`).
+Every `*Screen.kt` under `app/src/main/java` and, in the [Wear OS](#wear-os) section, `wear/src/main/java`, grouped by feature package, with the frame that renders it on the `Bitkit - Handoff vNN` page of the Bitkit Figma file (`ltqvnKiejWj0JQiqtDf2JJ`, always the highest `vNN`).
 
 Columns:
 
-- Android: the Compose screen file. Every `*Screen.kt` in the app has exactly one row; `ScreensMapTest` fails when a screen is added or removed without updating this file. A row is the only requirement, a design is not.
+- Android: the Compose screen file. Every `*Screen.kt` has exactly one row per app: phone screens in the sections before [Wear OS](#wear-os), watch screens in that section, so a file name both apps use has a row in each. `ScreensMapTest` checks each app against its own sections and fails when a screen is added or removed without updating this file. A row is the only requirement, a design is not.
 - Figma: `Flow › Frame`, where Flow is the `SectionTitle` above the frame on the handoff page and Frame is the top-level frame name. `todo` when the screen shipped ahead of its design; `n/a` when no design is intended (dev tools, debug screens).
 
 Frame names are stable across handoff iterations; node ids are not, so the map lists names only. Sheets, dialogs, and composables without the `Screen` suffix are out of scope.
@@ -372,3 +372,63 @@ Amount entry stays in dollars with a BTC equivalent; QR and shared payment amoun
 ### Update spending balance
 
 `MoveToSparkSheet.kt` implements [Modal Update Spending Balance](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=52052-404808) and [Spending Balance Updated](https://www.figma.com/design/ltqvnKiejWj0JQiqtDf2JJ/Bitkit-Wallet?node-id=52052-409823) in Wallet Lightning - Transfer to Spending Balance. Its in-flight and failed states have no frame and keep their earlier copy in the same sheet. Covered by `journeys/transfer/move-to-spark.xml`; the update before a payment is covered by `journeys/send/update-spending-balance-payment.xml`.
+
+## Wear OS
+
+The watch app's screens, under `wear/src/main/java/to/bitkit/wear`. None has a design yet. `HomeScreen.kt` and `SettingsScreen.kt` share their file names with phone screens and have their own rows here.
+
+### ui/components
+
+Layout scaffolds that other screens build on, not screens of their own.
+
+| Android | Figma |
+| - | - |
+| CenteredScreen.kt | `n/a` |
+| ListScreen.kt | `n/a` |
+| MessageScreen.kt | `n/a` |
+
+### ui/screens/home
+
+| Android | Figma |
+| - | - |
+| HomeScreen.kt | `todo` |
+
+### ui/screens/onboarding
+
+| Android | Figma |
+| - | - |
+| OnboardingScreen.kt | `todo` |
+
+### ui/screens/removed
+
+| Android | Figma |
+| - | - |
+| WalletRemovedScreen.kt | `todo` |
+
+### ui/screens/restore
+
+| Android | Figma |
+| - | - |
+| RestoreChecksumScreen.kt | `todo` |
+| RestorePassphraseScreen.kt | `todo` |
+| RestoreStartScreen.kt | `todo` |
+| RestoreWordScreen.kt | `todo` |
+
+### ui/screens/settings
+
+| Android | Figma |
+| - | - |
+| AboutScreen.kt | `todo` |
+| SettingsScreen.kt | `todo` |
+
+### ui/screens/start
+
+| Android | Figma |
+| - | - |
+| StartErrorScreen.kt | `todo` |
+
+### ui/screens/unsupported
+
+| Android | Figma |
+| - | - |
+| UnsupportedScreen.kt | `todo` |

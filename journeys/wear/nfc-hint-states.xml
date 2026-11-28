@@ -1,0 +1,23 @@
+<journey name="wear nfc hint states">
+  <description>
+    On a ready wallet the NFC hint follows NFC live: the animated hint with NFC on, a dimmed, slashed, still icon with
+    NFC off, whose tap opens the NFC settings. This journey is physical-only: the emulators have no NFC, so they never
+    show either hint (the hidden, no-adapter state). There, check the `NfcHint` and `BalancePage` previews instead.
+
+    Precondition: Restored wallet, see journeys/wear/README.md › Restored wallet, on the Balance page with the loading
+    ring stopped, the watch online and NFC on. Backend: hosted regtest.
+  </description>
+  <actions>
+    <action>Verify "NfcHint" is listed with the content-desc "Tap to pay"</action>
+    <action>Run `adb shell svc nfc disable` and wait 3 s</action>
+    <action>Verify "NfcHintDisabled" is listed with the content-desc "NFC off"</action>
+    <action>Verify "NfcHint" is not listed</action>
+    <action>Verify from two screenshots 1 s apart that the icon is dimmed, slashed and still</action>
+    <action>Tap "NfcHintDisabled"</action>
+    <action>Run `adb shell dumpsys activity activities | grep -m1 topResumedActivity` and verify it names a settings activity, not `to.bitkit.dev`</action>
+    <action>Run `adb shell svc nfc enable`</action>
+    <action>Run `adb shell am start -n to.bitkit.dev/to.bitkit.wear.ui.MainActivity`</action>
+    <action>Dump `android layout` every 5 s until it lists "NfcHint", for up to 1 minute: the wallet may connect again first, and the hint shows only once it is ready</action>
+    <action>Verify "NfcHintDisabled" is not listed</action>
+  </actions>
+</journey>

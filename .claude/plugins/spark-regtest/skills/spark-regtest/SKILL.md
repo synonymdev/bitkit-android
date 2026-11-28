@@ -30,7 +30,7 @@ siblings. Run `./spark` commands from bitkit-docker. Read the named docs and scr
 1. A dev build connects with no key. Without `ESPLORA_URL`, Savings stays on Blocktank's staging chain, so the app
    shows the Transfer Unavailable sheet instead of Transfer to Spending (`Env.sparkSharesNodeChain`).
 2. Put Savings on Spark's chain: run `python3 scripts/spark-regtest-esplora.py --port 3999`, then build with
-   `ESPLORA_URL=http://10.0.2.2:3999 ./gradlew assembleDevDebug`.
+   `ESPLORA_URL=http://10.0.2.2:3999 ./gradlew :app:assembleDevDebug`.
    - `ESPLORA_URL` has the same sources as `BREEZ_API_KEY` (environment, Gradle property, `local.properties`, keychain)
      and applies to the dev flavor only.
    - The proxy stops after `--max-seconds` (default 3 h). The build then loses its chain; restart the proxy.
@@ -58,7 +58,7 @@ it, the build silently stays on the hosted regtest.
 ../bitkit-docker/spark up && \
 CFG="$(../bitkit-docker/spark config --base64)" && \
 ESPLORA_URL= E2E=true E2E_BACKEND=local SPARK_LOCAL_CONFIG_B64="$CFG" \
-SPARK_LOCAL_CHAIN_URL=http://127.0.0.1:23090/api ./gradlew assembleDevDebug && \
+SPARK_LOCAL_CHAIN_URL=http://127.0.0.1:23090/api ./gradlew :app:assembleDevDebug && \
 for port in 23535 23536 23537 23049 23090 60001; do adb reverse tcp:$port tcp:$port; done
 ```
 

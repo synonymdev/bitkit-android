@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="about__title">Informazioni</string>
+    <string name="common__next">Avanti</string>
+    <string name="common__ok">OK</string>
+    <string name="common__retry">Riprova</string>
+    <string name="home__balance_hidden">Saldo nascosto</string>
+    <string name="home__error">Impossibile caricare il portafoglio</string>
+    <string name="home__nfc_hint">Tocca per pagare</string>
+    <string name="home__nfc_off">NFC disattivato</string>
+    <string name="home__offline">Offline</string>
+    <string name="home__toggle_unit">Cambia unità</string>
+    <string name="onboarding__restore">Ripristina</string>
+    <string name="removed__title">Portafoglio rimosso</string>
+    <string name="restore__checksum_review">Rivedi</string>
+    <string name="restore__checksum_title">Frase non valida</string>
+    <string name="restore__error_failed">Impossibile salvare il portafoglio</string>
+    <string name="restore__error_insecure">Nessun hardware sicuro</string>
+    <plurals name="restore__length_words">
+        <item quantity="one">%1$d parola</item>
+        <item quantity="many">%1$d parole</item>
+        <item quantity="other">%1$d parole</item>
+    </plurals>
+    <string name="restore__passphrase_add">Aggiungi passphrase</string>
+    <string name="restore__passphrase_confirm">Ripristina</string>
+    <string name="restore__passphrase_placeholder">Passphrase</string>
+    <string name="restore__passphrase_skip">Continua</string>
+    <string name="restore__passphrase_title">Passphrase?</string>
+    <string name="restore__passphrase_too_long">Troppo lunga</string>
+    <string name="restore__title">Quante parole?</string>
+    <string name="restore__word_no_match">Nessuna corrispondenza</string>
+    <string name="restore__word_placeholder">Parola %1$d</string>
+    <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="settings__remove_wallet">Rimuovi portafoglio</string>
+    <string name="settings__remove_wallet_confirm_title">Rimuovere il portafoglio?</string>
+    <string name="settings__remove_wallet_failed">Impossibile rimuovere il portafoglio</string>
+    <string name="settings__title">Impostazioni</string>
+    <string name="unsupported__text">Spark non disponibile su questa rete</string>
+    <string name="unsupported__text_mainnet">Non ancora su mainnet</string>
+    <string name="unsupported__title">Non supportato</string>
+</resources>

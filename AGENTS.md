@@ -223,7 +223,7 @@ just test android
 just e2e
 
 # Build for E2E tests using network Electrum (not local; staging/mainnet based on flavor)
-just e2e network assembleTnetRelease
+just e2e network :app:assembleTnetRelease
 
 # Lint using detekt and Android Lint
 just lint

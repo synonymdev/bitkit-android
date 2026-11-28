@@ -1,0 +1,24 @@
+<journey name="wear remove wallet">
+  <description>
+    Confirming Remove wallet deletes the wallet from the watch: onboarding opens, a restart stays on onboarding, and
+    the encrypted seed file is gone. Home leaves for onboarding from the wallet's state, so it also does when the
+    Settings page was swiped away while the wallet was removed; unit tests cover that race, which is too short to
+    drive. Emulator and physical watch (`run-as` works on any debug build).
+
+    Precondition: Restored wallet, see journeys/wear/README.md › Restored wallet. Backend: hosted regtest. The journey
+    leaves no wallet; restore one again for the journeys that need it. Read the screen size once
+    with `adb shell wm size` and use the swipe written for it: 454 px (`Wear_Large_Round_API37`) or 384 px
+    (`Wear_Small_Round_API34`); for another size scale it as in README › What differs.
+  </description>
+  <actions>
+    <action>Run `adb shell run-as to.bitkit.dev ls no_backup/seed` and verify it lists one file, the encrypted seed</action>
+    <action>Swipe the pager left: on a 454 px screen `adb shell input swipe 400 227 60 227 300`, on a 384 px screen `adb shell input swipe 340 192 50 192 300`</action>
+    <action>Tap Remove wallet (tag "WatchSettingsRemoveWallet")</action>
+    <action>Tap ✓ (tag "WatchSettingsRemoveConfirm")</action>
+    <action>Verify onboarding: "WatchOnboardingRestore" is listed</action>
+    <action>Restart the app (README › Restart)</action>
+    <action>Verify onboarding again: "WatchOnboardingRestore" is listed</action>
+    <action>Verify "WatchHomePager" is not listed</action>
+    <action>Run `adb shell run-as to.bitkit.dev ls no_backup/seed` and verify it prints nothing: the encrypted seed is deleted</action>
+  </actions>
+</journey>

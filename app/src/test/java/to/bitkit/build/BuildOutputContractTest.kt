@@ -77,6 +77,7 @@ class BuildOutputContractTest {
     @Test
     fun `generated BuildConfig fields are declared per variant`() {
         val buildFile = repoRoot.resolve("app/build.gradle.kts").readText()
+        val sharedFile = repoRoot.resolve("gradle/bitkit-env.gradle.kts").readText()
         val fields = listOf(
             "E2E",
             "E2E_BACKEND",
@@ -93,9 +94,15 @@ class BuildOutputContractTest {
             buildFile.contains("buildConfigField("),
             "BuildConfig fields must come from androidComponents.onVariants, not the legacy DSL.",
         )
+        assertTrue(
+            Regex("""sparkBuildConfig\(variant\.flavorName\)[\s\S]*buildConfigFields\.put\(""")
+                .containsMatchIn(buildFile),
+            "The shared Spark BuildConfig fields must be put on the variant API.",
+        )
         fields.forEach { field ->
             assertTrue(
-                Regex("""buildConfigFields\.put\(\s*"$field"""").containsMatchIn(buildFile),
+                Regex("""buildConfigFields\.put\(\s*"$field"""").containsMatchIn(buildFile) ||
+                    Regex("""^\s*"$field" to \(""", RegexOption.MULTILINE).containsMatchIn(sharedFile),
                 "BuildConfig field '$field' must be preserved on the variant API.",
             )
         }

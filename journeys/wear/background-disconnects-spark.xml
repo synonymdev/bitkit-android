@@ -1,0 +1,20 @@
+<journey name="wear background disconnects spark">
+  <description>
+    Leaving the watch app disconnects its Spark wallet after a grace period of 10 s, and coming back connects and
+    syncs it again; a shorter trip away keeps it connected. Emulator and physical watch (on a watch, press the crown
+    to leave the app and open it again from the launcher).
+
+    Precondition: Restored wallet, see journeys/wear/README.md › Restored wallet, on the Balance page with the loading
+    ring stopped. Backend: hosted regtest. The wallet's log lines are in logcat under the tag `BitkitWear`.
+  </description>
+  <actions>
+    <action>Run `adb logcat -c`</action>
+    <action>Run `adb shell "input keyevent KEYCODE_HOME; sleep 3; am start -n to.bitkit.dev/to.bitkit.wear.ui.MainActivity; sleep 2"`: one command, so the app is away for 3 s however slow the runner is</action>
+    <action>Run `adb logcat -d -s BitkitWear | grep -c "Disconnected wallet"` and verify it prints 0: the app came back within the grace period</action>
+    <action>Run `adb shell input keyevent KEYCODE_HOME` and wait 15 s</action>
+    <action>Run `adb logcat -d -s BitkitWear | grep "Disconnected wallet because the app left the screen"` and verify it prints one line</action>
+    <action>Run `adb shell am start -n to.bitkit.dev/to.bitkit.wear.ui.MainActivity`</action>
+    <action>Run `adb logcat -d -s BitkitWear | grep "Synced wallet in"` every 5 s until it prints a line, for up to 1 minute: the wallet connected and synced again</action>
+    <action>Verify "WatchHomeBalance" reads a number above 0</action>
+  </actions>
+</journey>

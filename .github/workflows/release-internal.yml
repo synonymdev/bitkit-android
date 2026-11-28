@@ -82,7 +82,7 @@ jobs:
           BREEZ_API_KEY: ${{ secrets.BREEZ_API_KEY }}
         run: |
           set -euo pipefail
-          ./gradlew assembleMainnetRelease :app:syncNativeDebugSymbolArtifacts --no-daemon --stacktrace
+          ./gradlew :app:assembleMainnetRelease :app:syncNativeDebugSymbolArtifacts --no-daemon --stacktrace
           scripts/create-native-debug-symbols.sh
 
       - name: Remove decoded keystore

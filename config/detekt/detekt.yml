@@ -797,6 +797,7 @@ style:
     allowedNames: ''
     ignoreAnnotated:
       - 'Preview'
+      - 'WearPreviewDevices'
   UnusedPrivateProperty:
     active: true
     allowedNames: '_|ignored|expected|serialVersionUID'

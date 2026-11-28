@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-feature android:name="android.hardware.type.watch" />
+    <!-- Paying by tap is the watch app's purpose, so Play offers it only to watches with NFC (a store filter only). -->
+    <uses-feature
+        android:name="android.hardware.nfc"
+        android:required="true"
+        tools:ignore="UnnecessaryRequiredFeature" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:name=".WearApp"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="${app_icon}"
+        android:label="@string/app_name"
+        android:roundIcon="${app_icon_round}"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Wear">
+
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" />
+
+        <!--
+            The Breez SDK's dependencies bring Play services' sign-in and credential components, which the watch app
+            never uses. One of them is an exported service, so all are left out of the app. These entries only
+            remove a library's entry, so lint's checks of a declared component do not apply to them.
+        -->
+        <activity
+            android:name="androidx.credentials.playservices.HiddenActivity"
+            tools:ignore="MissingClass,WearRecents"
+            tools:node="remove" />
+        <activity
+            android:name="com.google.android.gms.auth.api.signin.internal.SignInHubActivity"
+            tools:ignore="MissingClass,WearRecents"
+            tools:node="remove" />
+        <activity
+            android:name="com.google.android.gms.common.api.GoogleApiActivity"
+            tools:ignore="MissingClass,WearRecents"
+            tools:node="remove" />
+        <service
+            android:name="androidx.credentials.playservices.CredentialProviderMetadataHolder"
+            tools:ignore="MissingClass"
+            tools:node="remove" />
+        <service
+            android:name="com.google.android.gms.auth.api.signin.RevocationBoundService"
+            tools:ignore="MissingClass"
+            tools:node="remove" />
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Wear.Splash">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

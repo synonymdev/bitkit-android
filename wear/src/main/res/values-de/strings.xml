@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="about__title">Über</string>
+    <string name="common__next">Weiter</string>
+    <string name="common__ok">OK</string>
+    <string name="common__retry">Wiederholen</string>
+    <string name="home__balance_hidden">Guthaben versteckt</string>
+    <string name="home__error">Wallet konnte nicht geladen werden</string>
+    <string name="home__nfc_hint">Zum Bezahlen tippen</string>
+    <string name="home__nfc_off">NFC aus</string>
+    <string name="home__offline">Offline</string>
+    <string name="home__toggle_unit">Einheit wechseln</string>
+    <string name="onboarding__restore">Wiederherstellen</string>
+    <string name="removed__title">Wallet entfernt</string>
+    <string name="restore__checksum_review">Prüfen</string>
+    <string name="restore__checksum_title">Ungültige Phrase</string>
+    <string name="restore__error_failed">Wallet konnte nicht gespeichert werden</string>
+    <string name="restore__error_insecure">Keine sichere Hardware</string>
+    <plurals name="restore__length_words">
+        <item quantity="one">%1$d Wort</item>
+        <item quantity="other">%1$d Wörter</item>
+    </plurals>
+    <string name="restore__passphrase_add">Passwort hinzufügen</string>
+    <string name="restore__passphrase_confirm">Wiederherstellen</string>
+    <string name="restore__passphrase_placeholder">Passwort</string>
+    <string name="restore__passphrase_skip">Weiter</string>
+    <string name="restore__passphrase_title">Passwort?</string>
+    <string name="restore__passphrase_too_long">Zu lang</string>
+    <string name="restore__title">Wie viele Wörter?</string>
+    <string name="restore__word_no_match">Kein Treffer</string>
+    <string name="restore__word_placeholder">Wort %1$d</string>
+    <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="settings__remove_wallet">Wallet entfernen</string>
+    <string name="settings__remove_wallet_confirm_title">Wallet entfernen?</string>
+    <string name="settings__remove_wallet_failed">Wallet konnte nicht entfernt werden</string>
+    <string name="settings__title">Einstellungen</string>
+    <string name="unsupported__text">Kein Spark in diesem Netzwerk</string>
+    <string name="unsupported__text_mainnet">Noch nicht im Mainnet</string>
+    <string name="unsupported__title">Nicht unterstützt</string>
+</resources>

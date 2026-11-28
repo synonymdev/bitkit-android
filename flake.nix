@@ -5,7 +5,7 @@
   #
   # Usage:
   #   nix develop          # enter the shell
-  #   just compile         # or: ./gradlew assembleDevDebug
+  #   just compile         # or: ./gradlew :app:assembleDevDebug
   #
   # Notes:
   #   - First `nix develop` downloads ~2 GB of SDK/NDK; first gradle run

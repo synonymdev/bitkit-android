@@ -63,6 +63,8 @@ echo "Downloading every dependency into a temporary Gradle home, which is delete
 # change what is resolved. If keystore.properties exists, it takes precedence over the KEYSTORE_*
 # variables below, so its storeFile must exist.
 # useMavenLocal=false keeps locally published artifacts out of the recorded checksums.
+# The unqualified tasks run in every module, so they cover :wear as well as :app. Building both apps' release
+# variants in one invocation runs out of the default 4 GB heap while dexing, so this run gets 6 GB.
 # --continue lets every task resolve its dependencies even when another task fails.
 if [ -f keystore.properties ]; then
     echo "Note: keystore.properties takes precedence over the debug keystore, so its storeFile must exist." >&2
@@ -70,7 +72,8 @@ fi
 if GRADLE_USER_HOME="$gradle_home" \
     KEYSTORE_FILE=app/debug.keystore KEYSTORE_PASSWORD=android \
     KEY_ALIAS=androiddebugkey KEY_PASSWORD=android \
-    ./gradlew --write-verification-metadata sha256 --no-daemon --no-configuration-cache --no-build-cache \
+    ./gradlew -Dorg.gradle.jvmargs="-Xmx6g -Dfile.encoding=UTF-8" \
+    --write-verification-metadata sha256 --no-daemon --no-configuration-cache --no-build-cache \
     --continue -PuseMavenLocal=false \
     testDevDebugUnitTest detekt lintDevDebug \
     assembleDevDebug assembleDevDebugAndroidTest assembleTnetRelease bundleTnetRelease \

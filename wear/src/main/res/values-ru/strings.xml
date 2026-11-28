@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="about__title">О приложении</string>
+    <string name="common__next">Далее</string>
+    <string name="common__ok">ОК</string>
+    <string name="common__retry">Повторить</string>
+    <string name="home__balance_hidden">Баланс скрыт</string>
+    <string name="home__error">Не удалось загрузить кошелёк</string>
+    <string name="home__nfc_hint">Коснитесь для оплаты</string>
+    <string name="home__nfc_off">NFC выключен</string>
+    <string name="home__offline">Нет сети</string>
+    <string name="home__toggle_unit">Сменить единицу</string>
+    <string name="onboarding__restore">Восстановить</string>
+    <string name="removed__title">Кошелёк удалён</string>
+    <string name="restore__checksum_review">Проверить</string>
+    <string name="restore__checksum_title">Неверная фраза</string>
+    <string name="restore__error_failed">Не удалось сохранить кошелёк</string>
+    <string name="restore__error_insecure">Нет защищённого модуля</string>
+    <plurals name="restore__length_words">
+        <item quantity="one">%1$d слово</item>
+        <item quantity="few">%1$d слова</item>
+        <item quantity="many">%1$d слов</item>
+        <item quantity="other">%1$d слова</item>
+    </plurals>
+    <string name="restore__passphrase_add">Добавить кодовую фразу</string>
+    <string name="restore__passphrase_confirm">Восстановить</string>
+    <string name="restore__passphrase_placeholder">Кодовая Фраза</string>
+    <string name="restore__passphrase_skip">Продолжить</string>
+    <string name="restore__passphrase_title">Кодовая фраза?</string>
+    <string name="restore__passphrase_too_long">Слишком длинная</string>
+    <string name="restore__title">Сколько слов?</string>
+    <string name="restore__word_no_match">Нет совпадений</string>
+    <string name="restore__word_placeholder">Слово %1$d</string>
+    <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="settings__remove_wallet">Удалить кошелёк</string>
+    <string name="settings__remove_wallet_confirm_title">Удалить кошелёк?</string>
+    <string name="settings__remove_wallet_failed">Не удалось удалить кошелёк</string>
+    <string name="settings__title">Настройки</string>
+    <string name="unsupported__text">Нет Spark в этой сети</string>
+    <string name="unsupported__text_mainnet">Пока нет в основной сети</string>
+    <string name="unsupported__title">Не поддерживается</string>
+</resources>

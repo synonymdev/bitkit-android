@@ -1,0 +1,14 @@
+<journey name="wear no backup">
+  <description>
+    The watch app opts out of Android backup and device transfer, so neither the seed nor the Spark state leaves the
+    watch. Emulator and physical watch.
+
+    Precondition: the dev watch app installed (journeys/wear/README.md › Build and install); no wallet needed.
+    Backend: none. A package that allows backup lists `ALLOW_BACKUP` in its `pkgFlags`, as
+    `adb shell dumpsys package com.google.android.gms | grep -m1 pkgFlags` shows.
+  </description>
+  <actions>
+    <action>Run `adb shell dumpsys package to.bitkit.dev | grep -i backup` and verify it prints nothing</action>
+    <action>Run `adb shell dumpsys package to.bitkit.dev | grep -m1 pkgFlags` and verify the flags do not include `ALLOW_BACKUP`; the debug build prints `pkgFlags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ]`</action>
+  </actions>
+</journey>

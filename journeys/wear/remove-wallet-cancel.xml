@@ -1,0 +1,23 @@
+<journey name="wear remove wallet cancel">
+  <description>
+    Cancelling Remove wallet keeps the wallet: the dialog closes, and after a restart the watch still opens on Balance
+    with a balance, not on onboarding. Emulator and physical watch.
+
+    Precondition: Restored wallet, see journeys/wear/README.md › Restored wallet. Backend: hosted regtest. The test
+    wallet is public and its balance can change at any time, so the journey expects a balance above 0, not the amount
+    it started with. Read the screen size once with `adb shell wm size` and use the swipe written for it: 454 px
+    (`Wear_Large_Round_API37`) or 384 px (`Wear_Small_Round_API34`); for another size scale it as in README › What
+    differs.
+  </description>
+  <actions>
+    <action>Swipe the pager left: on a 454 px screen `adb shell input swipe 400 227 60 227 300`, on a 384 px screen `adb shell input swipe 340 192 50 192 300`</action>
+    <action>Tap Remove wallet (tag "WatchSettingsRemoveWallet")</action>
+    <action>Verify the dialog: the text "Remove wallet?" with ✕ (tag "WatchSettingsRemoveCancel")</action>
+    <action>Tap ✕ (tag "WatchSettingsRemoveCancel")</action>
+    <action>Verify the dialog is gone: "WatchSettingsRemoveCancel" is not listed</action>
+    <action>Restart the app (README › Restart)</action>
+    <action>Dump `android layout` every 5 s until it lists "WatchHomeBalance", for up to 1 minute</action>
+    <action>Verify "WatchHomeBalance" reads a number above 0</action>
+    <action>Verify "WatchOnboardingRestore" is not listed</action>
+  </actions>
+</journey>

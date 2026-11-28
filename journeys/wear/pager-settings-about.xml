@@ -1,0 +1,25 @@
+<journey name="wear pager settings about">
+  <description>
+    Swiping left on Balance shows the Settings page; About shows the app version and network; swipe-to-dismiss returns
+    to Settings and a swipe right returns to Balance. Emulator and physical watch.
+
+    Precondition: Restored wallet, see journeys/wear/README.md › Restored wallet. Backend: hosted regtest. Gestures are
+    in README › Watch gestures. Read the screen size once with `adb shell wm size` and use the swipe written for it:
+    454 px (`Wear_Large_Round_API37`) or 384 px (`Wear_Small_Round_API34`); for another size scale it as in README ›
+    What differs. The watch takes the phone app's version name, and the phone's version code plus 1 000 000 000
+    (docs/wear.md › Version): phone 3.1.1 (197) gives watch "3.1.1 (1000000197)".
+  </description>
+  <actions>
+    <action>Verify the Balance page: "WatchHomeBalance" is listed</action>
+    <action>Swipe the pager left: on a 454 px screen `adb shell input swipe 400 227 60 227 300`, on a 384 px screen `adb shell input swipe 340 192 50 192 300`</action>
+    <action>Verify the Settings page: About (tag "WatchSettingsAbout") is listed</action>
+    <action>Tap About (tag "WatchSettingsAbout")</action>
+    <action>Run `adb shell dumpsys package to.bitkit.dev | grep -E 'versionName|versionCode'` and note both values</action>
+    <action>Verify "WatchAboutVersion" reads "&lt;versionName&gt; (&lt;versionCode&gt;)" with the values noted, such as "3.1.1 (1000000197)"</action>
+    <action>Verify "WatchAboutNetwork" reads "regtest"</action>
+    <action>Swipe to dismiss from the left edge: on a 454 px screen `adb shell input swipe 20 227 400 227 300`, on a 384 px screen `adb shell input swipe 15 192 340 192 300`</action>
+    <action>Verify the Settings page again: "WatchSettingsAbout" is listed</action>
+    <action>Swipe the pager right: on a 454 px screen `adb shell input swipe 100 227 420 227 300`, on a 384 px screen `adb shell input swipe 85 192 355 192 300`</action>
+    <action>Verify the Balance page: "WatchHomeBalance" is listed</action>
+  </actions>
+</journey>

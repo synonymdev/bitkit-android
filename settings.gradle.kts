@@ -103,3 +103,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "bitkit-android"
 include(":app")
+include(":wear")

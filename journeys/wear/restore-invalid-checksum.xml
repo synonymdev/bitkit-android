@@ -1,0 +1,25 @@
+<journey name="wear restore invalid checksum">
+  <description>
+    A phrase made of wordlist words that fails the BIP39 checksum shows Invalid phrase. Review walks through the words
+    again from the first with the typed words in place, and fixing the last word continues to the passphrase step.
+    Emulator and physical watch.
+
+    Precondition: Fresh app, see journeys/wear/README.md › Fresh app. Backend: none; the journey stops before the
+    wallet is saved. The word screens block screenshots, so check them with `android layout` only.
+    "Tap Next eleven times" is one action repeated: tap "RestoreNext", wait 1 s, and do that eleven times in a row,
+    with no check in between; "RestoreProgress" goes up by one each time.
+  </description>
+  <actions>
+    <action>Tap Restore (tag "WatchOnboardingRestore")</action>
+    <action>Tap 12 (tag "RestoreWords12")</action>
+    <action>Type `abandon` twelve times (README › Typing several words, with the list changed to twelve times `abandon`)</action>
+    <action>Verify the error (tag "RestoreChecksumError") reads "Invalid phrase"</action>
+    <action>Tap Review (tag "RestoreChecksumReview")</action>
+    <action>Verify the progress (tag "RestoreProgress") reads "1/12"</action>
+    <action>Verify the word field (tag "RestoreWordInput") still reads "abandon"</action>
+    <action>Tap Next (tag "RestoreNext") eleven times</action>
+    <action>Verify "RestoreProgress" reads "12/12"</action>
+    <action>Replace the word with `about` (README › Replacing a word)</action>
+    <action>Verify the passphrase screen: the title (tag "RestorePassphraseTitle") reads "Passphrase?"</action>
+  </actions>
+</journey>

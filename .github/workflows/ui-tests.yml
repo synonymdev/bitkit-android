@@ -101,7 +101,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHATWOOT_API: ${{ secrets.CHATWOOT_API }}
         run: |
-          ./gradlew assembleDevDebug assembleDevDebugAndroidTest
+          ./gradlew :app:assembleDevDebug :app:assembleDevDebugAndroidTest
           ls -la app/build/outputs/apk/dev/debug/
           ls -la app/build/outputs/apk/androidTest/dev/debug/
 

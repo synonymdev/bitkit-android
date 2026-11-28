@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- Exported artwork drawn at its design size; simplifying the paths or shrinking the canvas would change it. -->
+    <issue id="VectorRaster">
+        <ignore path="src/main/res/drawable/bitkit_logo.xml" />
+    </issue>
+</lint>

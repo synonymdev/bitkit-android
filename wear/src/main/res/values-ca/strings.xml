@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="about__title">Quant a</string>
+    <string name="common__next">Següent</string>
+    <string name="common__ok">OK</string>
+    <string name="common__retry">Reintentar</string>
+    <string name="home__balance_hidden">Saldo amagat</string>
+    <string name="home__error">No s\'ha pogut carregar la cartera</string>
+    <string name="home__nfc_hint">Toca per pagar</string>
+    <string name="home__nfc_off">NFC desactivat</string>
+    <string name="home__offline">Sense connexió</string>
+    <string name="home__toggle_unit">Canvia la unitat</string>
+    <string name="onboarding__restore">Restaurar</string>
+    <string name="removed__title">Cartera eliminada</string>
+    <string name="restore__checksum_review">Revisa</string>
+    <string name="restore__checksum_title">Frase no vàlida</string>
+    <string name="restore__error_failed">No s\'ha pogut desar la cartera</string>
+    <string name="restore__error_insecure">Sense maquinari segur</string>
+    <plurals name="restore__length_words">
+        <item quantity="one">%1$d paraula</item>
+        <item quantity="many">%1$d paraules</item>
+        <item quantity="other">%1$d paraules</item>
+    </plurals>
+    <string name="restore__passphrase_add">Afegeix frase de pas</string>
+    <string name="restore__passphrase_confirm">Restaurar</string>
+    <string name="restore__passphrase_placeholder">Frase de pas</string>
+    <string name="restore__passphrase_skip">Continua</string>
+    <string name="restore__passphrase_title">Frase de pas?</string>
+    <string name="restore__passphrase_too_long">Massa llarga</string>
+    <string name="restore__title">Quantes paraules?</string>
+    <string name="restore__word_no_match">Cap coincidència</string>
+    <string name="restore__word_placeholder">Paraula %1$d</string>
+    <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="settings__remove_wallet">Elimina la cartera</string>
+    <string name="settings__remove_wallet_confirm_title">Eliminar la cartera?</string>
+    <string name="settings__remove_wallet_failed">No s\'ha pogut eliminar la cartera</string>
+    <string name="settings__title">Configuracions</string>
+    <string name="unsupported__text">No hi ha Spark en aquesta xarxa</string>
+    <string name="unsupported__text_mainnet">Encara no a mainnet</string>
+    <string name="unsupported__title">No compatible</string>
+</resources>
