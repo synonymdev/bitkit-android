@@ -34,6 +34,9 @@ import kotlin.time.Clock
  */
 internal const val MAX_SPARK_SEND_HASHES = 100
 
+/** How many unexpired invoices of the wallet's own are remembered; the ones that expire last are kept. */
+internal const val MAX_SPARK_OWN_INVOICES = 200
+
 /**
  * How long past its invoice's expiry a send no listing shows may still be pending: no send starts after the expiry,
  * and one settles within its HTLC timeout, which LDK caps at 1008 blocks (about a week) and Spark's routes keep
@@ -166,6 +169,25 @@ class CacheStore internal constructor(
             )
         }
     }
+
+    /**
+     * Remembers the Spark invoice with [paymentHash] as one this wallet created, until [expiresAt] in epoch seconds,
+     * so the wallet refuses to pay it. Invoices expired at [now] are dropped, as nobody can pay them. A paired
+     * device's invoices are added the same way.
+     */
+    suspend fun addSparkOwnInvoice(paymentHash: String, expiresAt: Long, now: Long) {
+        store.updateData { data ->
+            val invoices = (data.sparkOwnInvoices + (paymentHash.lowercase() to expiresAt)).entries
+                .filter { it.value > now }
+                .sortedByDescending { it.value }
+                .take(MAX_SPARK_OWN_INVOICES)
+            data.copy(sparkOwnInvoices = invoices.associate { it.key to it.value })
+        }
+    }
+
+    /** Whether [paymentHash] is a Spark invoice of this wallet that has not expired at [now], in epoch seconds. */
+    suspend fun hasSparkOwnInvoice(paymentHash: String, now: Long): Boolean =
+        store.data.first().sparkOwnInvoices[paymentHash.lowercase()]?.let { it > now } == true
 
     suspend fun removeSparkSendHash(paymentHash: String) {
         val hash = paymentHash.lowercase()
@@ -454,6 +476,11 @@ data class AppCacheData(
     val sparkSendHashes: List<String> = listOf(),
     /** Invoice expiry in epoch seconds of the [sparkSendHashes] that know it. */
     val sparkSendExpiries: Map<String, Long> = mapOf(),
+    /**
+     * Payment hashes of the unexpired Spark invoices this wallet created, with their expiry in epoch seconds, which
+     * the wallet refuses to pay: such an invoice names only Spark's provider, so nothing in it tells whose it is.
+     */
+    val sparkOwnInvoices: Map<String, Long> = mapOf(),
     /**
      * Spark's sends whose outcome it didn't report, by hash, with when they started in epoch seconds, kept across a
      * restart until Spark settles them.

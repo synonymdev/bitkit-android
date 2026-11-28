@@ -431,6 +431,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
+        whenever { lightningRepo.isOwnSparkInvoice(any(), any()) }.thenReturn(false)
         whenever { privatePaykitAddressReservationRepo.needsPublicAddressRotation(any()) }
             .thenReturn(Result.success(false))
         whenever(privatePaykitRepo.isProfileDeletionInProgress).thenReturn(isProfileDeletionInProgress)
@@ -11999,6 +12000,71 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertNull(sut.quickPayData.value)
         assertNull(sut.sendUiState.value.decodedInvoice)
         assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `lightning scan of own spark invoice shows self payment toast without paying`() = test {
+        val bolt11 = "lnbcrt1ownsparkquickpay"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u, payeeNodeId = FOREIGN_NODE_ID.fromHex())
+        whenever(lightningRepo.awaitNodeId()).thenReturn(OWN_NODE_ID)
+        whenever(lightningRepo.isOwnSparkInvoice(bolt11, "010203")).thenReturn(true)
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("SelfPaymentToast", toastCaptor.lastValue.testTag)
+        verify(lightningRepo, never()).canSend(any())
+        verify(quickPayRepo, never()).canApply(any<ULong>())
+        assertNull(sut.quickPayData.value)
+        assertNull(sut.sendUiState.value.decodedInvoice)
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `unified scan with own spark invoice falls back to onchain`() = test {
+        val bolt11 = "lnbcrt1ownsparkunified"
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.00001&lightning=$bolt11"
+        stubUnifiedScan(uri = uri, bolt11 = bolt11, amountSats = 1_000u, payeeNodeId = FOREIGN_NODE_ID.fromHex())
+        whenever(lightningRepo.awaitNodeId()).thenReturn(OWN_NODE_ID)
+        whenever(lightningRepo.isOwnSparkInvoice(bolt11, "010203")).thenReturn(true)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(uri)
+        advanceUntilIdle()
+
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertNull(sut.sendUiState.value.decodedInvoice)
+        assertFalse(sut.sendUiState.value.isUnified)
+        verify(lightningRepo, never()).canSend(any())
+    }
+
+    @Test
+    fun `unified scan with own spark invoice and no savings shows self payment toast`() = test {
+        val bolt11 = "lnbcrt1ownsparkunifiednosavings"
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.00001&lightning=$bolt11"
+        stubUnifiedScan(uri = uri, bolt11 = bolt11, amountSats = 1_000u, payeeNodeId = FOREIGN_NODE_ID.fromHex())
+        balanceState.value = BalanceState(maxSendOnchainSats = 0u)
+        whenever(lightningRepo.awaitNodeId()).thenReturn(OWN_NODE_ID)
+        whenever(lightningRepo.getLastKnownNodeId()).thenReturn(OWN_NODE_ID)
+        whenever(lightningRepo.isOwnSparkInvoice(bolt11, "010203")).thenReturn(true)
+        sut.setIsAuthenticated(true)
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.onScanResult(uri)
+        advanceUntilIdle()
+
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("SelfPaymentToast", toastCaptor.lastValue.testTag)
+        verify(lightningRepo, never()).canSend(any())
+        assertNull(sut.sendUiState.value.decodedInvoice)
     }
 
     @Test
