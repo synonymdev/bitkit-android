@@ -4,11 +4,12 @@
     written with eight decimals. The Settings page shows when the phone's settings were last imported, and a tap on
     that row imports them again. Emulator and physical watch.
 
-    Precondition: Private settings wallet, see journeys/wear/README.md › Private settings wallet, never the public
-    test phrase. Phone settings on VSS, see README › Phone settings on VSS, with Default Unit set to the currency,
-    Denomination set to Classic and Local Currency set to EUR on the phone, and the phone app closed. Then that
-    wallet restored on the watch on the local ./spark stack with a balance above 0 (run receive-paid.xml first), see
-    README › Local ./spark stack.
+    Precondition, in this order: Private settings wallet, see journeys/wear/README.md › Private settings wallet,
+    never the public test phrase alone, restored on the watch on the local ./spark stack (README › Local ./spark
+    stack) and funded there with a balance above 0 before any phone setting changed (README › Private settings
+    wallet, step 5: receive-paid.xml reads its amount in sats). Only then Phone settings on VSS, see README › Phone
+    settings on VSS, with Default Unit set to the currency, Denomination set to Classic, Local Currency set to EUR
+    and QuickPay off on the phone, and the phone app closed.
   </description>
   <actions>
     <action>Restart the app (README › Restart)</action>

@@ -3,8 +3,12 @@
     Paying the receive QR's invoice turns the QR into a check with the amount, with a firm haptic; a tap on the check
     shows a new invoice. This also funds the wallet for the send journeys. Emulator and physical watch.
 
-    Precondition: Restored wallet on the local ./spark stack, see journeys/wear/README.md › Local ./spark stack and
-    › Restored wallet, on the Balance page with the loading ring stopped. Gestures are written for the 454 px screen.
+    Precondition: a wallet restored on the local ./spark stack, see journeys/wear/README.md › Local ./spark stack: the
+    Restored wallet (README › Restored wallet), or the Private settings wallet (README › Private settings wallet)
+    when this funds it for the settings and QuickPay journeys. Either way the phone's settings of that wallet are
+    still the defaults, Bitcoin first and Denomination Modern, so the paid amount reads in sats: on the private
+    wallet run this before any settings journey, since under Classic the same amount reads "0.00050000". The app is
+    on the Balance page with the loading ring stopped. Gestures are written for the 454 px screen.
     The haptic cannot be checked over adb; feel it on a physical watch.
   </description>
   <actions>

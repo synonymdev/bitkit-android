@@ -3,10 +3,12 @@
     With QuickPay on in the phone's settings, an invoice above the phone's QuickPay amount still opens the review and
     is paid only by the hold. Emulator and physical watch.
 
-    Precondition: as quickpay-skips-hold.xml: Private settings wallet, never the public test phrase; Phone settings
-    on VSS with QuickPay on at $1 and 5×, see journeys/wear/README.md › Phone settings on VSS; that wallet restored
-    on the watch on the local ./spark stack with at least 12 000 sats, the app open on the Balance page and the
-    loading ring stopped. 10 000 sats are above $1 while a bitcoin costs more than $10 000. README › Holding to pay
+    Precondition, in this order, as quickpay-skips-hold.xml: Private settings wallet, never the public test phrase
+    alone, restored on the watch on the local ./spark stack and funded there with at least 12 000 sats before any
+    phone setting changed (journeys/wear/README.md › Private settings wallet, step 5). Then Phone settings on VSS,
+    see README › Phone settings on VSS, with Default Unit Bitcoin, Denomination Modern, Local Currency USD and
+    QuickPay on at $1 and 5×, and the phone app closed. Watch: the app open on the Balance page and the loading ring
+    stopped. The fiat value below is in dollars, which is what those units give. 10 000 sats are above $1 while a bitcoin costs more than $10 000. README › Holding to pay
     has the hold gesture.
   </description>
   <actions>

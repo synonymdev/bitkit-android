@@ -4,9 +4,10 @@
     paid by itself now opens the review and waits for the hold. A watch that never imported the phone's settings
     behaves the same. Emulator and physical watch.
 
-    Precondition: run quickpay-skips-hold.xml first, on its Private settings wallet and never the public test phrase.
-    Then, on the phone with the same recovery phrase, turn QuickPay off, wait for the backup and close the phone app,
-    see journeys/wear/README.md › Phone settings on VSS. Watch: the
+    Precondition: run quickpay-skips-hold.xml first, on its Private settings wallet and never the public test phrase
+    alone. Then, on the phone with the same wallet, turn QuickPay off and leave Default Unit Bitcoin, Denomination
+    Modern and Local Currency USD as that journey set them, so the amount below reads in sats; wait for the backup
+    and close the phone app, see journeys/wear/README.md › Phone settings on VSS. Watch: the
     wallet of quickpay-skips-hold.xml on the local ./spark stack with at least 2 000 sats, the app open on the Balance
     page and the loading ring stopped. README › Holding to pay has the hold gesture.
   </description>

@@ -214,7 +214,9 @@ On-screen copy stays short: a title or one line of at most about six words per s
   without an amount, an amountless invoice, a Spark address or an LNURL with a range, gets a minimal amount entry
   (the number keyboard, the LNURL range below it); Receive never has one.
   - Review: the amount in the balance's large style, fiat below in the small style, the fee only when it is at
-    least 1 % of the amount, and one line naming the payee when the input names one. The pay button is the edge
+    least 1 % of the amount, and one line naming the payee when the input names one. The fee line
+    (`WatchSendFee`) may wrap to 2 lines and is never cut: under Classic a long translation, as the Italian
+    "Commissione ₿ 0.00001234", does not fit one. The pay button is the edge
     button, "Hold to pay" (`WatchSendHold`).
   - Hold to pay: holding the button fills a ring around the bezel (`HoldToPayRing`, the geometry of `BezelLoading`)
     over 1.2 s, with a light tick (`SegmentTick`) at each quarter and the confirm haptic at the end, and only then
@@ -366,6 +368,11 @@ result screens, only when every one of these holds:
   wallet, as one opened without a network that connects minutes later by itself, always ends on the review and
   the hold, so nothing is paid after the wearer looked away. The phone does the same for a scan put off across
   its lock. The 30 s cover a wallet that connects and syncs as the link opens the app.
+- It is the link's first send flow. Android keeps the Send route and its link in the saved back stack, and builds
+  the flow again when it restores the app, as after the process was killed in the background. The first flow
+  leaves a mark in that saved state (`SendViewModel.KEY_STARTED`), and a flow that finds it never asks QuickPay,
+  whenever it is built: a send the wearer left on the review or on a failure comes back on the review and the
+  hold, hours later too.
 - The phone's settings were imported at most 15 minutes ago, and QuickPay is on in them. The age is that of the
   watch's last read of the backup, not of the phone's upload: QuickPay turned off on the phone stops on the watch
   with the first import after the phone uploaded its settings, and within 15 minutes of the watch's last import
@@ -381,7 +388,8 @@ A payment link usually opens the app, after a start or a long absence, and the i
 brings are then still on their way when the send is priced. So before it reads the limits the decision waits for
 them (`QuickPayRepo.awaitInputs`): when the last import has QuickPay on and is older than 15 minutes it joins the
 import under way, or starts one, and when the rates are missing or older than an hour it fetches them, both together
-for 5 s at most, under the loading ring. It waits only then: a watch whose last import has QuickPay off, or that has
+for 5 s at most, under the loading ring. After the 5 s only the wait ends: an import still under way goes on and
+lands, so the next payment finds it and does not wait again. It waits only then: a watch whose last import has QuickPay off, or that has
 none, goes to the review at once, so QuickPay newly turned on at the phone applies from the payment after the next
 import. What is still missing after the wait answers no. The wait cannot turn into a late payment: it starts only
 inside the 30 s above, and the wearer has to be there still when it ends.
@@ -398,6 +406,14 @@ backup the phone never wrote, an unreadable or newer backup, QuickPay values out
 - **Known gap: two counts.** The phone keeps its own count of the day's QuickPay payments and the watch cannot read
   it, so the phone and the watch each allow the daily limit: together up to twice the limit a day. Pairing (PR 4)
   is where the two can share one count.
+- **Known limit: a link sent from the phone.** Being there is measured as the watch unlocked, the app on screen
+  and out of ambient mode. It is not measured as a look or a touch: the watch has no sensor it could ask. An app on
+  the paired phone can open a `lightning:` link on the watch (`RemoteActivityHelper`) while the wearer looks at the
+  phone. With the watch on the wrist and unlocked, and the screen lit by the launch, that send counts as attended
+  and goes out under QuickPay with no touch on the watch, as a link from another app on the watch does. It is
+  bounded by the phone's QuickPay amount per payment and by the daily limit, and by the two counts above. Whether
+  a remote launch lights the screen was not tried on a device. Nothing in V1 tells such a launch from a tap on
+  the watch; turning QuickPay off on the phone is the wearer's way to rule it out.
 - **Known gap: the phone's payment PIN.** The phone can ask for its PIN before a QuickPay limit is raised; the
   watch has no PIN and adopts whatever the phone saved.
 
@@ -440,15 +456,23 @@ from VSS and never writes there.
   changes nothing on VSS; in the library's source the client's constructor and its get make no put or delete
   request (read at the head of synonymdev/vss-rust-client-ffi on 2026-11-28; the shipped binary is 0.5.26-rc2).
 - **No client kept.** The library keeps one client for the process, with keys derived from the seed. Each import
-  builds it, reads and shuts it down, so nothing of the wallet stays in it across a lock, a pause or a wipe.
+  builds it, reads and shuts it down, so nothing of the wallet stays in it once the read is over. The library runs
+  each of its calls to the end on the calling thread (`block_on`), so a read cannot be interrupted: one that was
+  given up is abandoned, ends with the HTTP call it is in and only then shuts its client down. Until then, a
+  moment after a lock or a pause, the client is still alive.
+- **Who waits.** `SettingsSyncRepo` runs each import in a scope of its own, and the read apart from the import.
+  A caller only waits: one that is cancelled or out of time, as a payment after its 5 s, returns at once, and the
+  import goes on and lands. The import stops waiting for its read after 30 s or when the wallet stops being
+  ready, at once in both cases, and then writes nothing.
 - **When.** While Home is open, each time the wallet is ready with the app on screen and out of ambient mode, so at
   every start, every return to the app and every wake from ambient mode, and every 5 minutes from then; before a
   QuickPay decision whose import is too old (see QuickPay); and on a tap on the Phone settings row. An import
   within a minute of the last read of this wallet's backup is skipped (`MIN_READ_GAP`), so a wallet that keeps
-  losing and finding its network does not sign in each time; the tap is never skipped. Never in the background or
-  in ambient mode, and never for a wallet that is not connected and synced: a read under way is given up the moment
-  the wallet stops being ready, as on a lock or a pause, whoever started it, and the client is shut down with it.
-  Reading takes about 2 s; it is given up after 30 s.
+  losing and finding its network does not sign in each time; the tap is never skipped. None is started in the
+  background or in ambient mode, and none for a wallet that is not connected and synced: a read under way is given
+  up the moment the wallet stops being ready, as on a lock or a pause, whoever started it, and its client is shut
+  down when its HTTP call returns. An import under way when the watch goes ambient or its caller leaves still
+  lands. Reading takes about 2 s; it is given up after 30 s.
 - **Outcomes.** A backup that was read replaces the six values. The phone's `primaryDisplay` is adopted when it
   differs from the one last imported, so the wearer's own swap on the balance lasts until the phone's setting
   changes. A display value the backup lacks, or holds in a form the watch cannot read, keeps the watch's. A backup

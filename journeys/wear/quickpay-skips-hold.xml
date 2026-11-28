@@ -4,12 +4,15 @@
     and without the hold: the link goes straight to sending and the same "Sent" check, and the flow closes by itself.
     Emulator and physical watch.
 
-    Precondition: Private settings wallet, see journeys/wear/README.md › Private settings wallet, never the public
-    test phrase. Phone settings on VSS, see README › Phone settings on VSS, with QuickPay on at $1 and the daily limit
-    at 5× on the phone, and the phone app closed. Then that wallet restored on the watch on the local ./spark stack
-    with at least 2 000 sats (run receive-paid.xml first), see README › Local ./spark stack, with the app open on the
-    Balance page and the loading ring stopped. The watch reads the phone's settings from the hosted staging VSS
-    whatever Spark network it is on. 200 sats are under $1 while a bitcoin costs less than $500 000.
+    Precondition, in this order: Private settings wallet, see journeys/wear/README.md › Private settings wallet,
+    never the public test phrase alone, restored on the watch on the local ./spark stack (README › Local ./spark
+    stack) and funded there with at least 2 000 sats before any phone setting changed (README › Private settings
+    wallet, step 5). Then Phone settings on VSS, see README › Phone settings on VSS, with Default Unit Bitcoin,
+    Denomination Modern, Local Currency USD, QuickPay on at $1 and the daily limit at 5× on the phone, and the phone
+    app closed. Watch: the app open on the Balance page and the loading ring stopped. The amounts below are in sats
+    and the fiat value in dollars, which is what those units give. The watch reads the phone's settings from the
+    hosted staging VSS whatever Spark network it is on. 200 sats are under $1 while a bitcoin costs less than
+    $500 000.
   </description>
   <actions>
     <action>Swipe left three times to the Settings page (README › Watch gestures)</action>

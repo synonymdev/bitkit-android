@@ -130,10 +130,11 @@ the command line. Run `receive-paid.xml` first: it funds the wallet the send jou
 | `quickpay-over-limit-holds.xml` | local, and a phone that wrote its settings | yes, 12 000 sats |
 | `quickpay-off-holds.xml` | local, and a phone that wrote its settings, after `quickpay-skips-hold.xml` | yes, 2 000 sats |
 | `settings-import-units.xml` | local, a private phrase, and a phone that wrote its settings | yes, any balance above 0 |
+| `settings-import-units.xml` | local, the private settings wallet, and a phone that wrote its settings | yes, any balance above 0 |
 | `settings-swap-survives-import.xml` | as `settings-import-units.xml`, after it | yes, any balance above 0 |
-| `quickpay-skips-hold.xml` | local, a private phrase, and a phone that wrote its settings | yes, 2 000 sats |
+| `quickpay-skips-hold.xml` | local, the private settings wallet, and a phone that wrote its settings | yes, 2 000 sats |
 | `quickpay-on-app-start.xml` | as `quickpay-skips-hold.xml`, after it | yes, 2 000 sats |
-| `quickpay-over-limit-holds.xml` | local, a private phrase, and a phone that wrote its settings | yes, 12 000 sats |
+| `quickpay-over-limit-holds.xml` | local, the private settings wallet, and a phone that wrote its settings | yes, 12 000 sats |
 | `quickpay-off-holds.xml` | as `quickpay-skips-hold.xml`, after it | yes, 2 000 sats |
 
 The six settings journeys read the phone's settings backup from Blocktank's hosted staging VSS, which every dev
@@ -237,7 +238,9 @@ A wallet restored by an earlier journey can stay: only [Fresh app](#fresh-app) a
 The watch imports the settings backup of whatever phrase it holds, so these journeys count on the public phrase's
 backup holding the phone's defaults (Bitcoin first, sats, USD, QuickPay off) or not existing. If the balance shows
 another currency or eight decimals, a phone app changed that backup: run the journeys with a private 12-word phrase
-of your own instead, which they support (see [The test wallet](#the-test-wallet)).
+of your own instead, which they support (see [The test wallet](#the-test-wallet)). That phrase's phone settings must
+be at their defaults too, so not the [Private settings wallet](#private-settings-wallet), whose backup holds
+whatever the last settings journey set.
 
 ### Private settings wallet
 
@@ -246,22 +249,60 @@ never on the public test phrase. That phrase's settings backup is one object on 
 hosted regtest and the local `./spark` stack and by everyone who restores the phrase: fiat first, euros or QuickPay
 written there would reach every other watch on that phrase and break the journeys that expect the defaults.
 
-1. Create a new wallet in a phone dev build, from its onboarding: a phrase nobody else has. Do not
-   reuse a phrase that holds or ever held real funds.
-2. Read its 12 words at Settings › Security › Back up your wallet (`BackupWallet`).
-3. Keep the words out of the repository, the journey files, logs, screenshots and pull requests. Hold them in a
-   shell variable for the session, read without echo:
+The private wallet is the public test phrase with a passphrase that only this machine knows. With a passphrase the
+phrase is another wallet, with a backup of its own that nobody else can name. No secret is read off a screen and
+none is typed by hand, so an agent can set it up without ever seeing the passphrase.
+
+1. Make the passphrase, once per machine, in a file outside the repository that only you can read:
 
    ```bash
-   read -rs PHRASE    # paste the 12 words, separated by spaces, then Enter
+   F=~/.config/bitkit-journeys/settings-passphrase
+   mkdir -p "${F%/*}" && chmod 700 "${F%/*}"
+   [ -s "$F" ] || (umask 077; LC_ALL=C tr -dc a-z0-9 </dev/urandom | head -c 12 >"$F")
    ```
 
-4. Restore it on the watch as in [Restored wallet](#restored-wallet), typing `for w in $PHRASE; do … done` with the
-   loop of [Typing several words](#typing-several-words).
-5. On the local `./spark` stack, `receive-paid.xml` funds it on the watch.
+   It prints nothing and keeps a passphrase that is already there. Twelve lowercase letters and digits are short and
+   plain enough for `adb shell input text`, which drops characters from long or dotted strings.
+2. Never print it: no `cat`, `echo` or `set -x` on it, and no screenshot, `android layout` or `uiautomator dump`
+   output while a passphrase field shows it. Never copy it into the repository, a journey file, a log or a pull
+   request. Every command below reads the file inside the command that uses it.
+3. Restore it in the phone app, a plain dev build (see [Phone settings on VSS](#phone-settings-on-vss), step 1). From
+   a fresh install go through the onboarding to the Restore wallet screen (`RestoreWallet`, then
+   `MultipleDevices-button`). For each word, tap its field (`Word-0` to `Word-11`) and run
+   `adb shell input text <word>`: eleven times `abandon`, then `about`. Tap `AdvancedButton`, tap `PassphraseInput`
+   and type the passphrase:
 
-One private wallet serves all six journeys. Remove it from the watch (`remove-wallet.xml` or
-[Fresh app](#fresh-app)) before the journeys on the public phrase run again.
+   ```bash
+   adb shell input text "$(cat ~/.config/bitkit-journeys/settings-passphrase)"
+   ```
+
+   [Check it](#checking-the-passphrase), then tap `RestoreButton`. Leave the phone's settings at their defaults for
+   now and close the phone app (`adb shell am force-stop to.bitkit.dev`).
+4. Restore it on the watch: [Restored wallet](#restored-wallet) steps 1 to 3, then tap `RestorePassphraseAdd`
+   instead of `RestorePassphraseSkip`, tap `RestorePassphraseInput`, close the keyboard with Back
+   ([Typing](#typing)) and run the same `adb shell input text "$(cat …)"` command. [Check it](#checking-the-passphrase),
+   tap `RestorePassphraseConfirm` and wait for `WatchHomeBalance`, which reads `0` for a new wallet.
+5. Fund it before the phone's settings change: on the local `./spark` stack run `receive-paid.xml` on this wallet
+   while the phone's settings are still the defaults. That journey expects "50 000", which is what a watch on
+   Bitcoin and Modern shows; after `settings-import-units.xml` set Classic, the same payment reads "0.00050000".
+6. Only now set what a journey asks for on the phone: [Phone settings on VSS](#phone-settings-on-vss).
+
+One private wallet serves all six journeys, in the order of the table: the settings journeys first, then the
+QuickPay ones, whose preconditions set the units and the currency back. Remove it from the watch
+(`remove-wallet.xml` or [Fresh app](#fresh-app)) before the journeys on the public phrase run again.
+
+#### Checking the passphrase
+
+`adb shell input text` can drop a character, and a passphrase that differs by one names another wallet with no
+backup. Check the field before you confirm, without printing it: this prints only a count, which must be `1`.
+
+```bash
+adb exec-out uiautomator dump /dev/tty | grep -c "text=\"$(cat ~/.config/bitkit-journeys/settings-passphrase)\""
+```
+
+On `0`, clear the field, type again and check again. The proof that phone and watch hold the same wallet comes with
+the first import: the watch logs `Imported the phone's settings` once the phone wrote its backup, and
+`Found no settings backup of the phone` when the two differ.
 
 ### Phone settings on VSS
 
@@ -273,13 +314,16 @@ names this precondition:
    ([journeys/README.md](../README.md) has the phone setup). Install a plain dev build of the phone app there with
    `just install`: not an E2E build with `E2E_VSS_SERVER_URL` set, which would back up to a local server the watch
    never reads.
-2. Use the [Private settings wallet](#private-settings-wallet) in the phone app: the wallet created there, or the
-   same private phrase restored. Never restore the public test phrase in a phone app to change its settings. The
-   recovery phrase and passphrase must be the same on phone and watch, since they name the backup.
+2. Use the [Private settings wallet](#private-settings-wallet) in the phone app, restored there with its
+   passphrase. Never restore the public test phrase without that passphrase in a phone app to change its settings.
+   The recovery phrase and passphrase must be the same on phone and watch, since they name the backup.
 3. Set what the journey asks for in the phone's Settings (`HeaderMenu`, `DrawerSettings`, `Tab-general`):
    - Default Unit (`UnitSettings`): Bitcoin or the currency first, and the denomination (`DenominationModern`,
      `DenominationClassic`).
    - Local Currency (`CurrenciesSettings`).
+   - The QuickPay journeys read sats and dollars, so each of them asks for Default Unit Bitcoin, Denomination Modern
+     and Local Currency USD besides its QuickPay values: `settings-import-units.xml` leaves the wallet on the
+     currency, Classic and EUR.
    - QuickPay (`QuickpaySettings`, past `QuickpayIntro-button` the first time): the switch (`QuickpayToggle`), the
      amount (`QuickpayAmountSlider`, stops $1 to $50) and the daily limit (`QuickpayDailyLimitSlider`, 1× to 50×).
      Tap the slider track above a stop's label, as in `settings/quickpay-payment-pin.xml`.
@@ -298,7 +342,7 @@ names this precondition:
 
 **Gotcha:** the public test phrase's backup belongs to everyone who restores it on a dev build, so its settings can
 change without notice. That is why no settings journey reads or writes it, and why a phone app that holds the public
-phrase, as for [Funding the test wallet](#funding-the-test-wallet), must leave its units, currency and QuickPay at
+phrase without a passphrase, as for [Funding the test wallet](#funding-the-test-wallet), must leave its units, currency and QuickPay at
 their defaults.
 
 **Gotcha:** QuickPay pays only a link that the wearer is there for: the send has to be priced within 30 s of the
