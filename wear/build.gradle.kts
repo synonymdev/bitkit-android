@@ -228,6 +228,7 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.collections.immutable)
     implementation(libs.bitkit.core)
+    implementation(libs.zxing)
     implementation(libs.breez.sdk.spark) { exclude(group = "net.java.dev.jna", module = "jna") }
     // Lifecycle
     implementation(libs.lifecycle.viewmodel.compose)
