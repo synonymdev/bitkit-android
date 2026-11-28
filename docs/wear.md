@@ -359,7 +359,9 @@ usual result screens, only when every one of these holds:
 - The send was priced by `PaymentsRepo.prepare`, so the self-send guard, the expiry, the balance and every other
   check before the hold passed. A request those checks refuse never reaches QuickPay.
 - The request fixes the amount, as on the phone: a BOLT11 invoice that carries its amount, also the one inside a
-  `bitcoin:` URI, or an LNURL-pay link or a Lightning address whose smallest and largest amount are the same. An
+  `bitcoin:` URI, or an LNURL-pay link or a Lightning address whose smallest and largest amount are the same. The
+  link's scheme and case change nothing, since the request is what `PaymentsRepo.decoderInput` leaves of it: an
+  uppercase `BITCOIN:` URI with an amount counts like a lowercase one, and an `lnurlp://` link like any LNURL. An
   amount the wearer typed always gets the review and the hold, and so does a Spark address, which names no amount.
 - QuickPay is on in the settings last imported from the phone. They count however long ago the import was, as the
   phone's own settings do on the phone.
@@ -382,9 +384,11 @@ The two differences from the phone:
   off across its lock, since whoever unlocks did not confirm it. The watch has the same case in more shapes, so:
   - The send is priced within 30 s of its link arriving (`QUICKPAY_WINDOW`), and from the link to the decision the
     app stayed on screen and out of ambient mode, the watch was never locked, and the wallet was not paused again
-    once it ran. A link that waited longer for the wallet, as one opened without a network that connects minutes
-    later by itself, always ends on the review and the hold. The 30 s cover a wallet that connects and syncs as
-    the link opens the app.
+    once it ran. A link that waited longer for the wallet, as one opened on a wallet that takes minutes to
+    connect, always ends on the review and the hold. The 30 s cover a wallet that connects and syncs as
+    the link opens the app. The wait never runs across `WalletStatus.Offline`: an offline wallet ends the flow on
+    the offline refusal (see Send), the request is dropped, and QuickPay is not asked for it, then or when the
+    network returns.
   - It is the link's first send flow. Android keeps the Send route and its link in the saved back stack, and
     builds the flow again when it restores the app, as after the process was killed in the background. The first
     flow leaves a mark in that saved state (`SendViewModel.KEY_STARTED`), and a flow that finds it never asks
