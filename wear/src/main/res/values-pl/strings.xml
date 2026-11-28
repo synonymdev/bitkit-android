@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about__title">O aplikacji</string>
+    <string name="activity__empty">Brak aktywności</string>
+    <string name="activity__received">Otrzymano</string>
+    <string name="activity__sent">Wysłano</string>
+    <string name="activity__status_completed">Zakończono</string>
+    <string name="activity__status_failed">Niepowodzenie</string>
+    <string name="activity__status_pending">Oczekuje</string>
+    <string name="activity__title">Aktywność</string>
     <string name="common__next">Dalej</string>
     <string name="common__ok">OK</string>
     <string name="common__retry">Spróbuj ponownie</string>
@@ -11,6 +18,12 @@
     <string name="home__offline">Offline</string>
     <string name="home__toggle_unit">Zmień jednostkę</string>
     <string name="onboarding__restore">Odzyskaj</string>
+    <string name="receive__error">Nie utworzono faktury</string>
+    <string name="receive__hidden">QR ukryty</string>
+    <string name="receive__new">Nowa faktura</string>
+    <string name="receive__paid">Opłacono</string>
+    <string name="receive__show">Pokaż QR</string>
+    <string name="receive__title">Odbierz</string>
     <string name="removed__title">Portfel usunięty</string>
     <string name="restore__checksum_review">Sprawdź</string>
     <string name="restore__checksum_title">Nieprawidłowa fraza</string>
@@ -32,6 +45,27 @@
     <string name="restore__word_no_match">Brak dopasowań</string>
     <string name="restore__word_placeholder">Słowo %1$d</string>
     <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="send__amount_confirm">Dalej</string>
+    <string name="send__amount_placeholder">Kwota</string>
+    <string name="send__amount_range">%1$s – %2$s</string>
+    <string name="send__error_already_paid">Już opłacona</string>
+    <string name="send__error_busy">Portfel jest zajęty</string>
+    <string name="send__error_expired">Faktura wygasła</string>
+    <string name="send__error_failed">Płatność nieudana</string>
+    <string name="send__error_insufficient">Za mało środków</string>
+    <string name="send__error_invalid">Nieprawidłowa faktura</string>
+    <string name="send__error_not_ready">Portfel nie jest gotowy</string>
+    <string name="send__error_out_of_range">Poza zakresem</string>
+    <string name="send__error_offline">Nie można płacić offline</string>
+    <string name="send__error_own_invoice">Własna faktura</string>
+    <string name="send__error_unsupported">Nieobsługiwane</string>
+    <string name="send__fee">Opłata %1$s</string>
+    <string name="send__hold">Przytrzymaj, aby zapłacić</string>
+    <string name="send__pay">Zapłać</string>
+    <string name="send__pending">Oczekuje</string>
+    <string name="send__sent">Wysłano</string>
+    <string name="send__unknown">Sprawdź aktywność</string>
+    <string name="send__waiting">Czekam na sieć</string>
     <string name="settings__remove_wallet">Usuń portfel</string>
     <string name="settings__remove_wallet_confirm_title">Usunąć portfel?</string>
     <string name="settings__remove_wallet_failed">Nie udało się usunąć portfela</string>

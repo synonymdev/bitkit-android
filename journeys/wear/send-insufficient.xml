@@ -1,0 +1,18 @@
+<journey name="wear send insufficient">
+  <description>
+    An invoice for more than the balance is refused before the hold: the review never shows, only a cross with "Not
+    enough funds" and one button, which returns to Home. Emulator and physical watch.
+
+    Precondition: Restored wallet on the local ./spark stack with less than 10 000 000 sats, see
+    journeys/wear/README.md › Local ./spark stack, with the app open on the Balance page and the loading ring stopped.
+  </description>
+  <actions>
+    <action>Run `../bitkit-docker/spark invoice 10000000` and note the BOLT11 invoice it prints as &lt;invoice&gt;</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;invoice&gt;" to.bitkit.dev`</action>
+    <action>Wait up to 10 s until "WatchSendError" is listed</action>
+    <action>Verify "WatchSendError" reads "Not enough funds"</action>
+    <action>Verify "WatchSendHold" is not listed</action>
+    <action>Tap "WatchSendClose"</action>
+    <action>Verify the Balance page: "WatchHomeBalance" is listed</action>
+  </actions>
+</journey>

@@ -14,6 +14,9 @@ What `android layout` misses on the watch, verified on the API 37 emulator:
   listed (the balance, for one), but wait for the ring to stop before asserting on a balance that is still loading.
 - **The pending and hidden marks.** `WatchHomeBalancePending` has no text either, so `android layout` leaves it out;
   `uiautomator dump` lists it. The same goes for `RestoreHidden`, the empty screen the restore shows in ambient mode.
+- **The receive QR.** `WatchReceiveQr` is an image with no text or action, so `android layout` leaves it out;
+  `adb shell uiautomator dump` lists it. Check it there or from a screenshot. `WatchReceiveHidden`, the screen with the
+  dimmed icon that replaces it in ambient mode and once it rests, has a content-desc and is listed.
 - **Suggestion chips.** A chip's tag (`RestoreSuggestion-0`, counted from 0) is on the button and its word is a
   text node at the same `center`. A chip below the screen edge is not listed until the screen scrolls.
 - **The keyboard.** The Wear OS keyboard is a full-screen window that `android layout` does not show. It lists the
@@ -85,8 +88,10 @@ A dev watch build runs Spark on regtest. Two regtest networks exist, as for the 
 | Funding | Faucet | `./spark send`, `./spark pay` |
 | Physical watch | Works over Wi-Fi or LTE | Needs `adb reverse` over the Wi-Fi debugging connection, or the stack on a LAN IP |
 
-**Recommendation: hosted regtest for every journey in this suite.** None of them needs a payment, so the only cost is
-the first sync of the test wallet, which the [Restored wallet](#restored-wallet) precondition pays once.
+**Recommendation: hosted regtest for every journey that makes no payment**, where the only cost is the first sync of
+the test wallet, which the [Restored wallet](#restored-wallet) precondition pays once. **The payment journeys run on
+the [local `./spark` stack](#local-spark-stack)**, whose funds are ours alone and which pays and makes invoices from
+the command line. Run `receive-paid.xml` first: it funds the wallet the send journeys spend from.
 
 | Journey | Backend | Needs funds |
 | --- | --- | --- |
@@ -108,6 +113,23 @@ the first sync of the test wallet, which the [Restored wallet](#restored-wallet)
 | `background-disconnects-spark.xml` | hosted | yes |
 | `nfc-hint-states.xml` | hosted, physical watch only | yes |
 | `screenshot-blocked.xml` | none | no |
+| `receive-qr.xml` | local | no |
+| `receive-qr-rests.xml` | local | no |
+| `receive-paid.xml` | local | no, it funds the wallet with 50 000 sats |
+| `send-deeplink-bolt11.xml` | local | yes, 2 000 sats |
+| `send-hold-cancel.xml` | local | yes, 2 000 sats |
+| `send-ambient-hides-amount.xml` | local | yes, 2 000 sats |
+| `send-insufficient.xml` | local | yes, less than 10 000 000 sats |
+| `send-own-invoice-guard.xml` | local | yes, any balance above 0 |
+| `send-offline-error.xml` | local | yes, any balance above 0 |
+| `activity-list.xml` | local | yes, after `receive-paid.xml` and `send-deeplink-bolt11.xml` |
+| `receive-paid-ambient.xml` | local | no, it funds the wallet with 1 000 sats |
+| `tile-balance.xml` | hosted or local | no |
+
+Paying an LNURL-pay link or a Lightning address has no journey: the local stack's LNURL server serves only the
+Lightning addresses its Spark wallets registered, over plain HTTP, and nothing in it registers one. It is covered by
+`PaymentsRepoTest.kt` and `SendViewModelTest.kt`, which check the range, the amount entry and the invoice the service
+returns.
 
 ### Local `./spark` stack
 
@@ -126,8 +148,8 @@ regtest. A local wallet is new to that chain, so it starts at 0.
 
 ### Funding the test wallet
 
-The watch app has no receive screen yet, so take the deposit address or invoice from the phone app with the same
-recovery phrase: restore [the test wallet](#the-test-wallet) in a phone dev build on the same Spark network, read the
+On the local stack, `receive-paid.xml` funds the watch through its own receive QR. Otherwise, or for an on-chain
+deposit, take the deposit address or invoice from the phone app with the same recovery phrase: restore [the test wallet](#the-test-wallet) in a phone dev build on the same Spark network, read the
 Spark deposit address at Settings › Advanced › Lightning Connections › Spark (`SparkDepositAddress`), fund it, then
 close the phone app before you start the watch again. Two live Spark instances on one seed are unsafe (#2152), so never
 keep both open.
@@ -253,6 +275,58 @@ adb shell input keyevent KEYCODE_ENTER
 
 Tapping a filled field puts the cursor where you tapped, so deleting with `KEYCODE_DEL` alone leaves part of the word.
 
+## Payments
+
+### Reading the receive invoice
+
+`android layout` cannot read a QR code. Debug builds log the invoice the receive QR shows, in lowercase:
+
+```bash
+adb logcat -d -s BitkitWear | grep -o "Showing invoice '[^']*'" | tail -n 1 | cut -d "'" -f 2
+```
+
+Each new invoice logs a new line (debug builds only; verified on the API 37 emulator), so the last line is the invoice on screen.
+
+### Holding to pay
+
+The review's pay button (`WatchSendHold`) pays only when held for about 1.2 s; a tap does nothing. Hold it with a
+swipe that does not move, for as long as its last argument says, at the `center` that `android layout` gives for the
+button:
+
+```bash
+adb shell input swipe <x> <y> <x> <y> 2000     # held 2 s: the ring fills and the payment goes out
+adb shell input swipe <x> <y> <x> <y> 500      # released after 0.5 s: the ring empties and nothing is paid
+```
+
+### Local invoices
+
+From the bitkit-docker checkout, `./spark invoice <sats>` prints a BOLT11 invoice of Alice's node, which the watch
+pays out of Spark, and `./spark pay <invoice> <sats>` pays a watch invoice from Alice (the amount is needed, the
+watch's invoices are amountless). Hand an invoice to the watch as a link, never by typing it:
+
+```bash
+adb shell am start -a android.intent.action.VIEW -d "lightning:<invoice>" to.bitkit.dev
+```
+
+## Tiles
+
+The system draws a tile, so `android layout` does not list what it shows; check it from a screenshot. Add, show and
+remove the Bitkit tile with the Wear OS debug broadcasts:
+
+```bash
+adb shell am broadcast -a com.google.android.wearable.app.DEBUG_SURFACE --es operation add-tile \
+  --ecn component to.bitkit.dev/to.bitkit.wear.tile.BalanceTileService
+adb shell am broadcast -a com.google.android.wearable.app.DEBUG_SYSUI --es operation show-tile --ei index 0
+adb shell am broadcast -a com.google.android.wearable.app.DEBUG_SURFACE --es operation remove-tile \
+  --ecn component to.bitkit.dev/to.bitkit.wear.tile.BalanceTileService
+```
+
+`add-tile` prints the index the tile took; pass that one to `show-tile` when other tiles are added.
+Wait about 5 s after `show-tile` before a screenshot: an earlier one can catch the watch face mid-transition. The
+Receive edge button is at about (227, 400) on the large screen. Adding the tile again (remove, then add) makes the
+system ask the app for it at once; the app also asks the system to redraw it whenever the balance or the wallet's
+status changes.
+
 ## Watch gestures
 
 Coordinates are pixels. The 227 dp screen is 454 px square (centre 227), the 192 dp screen 384 px (centre 192).
@@ -287,12 +361,20 @@ android screen capture -o shot.png
 ```
 
 Screen recordings, up to 170 s (the recorder stops at 180 s). The recording takes the screen's own size: 454 px
-square on the large emulator, 384 px on the small one.
+square on the large emulator, 384 px on the small one. Start the recorder in the background, run the steps, then
+stop it and wait for it to finish writing before pulling the file: a file pulled while `screenrecord` still writes
+has no `moov` atom and does not play.
 
 ```bash
-adb shell screenrecord --time-limit 170 /sdcard/<name>.mp4
+adb shell 'screenrecord --time-limit 170 /sdcard/<name>.mp4' &
+REC=$!
+# ... run the journey's steps ...
+adb shell pkill -INT screenrecord
+wait "$REC"
+sleep 2
 adb pull /sdcard/<name>.mp4
 adb shell rm /sdcard/<name>.mp4
+grep -q moov <name>.mp4 || echo "<name>.mp4 has no moov atom: record it again"
 ```
 
 The word and passphrase screens record as black frames (`FLAG_SECURE`), which is what `screenshot-blocked.xml`

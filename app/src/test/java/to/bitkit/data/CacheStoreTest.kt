@@ -36,6 +36,40 @@ class CacheStoreTest : BaseUnitTest() {
     fun tearDown() = runBlocking { sut.reset() }
 
     @Test
+    fun `an own spark invoice is known in either case until it expires`() = test {
+        sut.addSparkOwnInvoice("AB12", expiresAt = 2_000, now = 1_000)
+
+        assertTrue(sut.hasSparkOwnInvoice("ab12", now = 1_999))
+        assertTrue(sut.hasSparkOwnInvoice("AB12", now = 1_999))
+        assertFalse(sut.hasSparkOwnInvoice("ab12", now = 2_000))
+        assertFalse(sut.hasSparkOwnInvoice("cd34", now = 1_000))
+    }
+
+    @Test
+    fun `adding an own spark invoice drops the expired ones and keeps those that expire last`() = test {
+        sut.addSparkOwnInvoice("expired", expiresAt = 1_500, now = 1_000)
+        sut.addSparkOwnInvoice("first", expiresAt = 3_000, now = 1_600)
+
+        assertEquals(mapOf("first" to 3_000L), sut.data.first().sparkOwnInvoices)
+
+        repeat(MAX_SPARK_OWN_INVOICES) { sut.addSparkOwnInvoice("hash$it", expiresAt = 3_001L + it, now = 1_600) }
+
+        val kept = sut.data.first().sparkOwnInvoices
+        assertEquals(MAX_SPARK_OWN_INVOICES, kept.size)
+        assertFalse("first" in kept)
+        assertTrue("hash0" in kept)
+    }
+
+    @Test
+    fun `a wallet reset forgets the own spark invoices`() = test {
+        sut.addSparkOwnInvoice("ab12", expiresAt = 2_000, now = 1_000)
+
+        sut.reset()
+
+        assertFalse(sut.hasSparkOwnInvoice("ab12", now = 1_000))
+    }
+
+    @Test
     fun `a spark send attempt drops expired ones and restores the earlier one`() = test {
         sut.setSparkSendAttempt("OLD", attempt = 2, amountSats = 100uL, expiresAt = 1_500, now = 1_000)
         sut.setSparkSendAttempt("hash", attempt = 0, amountSats = 100uL, expiresAt = 3_000, now = 1_000)

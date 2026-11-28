@@ -1,0 +1,23 @@
+<journey name="wear send own invoice guard">
+  <description>
+    The watch refuses to pay an invoice it created itself (the self-send guard, docs/wear.md › Self-send guard): the
+    invoice of its own Receive page, opened as a `lightning:` link on the same watch, ends on "Can't pay own invoice"
+    before any hold. Emulator and physical watch.
+
+    Precondition: Restored wallet on the local ./spark stack with a balance above 0, see
+    journeys/wear/README.md › Local ./spark stack, on the Balance page with the loading ring stopped. Gestures are
+    written for the 454 px screen.
+  </description>
+  <actions>
+    <action>Swipe the pager left once: `adb shell input swipe 400 227 60 227 300`</action>
+    <action>Tap "WatchReceiveOpen"</action>
+    <action>Wait up to 10 s until `adb shell uiautomator dump` lists "WatchReceiveQr" (README, top)</action>
+    <action>Read the invoice from the log as in README › Reading the receive invoice and note it as &lt;invoice&gt;</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;invoice&gt;" to.bitkit.dev`</action>
+    <action>Wait up to 10 s until "WatchSendError" is listed</action>
+    <action>Verify "WatchSendError" reads "Can't pay own invoice"</action>
+    <action>Verify "WatchSendHold" is not listed</action>
+    <action>Tap "WatchSendClose"</action>
+    <action>Verify Home is back on the Receive page it was left on: "WatchReceiveOpen" is listed</action>
+  </actions>
+</journey>

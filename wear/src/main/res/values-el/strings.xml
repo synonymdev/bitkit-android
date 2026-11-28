@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about__title">Σχετικά</string>
+    <string name="activity__empty">Καμία δραστηριότητα</string>
+    <string name="activity__received">Ελήφθη</string>
+    <string name="activity__sent">Στάλθηκε</string>
+    <string name="activity__status_completed">Ολοκληρώθηκε</string>
+    <string name="activity__status_failed">Απέτυχε</string>
+    <string name="activity__status_pending">Εκκρεμεί</string>
+    <string name="activity__title">Δραστηριότητα</string>
     <string name="common__next">Επόμενο</string>
     <string name="common__ok">ΟΚ</string>
     <string name="common__retry">Δοκιμάστε Ξανά</string>
@@ -11,6 +18,12 @@
     <string name="home__offline">Εκτός σύνδεσης</string>
     <string name="home__toggle_unit">Αλλαγή μονάδας</string>
     <string name="onboarding__restore">Επαναφορά</string>
+    <string name="receive__error">Αποτυχία τιμολογίου</string>
+    <string name="receive__hidden">QR κρυφό</string>
+    <string name="receive__new">Νέο τιμολόγιο</string>
+    <string name="receive__paid">Πληρώθηκε</string>
+    <string name="receive__show">Εμφάνιση QR</string>
+    <string name="receive__title">Λήψη</string>
     <string name="removed__title">Το πορτοφόλι αφαιρέθηκε</string>
     <string name="restore__checksum_review">Έλεγχος</string>
     <string name="restore__checksum_title">Μη έγκυρη φράση</string>
@@ -30,6 +43,27 @@
     <string name="restore__word_no_match">Καμία αντιστοιχία</string>
     <string name="restore__word_placeholder">Λέξη %1$d</string>
     <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="send__amount_confirm">Συνέχεια</string>
+    <string name="send__amount_placeholder">Ποσό</string>
+    <string name="send__amount_range">%1$s – %2$s</string>
+    <string name="send__error_already_paid">Ήδη πληρωμένο</string>
+    <string name="send__error_busy">Το πορτοφόλι είναι απασχολημένο</string>
+    <string name="send__error_expired">Το τιμολόγιο έληξε</string>
+    <string name="send__error_failed">Η πληρωμή απέτυχε</string>
+    <string name="send__error_insufficient">Ανεπαρκές υπόλοιπο</string>
+    <string name="send__error_invalid">Μη έγκυρο τιμολόγιο</string>
+    <string name="send__error_not_ready">Το πορτοφόλι δεν είναι έτοιμο</string>
+    <string name="send__error_out_of_range">Εκτός ορίων</string>
+    <string name="send__error_offline">Δεν γίνεται πληρωμή εκτός σύνδεσης</string>
+    <string name="send__error_own_invoice">Δικό σου τιμολόγιο</string>
+    <string name="send__error_unsupported">Δεν υποστηρίζεται</string>
+    <string name="send__fee">Χρέωση %1$s</string>
+    <string name="send__hold">Κράτα για πληρωμή</string>
+    <string name="send__pay">Πληρωμή</string>
+    <string name="send__pending">Εκκρεμεί</string>
+    <string name="send__sent">Στάλθηκε</string>
+    <string name="send__unknown">Δες τη δραστηριότητα</string>
+    <string name="send__waiting">Αναμονή για δίκτυο</string>
     <string name="settings__remove_wallet">Αφαίρεση πορτοφολιού</string>
     <string name="settings__remove_wallet_confirm_title">Αφαίρεση πορτοφολιού;</string>
     <string name="settings__remove_wallet_failed">Αδυναμία αφαίρεσης πορτοφολιού</string>

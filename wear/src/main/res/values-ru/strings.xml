@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about__title">О приложении</string>
+    <string name="activity__empty">Нет активности</string>
+    <string name="activity__received">Получено</string>
+    <string name="activity__sent">Отправлено</string>
+    <string name="activity__status_completed">Завершено</string>
+    <string name="activity__status_failed">Ошибка</string>
+    <string name="activity__status_pending">В ожидании</string>
+    <string name="activity__title">Активность</string>
     <string name="common__next">Далее</string>
     <string name="common__ok">ОК</string>
     <string name="common__retry">Повторить</string>
@@ -11,6 +18,12 @@
     <string name="home__offline">Нет сети</string>
     <string name="home__toggle_unit">Сменить единицу</string>
     <string name="onboarding__restore">Восстановить</string>
+    <string name="receive__error">Счёт не создан</string>
+    <string name="receive__hidden">QR скрыт</string>
+    <string name="receive__new">Новый счёт</string>
+    <string name="receive__paid">Оплачено</string>
+    <string name="receive__show">Показать QR</string>
+    <string name="receive__title">Получить</string>
     <string name="removed__title">Кошелёк удалён</string>
     <string name="restore__checksum_review">Проверить</string>
     <string name="restore__checksum_title">Неверная фраза</string>
@@ -32,6 +45,27 @@
     <string name="restore__word_no_match">Нет совпадений</string>
     <string name="restore__word_placeholder">Слово %1$d</string>
     <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="send__amount_confirm">Далее</string>
+    <string name="send__amount_placeholder">Сумма</string>
+    <string name="send__amount_range">%1$s – %2$s</string>
+    <string name="send__error_already_paid">Уже оплачен</string>
+    <string name="send__error_busy">Кошелёк занят</string>
+    <string name="send__error_expired">Счёт истёк</string>
+    <string name="send__error_failed">Платёж не прошёл</string>
+    <string name="send__error_insufficient">Недостаточно средств</string>
+    <string name="send__error_invalid">Неверный счёт</string>
+    <string name="send__error_not_ready">Кошелёк не готов</string>
+    <string name="send__error_out_of_range">Вне диапазона</string>
+    <string name="send__error_offline">Нельзя платить офлайн</string>
+    <string name="send__error_own_invoice">Это ваш счёт</string>
+    <string name="send__error_unsupported">Не поддерживается</string>
+    <string name="send__fee">Комиссия %1$s</string>
+    <string name="send__hold">Удерживайте для оплаты</string>
+    <string name="send__pay">Оплатить</string>
+    <string name="send__pending">В ожидании</string>
+    <string name="send__sent">Отправлено</string>
+    <string name="send__unknown">Проверьте активность</string>
+    <string name="send__waiting">Ожидание сети</string>
     <string name="settings__remove_wallet">Удалить кошелёк</string>
     <string name="settings__remove_wallet_confirm_title">Удалить кошелёк?</string>
     <string name="settings__remove_wallet_failed">Не удалось удалить кошелёк</string>

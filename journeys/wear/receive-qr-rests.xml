@@ -1,0 +1,21 @@
+<journey name="wear receive qr rests">
+  <description>
+    A receive QR that is not touched for 2 min rests: it hides behind the dimmed QR icon and stops holding the screen
+    on at full brightness; a tap anywhere on the screen shows it again. Emulator and physical watch.
+
+    Precondition: Restored wallet on the local ./spark stack, see journeys/wear/README.md › Local ./spark stack and
+    › Restored wallet, on the Balance page with the loading ring stopped, and the always-on screen on (README › Watch
+    gestures). Gestures are written for the 454 px screen; scale them as in README › What differs. Once the QR rests
+    the watch may go to ambient mode, which shows the same icon; the tap then wakes the watch, which shows the QR too.
+  </description>
+  <actions>
+    <action>Swipe the pager left once: `adb shell input swipe 400 227 60 227 300`</action>
+    <action>Tap "WatchReceiveOpen"</action>
+    <action>Wait up to 10 s until `adb shell uiautomator dump` lists "WatchReceiveQr" (README, top)</action>
+    <action>Wait 125 s without touching the watch</action>
+    <action>Verify "WatchReceiveHidden" is listed with the content-desc "QR hidden"</action>
+    <action>Tap "WatchReceiveHidden"</action>
+    <action>Wait up to 5 s until "WatchReceiveHidden" is not listed</action>
+    <action>Verify from a screenshot that a black-on-white QR code fills the middle of the screen</action>
+  </actions>
+</journey>

@@ -529,10 +529,38 @@ class SparkRepo @Inject constructor(
     /** A withdrawal's debit already holds its fees, so it is weighed against the whole balance. */
     fun canWithdraw(debitSats: ULong): Boolean = _state.value.isReady && _state.value.balanceSats >= debitSats
 
+    /**
+     * Creates a Spark invoice and remembers it as this wallet's own, which [isOwnInvoice] then recognises. An invoice
+     * that cannot be read or remembered is not handed out.
+     */
     suspend fun createInvoice(amountSats: ULong?, description: String, expirySecs: UInt): Result<String> =
         withContext(bgDispatcher) {
-            runSuspendCatching { sparkService.receiveBolt11(amountSats, description, expirySecs) }
+            runSuspendCatching {
+                sparkService.receiveBolt11(amountSats, description, expirySecs).also { rememberOwnInvoice(it) }
+            }
         }
+
+    private suspend fun rememberOwnInvoice(bolt11: String) {
+        val invoice = sparkService.invoiceDetails(bolt11) ?: throw SparkError.InvoiceUnreadable()
+        val expiresAt = SparkService.invoiceExpiresAt(invoice.timestamp, invoice.expiry)
+        cacheStore.addSparkOwnInvoice(invoice.paymentHash, expiresAt.toEpochSeconds(), clock.now().epochSeconds)
+    }
+
+    /**
+     * Whether [bolt11], with [paymentHash] in hex, pays this Spark wallet: an unexpired invoice this wallet remembers
+     * creating, or one that carries this wallet's Spark address. Remembered invoices that cannot be read count as
+     * own, so the invoice is refused instead of paid unchecked. The second check needs Spark connected and is skipped
+     * without it, as on a build or network without Spark. An invoice a paired watch created is known only once its
+     * hash was added to the cache.
+     */
+    suspend fun isOwnInvoice(bolt11: String, paymentHash: String): Boolean = withContext(bgDispatcher) {
+        val isRemembered = runSuspendCatching { cacheStore.hasSparkOwnInvoice(paymentHash, clock.now().epochSeconds) }
+            .onFailure { Logger.warn("Failed to read the wallet's own Spark invoices", it, context = TAG) }
+            .getOrDefault(true)
+        isRemembered || runSuspendCatching { sparkService.carriesOwnSparkAddress(bolt11) }
+            .onFailure { Logger.debug("Skipped the Spark address check of an invoice: '${it.message}'", context = TAG) }
+            .getOrDefault(false)
+    }
 
     /** Returns the Lightning routing fee plus Spark's 0.25% service fee for paying [bolt11]. */
     suspend fun estimateFeeSats(bolt11: String, amountSats: ULong?): Result<ULong> = withContext(bgDispatcher) {

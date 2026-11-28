@@ -188,6 +188,70 @@ class SparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an invoice spark creates is remembered as the wallet's own until it expires`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        val created = now.epochSeconds.toULong()
+        val details = mock<Bolt11InvoiceDetails> {
+            on { paymentHash } doReturn "AB12"
+            on { timestamp } doReturn created
+            on { expiry } doReturn 3_600uL
+        }
+        whenever { sparkService.receiveBolt11(null, "", 3_600u) }.thenReturn("lnbcrt1own")
+        whenever { sparkService.invoiceDetails("lnbcrt1own") }.thenReturn(details)
+        whenever { sparkService.carriesOwnSparkAddress(any()) }.thenReturn(false)
+        val sut = createSut(cacheStore = store)
+
+        assertEquals("lnbcrt1own", sut.createInvoice(null, "", 3_600u).getOrThrow())
+
+        assertEquals(mapOf("ab12" to now.epochSeconds + 3_600), store.data.first().sparkOwnInvoices)
+        assertTrue(sut.isOwnInvoice("lnbcrt1own", "ab12"))
+        assertFalse(sut.isOwnInvoice("lnbcrt1other", "cd34"))
+
+        now += 3_600.seconds
+        assertFalse(sut.isOwnInvoice("lnbcrt1own", "ab12"))
+    }
+
+    @Test
+    fun `an invoice spark's parser cannot read is not handed out`() = test {
+        whenever { sparkService.receiveBolt11(null, "", 3_600u) }.thenReturn("lnbcrt1own")
+        whenever { sparkService.invoiceDetails("lnbcrt1own") }.thenReturn(null)
+        val sut = createSut(cacheStore = CacheStore(InMemoryDataStore(AppCacheData()), clock))
+
+        assertIs<SparkError.InvoiceUnreadable>(sut.createInvoice(null, "", 3_600u).exceptionOrNull())
+    }
+
+    @Test
+    fun `an invoice is refused as the wallet's own while its remembered invoices cannot be read`() = test {
+        val store = mock<CacheStore>()
+        whenever { store.hasSparkOwnInvoice(any(), any()) }.doSuspendableAnswer { throw IOException("disk") }
+        whenever { sparkService.carriesOwnSparkAddress(any()) }.thenReturn(false)
+        val sut = createSut(cacheStore = store)
+
+        assertTrue(sut.isOwnInvoice("lnbcrt1other", "cd34"))
+    }
+
+    @Test
+    fun `an invoice that carries this wallet's spark address is its own without being remembered`() = test {
+        whenever { sparkService.carriesOwnSparkAddress("lnbcrt1hint") }.thenReturn(true)
+        whenever { sparkService.carriesOwnSparkAddress("lnbcrt1other") }.thenReturn(false)
+        val sut = createSut(cacheStore = CacheStore(InMemoryDataStore(AppCacheData()), clock))
+
+        assertTrue(sut.isOwnInvoice("lnbcrt1hint", "ab12"))
+        assertFalse(sut.isOwnInvoice("lnbcrt1other", "cd34"))
+    }
+
+    @Test
+    fun `a remembered invoice is the wallet's own while spark is not connected`() = test {
+        val store = CacheStore(InMemoryDataStore(AppCacheData()), clock)
+        store.addSparkOwnInvoice("ab12", now.epochSeconds + 60, now.epochSeconds)
+        whenever { sparkService.carriesOwnSparkAddress(any()) }.doSuspendableAnswer { throw SparkError.NotConnected() }
+        val sut = createSut(cacheStore = store)
+
+        assertTrue(sut.isOwnInvoice("lnbcrt1own", "AB12"))
+        assertFalse(sut.isOwnInvoice("lnbcrt1other", "cd34"))
+    }
+
+    @Test
     fun `imports a restored exit backup once Spark connects`() = test {
         whenever { sparkService.importExitState(any()) }.thenReturn(ImportUnilateralExitStateResponse(2u, 0u, 0u, 0u))
         val sut = createSut()

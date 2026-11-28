@@ -1,9 +1,15 @@
 package to.bitkit.services
 
+import breez_sdk_spark.BitcoinNetwork
+import breez_sdk_spark.Bolt11Invoice
+import breez_sdk_spark.Bolt11InvoiceDetails
+import breez_sdk_spark.Bolt11RouteHint
+import breez_sdk_spark.Bolt11RouteHintHop
 import breez_sdk_spark.ChainApiType
 import breez_sdk_spark.Config
 import breez_sdk_spark.LeafOptimizationConfig
 import breez_sdk_spark.Network
+import breez_sdk_spark.PaymentRequestSource
 import breez_sdk_spark.SendPaymentOptions
 import breez_sdk_spark.SparkConfig
 import breez_sdk_spark.TokenOptimizationConfig
@@ -28,6 +34,11 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SparkServiceTest {
+    private companion object {
+        const val SPARK_IDENTITY = "02698b27ac308b275671b3ca25436346469d04a5bba578ae39feba1d65897a6abc"
+        const val SPARK_PROVIDER_NODE = "0313ee54b3e35eed377248c83e77004972a3807af648a22ea1e8a9d22ef8b9a11c"
+    }
+
     @get:Rule
     val tempFolder = TemporaryFolder()
 
@@ -69,6 +80,22 @@ class SparkServiceTest {
         assertTrue(SparkService.hasSparkAddressHint(listOf(1uL, 17_592_187_092_992_000_001uL)))
         assertFalse(SparkService.hasSparkAddressHint(listOf(1uL, 17_592_187_092_992_000_000uL)))
         assertFalse(SparkService.hasSparkAddressHint(emptyList()))
+    }
+
+    // What SDK 0.28.3 printed on the local regtest Spark stack (2026-11-27) for a wallet whose identity is
+    // SPARK_IDENTITY: an invoice made with Bitkit's settings carries only the provider's channel hint, and one made
+    // with `preferSparkOverLightning` on also carries the Spark address hint, whose node is the identity.
+    @Test
+    fun `an invoice names a spark identity only by its spark address hint`() {
+        val providerHint = hint("026ccad2762df4865753f7adc464acdbb9ae4509d0f2109789b91941cfe0e67261", "1x1026x2")
+        val sparkHint = hint(SPARK_IDENTITY, "16000000x16000000x1")
+
+        assertEquals("16000000x16000000x1", SparkService.sparkAddressHintScid)
+        assertTrue(SparkService.namesSparkIdentity(invoice(providerHint, sparkHint), SPARK_IDENTITY))
+        assertTrue(SparkService.namesSparkIdentity(invoice(providerHint, sparkHint), SPARK_IDENTITY.uppercase()))
+        assertFalse(SparkService.namesSparkIdentity(invoice(providerHint), SPARK_IDENTITY))
+        assertFalse(SparkService.namesSparkIdentity(invoice(providerHint, sparkHint), SPARK_PROVIDER_NODE))
+        assertFalse(SparkService.namesSparkIdentity(invoice(hint(SPARK_IDENTITY, "1x1026x2")), SPARK_IDENTITY))
     }
 
     @Test
@@ -159,6 +186,25 @@ class SparkServiceTest {
         assertNull(config.sparkConfig)
         assertNull(config.watchtowerFeeLadderEnabled)
     }
+
+    private fun hint(srcNodeId: String, shortChannelId: String) = Bolt11RouteHint(
+        listOf(Bolt11RouteHintHop(srcNodeId, shortChannelId, 0u, 0u, 0u, null, null)),
+    )
+
+    private fun invoice(vararg hints: Bolt11RouteHint) = Bolt11InvoiceDetails(
+        amountMsat = null,
+        description = "",
+        descriptionHash = null,
+        expiry = 3_600uL,
+        invoice = Bolt11Invoice("lnbcrt1invoice", PaymentRequestSource(null, null)),
+        minFinalCltvExpiryDelta = 60uL,
+        network = BitcoinNetwork.REGTEST,
+        payeePubkey = SPARK_PROVIDER_NODE,
+        paymentHash = "0a00a78ffbde5c36ad8220a26bb2609347bbf7e7c195622c42b81f088ccf1f6e",
+        paymentSecret = "secret",
+        routingHints = hints.toList(),
+        timestamp = 1_795_827_219uL,
+    )
 
     @Test
     fun `invoices carry no spark address on any network, so every payment is a lightning payment bitkit records`() {

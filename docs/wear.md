@@ -46,8 +46,8 @@ Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only
 - **Play services components.** The Breez SDK's dependencies bring Play services' sign-in and credential
   components into the manifest: three activities and two services, one of them exported
   (`RevocationBoundService`). The watch app uses none of them, so its manifest removes them
-  (`tools:node="remove"`), and the merged manifest lists only `MainActivity` and the androidx startup and profile
-  components. The libraries themselves stay on the classpath, since Breez's classes load them.
+  (`tools:node="remove"`), and the merged manifest lists only `MainActivity`, the balance tile's service and the
+  androidx startup and profile components. The libraries themselves stay on the classpath, since Breez's classes load them.
 - **Main thread.** Nothing reads the disk, the network or a system service on the main thread at launch or while
   a screen composes. `NetworkMonitor`, `DeviceLock` and `NfcMonitor` are created empty and register with the system
   on the IO dispatcher; the HTTP client, the settings file and the seed directory are opened on first use there.
@@ -64,17 +64,23 @@ Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only
 - `security`: `SeedStore` with its Keystore-backed implementation, `SeedKey` (the AndroidKeyStore seam), `DeviceLock`
   (screen lock state) and `Bip39`, the one interface every BIP39 call goes through. `CoreBip39` backs it with
   bitkit-core, as on the phone.
-- `services/WatchSparkService`: connect, disconnect, sync, info and storage wipe, with the phone's SDK settings and
-  the local regtest fixture. Payments, and the idempotency keys they use, come with PR 2.
+- `services`: `WatchSparkService` (connect, disconnect, sync, info, storage wipe, invoices, sends and the payment
+  list, with the phone's SDK settings and the local regtest fixture), `SparkSendKey` (the idempotency keys of
+  sends, a copy of the phone's), `InputDecoder` (bitkit-core's reader of payment inputs) and `SelfSendGuard`.
 - `repositories`: `WalletRepo` (wallet state and balance, restore, start, lock, background and network handling,
-  wipe and its recovery at launch) and `CurrencyRepo` (Blocktank rates and the unit shown first).
-- `data`: `SettingsStore` (display settings and the wipe's notes, with `WipeMarker` for the note itself), the rates
+  wipe and its recovery at launch), `PaymentsRepo` (receive, read an input, price, send, recent payments; see
+  Payments) and `CurrencyRepo` (Blocktank rates and the unit shown first).
+- `data`: `SettingsStore` (display settings and the wipe's notes, with `WipeMarker` for the note itself),
+  `OwnInvoiceStore` (the invoices this wallet created, in the settings file), the rates
   client, `NetworkMonitor` (`ConnectivityManager`'s default network, online once the system validated it),
   `NfcMonitor` (the NFC adapter's state) and `ForegroundMonitor` (the process lifecycle: whether the app is on
   screen).
+- `tile`: `BalanceTileService` (the balance tile), `TileState` (what it shows) and `TileUpdates` (asks the system
+  to draw it again). See Tile below.
 - `ui`: one `MainActivity` with `testTagsAsResourceId`, a `SwipeDismissableNavHost` with the routes Onboarding,
-  the Restore graph, Wallet removed, Home, About and Not supported, and the M3 Expressive theme (black background,
-  Brand orange, Inter Tight). The splash screen stays while the first screen is picked, for at most about a second;
+  the Restore graph, Wallet removed, Home, About, Receive QR, Send, Activity detail and Not supported, and the M3
+  Expressive theme (black background, Brand orange, Inter Tight). `LaunchRequest` reads what an intent asks for
+  beyond opening the app: a payment link or the tile's Receive. The splash screen stays while the first screen is picked, for at most about a second;
   after that the loading ring shows until it is. When the wallet storage cannot be recovered at launch, the start
   error (`WatchStartError` with `WatchStartRetry`) shows instead of a first screen.
 
@@ -86,9 +92,9 @@ On-screen copy stays short: a title or one line of at most about six words per s
 ## Screens and visual system
 
 - **Home pager.** Home is a horizontal pager (`HorizontalPagerScaffold` with a page indicator) that opens on the
-  Balance page; Settings is the next page. `HOME_PAGES` in `HomePage.kt` lists the pages in swipe order, so a page
+  Balance page; Receive, Activity and Settings follow, in that order. `HOME_PAGES` in `HomePage.kt` lists the pages in swipe order, so a page
   is added in one line. The pager leaves the left edge of the first page to swipe-to-dismiss, which leaves the app.
-  There is no Send page or button: a send starts from outside the app (phone handoff, NFC or a `lightning:` link).
+  There is no Send page or button: a send starts from outside the app (phone handoff, NFC or a payment link).
   The pager composes only the page on screen, so Home itself, above the pager, leaves for onboarding or the Wallet
   removed notice when the wallet's state says the wallet is gone. A removal therefore reaches the wearer on any
   page, also when the Settings page that asked for it was swiped away meanwhile.
@@ -147,12 +153,103 @@ On-screen copy stays short: a title or one line of at most about six words per s
   disconnected, the app keeps hold of it so the next lock, pause or wipe tries again: each of them disconnects
   whatever the wallet's status says, as does a start that finds the watch locked. Ambient mode is not the
   background: the app stays on screen and connected.
+- **Receive.** The Receive page is one large round QR button (`WatchReceiveOpen`); it has no amount entry. It opens
+  the receive QR (`WatchReceiveQr`): an amountless invoice, uppercased so the code uses QR's alphanumeric mode, black
+  on white with the standard four-module quiet zone, error correction L, filling the largest square inside the round
+  screen (1/√2 of its width). Each module is one bitmap pixel scaled up without smoothing (zxing, as on the phone).
+  While the QR shows, the screen stays on at full brightness; both end when it leaves. After 2 min without a touch
+  the QR rests: it hides behind the dimmed QR icon (`WatchReceiveHidden`, "Show QR") and the screen may turn off
+  again, so a forgotten QR does not hold the screen at full brightness; a tap anywhere on that screen, or waking the watch from
+  ambient mode, shows it for another 2 min. The invoice is made once the
+  wallet is ready, under the loading ring; a failure shows one line and a retry (`WatchReceiveError`,
+  `WatchReceiveRetry`). An invoice is replaced by a new one a minute before it expires, and it stays on screen until
+  the new one exists; a replacement that fails is tried again every 5 s meanwhile, and when none exists by then, the
+  loading ring, or the error, takes its place as it expires. A replaced invoice is still watched until it expires, so
+  a payer who scanned the earlier QR gets the check too. An
+  invoice shows for at least 30 s, also when the watch's clock runs ahead. Paid, the QR turns into a
+  check with the amount (`WatchReceivePaid`, `WatchReceivePaidAmount`) and a firm click (the `LongPress` haptic), unlike
+  the confirm pattern that ends a send; a tap on the check shows a new invoice. In ambient mode the QR is replaced by
+  a dimmed QR icon (`WatchReceiveHidden`), and an invoice paid meanwhile shows the check dimmed and without the
+  amount, with the same haptic, so the always-on screen shows no amount; the amount shows once the watch wakes. Debug builds log each invoice shown (`Showing invoice`), which is how the
+  journeys read it.
+- **Tile.** The Bitkit tile (`BalanceTileService`) uses the tiles and ProtoLayout Material 3 libraries: a primary
+  layout with the balance in the main slot and an edge button below. With a wallet it shows the balance in bitcoin
+  (white, as on the Balance page) and a round Brand orange edge button with the QR icon ("Receive" to accessibility
+  services), which opens the app on the receive QR: the launch intent carries the extra `to.bitkit.wear.OPEN` with
+  `receive`, which `LaunchRequest` reads as `Receive`, and the receive QR opens above Home, as a payment link's send
+  does. Without a wallet it shows the Bitkit mark and a "Restore" edge button that opens the app. Tiles cannot use
+  the app's fonts, so the balance is in the system font.
+  - The tile only reads `WalletRepo`'s state in memory and never starts the wallet, so the balance shows only once
+    the app loaded it in this process and a sync confirmed it, as on the Balance page; until then, and while the
+    watch is locked, the dimmed mark stands in for it. A removed wallet shows the signed-out tile at once.
+  - `TileUpdates`, started by `WearApp`, asks the system to draw the tile again whenever the balance shown or the
+    wallet's status changes, and once when the process starts, so a tile drawn by an earlier process drops a balance
+    the new one has not loaded. Each tile is fresh for 15 min, after which the system asks again; a tile drawn just
+    before the process died can show the last balance until then.
+  - Privacy: the tile shows the balance on the tile carousel, so it hides it while the wallet is disconnected
+    because the watch locked (`WalletStatus.Locked`). Tiles have no ambient mode: in ambient the system shows the watch face, so the app's rule that the always-on screen
+    shows no amount holds without code in the tile. The tile carries no secret: the receive invoice is made by the
+    app after the tap, never by the tile.
+  - The tile picker shows `tile_preview` (a drawing of the balance and the Receive button, no real amount).
+    `tile_logo` and `tile_logo_dim` are the mark's letters and dot without its black outline, the dim one at 40%
+    opacity baked into its colours, since a tile image cannot be drawn half transparent or tinted per path.
+- **Send.** There is no Send page or button. A `bitcoin:`, `BITCOIN:`, `lightning:`, `LIGHTNING:`, `lnurl:`,
+  `lnurlp:` or `spark:` link opens the app, as on the phone (Android matches schemes case-sensitively, and QR codes
+  often use the uppercase ones). `lnurlw:` and `lnurlc:` (LNURL withdraw and channel) are not taken: the watch only
+  pays. `PaymentsRepo.parse` drops `lightning:`, `lnurl:` and `lnurlp:` before decoding, as the phone's scanner
+  does, reads a LUD-17 `lnurlp://host/path` as `https://host/path` (`http` for an onion host) and lowercases an
+  all-uppercase payload. A link opens the send flow above Home (`MainActivity` is `singleTop`, so a link reaches the
+  open app); without a wallet, during the restore, or while a send is under way, the link is dropped. The flow waits
+  for the wallet to be ready (the loading ring), reads the input and prices the send (see Payments), all before the
+  hold. An input
+  without an amount, an amountless invoice, a Spark address or an LNURL with a range, gets a minimal amount entry
+  (the number keyboard, the LNURL range below it); Receive never has one.
+  - Review: the amount in the balance's large style, fiat below in the small style, the fee only when it is at
+    least 1 % of the amount, and one line naming the payee when the input names one. The pay button is the edge
+    button, "Hold to pay" (`WatchSendHold`).
+  - Hold to pay: holding the button fills a ring around the bezel (`HoldToPayRing`, the geometry of `BezelLoading`)
+    over 1.2 s, with a light tick (`SegmentTick`) at each quarter and the confirm haptic at the end, and only then
+    the payment goes out. Releasing early empties the ring; a tap never pays. While the wallet connects, locks or
+    pauses, the button is disabled under the loading ring.
+  - Offline: the app pays only online. A wallet that is offline (`WalletStatus.Offline`) while a request is open and
+    its send has not started (on arrival, while it is read or priced, on the amount entry or on review before the
+    hold completes) ends the flow on its own refusal, `SendStep.Offline`: the crossed-out cloud, "Can't pay
+    offline" (`WatchSendOfflineError`), the reject haptic and OK (`WatchSendClose`), which closes the flow. The
+    request is dropped, never kept to pay when the network returns, so nothing (QuickPay included) pays it later.
+    Once the hold completed and the send started, going offline changes nothing: the send keeps its pending or
+    unknown outcome.
+    `PaymentsRepo.skipConfirmation` is asked before the hold; it is always false until QuickPay (PR 3).
+  - Screen readers: a screen reader's wearer cannot hold, and the button's click pays nothing, so the button
+    offers "Pay" as a custom accessibility action, picked from the actions menu, and as its long click (a double
+    tap and hold); both only while the hold is enabled. `SendReviewTest` checks the three; the actions menu of
+    TalkBack on a watch has not been tried on a device. The Receive button reads "Receive".
+  - Ambient: the amount entry, the review and the result are replaced by a dimmed bolt (`WatchSendHidden`), so
+    the always-on screen shows no amount; the hold starts over when the watch wakes.
+  - Sending: the loading ring, with "Waiting for network" after 3 s. The screen stays on and the flow cannot be
+    swiped away or left with Back while the send runs.
+  - Result: sent shows a check, "Sent" and the amount with the confirm haptic, and closes after 2 s. A payment that
+    did not settle in time, or one that was already under way, from the watch or the phone, shows a clock and
+    "Pending"; an outcome Spark could not report shows "Check activity", never a failure; both close after 3 s. The
+    amount is the one Spark paid. A request that was not sent because another send still holds the wallet shows
+    "Wallet busy" as a failure, never "Pending"; the request whose own stalled call Spark still holds shows "Pending",
+    since that call may still pay. A refusal or a failure shows a cross, one line of at most four words and
+    an OK button (`WatchSendError`, `WatchSendClose`), with the reject haptic. Insufficient funds, an expired or
+    unreadable invoice and an own invoice end there before any hold.
+- **Activity.** The Activity page lists the newest 20 payments from Spark's local list: a direction icon (or a
+  clock for pending, a cross for failed), the amount with its sign and how long ago (`WatchActivityItem-0` onwards).
+  It is read when Spark connects and after every payment or sync, and the last list stays while Spark is
+  disconnected, with its times counted again every minute; a list just read counts from its own time. A tap opens the detail: the amount, the fee of a send, the
+  date and time and the status (`WatchActivityDetailAmount`, `…Fee`, `…Time`, `…Status`); Spark's list carries no payee or description. With no
+  payments it shows a dimmed icon and "No activity" (`WatchActivityEmpty`). A detail whose payment the list does not
+  hold, while it loads or after newer payments pushed it out, shows the dimmed icon (`WatchActivityDetailMissing`).
+  Ambient mode hides the amounts.
 - **Settings.** A short list of icon rows: About and Remove wallet. The unit has no setting: tapping the balance is
   the only way to switch it, and the choice is kept in the settings store across restarts. Remove wallet asks with a
   one-line title and the two round ✕/✓ buttons.
 - **Loading.** Every wait shows `BezelLoading`: an indeterminate ring around the screen edge (test tag
   `BezelLoading`), with the screen's content readable inside it. It covers connecting and syncing on Balance, saving
-  the restored wallet, and removing the wallet. It is hidden in ambient mode. Accessibility services report only
+  the restored wallet, removing the wallet, making an invoice, the first activity list, and a send being read,
+  priced and sent. It is hidden in ambient mode. Accessibility services report only
   content that no node above it covers, so the full-screen ring has no semantics; its one progress node
   (`BezelLoading`) is a stroke-sized spot at the top of the ring, and the content beneath stays reachable by TalkBack
   and `android layout`. `BezelPadding` and `BezelStrokeWidth` hold the ring's padding and stroke for other edge
@@ -161,6 +258,108 @@ On-screen copy stays short: a title or one line of at most about six words per s
   Tight; content centered inside the round screen and clear of the time; icons rather than labels where the icon is
   clear; no stacked button lists. Icon and text buttons morph their shape on press and the theme uses the expressive
   (spring) motion scheme. Icons are vector drawables in `res/drawable`, with no icon library.
+
+## Payments
+
+`PaymentsRepo` holds every payment rule; the screens only show what it returns. Everything that reaches Spark needs
+the wallet connected and synced (`WalletStatus.Ready`): no invoice is made, nothing is priced and nothing is sent
+in any other state.
+
+- **Receive.** An amountless BOLT11 invoice from Spark, valid for one hour. The receive screen waits for its
+  payment, which arrives as an SDK event; Spark's payment list is read at the start of the wait and after every
+  sync, so a payment that landed while the wallet was disconnected is found too.
+- **Inputs.** A BOLT11 invoice, an LNURL-pay link, a Lightning address and a BIP21 URI with a `lightning`
+  parameter are read by bitkit-core, as on the phone. A Spark address is read by the Breez SDK's parser, since
+  bitkit-core has no such type; only text with the shape of a Spark address is handed to it, because the SDK's
+  parser may look other text up on the network. On-chain addresses and every other input are refused.
+- **Pricing.** Before the hold to pay, a send is priced by Spark and checked: the amount (an amountless invoice
+  and a Spark address need one, an LNURL amount has to be in the service's range), expiry, the self-send guard, and
+  the balance against the amount plus its fee. The invoice an LNURL service returns has to be for exactly the
+  amount asked, to the millisat as Spark reads it.
+- **Sending.** A send runs in the repository's own scope, so the screen that started it cannot cancel it, also not
+  by closing, and one send runs at a time. An invoice's send first syncs with Spark, for up to 20 s, and is
+  refused when the sync does not reach Spark. The call returns when Spark has the payment; a call that stalls for
+  a minute ends as an unknown outcome, and nothing else is sent until Spark returns that call: another request is
+  refused as busy (`SendError.Busy`, "Wallet busy"), since nothing of it went out, and the same request (the same
+  invoice, or a transfer to the same Spark wallet) is reported as under way (`SendError.InFlight`, "Pending"). The result then waits
+  up to a minute for the payment to settle and reports it as pending after that. A lock, a pause or a wipe waits up to 10 s for a send before it
+  disconnects, from the moment the send is noted until Spark returns its call; a wallet that is disconnected before
+  Spark got the call, or wiped before the note was written, sent nothing: "Wallet not ready", and no note stays. The send screen keeps the screen on, so the app stays on screen and connected while it waits.
+  **Known gap:** a wearer who leaves the app during that wait pauses the wallet 10 s later (see Background); the
+  settlement is then not seen and the send reports pending after the minute, although it may have completed. The
+  activity list shows the real state once the app is back.
+- **LNURL.** LNURL-pay and Lightning addresses are covered by unit tests only: the local stack's LNURL server serves
+  only addresses its own wallets registered, so no journey pays one.
+- **Paying once.** An invoice is sent under an idempotency key derived from the wallet seed, the payment hash and
+  the attempt number (`SparkSendKey`, the same derivation as the phone and iOS). Spark makes one transfer per key,
+  so the same invoice sent from the watch and the phone, or twice from the watch, is paid once. Before each send
+  the wallet syncs and Spark's payment list is read: an invoice it shows paid or pending is not sent again, and
+  each attempt it shows failed moves the send to the next key. A sync that does not reach Spark, or a list that
+  cannot be read, refuses the send.
+- **Spark addresses.** A Spark address has no payment hash to derive a key from, so its transfer goes out under a
+  random key. `UncertainSendStore`, in the settings file the wipe clears, notes every send before it goes out and
+  drops it once Spark shows its payment or refuses it unsent. A transfer is noted under the Spark identity public
+  key its address encodes, which the `sp…` and the `spark…` spelling of one wallet's address share. A transfer whose
+  outcome was never learned, also because the app was closed during it, keeps its key there: the next send to the
+  same wallet syncs and asks Spark's list about every transfer noted for it. A transfer the list shows completed is not sent again ("Already paid", once), one it shows pending
+  is "Pending", one it shows failed makes way for a new key, and one it does not show goes out again under the
+  same key, which pays once. Without a sync that reaches Spark, nothing is sent to that address.
+- **Reused key on a Spark address.** That a reused key pays once also for a transfer to a Spark address was read
+  from the SDK's source at tag 0.28.3, not tried against the operators. `SendPaymentRequest.idempotency_key` is
+  documented for "all Spark based transfers": a reused key returns the same payment, and the payment's id is the key.
+  `orchestrate_send` first returns the payment its local storage holds under the key. Otherwise the key is the
+  transfer id handed to the operators (`send/spark_address.rs`, `TransferService.send_transfer_inner`), and when
+  they refuse the submission, as for an id they already hold ("a transfer id is single-use"),
+  `recover_committed_transfer` asks them for that id and returns the earlier transfer. The one part the source
+  cannot show is that the operators refuse a second submission of an id. The watch does not lean on it alone: a
+  transfer goes out again under its key only after a sync that reached Spark shows no payment under it, and any
+  error on that send is "unknown" with the note kept, never a new key.
+- **Unknown outcome.** When the send call fails or stalls after Spark may have taken the payment and Spark's list
+  does not show it, the result is "unknown", never "failed". The activity list tells once Spark lists it, and
+  sending the same request again from the watch goes out under the same key, so it cannot pay twice. A refusal
+  (expired, not enough funds) that follows an attempt of unknown outcome under the same key is "unknown" too, also
+  after the app was closed: the earlier attempt may have paid. An invoice's note is kept until a day after the
+  invoice expired.
+- **Known gap: the phone's attempts.** The phone picks an invoice's attempt number from its own record of sends
+  plus Spark's list; the watch has Spark's list alone and cannot read the phone's record until the two are paired
+  (PR 4). The two agree whenever the watch's synced list shows the phone's sends, which is why a send needs a sync
+  that reached Spark. Should Spark's operators not report an attempt of the phone, the watch can derive another
+  attempt number than the phone: when the phone's attempt failed before it reached the operators and its next
+  attempt is in flight, unseen by the watch's sync, the watch's send under the first key is a second payment of
+  the invoice. The same holds the other way round for a send of unknown outcome on the watch that the phone's list
+  does not show. A transfer to a Spark address has no shared key at all: the phone and the watch each pay it when
+  asked. Pairing closes both by sharing the send records.
+- **QuickPay.** `PaymentsRepo.skipConfirmation` is the one place that decides whether a send skips the hold to
+  pay. It is always false until the watch has QuickPay settings (PR 3).
+
+### Self-send guard
+
+The phone and the watch share one Spark wallet, so neither may pay a request the other, or itself, created. Both
+refuse with "Cannot Pay Own Invoice". Two checks recognise such a request:
+
+- **Spark identity.** Both devices have the wallet's Spark identity public key (`getInfo().identityPubkey`). A
+  Spark address encodes it, and a BOLT11 invoice carries it as the node of a route hint hop with the short
+  channel id 17592187092992000001 (`16000000x16000000x1`) when the wallet that made it had the SDK's
+  `preferSparkOverLightning` on.
+- **Payment hash.** Each device remembers the payment hashes of the invoices it created on Spark until they
+  expire, at most 200 on the watch and 2 000 on the phone, whose invoices live a day, and refuses to pay them. An
+  invoice that cannot be remembered is not handed out, and the phone refuses an invoice while it cannot read the
+  ones it remembers. The watch keeps them in its settings file, which the wallet's wipe
+  clears (`OwnInvoiceStore`); the phone keeps them in its cache store (`sparkOwnInvoices`).
+
+The second check exists because Bitkit creates its invoices with `preferSparkOverLightning` off: such an invoice
+names Spark's provider node as its payee and one of that node's channels as its only route hint, which every Spark
+wallet's invoices share, and nothing in it tells whose it is. This was read from invoices made with SDK 0.28.3 on
+the local regtest stack on 2026-11-27: with the setting off the invoice had the provider's hint alone, and with it
+on it gained the hint above, whose node equalled the identity key. The SDK itself prices a payment of the wallet's
+own invoice without complaint.
+
+**Known gap.** A device does not know the invoices the other one created: the watch pays an invoice the phone made,
+and the phone one the watch made, until the two share their hashes. Both stores take hashes from outside
+(`OwnInvoiceStore.add`, `CacheStore.addSparkOwnInvoice`), which the pairing work (PR 4) uses to merge them. An
+unpaired watch has no way to learn the phone's invoices. The watch runs the guard when an input is read, if the
+wallet is ready then, and always before a send is priced, also on the invoice an LNURL service returns; a guard
+that cannot tell refuses the send.
 
 ## Seed storage
 

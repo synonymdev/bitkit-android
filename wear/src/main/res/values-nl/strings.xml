@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about__title">Over</string>
+    <string name="activity__empty">Geen activiteit</string>
+    <string name="activity__received">Ontvangen</string>
+    <string name="activity__sent">Verzonden</string>
+    <string name="activity__status_completed">Voltooid</string>
+    <string name="activity__status_failed">Mislukt</string>
+    <string name="activity__status_pending">In behandeling</string>
+    <string name="activity__title">Activiteit</string>
     <string name="common__next">Volgende</string>
     <string name="common__ok">OK</string>
     <string name="common__retry">Opnieuw proberen</string>
@@ -11,6 +18,12 @@
     <string name="home__offline">Offline</string>
     <string name="home__toggle_unit">Eenheid wisselen</string>
     <string name="onboarding__restore">Herstellen</string>
+    <string name="receive__error">Factuur niet gemaakt</string>
+    <string name="receive__hidden">QR verborgen</string>
+    <string name="receive__new">Nieuwe factuur</string>
+    <string name="receive__paid">Betaald</string>
+    <string name="receive__show">QR tonen</string>
+    <string name="receive__title">Ontvangen</string>
     <string name="removed__title">Wallet verwijderd</string>
     <string name="restore__checksum_review">Controleren</string>
     <string name="restore__checksum_title">Ongeldige zin</string>
@@ -30,6 +43,27 @@
     <string name="restore__word_no_match">Geen overeenkomst</string>
     <string name="restore__word_placeholder">Woord %1$d</string>
     <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="send__amount_confirm">Doorgaan</string>
+    <string name="send__amount_placeholder">Bedrag</string>
+    <string name="send__amount_range">%1$s – %2$s</string>
+    <string name="send__error_already_paid">Al betaald</string>
+    <string name="send__error_busy">Wallet bezet</string>
+    <string name="send__error_expired">Factuur verlopen</string>
+    <string name="send__error_failed">Betaling mislukt</string>
+    <string name="send__error_insufficient">Onvoldoende saldo</string>
+    <string name="send__error_invalid">Ongeldige factuur</string>
+    <string name="send__error_not_ready">Wallet niet gereed</string>
+    <string name="send__error_out_of_range">Buiten bereik</string>
+    <string name="send__error_offline">Betalen kan niet offline</string>
+    <string name="send__error_own_invoice">Eigen factuur</string>
+    <string name="send__error_unsupported">Niet ondersteund</string>
+    <string name="send__fee">Kosten %1$s</string>
+    <string name="send__hold">Houd vast om te betalen</string>
+    <string name="send__pay">Betalen</string>
+    <string name="send__pending">In behandeling</string>
+    <string name="send__sent">Verzonden</string>
+    <string name="send__unknown">Bekijk activiteit</string>
+    <string name="send__waiting">Wachten op netwerk</string>
     <string name="settings__remove_wallet">Wallet verwijderen</string>
     <string name="settings__remove_wallet_confirm_title">Wallet verwijderen?</string>
     <string name="settings__remove_wallet_failed">Wallet verwijderen mislukt</string>

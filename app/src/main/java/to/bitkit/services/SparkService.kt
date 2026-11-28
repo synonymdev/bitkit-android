@@ -1,5 +1,6 @@
 package to.bitkit.services
 
+import breez_sdk_spark.Bolt11InvoiceDetails
 import breez_sdk_spark.BreezSdk
 import breez_sdk_spark.ChainApiType
 import breez_sdk_spark.CheckRecoverFundsRequest
@@ -151,6 +152,29 @@ class SparkService @Inject constructor(
         /** Whether [shortChannelIds], an invoice's route hint hops, carry a Spark address. */
         internal fun hasSparkAddressHint(shortChannelIds: List<ULong>): Boolean =
             SPARK_ADDRESS_HINT_SCID in shortChannelIds
+
+        private const val SCID_BLOCK_SHIFT = 40
+        private const val SCID_TX_SHIFT = 16
+        private const val SCID_TX_MASK = 0xFFFFFFuL
+        private const val SCID_OUTPUT_MASK = 0xFFFFuL
+
+        /** [SPARK_ADDRESS_HINT_SCID] as the SDK's parser prints a hop's: block x transaction x output. */
+        internal val sparkAddressHintScid: String = SPARK_ADDRESS_HINT_SCID.let {
+            "${it shr SCID_BLOCK_SHIFT}x${(it shr SCID_TX_SHIFT) and SCID_TX_MASK}x${it and SCID_OUTPUT_MASK}"
+        }
+
+        /**
+         * Whether [invoice] carries the Spark address of the wallet with [identityPubkey], its Spark identity in hex:
+         * the node of the Spark address hint is the identity of the wallet that asked for the invoice. Bitkit's own
+         * invoices carry no such hint, so this only recognises invoices made with the SDK's
+         * `preferSparkOverLightning` on.
+         */
+        internal fun namesSparkIdentity(invoice: Bolt11InvoiceDetails, identityPubkey: String): Boolean =
+            invoice.routingHints.any { hint ->
+                hint.hops.any {
+                    it.shortChannelId == sparkAddressHintScid && it.srcNodeId.equals(identityPubkey, ignoreCase = true)
+                }
+            }
     }
 
     private val mutex = Mutex()
@@ -336,7 +360,15 @@ class SparkService @Inject constructor(
 
     /** When [bolt11] expires, in epoch seconds, read by the SDK's own parser; null when it isn't a BOLT11 invoice. */
     suspend fun invoiceExpiresAt(bolt11: String): ULong? =
-        (requireSdk().parse(bolt11) as? InputType.Bolt11Invoice)?.v1?.let { invoiceExpiresAt(it.timestamp, it.expiry) }
+        invoiceDetails(bolt11)?.let { invoiceExpiresAt(it.timestamp, it.expiry) }
+
+    /** [bolt11] as the SDK's own parser reads it; null when it isn't a BOLT11 invoice. */
+    suspend fun invoiceDetails(bolt11: String): Bolt11InvoiceDetails? =
+        (requireSdk().parse(bolt11) as? InputType.Bolt11Invoice)?.v1
+
+    /** Whether [bolt11] carries this wallet's own Spark address, see [namesSparkIdentity]. */
+    suspend fun carriesOwnSparkAddress(bolt11: String): Boolean =
+        invoiceDetails(bolt11)?.let { namesSparkIdentity(it, getInfo().identityPubkey) } == true
 
     /**
      * This wallet's Lightning send of [bolt11] as the Spark operators record it, without the local history: null when
@@ -392,6 +424,9 @@ sealed class SparkError(message: String, cause: Throwable? = null) : AppError(me
     class NotConnected : SparkError("Spark wallet is not connected")
     class WipeInProgress : SparkError("Spark wallet cannot connect while the wallet is wiped")
     class WipeFailed(path: String) : SparkError("Failed to delete Spark storage at '$path'")
+
+    /** An invoice Spark created that its own parser cannot read, so it cannot be remembered as the wallet's own. */
+    class InvoiceUnreadable : SparkError("Spark invoice cannot be read")
 
     /** Stored exit data Spark can never import: an exit state version it doesn't support, or one it can't read. */
     class ExitStateUnimportable(cause: Throwable? = null) : SparkError("Spark can't import the exit data", cause)

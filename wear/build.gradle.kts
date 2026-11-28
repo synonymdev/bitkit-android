@@ -228,6 +228,7 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.collections.immutable)
     implementation(libs.bitkit.core)
+    implementation(libs.zxing)
     implementation(libs.breez.sdk.spark) { exclude(group = "net.java.dev.jna", module = "jna") }
     // Lifecycle
     implementation(libs.lifecycle.viewmodel.compose)
@@ -246,6 +247,11 @@ dependencies {
     implementation(libs.wear.compose.material3)
     implementation(libs.wear.compose.navigation)
     implementation(libs.wear.tooling.preview)
+    // Tile
+    implementation(libs.wear.tiles)
+    implementation(libs.wear.protolayout)
+    implementation(libs.wear.protolayout.material3)
+    implementation(libs.concurrent.futures.ktx)
     // Hilt - DI
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)

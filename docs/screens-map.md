@@ -375,7 +375,7 @@ Amount entry stays in dollars with a BTC equivalent; QR and shared payment amoun
 
 ## Wear OS
 
-The watch app's screens, under `wear/src/main/java/to/bitkit/wear`. None has a design yet. `HomeScreen.kt` and `SettingsScreen.kt` share their file names with phone screens and have their own rows here.
+The watch app's screens, under `wear/src/main/java/to/bitkit/wear`. None has a design yet. `HomeScreen.kt`, `SettingsScreen.kt`, `ActivityDetailScreen.kt` and `ReceiveQrScreen.kt` share their file names with phone screens and have their own rows here.
 
 ### ui/components
 
@@ -386,6 +386,13 @@ Layout scaffolds that other screens build on, not screens of their own.
 | CenteredScreen.kt | `n/a` |
 | ListScreen.kt | `n/a` |
 | MessageScreen.kt | `n/a` |
+
+### ui/screens/activity
+
+| Android | Figma |
+| - | - |
+| ActivityDetailScreen.kt | `todo` |
+| ActivityScreen.kt | `todo` |
 
 ### ui/screens/home
 
@@ -398,6 +405,13 @@ Layout scaffolds that other screens build on, not screens of their own.
 | Android | Figma |
 | - | - |
 | OnboardingScreen.kt | `todo` |
+
+### ui/screens/receive
+
+| Android | Figma |
+| - | - |
+| ReceiveQrScreen.kt | `todo` |
+| ReceiveScreen.kt | `todo` |
 
 ### ui/screens/removed
 
@@ -413,6 +427,12 @@ Layout scaffolds that other screens build on, not screens of their own.
 | RestorePassphraseScreen.kt | `todo` |
 | RestoreStartScreen.kt | `todo` |
 | RestoreWordScreen.kt | `todo` |
+
+### ui/screens/send
+
+| Android | Figma |
+| - | - |
+| SendScreen.kt | `todo` |
 
 ### ui/screens/settings
 

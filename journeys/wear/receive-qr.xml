@@ -1,0 +1,24 @@
+<journey name="wear receive qr">
+  <description>
+    The Receive page opens a full-screen QR of an amountless invoice; ambient mode hides the QR and waking the watch
+    shows it again. Emulator and physical watch.
+
+    Precondition: Restored wallet on the local ./spark stack, see journeys/wear/README.md › Local ./spark stack and
+    › Restored wallet, on the Balance page with the loading ring stopped, and the always-on screen on (README › Watch
+    gestures). Gestures are written for the 454 px screen; scale them as in README › What differs. The QR content is
+    not in `android layout`: README › Reading the receive invoice takes it from the log.
+  </description>
+  <actions>
+    <action>Swipe the pager left once: `adb shell input swipe 400 227 60 227 300`</action>
+    <action>Verify the Receive page: "WatchReceiveOpen" is listed</action>
+    <action>Tap "WatchReceiveOpen"</action>
+    <action>Wait up to 10 s until `adb shell uiautomator dump` lists "WatchReceiveQr" (README, top)</action>
+    <action>Read the invoice from the log as in README › Reading the receive invoice</action>
+    <action>Verify the invoice starts with "lnbcrt"</action>
+    <action>Run `adb shell input keyevent KEYCODE_SLEEP`</action>
+    <action>Wait up to 5 s until "WatchReceiveHidden" is listed with the content-desc "QR hidden"</action>
+    <action>Run `adb shell input keyevent KEYCODE_WAKEUP`</action>
+    <action>Wait up to 5 s until "WatchReceiveHidden" is not listed</action>
+    <action>Verify from a screenshot that a black-on-white QR code fills the middle of the screen</action>
+  </actions>
+</journey>

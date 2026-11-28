@@ -3868,7 +3868,15 @@ class AppViewModel @Inject constructor(
                 return@takeIf canSend
             }
 
-    private suspend fun LightningInvoice.isOwnInvoice(): Boolean = isPayee(lightningRepo.awaitNodeId())
+    /**
+     * Whether this wallet created the invoice: the node is its payee, or it pays the wallet's Spark balance, which
+     * the phone and a paired watch share.
+     */
+    private suspend fun LightningInvoice.isOwnInvoice(): Boolean =
+        isPayee(lightningRepo.awaitNodeId()) || isOwnSparkInvoice()
+
+    private suspend fun LightningInvoice.isOwnSparkInvoice(): Boolean =
+        lightningRepo.isOwnSparkInvoice(bolt11, paymentHash.toHex())
 
     private fun LightningInvoice.isPayee(nodeId: String?): Boolean {
         val payee = payeeNodeId?.toHex() ?: return false
@@ -3879,7 +3887,7 @@ class AppViewModel @Inject constructor(
         params: Map<String, String>?,
         walletGeneration: Long? = connectionRecovery.currentGeneration(),
     ): Boolean = decodeLightningParam(params).also { requireCurrentPaymentPreparation(walletGeneration) }
-        ?.isPayee(lightningRepo.getLastKnownNodeId()) == true
+        ?.let { it.isPayee(lightningRepo.getLastKnownNodeId()) || it.isOwnSparkInvoice() } == true
 
     private suspend fun decodeLightningParam(params: Map<String, String>?): LightningInvoice? =
         params?.get("lightning")?.let { bolt11 ->

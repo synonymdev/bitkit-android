@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Bitkit tile as the tile picker shows it: a balance line and the Receive edge button, with no real amount. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M96,0a96,96 0,1 0,0.01 0z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M56,82h80a7,7 0,0 1,0 14h-80a7,7 0,0 1,0 -14z" />
+    <path
+        android:fillColor="#FFFF4400"
+        android:pathData="M66,150h60a16,16 0,0 1,16 16a46,22 0,0 1,-46 22a46,22 0,0 1,-46 -22a16,16 0,0 1,16 -16z" />
+    <group
+        android:translateX="86"
+        android:translateY="158"
+        android:scaleX="0.85"
+        android:scaleY="0.85">
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M3,11h8V3H3V11zM5,5h4v4H5V5zM3,21h8v-8H3V21zM5,15h4v4H5V15zM13,3v8h8V3H13zM19,9h-4V5h4V9zM19,19h2v2h-2V19zM13,13h2v2h-2V13zM15,15h2v2h-2V15zM13,17h2v2h-2V17zM15,19h2v2h-2V19zM17,17h2v2h-2V17zM17,13h2v2h-2V13zM19,15h2v2h-2V15z" />
+    </group>
+</vector>

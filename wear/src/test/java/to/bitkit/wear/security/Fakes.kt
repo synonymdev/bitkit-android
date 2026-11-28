@@ -25,6 +25,9 @@ class FakeBip39 : Bip39 {
             else -> Bip39Validation.InvalidChecksum
         }
     }
+
+    override fun toSeed(mnemonic: String, passphrase: String?): ByteArray =
+        "$mnemonic|${passphrase.orEmpty()}".encodeToByteArray()
 }
 
 class FakeForegroundMonitor(isForeground: Boolean = true) : ForegroundMonitor {

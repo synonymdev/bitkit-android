@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about__title">Informazioni</string>
+    <string name="activity__empty">Nessuna attività</string>
+    <string name="activity__received">Ricevuto</string>
+    <string name="activity__sent">Inviato</string>
+    <string name="activity__status_completed">Completato</string>
+    <string name="activity__status_failed">Fallito</string>
+    <string name="activity__status_pending">In sospeso</string>
+    <string name="activity__title">Attività</string>
     <string name="common__next">Avanti</string>
     <string name="common__ok">OK</string>
     <string name="common__retry">Riprova</string>
@@ -11,6 +18,12 @@
     <string name="home__offline">Offline</string>
     <string name="home__toggle_unit">Cambia unità</string>
     <string name="onboarding__restore">Ripristina</string>
+    <string name="receive__error">Fattura non creata</string>
+    <string name="receive__hidden">QR nascosto</string>
+    <string name="receive__new">Nuova fattura</string>
+    <string name="receive__paid">Pagato</string>
+    <string name="receive__show">Mostra QR</string>
+    <string name="receive__title">Ricevi</string>
     <string name="removed__title">Portafoglio rimosso</string>
     <string name="restore__checksum_review">Rivedi</string>
     <string name="restore__checksum_title">Frase non valida</string>
@@ -31,6 +44,27 @@
     <string name="restore__word_no_match">Nessuna corrispondenza</string>
     <string name="restore__word_placeholder">Parola %1$d</string>
     <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="send__amount_confirm">Continua</string>
+    <string name="send__amount_placeholder">Importo</string>
+    <string name="send__amount_range">%1$s – %2$s</string>
+    <string name="send__error_already_paid">Già pagata</string>
+    <string name="send__error_busy">Wallet occupato</string>
+    <string name="send__error_expired">Fattura scaduta</string>
+    <string name="send__error_failed">Pagamento fallito</string>
+    <string name="send__error_insufficient">Fondi insufficienti</string>
+    <string name="send__error_invalid">Fattura non valida</string>
+    <string name="send__error_not_ready">Wallet non pronto</string>
+    <string name="send__error_out_of_range">Fuori intervallo</string>
+    <string name="send__error_offline">Impossibile pagare offline</string>
+    <string name="send__error_own_invoice">È la tua fattura</string>
+    <string name="send__error_unsupported">Non supportato</string>
+    <string name="send__fee">Commissione %1$s</string>
+    <string name="send__hold">Tieni premuto per pagare</string>
+    <string name="send__pay">Paga</string>
+    <string name="send__pending">In sospeso</string>
+    <string name="send__sent">Inviato</string>
+    <string name="send__unknown">Controlla l\'attività</string>
+    <string name="send__waiting">In attesa della rete</string>
     <string name="settings__remove_wallet">Rimuovi portafoglio</string>
     <string name="settings__remove_wallet_confirm_title">Rimuovere il portafoglio?</string>
     <string name="settings__remove_wallet_failed">Impossibile rimuovere il portafoglio</string>

@@ -1,0 +1,24 @@
+<journey name="wear activity list">
+  <description>
+    The Activity page, after Receive, lists the newest payments with a direction icon, the amount and how long ago;
+    a tap opens the detail with the amount, the fee of a send, the time and the status. Emulator and physical watch.
+
+    Precondition: Restored wallet on the local ./spark stack after receive-paid.xml and send-deeplink-bolt11.xml, so
+    the newest payment is the 1 000 sat send, see journeys/wear/README.md › Local ./spark stack, on the Balance page
+    with the loading ring stopped. Gestures are written for the 454 px screen.
+  </description>
+  <actions>
+    <action>Swipe the pager left to Receive: `adb shell input swipe 400 227 60 227 300`</action>
+    <action>Swipe the pager left to Activity: `adb shell input swipe 400 227 60 227 300`</action>
+    <action>Wait up to 10 s until "WatchActivityItem-0" is listed</action>
+    <action>Verify "WatchActivityItem-0" shows "- ₿ 1 000"</action>
+    <action>Verify "WatchActivityItem-0" shows a relative time such as "1 min. ago"</action>
+    <action>Verify "WatchActivityItem-1" shows "+ ₿ 50 000"</action>
+    <action>Tap "WatchActivityItem-0"</action>
+    <action>Verify "WatchActivityDetailAmount" reads "1 000"</action>
+    <action>Verify "WatchActivityDetailStatus" reads "Completed"</action>
+    <action>Verify "WatchActivityDetailTime" shows today's date</action>
+    <action>Swipe to dismiss from the left edge: `adb shell input swipe 20 227 400 227 300`</action>
+    <action>Verify "WatchActivityItem-0" is listed again</action>
+  </actions>
+</journey>

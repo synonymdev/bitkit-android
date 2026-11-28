@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about__title">Sobre</string>
+    <string name="activity__empty">Sem atividade</string>
+    <string name="activity__received">Recebido</string>
+    <string name="activity__sent">Enviado</string>
+    <string name="activity__status_completed">Concluído</string>
+    <string name="activity__status_failed">Falha</string>
+    <string name="activity__status_pending">Pendente</string>
+    <string name="activity__title">Atividade</string>
     <string name="common__next">Próximo</string>
     <string name="common__ok">OK</string>
     <string name="common__retry">Tentar novamente</string>
@@ -11,6 +18,12 @@
     <string name="home__offline">Sem ligação</string>
     <string name="home__toggle_unit">Alternar unidade</string>
     <string name="onboarding__restore">Restaurar</string>
+    <string name="receive__error">Fatura não criada</string>
+    <string name="receive__hidden">QR oculto</string>
+    <string name="receive__new">Nova fatura</string>
+    <string name="receive__paid">Pago</string>
+    <string name="receive__show">Mostrar QR</string>
+    <string name="receive__title">Receber</string>
     <string name="removed__title">Carteira removida</string>
     <string name="restore__checksum_review">Revisar</string>
     <string name="restore__checksum_title">Frase inválida</string>
@@ -31,6 +44,27 @@
     <string name="restore__word_no_match">Nenhuma correspondência</string>
     <string name="restore__word_placeholder">Palavra %1$d</string>
     <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="send__amount_confirm">Continuar</string>
+    <string name="send__amount_placeholder">Montante</string>
+    <string name="send__amount_range">%1$s – %2$s</string>
+    <string name="send__error_already_paid">Já paga</string>
+    <string name="send__error_busy">Carteira ocupada</string>
+    <string name="send__error_expired">Fatura expirada</string>
+    <string name="send__error_failed">Pagamento falhou</string>
+    <string name="send__error_insufficient">Saldo insuficiente</string>
+    <string name="send__error_invalid">Fatura inválida</string>
+    <string name="send__error_not_ready">Carteira não pronta</string>
+    <string name="send__error_out_of_range">Fora do intervalo</string>
+    <string name="send__error_offline">Não é possível pagar sem ligação</string>
+    <string name="send__error_own_invoice">É a sua fatura</string>
+    <string name="send__error_unsupported">Não suportado</string>
+    <string name="send__fee">Taxa %1$s</string>
+    <string name="send__hold">Mantenha para pagar</string>
+    <string name="send__pay">Pagar</string>
+    <string name="send__pending">Pendente</string>
+    <string name="send__sent">Enviado</string>
+    <string name="send__unknown">Veja a atividade</string>
+    <string name="send__waiting">À espera da rede</string>
     <string name="settings__remove_wallet">Remover carteira</string>
     <string name="settings__remove_wallet_confirm_title">Remover carteira?</string>
     <string name="settings__remove_wallet_failed">Não foi possível remover a carteira</string>

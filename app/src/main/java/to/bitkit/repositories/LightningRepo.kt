@@ -3023,6 +3023,10 @@ class LightningRepo @Inject constructor(
     /** Whether Spark alone can pay [amountSats], which it does whenever the node cannot. */
     fun canSendWithSpark(amountSats: ULong): Boolean = sparkRepo.canSend(amountSats)
 
+    /** Whether [bolt11], with [paymentHash] in hex, pays this wallet's Spark balance, see [SparkRepo.isOwnInvoice]. */
+    suspend fun isOwnSparkInvoice(bolt11: String, paymentHash: String): Boolean =
+        sparkRepo.isOwnInvoice(bolt11, paymentHash)
+
     /** Whether Spark's whole balance covers a withdrawal debiting [debitSats], its fees included. */
     fun canWithdrawWithSpark(debitSats: ULong): Boolean = sparkRepo.canWithdraw(debitSats)
 

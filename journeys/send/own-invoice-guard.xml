@@ -9,7 +9,10 @@
     host are eaten there and the device shell splits the URI at the `&amp;` before `lightning=`,
     leaving an on-chain-only URI. Wrap the whole remote command in double quotes and the URI in
     single quotes so one level survives to the device. Android only for now: `bitkit-ios` has no
-    own-invoice guard.
+    own-invoice guard. The last steps repeat the check with an invoice the wallet created on Spark,
+    which names Spark's provider as its payee, so the app knows it by the payment hash it kept when
+    it created it. They need Spark connected (the precondition table in `journeys/README.md`) and an invoice amount
+    above the channel's receiving capacity, which is what makes Receive create it on Spark.
   </description>
   <actions>
     <action>Tap Receive on the home screen (tag "Receive")</action>
@@ -28,6 +31,13 @@
     <action>Open Settings ▸ QuickPay (tag "QuickpaySettings"), turn QuickPay on, and return to the wallet overview</action>
     <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;own invoice&gt;" to.bitkit.dev`</action>
     <action>Verify from a screenshot that the "Cannot Pay Own Invoice" toast is visible and the QuickPay screen did not open</action>
+    <action>With QuickPay still on, tap Receive (tag "Receive"), tap Edit (tag "SpecifyInvoiceButton"), tap the amount field (tag "ReceiveNumberPadTextField"), enter an amount above the channel's receiving capacity shown on Settings ▸ Advanced ▸ Lightning Connections, tap Continue (tag "ReceiveNumberPadSubmit"), then tap QR Code (tag "ShowQrReceive")</action>
+    <action>Read the unified `bitcoin:` URI from the QR element's content-desc and take the `lightning=` value as the own Spark invoice; never type it. Press the device back button until the wallet overview is visible</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;own Spark invoice&gt;" to.bitkit.dev`</action>
+    <action>Verify from a screenshot that the "Cannot Pay Own Invoice" toast is visible (tag "SelfPaymentToast") and that neither the QuickPay screen nor the Confirm screen opened</action>
+    <action>Run `adb shell "am start -a android.intent.action.VIEW -d '&lt;unified bitcoin: URI of the Spark invoice&gt;' to.bitkit.dev"` with the quoting described above</action>
+    <action>Verify that the send amount screen (tag "send_amount_screen") is visible with the SAVINGS source selected, and that the app log contains "Skipped own lightning invoice in unified URI, defaulting to onchain"</action>
+    <action>Press the device back button until the wallet overview is visible</action>
     <action>Open Settings ▸ QuickPay and turn QuickPay back off if it was off before this journey</action>
   </actions>
 </journey>
