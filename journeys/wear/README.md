@@ -143,15 +143,21 @@ regtest. Nothing extra runs locally, no VSS and no LNURL-auth server. They need 
 first: see [Phone settings on VSS](#phone-settings-on-vss). They never run on the public test phrase, whose backup
 every other journey reads too: see [Private settings wallet](#private-settings-wallet).
 
-The daily QuickPay limit, an amount the wearer typed, a missing, unreadable or newer backup, and settings older than
-15 minutes have no journey: they depend on the exchange rate of the day, an amountless invoice the local stack does
-not make, or a backup only a broken phone would write. `QuickPayRepoTest.kt`, `PaymentsRepoTest.kt`,
-`SettingsSyncRepoTest.kt` and `PhoneSettingsParserTest.kt` cover them.
+The daily QuickPay limit, a failed QuickPay payment that is taken out of the day's count, an amount the wearer
+typed, and a missing, unreadable or newer backup have no journey: they depend on the exchange rate of the day, a
+payment that fails on demand, an amountless invoice the local stack does not make, or a backup only a broken phone
+would write. `QuickPayRepoTest.kt`, `QuickPaySpendStoreTest.kt`, `PaymentsRepoTest.kt`, `SettingsSyncRepoTest.kt`
+and `PhoneSettingsParserTest.kt` cover them.
 
-Paying an LNURL-pay link or a Lightning address has no journey: the local stack's LNURL server serves only the
-Lightning addresses its Spark wallets registered, over plain HTTP, and nothing in it registers one. It is covered by
-`PaymentsRepoTest.kt` and `SendViewModelTest.kt`, which check the range, the amount entry and the invoice the service
-returns.
+A payment link opened again from Recents, which the watch takes as a plain launch, has no journey either: it was
+not tried on a device, and `ReplayedLaunchTest.kt` covers the check. To try it by hand: with the app not running,
+open a link as in `send-deeplink-bolt11.xml`, leave the review and Home with Back, open Bitkit from the watch's
+Recents and check that Home shows and `WatchSendHold` does not.
+
+Paying an LNURL-pay link or a Lightning address has no journey, under QuickPay or with the hold: the local stack's
+LNURL server serves only the Lightning addresses its Spark wallets registered, over plain HTTP, and nothing in it
+registers one. It is covered by `PaymentsRepoTest.kt` and `SendViewModelTest.kt`, which check the range, the amount
+entry, the invoice the service returns and that only a link with one amount goes out under QuickPay.
 
 ### Local `./spark` stack
 
@@ -249,24 +255,28 @@ never on the public test phrase. That phrase's settings backup is one object on 
 hosted regtest and the local `./spark` stack and by everyone who restores the phrase: fiat first, euros or QuickPay
 written there would reach every other watch on that phrase and break the journeys that expect the defaults.
 
-The private wallet is the public test phrase with a passphrase that only this machine knows. With a passphrase the
-phrase is another wallet, with a backup of its own that nobody else can name. No secret is read off a screen and
-none is typed by hand, so an agent can set it up without ever seeing the passphrase.
+The private wallet is the public test phrase with a passphrase made on this machine. With a passphrase the phrase
+is another wallet, with a settings backup of its own, so each machine's settings journeys stay apart from everyone
+else's.
 
-1. Make the passphrase, once per machine, in a file outside the repository that only you can read:
+The passphrase is not a secret. The phrase it is added to is public and the wallet holds regtest coins of no value;
+the passphrase only keeps one machine's settings backup apart from another's. It may show in a layout dump or a
+screenshot on your own machine. It still must not leave the machine, since anyone who has it can write to the same
+backup: never commit it, never put it in a journey file, a pull request's text or media, and never paste it into an
+issue. A screenshot or a recording of the phone's restore screen, or of the watch's passphrase screen, is not PR
+media.
+
+1. Make the passphrase, once per machine, in a file outside the repository:
 
    ```bash
    F=~/.config/bitkit-journeys/settings-passphrase
-   mkdir -p "${F%/*}" && chmod 700 "${F%/*}"
-   [ -s "$F" ] || (umask 077; LC_ALL=C tr -dc a-z0-9 </dev/urandom | head -c 12 >"$F")
+   mkdir -p "${F%/*}"
+   [ -s "$F" ] || LC_ALL=C tr -dc a-z0-9 </dev/urandom | head -c 12 >"$F"
    ```
 
-   It prints nothing and keeps a passphrase that is already there. Twelve lowercase letters and digits are short and
-   plain enough for `adb shell input text`, which drops characters from long or dotted strings.
-2. Never print it: no `cat`, `echo` or `set -x` on it, and no screenshot, `android layout` or `uiautomator dump`
-   output while a passphrase field shows it. Never copy it into the repository, a journey file, a log or a pull
-   request. Every command below reads the file inside the command that uses it.
-3. Restore it in the phone app, a plain dev build (see [Phone settings on VSS](#phone-settings-on-vss), step 1). From
+   It keeps a passphrase that is already there. Twelve lowercase letters and digits are short and plain enough for
+   `adb shell input text`, which drops characters from long or dotted strings.
+2. Restore it in the phone app, a plain dev build (see [Phone settings on VSS](#phone-settings-on-vss), step 1). From
    a fresh install go through the onboarding to the Restore wallet screen (`RestoreWallet`, then
    `MultipleDevices-button`). For each word, tap its field (`Word-0` to `Word-11`) and run
    `adb shell input text <word>`: eleven times `abandon`, then `about`. Tap `AdvancedButton`, tap `PassphraseInput`
@@ -276,33 +286,46 @@ none is typed by hand, so an agent can set it up without ever seeing the passphr
    adb shell input text "$(cat ~/.config/bitkit-journeys/settings-passphrase)"
    ```
 
-   [Check it](#checking-the-passphrase), then tap `RestoreButton`. Leave the phone's settings at their defaults for
-   now and close the phone app (`adb shell am force-stop to.bitkit.dev`).
+   [Check it](#checking-the-passphrase), then tap `RestoreButton`.
+3. Set the phone's settings to where the journeys start: Default Unit Bitcoin, Denomination Modern, Local Currency
+   USD and QuickPay off. A new wallet has them already. On a rerun the restore brings back whatever the last run
+   left, as the currency first, Classic and EUR after a run that stopped at `settings-import-units.xml`: set them
+   back and keep the app open for 20 s, so it uploads them
+   ([Phone settings on VSS](#phone-settings-on-vss), steps 3 and 4). Then close the phone app
+   (`adb shell am force-stop to.bitkit.dev`).
 4. Restore it on the watch: [Restored wallet](#restored-wallet) steps 1 to 3, then tap `RestorePassphraseAdd`
    instead of `RestorePassphraseSkip`, tap `RestorePassphraseInput`, close the keyboard with Back
    ([Typing](#typing)) and run the same `adb shell input text "$(cat …)"` command. [Check it](#checking-the-passphrase),
-   tap `RestorePassphraseConfirm` and wait for `WatchHomeBalance`, which reads `0` for a new wallet.
+   tap `RestorePassphraseConfirm` and wait for `WatchHomeBalance`. It reads `0` for a wallet that was never funded;
+   on a rerun against a local stack that kept its data it reads what the last run left.
 5. Fund it before the phone's settings change: on the local `./spark` stack run `receive-paid.xml` on this wallet
-   while the phone's settings are still the defaults. That journey expects "50 000", which is what a watch on
-   Bitcoin and Modern shows; after `settings-import-units.xml` set Classic, the same payment reads "0.00050000".
+   while the phone's settings are still the ones of step 3. That journey expects "50 000", which is what a watch
+   on Bitcoin and Modern shows for a wallet that held nothing; after `settings-import-units.xml` set Classic, the
+   same payment reads "0.00050000". On a rerun with at least 12 000 sats left, skip this step.
 6. Only now set what a journey asks for on the phone: [Phone settings on VSS](#phone-settings-on-vss).
 
 One private wallet serves all six journeys, in the order of the table: the settings journeys first, then the
 QuickPay ones, whose preconditions set the units and the currency back. Remove it from the watch
 (`remove-wallet.xml` or [Fresh app](#fresh-app)) before the journeys on the public phrase run again.
 
+To start over with an empty backup, delete `~/.config/bitkit-journeys/settings-passphrase` and begin at step 1: a
+new passphrase is a new wallet with no backup and no balance.
+
 #### Checking the passphrase
 
 `adb shell input text` can drop a character, and a passphrase that differs by one names another wallet with no
-backup. Check the field before you confirm, without printing it: this prints only a count, which must be `1`.
+backup. Check the field before you confirm: the layout dump has to hold the passphrase as typed, so this prints `1`
+or more.
 
 ```bash
-adb exec-out uiautomator dump /dev/tty | grep -c "text=\"$(cat ~/.config/bitkit-journeys/settings-passphrase)\""
+android layout | grep -c -F "$(cat ~/.config/bitkit-journeys/settings-passphrase)"
 ```
 
-On `0`, clear the field, type again and check again. The proof that phone and watch hold the same wallet comes with
-the first import: the watch logs `Imported the phone's settings` once the phone wrote its backup, and
-`Found no settings backup of the phone` when the two differ.
+On `0`, select all in the field, delete and type again, with the key events of
+[Replacing a word](#replacing-a-word), then check again. The proof that phone and watch hold the same wallet comes
+with the first import after step 6: the watch logs `Imported the phone's settings` once the phone wrote its backup.
+It logs `Found no settings backup of the phone` when the two differ, and also before the phone ever changed a
+setting.
 
 ### Phone settings on VSS
 

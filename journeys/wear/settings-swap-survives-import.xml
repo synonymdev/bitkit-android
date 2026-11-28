@@ -5,10 +5,11 @@
     after a restart and the import that follows it. Emulator and physical watch.
 
     Precondition: run settings-import-units.xml first, and change nothing on the phone since. Watch: the wallet of
-    settings-import-units.xml, the app open on the Balance page with "WatchHomeBalanceSymbol" reading "€" and the
-    loading ring stopped.
+    settings-import-units.xml, the app open on the Settings page, where that journey ends.
   </description>
   <actions>
+    <action>Swipe right three times to the Balance page (README › Watch gestures)</action>
+    <action>Verify "WatchHomeBalanceSymbol" reads "€"</action>
     <action>Tap "WatchHomeBalanceToggle"</action>
     <action>Verify "WatchHomeBalanceSymbol" reads "₿"</action>
     <action>Verify "WatchHomeBalance" reads the balance with eight decimals, such as "0.00050000"</action>
