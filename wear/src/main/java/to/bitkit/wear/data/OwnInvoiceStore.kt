@@ -16,6 +16,9 @@ interface OwnInvoiceStore {
     /** Remembers the invoice with [paymentHash], in hex, until [expiresAtSecs], its expiry in epoch seconds. */
     suspend fun add(paymentHash: String, expiresAtSecs: ULong)
 
+    /** Forgets the invoice with [paymentHash], in hex of either case, as when it was never handed out. */
+    suspend fun remove(paymentHash: String)
+
     /** Whether [paymentHash], in hex of either case, is an unexpired invoice of this wallet. */
     suspend fun contains(paymentHash: String): Boolean
 }
@@ -50,6 +53,14 @@ class SettingsOwnInvoiceStore internal constructor(
                 .sortedByDescending { it.value }
                 .take(MAX_INVOICES)
                 .mapTo(HashSet()) { "${it.key}$SEPARATOR${it.value}" }
+        }
+    }
+
+    override suspend fun remove(paymentHash: String) {
+        dataStore.edit { prefs ->
+            val invoices = decode(prefs[key])
+            if (paymentHash.lowercase() !in invoices) return@edit
+            prefs[key] = (invoices - paymentHash.lowercase()).mapTo(HashSet()) { "${it.key}$SEPARATOR${it.value}" }
         }
     }
 

@@ -62,8 +62,15 @@ class PreparedSend internal constructor(
     internal val response: PrepareSendPaymentResponse,
     /** The invoice's payment hash, or null for a Spark address. */
     internal val paymentHash: String?,
-    /** The idempotency key of a send without a payment hash, made once so a repeated send pays once. */
-    internal val transferKey: String?,
+    /** When the invoice expires, in epoch seconds, or null for a Spark address. */
+    internal val expiresAtSecs: ULong?,
+    /** The Spark address a transfer pays, or null for an invoice. */
+    internal val sparkAddress: String?,
+    /**
+     * The idempotency key a transfer to [sparkAddress] goes out under, made once so a repeated send pays once,
+     * unless an earlier transfer to the address is still in doubt: then its key is used again.
+     */
+    internal val transferKey: String,
 ) {
     val totalSats: ULong get() = amountSats + feeSats
 }
@@ -81,8 +88,8 @@ data class WatchPayment(
 )
 
 /**
- * Why an input cannot be paid, or a send did not go through. Every case but [Unknown] means nothing left the wallet
- * for this request.
+ * Why an input cannot be paid, or a send did not go through. Every case but [Unknown], [AlreadyPaid] and [InFlight]
+ * means nothing left the wallet for this request.
  */
 sealed class SendError(message: String, cause: Throwable? = null) : AppError(message, cause) {
     /** The wallet is not connected and synced, so it neither prices nor sends. */
@@ -109,18 +116,20 @@ sealed class SendError(message: String, cause: Throwable? = null) : AppError(mes
     /** The balance does not cover the amount and its fee; [shortfallSats] is what is missing, when known. */
     class InsufficientBalance(val shortfallSats: ULong?) : SendError("The balance is '$shortfallSats' sats short")
 
-    /** This wallet already paid the invoice. */
-    class AlreadyPaid : SendError("The invoice is already paid")
+    /** This wallet already paid the invoice, or an earlier transfer to the Spark address went through after all. */
+    class AlreadyPaid : SendError("The request is already paid")
 
-    /** A send of this invoice is still under way, from the watch or the phone. */
-    class InFlight : SendError("A payment of this invoice is under way")
+    /** A send of this request is still under way, from the watch or the phone. */
+    class InFlight : SendError("A payment of this request is under way")
 
     /** Spark refused or failed the payment. */
     class Failed(cause: Throwable? = null) : SendError("The payment failed", cause)
 
     /**
      * The send was handed to Spark and its outcome could not be learned: it may have been paid. Never shown as a
-     * plain failure; the activity list tells once Spark lists it, and sending the same invoice again cannot pay twice.
+     * plain failure; the activity list tells once Spark lists it. Sending the same request again from this watch
+     * goes out under the same idempotency key, an invoice's derived from its payment hash and a Spark address's kept
+     * until its outcome is known, so it cannot pay twice.
      */
     class Unknown(cause: Throwable? = null) : SendError("The payment's outcome is not known yet", cause)
 }

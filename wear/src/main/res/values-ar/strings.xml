@@ -52,7 +52,6 @@
     <string name="send__error_already_paid">مدفوعة مسبقًا</string>
     <string name="send__error_expired">انتهت صلاحية الفاتورة</string>
     <string name="send__error_failed">فشل الدفع</string>
-    <string name="send__error_in_flight">الدفع معلق</string>
     <string name="send__error_insufficient">رصيد غير كافٍ</string>
     <string name="send__error_invalid">فاتورة غير صالحة</string>
     <string name="send__error_not_ready">المحفظة غير جاهزة</string>
@@ -62,6 +61,7 @@
     <string name="send__fee">الرسوم %1$s</string>
     <string name="send__hold">اضغط مطولًا للدفع</string>
     <string name="send__offline">غير متصل</string>
+    <string name="send__pay">ادفع</string>
     <string name="send__pending">معلق</string>
     <string name="send__sent">تم الإرسال</string>
     <string name="send__unknown">تحقق من النشاط</string>

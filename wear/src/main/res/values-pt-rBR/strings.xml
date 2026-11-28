@@ -49,7 +49,6 @@
     <string name="send__error_already_paid">Já pago</string>
     <string name="send__error_expired">Invoice expirado</string>
     <string name="send__error_failed">Pagamento falhou</string>
-    <string name="send__error_in_flight">Pagamento pendente</string>
     <string name="send__error_insufficient">Saldo insuficiente</string>
     <string name="send__error_invalid">Invoice inválido</string>
     <string name="send__error_not_ready">Carteira não pronta</string>
@@ -59,6 +58,7 @@
     <string name="send__fee">Taxa %1$s</string>
     <string name="send__hold">Segure para pagar</string>
     <string name="send__offline">Offline</string>
+    <string name="send__pay">Pagar</string>
     <string name="send__pending">Pendente</string>
     <string name="send__sent">Enviado</string>
     <string name="send__unknown">Veja a atividade</string>

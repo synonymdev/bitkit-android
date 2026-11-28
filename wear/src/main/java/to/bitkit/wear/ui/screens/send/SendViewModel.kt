@@ -195,14 +195,24 @@ class SendViewModel @Inject constructor(
                 return@launch
             }
             Logger.info("Finished send with outcome '$outcome'", context = TAG)
-            val amount = bitcoinAmount(prepared.amountSats.toLong())
-            _uiState.update { it.copy(step = SendStep.Done(outcome, amount)) }
-            delay(if (outcome == SendResult.Sent) SENT_CLOSE_DELAY else PENDING_CLOSE_DELAY)
-            _effects.send(SendEffect.Close)
+            // The amount Spark paid, which is an earlier send's when the request was already sent at another amount.
+            finish(outcome, result.getOrNull()?.amountSats ?: prepared.amountSats)
         }
     }
 
-    private fun fail(error: Throwable?) {
+    /** Shows [result] with [amountSats] and then closes the flow. */
+    private suspend fun finish(result: SendResult, amountSats: ULong) {
+        _uiState.update { it.copy(step = SendStep.Done(result, bitcoinAmount(amountSats.toLong()))) }
+        delay(if (result == SendResult.Sent) SENT_CLOSE_DELAY else PENDING_CLOSE_DELAY)
+        _effects.send(SendEffect.Close)
+    }
+
+    /** Shows why nothing was sent. A payment that is already under way is no failure: it shows as pending. */
+    private suspend fun fail(error: Throwable?) {
+        if (error is SendError.InFlight) {
+            finish(SendResult.Pending, amountSats = prepared?.amountSats ?: 0uL)
+            return
+        }
         _uiState.update { it.copy(step = SendStep.Failed(SendFailure.of(error))) }
     }
 
@@ -238,7 +248,10 @@ sealed interface SendStep {
     /** The send is under way; [isWaiting] once it took longer than a moment. */
     data class Sending(val isWaiting: Boolean = false) : SendStep
 
-    /** The send went out: sent, pending, or with an outcome not known yet. */
+    /**
+     * The send went out: sent, pending, or with an outcome not known yet. Pending is also a payment of the request
+     * that was already under way. Only a sent payment shows its [amount].
+     */
     data class Done(val result: SendResult, val amount: DisplayAmount) : SendStep
 
     /** Nothing was sent, for [failure]. */
@@ -247,7 +260,7 @@ sealed interface SendStep {
 
 enum class SendResult { Sent, Pending, Unknown }
 
-/** Why nothing was sent, with its one-line copy. */
+/** Why nothing was sent by this flow, with its one-line copy. */
 enum class SendFailure(@StringRes val text: Int) {
     NotReady(R.string.send__error_not_ready),
     Invalid(R.string.send__error_invalid),
@@ -257,7 +270,6 @@ enum class SendFailure(@StringRes val text: Int) {
     OutOfRange(R.string.send__error_out_of_range),
     Insufficient(R.string.send__error_insufficient),
     AlreadyPaid(R.string.send__error_already_paid),
-    InFlight(R.string.send__error_in_flight),
     Failed(R.string.send__error_failed),
     ;
 
@@ -271,7 +283,6 @@ enum class SendFailure(@StringRes val text: Int) {
             is SendError.AmountOutOfRange -> OutOfRange
             is SendError.InsufficientBalance -> Insufficient
             is SendError.AlreadyPaid -> AlreadyPaid
-            is SendError.InFlight -> InFlight
             else -> Failed
         }
     }

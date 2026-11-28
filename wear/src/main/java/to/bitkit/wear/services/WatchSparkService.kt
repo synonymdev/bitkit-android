@@ -29,11 +29,15 @@ import breez_sdk_spark.parseSparkConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.wear.env.Env
 import to.bitkit.wear.env.LocalSparkSettings
 import to.bitkit.wear.env.WalletNetwork
@@ -47,6 +51,7 @@ import java.math.BigInteger
 import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.seconds
 import breez_sdk_spark.Network as SparkNetwork
 
 /**
@@ -67,6 +72,9 @@ class WatchSparkService @Inject constructor(
 
         /** Leeway in sat/vB over the recommended fee that an automatic deposit claim may pay. */
         private const val DEPOSIT_CLAIM_FEE_LEEWAY_SAT_PER_VB = 2uL
+
+        /** How long a [disconnect] waits for a send that Spark is taking, so it is not cut off halfway. */
+        val SEND_GRACE = 10.seconds
 
         /**
          * Bitkit's settings over the SDK's [defaults], as on the phone. Breez's real-time data sync server, its
@@ -126,6 +134,9 @@ class WatchSparkService @Inject constructor(
     @Volatile
     private var sendKeySecret: ByteArray? = null
 
+    /** How many [send] calls the SDK is running. */
+    private val runningSends = MutableStateFlow(0)
+
     private val _events = MutableSharedFlow<SdkEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<SdkEvent> = _events.asSharedFlow()
 
@@ -181,7 +192,9 @@ class WatchSparkService @Inject constructor(
      * wipe never deletes the storage under it.
      */
     suspend fun connect(seed: WalletSeed, wipeToken: Int): Boolean {
-        val secret = SparkSendKey.secret(bip39.toSeed(seed.mnemonic, seed.passphrase))
+        val secret = bip39.toSeed(seed.mnemonic, seed.passphrase).let { bytes ->
+            SparkSendKey.secret(bytes).also { bytes.fill(0) }
+        }
         return connectWith(wipeToken, secret) { build(seed) }
     }
 
@@ -238,11 +251,13 @@ class WatchSparkService @Inject constructor(
     }
 
     /**
-     * Disconnects the SDK as one step that its caller cannot cancel. A listener that cannot be removed does not stop
-     * the disconnect. When the disconnect itself fails, it throws and the SDK stays referenced, so the next
-     * [disconnect] reaches it again; a listener already removed is not removed twice.
+     * Disconnects the SDK as one step that its caller cannot cancel, after waiting up to [SEND_GRACE] for a running
+     * [send] to return. A listener that cannot be removed does not stop the disconnect. When the disconnect itself
+     * fails, it throws and the SDK stays referenced, so the next [disconnect] reaches it again; a listener already
+     * removed is not removed twice.
      */
     suspend fun disconnect() = withContext(NonCancellable) {
+        withTimeoutOrNull(SEND_GRACE) { runningSends.first { it == 0 } }
         mutex.withLock {
             val current = sdk ?: return@withLock
             listenerId?.let { id ->
@@ -334,7 +349,12 @@ class WatchSparkService @Inject constructor(
         }
         val current = requireSdk()
         return withContext(NonCancellable) {
-            current.sendPayment(SendPaymentRequest(prepared, options, idempotencyKey)).payment
+            runningSends.update { it + 1 }
+            try {
+                current.sendPayment(SendPaymentRequest(prepared, options, idempotencyKey)).payment
+            } finally {
+                runningSends.update { it - 1 }
+            }
         }
     }
 

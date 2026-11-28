@@ -48,7 +48,6 @@
     <string name="send__error_already_paid">Already paid</string>
     <string name="send__error_expired">Invoice expired</string>
     <string name="send__error_failed">Payment failed</string>
-    <string name="send__error_in_flight">Payment pending</string>
     <string name="send__error_insufficient">Not enough funds</string>
     <string name="send__error_invalid">Invalid invoice</string>
     <string name="send__error_not_ready">Wallet not ready</string>
@@ -58,6 +57,7 @@
     <string name="send__fee">Fee %1$s</string>
     <string name="send__hold">Hold to pay</string>
     <string name="send__offline">Offline</string>
+    <string name="send__pay">Pay</string>
     <string name="send__pending">Pending</string>
     <string name="send__sent">Sent</string>
     <string name="send__unknown">Check activity</string>

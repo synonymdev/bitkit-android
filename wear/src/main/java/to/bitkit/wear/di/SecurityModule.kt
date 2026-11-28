@@ -21,6 +21,8 @@ import to.bitkit.wear.data.NfcMonitor
 import to.bitkit.wear.data.OwnInvoiceStore
 import to.bitkit.wear.data.ProcessForegroundMonitor
 import to.bitkit.wear.data.SettingsOwnInvoiceStore
+import to.bitkit.wear.data.SettingsUncertainSendStore
+import to.bitkit.wear.data.UncertainSendStore
 import to.bitkit.wear.data.WipeMarker
 import to.bitkit.wear.data.settingsDataStore
 import to.bitkit.wear.env.Env
@@ -73,6 +75,10 @@ abstract class SecurityModule {
     @Binds
     @Singleton
     abstract fun bindOwnInvoiceStore(store: SettingsOwnInvoiceStore): OwnInvoiceStore
+
+    @Binds
+    @Singleton
+    abstract fun bindUncertainSendStore(store: SettingsUncertainSendStore): UncertainSendStore
 
     @Binds
     @Singleton

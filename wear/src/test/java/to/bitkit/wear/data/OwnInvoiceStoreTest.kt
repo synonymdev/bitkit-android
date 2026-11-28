@@ -22,6 +22,10 @@ class FakeOwnInvoiceStore : OwnInvoiceStore {
         invoices[paymentHash.lowercase()] = expiresAtSecs
     }
 
+    override suspend fun remove(paymentHash: String) {
+        invoices.remove(paymentHash.lowercase())
+    }
+
     override suspend fun contains(paymentHash: String): Boolean = paymentHash.lowercase() in invoices
 }
 

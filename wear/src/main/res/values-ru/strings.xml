@@ -50,7 +50,6 @@
     <string name="send__error_already_paid">Уже оплачен</string>
     <string name="send__error_expired">Счёт истёк</string>
     <string name="send__error_failed">Платёж не прошёл</string>
-    <string name="send__error_in_flight">Платёж в ожидании</string>
     <string name="send__error_insufficient">Недостаточно средств</string>
     <string name="send__error_invalid">Неверный счёт</string>
     <string name="send__error_not_ready">Кошелёк не готов</string>
@@ -60,6 +59,7 @@
     <string name="send__fee">Комиссия %1$s</string>
     <string name="send__hold">Удерживайте для оплаты</string>
     <string name="send__offline">Офлайн</string>
+    <string name="send__pay">Оплатить</string>
     <string name="send__pending">В ожидании</string>
     <string name="send__sent">Отправлено</string>
     <string name="send__unknown">Проверьте активность</string>

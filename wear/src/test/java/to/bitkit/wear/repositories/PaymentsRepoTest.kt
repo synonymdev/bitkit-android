@@ -31,6 +31,8 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.wear.data.FakeOwnInvoiceStore
+import to.bitkit.wear.data.FakeUncertainSendStore
+import to.bitkit.wear.data.UncertainSend
 import to.bitkit.wear.models.PaymentState
 import to.bitkit.wear.models.PreparedSend
 import to.bitkit.wear.models.ReceiveError
@@ -49,6 +51,7 @@ import to.bitkit.wear.services.SparkFixtures.SPARK_ADDRESS_HINT
 import to.bitkit.wear.services.SparkFixtures.invoiceInput
 import to.bitkit.wear.services.SparkFixtures.payment
 import to.bitkit.wear.services.SparkFixtures.sparkAddressInput
+import to.bitkit.wear.services.SparkSync
 import to.bitkit.wear.services.WalletSelfSendGuard
 import to.bitkit.wear.services.WatchSparkService
 import to.bitkit.wear.test.BaseUnitTest
@@ -73,6 +76,7 @@ class PaymentsRepoTest : BaseUnitTest() {
     private val events = MutableSharedFlow<SdkEvent>()
     private val walletState = MutableStateFlow(WalletState(WalletStatus.Ready, BALANCE, hasSynced = true))
     private val ownInvoices = FakeOwnInvoiceStore()
+    private val uncertainSends = FakeUncertainSendStore()
     private val decoder = FakeInputDecoder()
 
     private lateinit var sut: PaymentsRepo
@@ -84,6 +88,7 @@ class PaymentsRepoTest : BaseUnitTest() {
         whenever { sparkService.identityPubkey() }.thenReturn(IDENTITY)
         whenever { sparkService.getInfo() }.thenReturn(SparkFixtures.info(BALANCE))
         whenever { sparkService.listPayments(anyOrNull()) }.thenReturn(emptyList())
+        whenever { sparkService.syncWallet() }.thenReturn(SparkSync(error = null, syncedAtSecs = 1uL))
         whenever(sparkService.sendKey(any(), any())).thenAnswer { "key-${it.arguments[1]}" }
         whenever { sparkService.parse(BOLT11) }.thenReturn(invoiceInput(BOLT11))
         whenever { sparkService.prepareSend(eq(BOLT11), anyOrNull()) }.thenReturn(prepared())
@@ -94,6 +99,20 @@ class PaymentsRepoTest : BaseUnitTest() {
             decoder,
             WalletSelfSendGuard(sparkService, ownInvoices),
             ownInvoices,
+            uncertainSends,
+        )
+    }
+
+    /** A new repository over the same stores, as after the app was closed and opened again. */
+    private fun restart() {
+        sut = PaymentsRepo(
+            testDispatcher,
+            sparkService,
+            walletRepo,
+            decoder,
+            WalletSelfSendGuard(sparkService, ownInvoices),
+            ownInvoices,
+            uncertainSends,
         )
     }
 
@@ -128,6 +147,17 @@ class PaymentsRepoTest : BaseUnitTest() {
         ownInvoices.failure = IllegalStateException("disk")
 
         assertIs<IllegalStateException>(sut.createInvoice().exceptionOrNull())
+    }
+
+    @Test
+    fun `an invoice made while the wallet is wiped is forgotten and not handed out`() = test {
+        whenever(sparkService.receiveBolt11(null, "", PaymentsRepo.INVOICE_EXPIRY_SECS)).doSuspendableAnswer {
+            walletState.update { it.copy(status = WalletStatus.Idle) }
+            BOLT11
+        }
+
+        assertIs<ReceiveError.NotReady>(sut.createInvoice().exceptionOrNull())
+        assertTrue(ownInvoices.invoices.isEmpty())
     }
 
     @Test
@@ -428,13 +458,31 @@ class PaymentsRepoTest : BaseUnitTest() {
         decoder.lnurlInvoices[15_000uL] = LNURL_BOLT11
         decoder.inputs[LNURL_BOLT11] = lightning(LNURL_BOLT11, amountSats = 15uL)
         whenever(sparkService.parse(LNURL_BOLT11)).thenReturn(invoiceInput(LNURL_BOLT11, "cc".repeat(32)))
-        whenever(sparkService.prepareSend(LNURL_BOLT11, null)).thenReturn(prepared())
+        whenever(sparkService.prepareSend(LNURL_BOLT11, null)).thenReturn(prepared(amountMsat = 15_000uL))
 
         val request = SendRequest.Lnurl(lnurl(), minSats = 10uL, maxSats = 20uL, payee = "satoshi@pay.example")
         val prepared = sut.prepare(request, amountSats = 15uL).getOrThrow()
 
         assertEquals(15uL, prepared.amountSats)
         assertEquals("satoshi@pay.example", prepared.payee)
+    }
+
+    @Test
+    fun `an lnurl invoice that asks for millisats above the amount is refused`() = test {
+        decoder.lnurlInvoices[15_000uL] = LNURL_BOLT11
+        decoder.inputs[LNURL_BOLT11] = lightning(LNURL_BOLT11, amountSats = 15uL)
+        whenever(sparkService.parse(LNURL_BOLT11)).thenReturn(invoiceInput(LNURL_BOLT11, "cc".repeat(32)))
+        whenever(sparkService.prepareSend(LNURL_BOLT11, null)).thenReturn(prepared(amountMsat = 15_999uL))
+        val request = SendRequest.Lnurl(lnurl(), minSats = 10uL, maxSats = 20uL, payee = null)
+
+        assertIs<SendError.Invalid>(sut.prepare(request, amountSats = 15uL).exceptionOrNull())
+    }
+
+    @Test
+    fun `a wallet that disconnects while a send is priced is not ready, not failed`() = test {
+        whenever(sparkService.getInfo()).doSuspendableAnswer { throw SparkError.NotConnected() }
+
+        assertIs<SendError.NotReady>(sut.prepare(SendRequest.Invoice(BOLT11, 500uL, null)).exceptionOrNull())
     }
 
     @Test
@@ -527,6 +575,73 @@ class PaymentsRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `an invoice is sent only after a sync that reached spark, so the list shows the phone's sends`() = test {
+        val prepared = preparedSend()
+        whenever(sparkService.send(any(), eq("key-0"))).thenReturn(payment("key-0", PaymentStatus.COMPLETED))
+        // The watch's list lacks the phone's send of the invoice until it syncs.
+        whenever(sparkService.syncWallet()).doSuspendableAnswer {
+            whenever(sparkService.listPayments(anyOrNull()))
+                .thenReturn(listOf(payment("phone", PaymentStatus.PENDING)))
+            SparkSync(error = null, syncedAtSecs = 2uL)
+        }
+
+        assertIs<SendError.InFlight>(sut.send(prepared).exceptionOrNull())
+        verify(sparkService, never()).send(any(), any())
+    }
+
+    @Test
+    fun `a sync that brings the phone's failed attempt moves the watch to the phone's next key`() = test {
+        val prepared = preparedSend()
+        whenever(sparkService.send(any(), eq("key-1"))).thenReturn(payment("key-1", PaymentStatus.COMPLETED))
+        whenever(sparkService.syncWallet()).doSuspendableAnswer {
+            whenever(sparkService.listPayments(anyOrNull())).thenReturn(listOf(payment("key-0", PaymentStatus.FAILED)))
+            SparkSync(error = null, syncedAtSecs = 2uL)
+        }
+
+        assertTrue(sut.send(prepared).isSuccess)
+        verify(sparkService).send(any(), eq("key-1"))
+        verify(sparkService, never()).send(any(), eq("key-0"))
+    }
+
+    @Test
+    fun `an invoice is not sent when the sync does not reach spark, fails or stalls`() = test {
+        val prepared = preparedSend()
+
+        var sync: suspend () -> SparkSync = { SparkSync(error = "offline", syncedAtSecs = 1uL) }
+        whenever(sparkService.syncWallet()).doSuspendableAnswer { sync() }
+        assertIs<SendError.NotReady>(sut.send(prepared).exceptionOrNull())
+
+        sync = { SparkSync(error = null, syncedAtSecs = null) }
+        assertIs<SendError.NotReady>(sut.send(prepared).exceptionOrNull())
+
+        sync = { throw SparkError.NotConnected() }
+        assertIs<SendError.NotReady>(sut.send(prepared).exceptionOrNull())
+
+        sync = { CompletableDeferred<SparkSync>().await() }
+        assertIs<SendError.NotReady>(sut.send(prepared).exceptionOrNull())
+        assertEquals(PaymentsRepo.SYNC_TIMEOUT.inWholeMilliseconds, testScheduler.currentTime)
+
+        verify(sparkService, never()).send(any(), any())
+    }
+
+    @Test
+    fun `a key that cannot be derived refuses the send as not ready`() = test {
+        val prepared = preparedSend()
+        whenever(sparkService.sendKey(any(), any())).thenAnswer { throw SparkError.NotConnected() }
+
+        assertIs<SendError.NotReady>(sut.send(prepared).exceptionOrNull())
+        verify(sparkService, never()).send(any(), any())
+    }
+
+    @Test
+    fun `a send reports the amount of the payment spark returns, also another device's at another amount`() = test {
+        whenever(sparkService.send(any(), eq("key-0")))
+            .thenReturn(payment("key-0", PaymentStatus.COMPLETED, amountSats = 700))
+
+        assertEquals(700uL, sut.send(preparedSend()).getOrThrow().amountSats)
+    }
+
+    @Test
     fun `a pending send completes with the event that arrives while spark is still sending`() = test {
         whenever(sparkService.send(any(), eq("key-0"))).doSuspendableAnswer {
             events.emit(SdkEvent.PaymentSucceeded(payment("key-0", PaymentStatus.COMPLETED)))
@@ -585,15 +700,111 @@ class PaymentsRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `after an unknown outcome a refusal under the same key stays unknown`() = test {
-        val prepared = preparedSend()
+    fun `after an unknown outcome a refusal under the same key stays unknown, also after a restart`() = test {
         var refusal: Throwable = SdkException.NetworkException("reset")
         whenever(sparkService.send(any(), any())).doSuspendableAnswer { throw refusal }
-        sut.send(prepared)
+        sut.send(preparedSend())
+        restart()
 
         refusal = SdkException.InsufficientFunds(null)
+        assertIs<SendError.Unknown>(sut.send(preparedSend()).exceptionOrNull())
+
+        refusal = SdkException.InvalidInput("invoice has expired")
+        assertIs<SendError.Unknown>(sut.send(preparedSend()).exceptionOrNull())
+    }
+
+    @Test
+    fun `a refusal under a key of a send the app was closed during is unknown, not unsent`() = test {
+        // What the store holds when the process dies inside the send call.
+        uncertainSends.begin(UncertainSend("key-0", expiresAtSecs = SparkFixtures.TIMESTAMP + SparkFixtures.EXPIRY))
+        whenever(sparkService.send(any(), any())).doSuspendableAnswer { throw SdkException.InsufficientFunds(null) }
+
+        assertIs<SendError.Unknown>(sut.send(preparedSend()).exceptionOrNull())
+    }
+
+    @Test
+    fun `a refusal is answered with the payment spark lists under the key`() = test {
+        whenever(sparkService.send(any(), any())).doSuspendableAnswer {
+            whenever(sparkService.listPayments(anyOrNull()))
+                .thenReturn(listOf(payment("key-0", PaymentStatus.COMPLETED)))
+            throw SdkException.InsufficientFunds(null)
+        }
+
+        assertEquals(PaymentState.Completed, sut.send(preparedSend()).getOrThrow().state)
+    }
+
+    @Test
+    fun `a send is noted before it goes out and forgotten once its outcome is known`() = test {
+        var notedDuringSend: Set<String>? = null
+        whenever(sparkService.send(any(), eq("key-0"))).doSuspendableAnswer {
+            notedDuringSend = uncertainSends.sends.keys.toSet()
+            payment("key-0", PaymentStatus.COMPLETED)
+        }
+
+        sut.send(preparedSend()).getOrThrow()
+
+        assertEquals(setOf("key-0"), notedDuringSend)
+        assertTrue(uncertainSends.sends.isEmpty())
+    }
+
+    @Test
+    fun `a refusal before anything went out is forgotten, and an unknown outcome is kept`() = test {
+        var error: Throwable = SdkException.InsufficientFunds(null)
+        whenever(sparkService.send(any(), any())).doSuspendableAnswer { throw error }
+
+        sut.send(preparedSend())
+        assertTrue(uncertainSends.sends.isEmpty())
+
+        error = SdkException.NetworkException("reset")
+        sut.send(preparedSend())
+        assertEquals(
+            UncertainSend("key-0", expiresAtSecs = SparkFixtures.TIMESTAMP + SparkFixtures.EXPIRY),
+            uncertainSends.sends.values.single(),
+        )
+    }
+
+    @Test
+    fun `a send that cannot be noted is not sent`() = test {
+        val prepared = preparedSend()
+        uncertainSends.failure = IllegalStateException("disk")
+
+        assertIs<SendError.Failed>(sut.send(prepared).exceptionOrNull())
+        verify(sparkService, never()).send(any(), any())
+    }
+
+    @Test
+    fun `a send call that stalls ends as unknown, and nothing else is sent until spark returns it`() = test {
+        val prepared = preparedSend()
+        var answer = CompletableDeferred<Payment>()
+        whenever(sparkService.send(any(), any())).doSuspendableAnswer { answer.await() }
 
         assertIs<SendError.Unknown>(sut.send(prepared).exceptionOrNull())
+        assertEquals(PaymentsRepo.SEND_TIMEOUT.inWholeMilliseconds, testScheduler.currentTime)
+        assertEquals(setOf("key-0"), uncertainSends.sends.keys)
+
+        assertIs<SendError.InFlight>(sut.send(prepared).exceptionOrNull())
+        verify(sparkService).send(any(), any())
+
+        val stalled = answer
+        answer = CompletableDeferred(payment("key-0", PaymentStatus.COMPLETED))
+        stalled.completeExceptionally(SdkException.NetworkException("reset"))
+        assertTrue(sut.send(prepared).isSuccess)
+    }
+
+    @Test
+    fun `a send goes on and is settled after its caller is cancelled`() = test {
+        val release = CompletableDeferred<Payment>()
+        whenever(sparkService.send(any(), any())).doSuspendableAnswer { release.await() }
+        val prepared = preparedSend()
+        val caller = launch { sut.send(prepared) }
+
+        caller.cancel()
+        assertIs<SendError.InFlight>(sut.send(prepared).exceptionOrNull())
+        release.complete(payment("key-0", PaymentStatus.COMPLETED))
+
+        assertTrue(uncertainSends.sends.isEmpty())
+        whenever(sparkService.send(any(), any())).thenReturn(payment("key-0", PaymentStatus.COMPLETED))
+        assertTrue(sut.send(prepared).isSuccess)
     }
 
     @Test
@@ -636,6 +847,112 @@ class PaymentsRepoTest : BaseUnitTest() {
         assertEquals(2uL, prepared.feeSats)
         assertEquals(1, keys.distinct().size)
         verify(sparkService, never()).sendKey(any(), any())
+    }
+
+    @Test
+    fun `a spark address prepared again after an unknown outcome is sent under the same key`() = test {
+        val keys = stubTransfer()
+        var outcome: () -> Payment = { throw SdkException.NetworkException("reset") }
+        whenever(sparkService.send(any(), any())).thenAnswer {
+            keys += it.arguments[1] as String
+            outcome()
+        }
+        val request = SendRequest.SparkAddress(SPARK_ADDRESS)
+        assertIs<SendError.Unknown>(sut.send(sut.prepare(request, 500uL).getOrThrow()).exceptionOrNull())
+        restart()
+
+        outcome = { payment(keys.last(), PaymentStatus.COMPLETED, paymentHash = null) }
+        sut.send(sut.prepare(request, 500uL).getOrThrow()).getOrThrow()
+
+        assertEquals(2, keys.size)
+        assertEquals(1, keys.distinct().size)
+        assertTrue(uncertainSends.sends.isEmpty())
+    }
+
+    @Test
+    fun `a spark address sent by another review after an unknown outcome keeps the first key`() = test {
+        val keys = stubTransfer()
+        whenever(sparkService.send(any(), any())).thenAnswer {
+            keys += it.arguments[1] as String
+            throw SdkException.NetworkException("reset")
+        }
+        val request = SendRequest.SparkAddress(SPARK_ADDRESS)
+        val first = sut.prepare(request, 500uL).getOrThrow()
+        val second = sut.prepare(request, 500uL).getOrThrow()
+
+        sut.send(first)
+        sut.send(second)
+
+        assertEquals(1, keys.distinct().size)
+    }
+
+    @Test
+    fun `a spark transfer of unknown outcome that spark lists is not sent again`() = test {
+        val keys = stubTransfer()
+        whenever(sparkService.send(any(), any())).thenAnswer {
+            keys += it.arguments[1] as String
+            throw SdkException.NetworkException("reset")
+        }
+        val request = SendRequest.SparkAddress(SPARK_ADDRESS)
+        sut.send(sut.prepare(request, 500uL).getOrThrow())
+        val key = keys.single()
+
+        whenever(sparkService.listPayments(anyOrNull()))
+            .thenReturn(listOf(payment(key, PaymentStatus.PENDING, paymentHash = null)))
+        assertIs<SendError.InFlight>(sut.prepare(request, 500uL).exceptionOrNull())
+
+        whenever(sparkService.listPayments(anyOrNull()))
+            .thenReturn(listOf(payment(key, PaymentStatus.COMPLETED, paymentHash = null)))
+        assertIs<SendError.AlreadyPaid>(sut.prepare(request, 500uL).exceptionOrNull())
+        assertEquals(1, keys.size)
+
+        // Told once: the next transfer to the address is a new payment under a new key.
+        whenever(sparkService.send(any(), any())).thenAnswer {
+            keys += it.arguments[1] as String
+            payment(keys.last(), PaymentStatus.COMPLETED, paymentHash = null)
+        }
+        sut.send(sut.prepare(request, 500uL).getOrThrow()).getOrThrow()
+        assertEquals(2, keys.distinct().size)
+    }
+
+    @Test
+    fun `a spark transfer of unknown outcome that spark lists failed is sent under a new key`() = test {
+        val keys = stubTransfer()
+        var outcome: () -> Payment = { throw SdkException.NetworkException("reset") }
+        whenever(sparkService.send(any(), any())).thenAnswer {
+            keys += it.arguments[1] as String
+            outcome()
+        }
+        val request = SendRequest.SparkAddress(SPARK_ADDRESS)
+        sut.send(sut.prepare(request, 500uL).getOrThrow())
+        whenever(sparkService.listPayments(anyOrNull()))
+            .thenReturn(listOf(payment(keys.single(), PaymentStatus.FAILED, paymentHash = null)))
+
+        outcome = { payment(keys.last(), PaymentStatus.COMPLETED, paymentHash = null) }
+        sut.send(sut.prepare(request, 500uL).getOrThrow()).getOrThrow()
+
+        assertEquals(2, keys.distinct().size)
+    }
+
+    @Test
+    fun `a spark transfer of unknown outcome is not sent again while spark cannot be asked`() = test {
+        val keys = stubTransfer()
+        whenever(sparkService.send(any(), any())).thenAnswer {
+            keys += it.arguments[1] as String
+            throw SdkException.NetworkException("reset")
+        }
+        val request = SendRequest.SparkAddress(SPARK_ADDRESS)
+        val prepared = sut.prepare(request, 500uL).getOrThrow()
+        sut.send(prepared)
+
+        whenever(sparkService.syncWallet()).thenReturn(SparkSync(error = "offline", syncedAtSecs = 1uL))
+        assertIs<SendError.NotReady>(sut.prepare(request, 500uL).exceptionOrNull())
+        assertIs<SendError.NotReady>(sut.send(prepared).exceptionOrNull())
+
+        whenever(sparkService.syncWallet()).thenReturn(SparkSync(error = null, syncedAtSecs = 2uL))
+        uncertainSends.failure = IllegalStateException("disk")
+        assertIs<SendError.Failed>(sut.prepare(request, 500uL).exceptionOrNull())
+        assertEquals(1, keys.size)
     }
 
     // endregion
@@ -686,8 +1003,19 @@ class PaymentsRepoTest : BaseUnitTest() {
         amountSats: Long = 1_000,
     ) = payment(id, status, PaymentType.RECEIVE, paymentHash, amountSats, feeSats = 0)
 
-    private fun prepared(sparkTransferFeeSats: ULong? = null) = PrepareSendPaymentResponse(
-        paymentMethod = SendPaymentMethod.Bolt11Invoice(SparkFixtures.invoice(BOLT11), sparkTransferFeeSats, FEE),
+    /** A Spark address of another wallet that Spark prices; returns the list the test notes its send keys in. */
+    private suspend fun stubTransfer(): MutableList<String> {
+        whenever(sparkService.parse(SPARK_ADDRESS)).thenReturn(sparkAddressInput(OTHER_IDENTITY))
+        whenever(sparkService.prepareSend(SPARK_ADDRESS, 500uL)).thenReturn(preparedTransfer())
+        return mutableListOf()
+    }
+
+    private fun prepared(sparkTransferFeeSats: ULong? = null, amountMsat: ULong? = null) = PrepareSendPaymentResponse(
+        paymentMethod = SendPaymentMethod.Bolt11Invoice(
+            SparkFixtures.invoice(BOLT11, amountMsat = amountMsat),
+            sparkTransferFeeSats,
+            FEE,
+        ),
         amount = BigInteger.valueOf(500),
         tokenIdentifier = null,
         conversionEstimate = null,

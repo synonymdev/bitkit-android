@@ -48,7 +48,6 @@
     <string name="send__error_already_paid">Al betaald</string>
     <string name="send__error_expired">Factuur verlopen</string>
     <string name="send__error_failed">Betaling mislukt</string>
-    <string name="send__error_in_flight">Betaling in behandeling</string>
     <string name="send__error_insufficient">Onvoldoende saldo</string>
     <string name="send__error_invalid">Ongeldige factuur</string>
     <string name="send__error_not_ready">Wallet niet gereed</string>
@@ -58,6 +57,7 @@
     <string name="send__fee">Kosten %1$s</string>
     <string name="send__hold">Houd vast om te betalen</string>
     <string name="send__offline">Offline</string>
+    <string name="send__pay">Betalen</string>
     <string name="send__pending">In behandeling</string>
     <string name="send__sent">Verzonden</string>
     <string name="send__unknown">Bekijk activiteit</string>

@@ -50,7 +50,6 @@
     <string name="send__error_already_paid">Już opłacona</string>
     <string name="send__error_expired">Faktura wygasła</string>
     <string name="send__error_failed">Płatność nieudana</string>
-    <string name="send__error_in_flight">Płatność oczekuje</string>
     <string name="send__error_insufficient">Za mało środków</string>
     <string name="send__error_invalid">Nieprawidłowa faktura</string>
     <string name="send__error_not_ready">Portfel nie jest gotowy</string>
@@ -60,6 +59,7 @@
     <string name="send__fee">Opłata %1$s</string>
     <string name="send__hold">Przytrzymaj, aby zapłacić</string>
     <string name="send__offline">Offline</string>
+    <string name="send__pay">Zapłać</string>
     <string name="send__pending">Oczekuje</string>
     <string name="send__sent">Wysłano</string>
     <string name="send__unknown">Sprawdź aktywność</string>

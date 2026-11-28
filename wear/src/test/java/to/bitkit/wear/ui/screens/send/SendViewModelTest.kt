@@ -183,6 +183,48 @@ class SendViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a sent payment shows the amount spark paid`() = test {
+        val prepared = prepared(amountSats = 5_000uL)
+        stubInvoice(prepared)
+        whenever(paymentsRepo.send(prepared)).thenReturn(Result.success(payment(PaymentState.Completed)))
+        val sut = createSut()
+
+        sut.onHoldComplete()
+
+        assertEquals(SendStep.Done(SendResult.Sent, DisplayAmount("₿", "21 000")), sut.uiState.value.step)
+    }
+
+    @Test
+    fun `a payment already under way shows as pending, never as a failure`() = test {
+        val prepared = prepared()
+        stubInvoice(prepared)
+        whenever(paymentsRepo.send(prepared)).thenReturn(Result.failure(SendError.InFlight()))
+        val sut = createSut()
+
+        sut.effects.test {
+            sut.onHoldComplete()
+            assertEquals(SendResult.Pending, assertIs<SendStep.Done>(sut.uiState.value.step).result)
+
+            testScheduler.advanceTimeBy(SendViewModel.PENDING_CLOSE_DELAY + 1.seconds)
+            assertEquals(SendEffect.Close, awaitItem())
+        }
+    }
+
+    @Test
+    fun `a request found under way before the review shows as pending and closes`() = test {
+        whenever(paymentsRepo.parse(INPUT)).thenReturn(Result.success(INVOICE))
+        whenever(paymentsRepo.prepare(INVOICE, null)).thenReturn(Result.failure(SendError.InFlight()))
+
+        val sut = createSut()
+
+        sut.effects.test {
+            assertEquals(SendResult.Pending, assertIs<SendStep.Done>(sut.uiState.value.step).result)
+            testScheduler.advanceTimeBy(SendViewModel.PENDING_CLOSE_DELAY + 1.seconds)
+            assertEquals(SendEffect.Close, awaitItem())
+        }
+    }
+
+    @Test
     fun `a failed send shows its reason`() = test {
         val prepared = prepared()
         stubInvoice(prepared)
@@ -276,7 +318,9 @@ class SendViewModelTest : BaseUnitTest() {
         payee = null,
         response = mock<PrepareSendPaymentResponse>(),
         paymentHash = "ab12",
-        transferKey = null,
+        expiresAtSecs = 1_800_003_600uL,
+        sparkAddress = null,
+        transferKey = "transfer",
     )
 
     private fun payment(state: PaymentState) = WatchPayment(

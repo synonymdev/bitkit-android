@@ -19,8 +19,12 @@ import breez_sdk_spark.SendPaymentOptions
 import breez_sdk_spark.SendPaymentRequest
 import breez_sdk_spark.SendPaymentResponse
 import breez_sdk_spark.TokenOptimizationConfig
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
 import org.junit.Rule
@@ -172,6 +176,44 @@ class WatchSparkServiceTest {
         caller.join()
 
         assertTrue(isSent)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a disconnect waits for a running send, but no longer than its grace`() = runTest {
+        val sut = WatchSparkService(mock<Context>(), FakeBip39())
+        val sdk = connectedSdk()
+        val prepared = PrepareSendPaymentResponse(
+            SendPaymentMethod.Bolt11Invoice(SparkFixtures.invoice(), null, 4uL),
+            BigInteger.valueOf(500),
+            null,
+            null,
+            FeePolicy.FEES_EXCLUDED,
+        )
+        var release = CompletableDeferred<Unit>()
+        whenever(sdk.sendPayment(any())).doSuspendableAnswer {
+            release.await()
+            SendPaymentResponse(SparkFixtures.payment("key", PaymentStatus.PENDING))
+        }
+        sut.connectWith(assertNotNull(sut.wipeToken())) { sdk }
+
+        val sending = launch { sut.send(prepared, "key") }
+        val disconnecting = launch { sut.disconnect() }
+        runCurrent()
+        verify(sdk, never()).disconnect()
+        release.complete(Unit)
+        joinAll(sending, disconnecting)
+        verify(sdk).disconnect()
+
+        release = CompletableDeferred()
+        sut.connectWith(assertNotNull(sut.wipeToken())) { sdk }
+        val stalled = launch { sut.send(prepared, "key") }
+        runCurrent()
+        sut.disconnect()
+        assertEquals(WatchSparkService.SEND_GRACE.inWholeMilliseconds, testScheduler.currentTime)
+        verify(sdk, times(2)).disconnect()
+        release.complete(Unit)
+        stalled.join()
     }
 
     @Test

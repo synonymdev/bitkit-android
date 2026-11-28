@@ -48,7 +48,6 @@
     <string name="send__error_already_paid">Bereits bezahlt</string>
     <string name="send__error_expired">Rechnung abgelaufen</string>
     <string name="send__error_failed">Zahlung fehlgeschlagen</string>
-    <string name="send__error_in_flight">Zahlung ausstehend</string>
     <string name="send__error_insufficient">Nicht genug Guthaben</string>
     <string name="send__error_invalid">Ungültige Rechnung</string>
     <string name="send__error_not_ready">Wallet nicht bereit</string>
@@ -58,6 +57,7 @@
     <string name="send__fee">Gebühr %1$s</string>
     <string name="send__hold">Halten zum Bezahlen</string>
     <string name="send__offline">Offline</string>
+    <string name="send__pay">Bezahlen</string>
     <string name="send__pending">Ausstehend</string>
     <string name="send__sent">Gesendet</string>
     <string name="send__unknown">Aktivität prüfen</string>
