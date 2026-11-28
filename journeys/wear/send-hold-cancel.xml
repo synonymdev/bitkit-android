@@ -1,0 +1,22 @@
+<journey name="wear send hold cancel">
+  <description>
+    A tap on the pay button, or a hold released before the ring is full, pays nothing: the review stays and the
+    balance does not change. Emulator and physical watch.
+
+    Precondition: Restored wallet on the local ./spark stack with at least 2 000 sats, see
+    journeys/wear/README.md › Local ./spark stack, with the app open on the Balance page and the loading ring stopped.
+    README › Holding to pay has the gestures.
+  </description>
+  <actions>
+    <action>Note the text of "WatchHomeBalance" as &lt;balance&gt;</action>
+    <action>Run `../bitkit-docker/spark invoice 1000` and note the BOLT11 invoice it prints as &lt;invoice&gt;</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;invoice&gt;" to.bitkit.dev`</action>
+    <action>Wait up to 10 s until "WatchSendHold" is listed</action>
+    <action>Tap "WatchSendHold" once</action>
+    <action>Wait 3 s and verify "WatchSendHold" is still listed and "WatchSendSending" is not</action>
+    <action>Hold "WatchSendHold" for 0.5 s as in README › Holding to pay, then release</action>
+    <action>Wait 3 s and verify "WatchSendHold" is still listed and "WatchSendSending" is not</action>
+    <action>Swipe to dismiss from the left edge: `adb shell input swipe 20 227 400 227 300`</action>
+    <action>Verify "WatchHomeBalance" still reads &lt;balance&gt;</action>
+  </actions>
+</journey>

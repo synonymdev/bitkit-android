@@ -76,8 +76,9 @@ Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only
   `NfcMonitor` (the NFC adapter's state) and `ForegroundMonitor` (the process lifecycle: whether the app is on
   screen).
 - `ui`: one `MainActivity` with `testTagsAsResourceId`, a `SwipeDismissableNavHost` with the routes Onboarding,
-  the Restore graph, Wallet removed, Home, About and Not supported, and the M3 Expressive theme (black background,
-  Brand orange, Inter Tight). The splash screen stays while the first screen is picked, for at most about a second;
+  the Restore graph, Wallet removed, Home, About, Receive QR, Send, Activity detail and Not supported, and the M3
+  Expressive theme (black background, Brand orange, Inter Tight). `LaunchRequest` reads what an intent asks for
+  beyond opening the app: a payment link or the tile's Receive. The splash screen stays while the first screen is picked, for at most about a second;
   after that the loading ring shows until it is. When the wallet storage cannot be recovered at launch, the start
   error (`WatchStartError` with `WatchStartRetry`) shows instead of a first screen.
 
@@ -89,7 +90,7 @@ On-screen copy stays short: a title or one line of at most about six words per s
 ## Screens and visual system
 
 - **Home pager.** Home is a horizontal pager (`HorizontalPagerScaffold` with a page indicator) that opens on the
-  Balance page; Settings is the next page. `HOME_PAGES` in `HomePage.kt` lists the pages in swipe order, so a page
+  Balance page; Receive, Activity and Settings follow, in that order. `HOME_PAGES` in `HomePage.kt` lists the pages in swipe order, so a page
   is added in one line. The pager leaves the left edge of the first page to swipe-to-dismiss, which leaves the app.
   There is no Send page or button: a send starts from outside the app (phone handoff, NFC or a `lightning:` link).
   The pager composes only the page on screen, so Home itself, above the pager, leaves for onboarding or the Wallet
@@ -150,12 +151,51 @@ On-screen copy stays short: a title or one line of at most about six words per s
   disconnected, the app keeps hold of it so the next lock, pause or wipe tries again: each of them disconnects
   whatever the wallet's status says, as does a start that finds the watch locked. Ambient mode is not the
   background: the app stays on screen and connected.
+- **Receive.** The Receive page is one large round QR button (`WatchReceiveOpen`); it has no amount entry. It opens
+  the receive QR (`WatchReceiveQr`): an amountless invoice, uppercased so the code uses QR's alphanumeric mode, black
+  on white with the standard four-module quiet zone, error correction L, filling the largest square inside the round
+  screen (1/√2 of its width). Each module is one bitmap pixel scaled up without smoothing (zxing, as on the phone).
+  While the QR shows, the screen stays on at full brightness; both end when it leaves. The invoice is made once the
+  wallet is ready, under the loading ring; a failure shows one line and a retry (`WatchReceiveError`,
+  `WatchReceiveRetry`). An invoice is replaced by a new one a minute before it expires. Paid, the QR turns into a
+  check with the amount (`WatchReceivePaid`, `WatchReceivePaidAmount`) and a firm click (the `LongPress` haptic), unlike
+  the confirm pattern that ends a send; a tap on the check shows a new invoice. In ambient mode the QR is replaced by
+  a dimmed QR icon (`WatchReceiveHidden`). Debug builds log each invoice shown (`Showing invoice`), which is how the
+  journeys read it.
+- **Send.** There is no Send page or button. A `lightning:`, `bitcoin:` or `spark:` link opens the app
+  (`MainActivity` is `singleTop`, so a link reaches the open app) and the send flow above Home; without a wallet,
+  or during the restore, the link is dropped. The flow waits for the wallet to be ready (the loading ring, with
+  "Offline" while it is offline), reads the input and prices the send (see Payments), all before the hold. An input
+  without an amount, an amountless invoice, a Spark address or an LNURL with a range, gets a minimal amount entry
+  (the number keyboard, the LNURL range below it); Receive never has one.
+  - Review: the amount in the balance's large style, fiat below in the small style, the fee only when it is at
+    least 1 % of the amount, and one line naming the payee when the input names one. The pay button is the edge
+    button, "Hold to pay" (`WatchSendHold`).
+  - Hold to pay: holding the button fills a ring around the bezel (`HoldToPayRing`, the geometry of `BezelLoading`)
+    over 1.2 s, with a light tick (`SegmentTick`) at each quarter and the confirm haptic at the end, and only then
+    the payment goes out. Releasing early empties the ring; a tap never pays. Offline, or with the wallet not ready,
+    the button is disabled with the line "Offline". `PaymentsRepo.skipConfirmation` is asked before the hold; it is
+    always false until QuickPay (PR 3).
+  - Sending: the loading ring, with "Waiting for network" after 3 s. The screen stays on and the flow cannot be
+    swiped away or left with Back while the send runs.
+  - Result: sent shows a check, "Sent" and the amount with the confirm haptic, and closes after 2 s. A payment that
+    did not settle in time shows a clock and "Pending"; an outcome Spark could not report shows "Check activity",
+    never a failure; both close after 3 s. A refusal or a failure shows a cross, one line of at most four words and
+    an OK button (`WatchSendError`, `WatchSendClose`), with the reject haptic. Insufficient funds, an expired or
+    unreadable invoice and an own invoice end there before any hold.
+- **Activity.** The Activity page lists the newest 20 payments from Spark's local list: a direction icon (or a
+  clock for pending, a cross for failed), the amount with its sign and how long ago (`WatchActivityItem-0` onwards).
+  It is read when Spark connects and after every payment or sync, and the last list stays while Spark is
+  disconnected. A tap opens the detail: the amount, the fee of a send, the date and time and the status
+  (`WatchActivityDetailAmount`, `…Fee`, `…Time`, `…Status`); Spark's list carries no payee or description. With no
+  payments it shows a dimmed icon and "No activity" (`WatchActivityEmpty`). Ambient mode hides the amounts.
 - **Settings.** A short list of icon rows: About and Remove wallet. The unit has no setting: tapping the balance is
   the only way to switch it, and the choice is kept in the settings store across restarts. Remove wallet asks with a
   one-line title and the two round ✕/✓ buttons.
 - **Loading.** Every wait shows `BezelLoading`: an indeterminate ring around the screen edge (test tag
   `BezelLoading`), with the screen's content readable inside it. It covers connecting and syncing on Balance, saving
-  the restored wallet, and removing the wallet. It is hidden in ambient mode. Accessibility services report only
+  the restored wallet, removing the wallet, making an invoice, the first activity list, and a send being read,
+  priced and sent. It is hidden in ambient mode. Accessibility services report only
   content that no node above it covers, so the full-screen ring has no semantics; its one progress node
   (`BezelLoading`) is a stroke-sized spot at the top of the ring, and the content beneath stays reachable by TalkBack
   and `android layout`. `BezelPadding` and `BezelStrokeWidth` hold the ring's padding and stroke for other edge
@@ -184,7 +224,12 @@ in any other state.
   amount asked.
 - **Sending.** The send call cannot be cancelled by the screen that started it, and one send runs at a time. It
   returns when Spark has the payment; the result then waits up to a minute for it to settle and reports it as
-  pending after that.
+  pending after that. The send screen keeps the screen on, so the app stays on screen and connected while it waits.
+  **Known gap:** a wearer who leaves the app during that wait pauses the wallet 10 s later (see Background); the
+  settlement is then not seen and the send reports pending after the minute, although it may have completed. The
+  activity list shows the real state once the app is back.
+- **LNURL.** LNURL-pay and Lightning addresses are covered by unit tests only: the local stack's LNURL server serves
+  only addresses its own wallets registered, so no journey pays one.
 - **Paying once.** An invoice is sent under an idempotency key derived from the wallet seed, the payment hash and
   the attempt number (`SparkSendKey`, the same derivation as the phone and iOS). Spark makes one transfer per key,
   so the same invoice sent from the watch and the phone, or twice from the watch, is paid once. Before each send
