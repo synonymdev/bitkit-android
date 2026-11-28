@@ -77,13 +77,11 @@ settings by reading the phone's backup (see Settings sync).
   `WipeMarker` for the note itself), `OwnInvoiceStore` (the invoices this wallet created, in the settings file),
   `QuickPaySpendStore` (the day's QuickPay spend, in the settings file), the rates
   client, `NetworkMonitor` (`ConnectivityManager`'s default network, online once the system validated it),
-  `NfcMonitor` (the NFC adapter's state) and `ForegroundMonitor` (the process lifecycle: whether the app is on
-  screen).
-- `tile`: `BalanceTileService` (the balance tile), `TileState` (what it shows) and `TileUpdates` (asks the system
-  to draw it again). See Tile below.
   `NfcMonitor` (the NFC adapter's state), `ForegroundMonitor` (the process lifecycle: whether the app is on
   screen), `AmbientMonitor` (whether the activity is in ambient mode) and `ElapsedClock` (the time since boot,
   sleep included, for ages).
+- `tile`: `BalanceTileService` (the balance tile), `TileState` (what it shows) and `TileUpdates` (asks the system
+  to draw it again). See Tile below.
 - `models`: among others `PhoneSettingsParser`, the reader of the phone's settings backup.
 - `ui`: one `MainActivity` with `testTagsAsResourceId`, a `SwipeDismissableNavHost` with the routes Onboarding,
   the Restore graph, Wallet removed, Home, About, Receive QR, Send, Activity detail and Not supported, and the M3

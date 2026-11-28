@@ -125,11 +125,6 @@ the command line. Run `receive-paid.xml` first: it funds the wallet the send jou
 | `activity-list.xml` | local | yes, after `receive-paid.xml` and `send-deeplink-bolt11.xml` |
 | `receive-paid-ambient.xml` | local | no, it funds the wallet with 1 000 sats |
 | `tile-balance.xml` | hosted or local | no |
-| `settings-import-units.xml` | hosted, and a phone that wrote its settings | yes, any balance above 0 |
-| `quickpay-skips-hold.xml` | local, and a phone that wrote its settings | yes, 2 000 sats |
-| `quickpay-over-limit-holds.xml` | local, and a phone that wrote its settings | yes, 12 000 sats |
-| `quickpay-off-holds.xml` | local, and a phone that wrote its settings, after `quickpay-skips-hold.xml` | yes, 2 000 sats |
-| `settings-import-units.xml` | local, a private phrase, and a phone that wrote its settings | yes, any balance above 0 |
 | `settings-import-units.xml` | local, the private settings wallet, and a phone that wrote its settings | yes, any balance above 0 |
 | `settings-swap-survives-import.xml` | as `settings-import-units.xml`, after it | yes, any balance above 0 |
 | `quickpay-skips-hold.xml` | local, the private settings wallet, and a phone that wrote its settings | yes, 2 000 sats |
