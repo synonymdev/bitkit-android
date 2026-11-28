@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import breez_sdk_spark.PrepareSendPaymentResponse
 import com.synonym.bitkitcore.LnurlPayData
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -13,12 +14,16 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.wear.data.AmbientMonitor
 import to.bitkit.wear.data.SettingsStore
 import to.bitkit.wear.data.WatchSettings
+import to.bitkit.wear.models.BitcoinDisplayUnit
 import to.bitkit.wear.models.FxRate
 import to.bitkit.wear.models.PaymentState
 import to.bitkit.wear.models.PreparedSend
@@ -30,6 +35,7 @@ import to.bitkit.wear.repositories.PaymentsRepo
 import to.bitkit.wear.repositories.WalletRepo
 import to.bitkit.wear.repositories.WalletState
 import to.bitkit.wear.repositories.WalletStatus
+import to.bitkit.wear.security.FakeForegroundMonitor
 import to.bitkit.wear.test.BaseUnitTest
 import to.bitkit.wear.ui.Routes
 import to.bitkit.wear.ui.screens.home.DisplayAmount
@@ -46,21 +52,29 @@ class SendViewModelTest : BaseUnitTest() {
     private val currencyRepo = mock<CurrencyRepo>()
     private val settingsStore = mock<SettingsStore>()
     private val walletState = MutableStateFlow(WalletState(WalletStatus.Ready, 100_000uL, hasSynced = true))
+    private val foregroundMonitor = FakeForegroundMonitor()
+    private val ambientMonitor = AmbientMonitor()
+    private var elapsedMs = 1_000_000L
 
     @Before
     fun setUp() {
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(currencyRepo.rates).thenReturn(MutableStateFlow(emptyList<FxRate>()))
         whenever(settingsStore.data).thenReturn(flowOf(WatchSettings()))
+        whenever { paymentsRepo.skipConfirmation(any(), any()) }.thenReturn(false)
     }
 
-    private fun createSut() = SendViewModel(
-        SavedStateHandle(mapOf(Routes.SEND_INPUT to INPUT)),
+    private fun createSut(
+        savedState: SavedStateHandle = SavedStateHandle(mapOf(Routes.SEND_INPUT to INPUT)),
+    ) = SendViewModel(
+        savedState,
         paymentsRepo,
         walletRepo,
         currencyRepo,
         settingsStore,
-    )
+        foregroundMonitor,
+        ambientMonitor,
+    ) { elapsedMs }
 
     @Test
     fun `the input is read only once the wallet is ready`() = test {
@@ -116,15 +130,219 @@ class SendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `the quickpay hook sends without the hold`() = test {
+    fun `quickpay sends without the review or the hold and ends on the same result`() = test {
         val prepared = prepared()
         stubInvoice(prepared)
-        whenever(paymentsRepo.skipConfirmation(prepared)).thenReturn(true)
-        whenever(paymentsRepo.send(prepared)).thenReturn(Result.success(payment(PaymentState.Completed)))
+        val sent = CompletableDeferred<Result<WatchPayment>>()
+        whenever(paymentsRepo.skipConfirmation(eq(prepared), any())).thenReturn(true)
+        whenever(paymentsRepo.send(prepared)).doSuspendableAnswer { sent.await() }
 
-        createSut()
+        val sut = createSut()
+
+        assertIs<SendStep.Sending>(sut.uiState.value.step)
+        assertFalse(sut.uiState.value.isHoldEnabled)
+        verify(paymentsRepo, times(1)).skipConfirmation(eq(prepared), any())
+
+        sent.complete(Result.success(payment(PaymentState.Completed)))
+
+        val done = assertIs<SendStep.Done>(sut.uiState.value.step)
+        assertEquals(SendResult.Sent, done.result)
+        verify(paymentsRepo, times(1)).send(prepared)
+    }
+
+    @Test
+    fun `quickpay still applies to a link that opened the app and waited a moment for the wallet`() = test {
+        for (status in listOf(WalletStatus.Idle, WalletStatus.Paused, WalletStatus.Connecting)) {
+            walletState.update { it.copy(status = status) }
+            val prepared = prepared()
+            stubInvoice(prepared)
+            whenever(paymentsRepo.skipConfirmation(eq(prepared), any())).thenReturn(true)
+            whenever(paymentsRepo.send(prepared)).doSuspendableAnswer { awaitCancellation() }
+
+            val sut = createSut()
+            walletState.update { it.copy(status = WalletStatus.Connecting) }
+            elapsedMs += SendViewModel.QUICKPAY_WINDOW.inWholeMilliseconds
+            walletState.update { it.copy(status = WalletStatus.Ready) }
+
+            assertIs<SendStep.Sending>(sut.uiState.value.step, "$status")
+        }
+    }
+
+    @Test
+    fun `a link that waited long for the wallet is reviewed and held, never paid under quickpay`() = test {
+        for (status in listOf(WalletStatus.Error, WalletStatus.Connecting)) {
+            walletState.update { it.copy(status = status) }
+            stubInvoice(prepared())
+            whenever(paymentsRepo.skipConfirmation(any(), any())).thenReturn(true)
+
+            val sut = createSut()
+            elapsedMs += SendViewModel.QUICKPAY_WINDOW.inWholeMilliseconds + 1
+            walletState.update { it.copy(status = WalletStatus.Ready) }
+
+            assertIs<SendStep.Review>(sut.uiState.value.step, "$status")
+            assertTrue(sut.uiState.value.isHoldEnabled)
+        }
+        verify(paymentsRepo, never()).skipConfirmation(any(), any())
+        verify(paymentsRepo, never()).send(any())
+    }
+
+    @Test
+    fun `a wallet that turns offline while the link waits for it ends on the offline error, without quickpay`() =
+        test {
+            for (status in listOf(WalletStatus.Idle, WalletStatus.Paused, WalletStatus.Connecting)) {
+                walletState.update { it.copy(status = status) }
+                stubInvoice(prepared())
+                whenever(paymentsRepo.skipConfirmation(any(), any())).thenReturn(true)
+
+                val sut = createSut()
+                assertEquals(SendStep.Loading, sut.uiState.value.step, "$status")
+                walletState.update { it.copy(status = WalletStatus.Connecting) }
+                walletState.update { it.copy(status = WalletStatus.Offline) }
+                // The network returns well within the QuickPay window: the dropped request stays dropped.
+                walletState.update { it.copy(status = WalletStatus.Connecting) }
+                walletState.update { it.copy(status = WalletStatus.Ready) }
+
+                assertEquals(SendStep.Offline, sut.uiState.value.step, "$status")
+                assertFalse(sut.uiState.value.isHoldEnabled)
+                sut.onHoldComplete()
+            }
+            verify(paymentsRepo, never()).parse(any())
+            verify(paymentsRepo, never()).skipConfirmation(any(), any())
+            verify(paymentsRepo, never()).send(any())
+        }
+
+    @Test
+    fun `a wallet that turns offline while quickpay is decided ends on the offline error and sends nothing`() =
+        test {
+            val prepared = prepared()
+            stubInvoice(prepared)
+            whenever(paymentsRepo.skipConfirmation(eq(prepared), any())).doSuspendableAnswer {
+                walletState.update { state -> state.copy(status = WalletStatus.Offline) }
+                it.getArgument<() -> Boolean>(1)()
+            }
+
+            val sut = createSut()
+
+            assertEquals(SendStep.Offline, sut.uiState.value.step)
+            walletState.update { it.copy(status = WalletStatus.Ready) }
+            assertEquals(SendStep.Offline, sut.uiState.value.step)
+            verify(paymentsRepo, never()).send(any())
+        }
+
+    @Test
+    fun `a flow rebuilt for a link that already had one is reviewed and held, never paid under quickpay`() = test {
+        val prepared = prepared()
+        stubInvoice(prepared)
+        whenever(paymentsRepo.skipConfirmation(eq(prepared), any())).thenReturn(true)
+        whenever(paymentsRepo.send(prepared)).doSuspendableAnswer { awaitCancellation() }
+        // The first flow ends on the review, as when the watch dimmed, and the wearer leaves without paying.
+        ambientMonitor.set(true)
+        val savedState = SavedStateHandle(mapOf(Routes.SEND_INPUT to INPUT))
+        assertIs<SendStep.Review>(createSut(savedState).uiState.value.step)
+        ambientMonitor.set(false)
+
+        // The process is killed and the back stack restored: a new flow on what the first one saved.
+        val restored = SavedStateHandle(savedState.keys().associateWith { savedState.get<Any?>(it) })
+        val sut = createSut(restored)
+
+        assertIs<SendStep.Review>(sut.uiState.value.step)
+        assertTrue(sut.uiState.value.isHoldEnabled)
+        verify(paymentsRepo, never()).skipConfirmation(any(), any())
+        verify(paymentsRepo, never()).send(any())
+
+        sut.onHoldComplete()
 
         verify(paymentsRepo).send(prepared)
+    }
+
+    @Test
+    fun `a link whose wait crossed a lock, a pause or ambient mode is reviewed and held`() = test {
+        val interruptions = listOf<Pair<String, () -> Unit>>(
+            "lock" to {
+                walletState.update { it.copy(status = WalletStatus.Locked) }
+                walletState.update { it.copy(status = WalletStatus.Connecting) }
+            },
+            "pause" to {
+                foregroundMonitor.isForeground.update { false }
+                foregroundMonitor.isForeground.update { true }
+            },
+            "wallet pause" to {
+                walletState.update { it.copy(status = WalletStatus.Paused) }
+                walletState.update { it.copy(status = WalletStatus.Connecting) }
+            },
+            "ambient" to {
+                ambientMonitor.set(true)
+                ambientMonitor.set(false)
+            },
+        )
+        for ((name, interrupt) in interruptions) {
+            walletState.update { it.copy(status = WalletStatus.Connecting) }
+            stubInvoice(prepared())
+            whenever(paymentsRepo.skipConfirmation(any(), any())).thenReturn(true)
+
+            val sut = createSut()
+            interrupt()
+            walletState.update { it.copy(status = WalletStatus.Ready) }
+
+            assertIs<SendStep.Review>(sut.uiState.value.step, name)
+        }
+        verify(paymentsRepo, never()).skipConfirmation(any(), any())
+        verify(paymentsRepo, never()).send(any())
+    }
+
+    @Test
+    fun `a link that arrives on a locked watch is reviewed and held`() = test {
+        walletState.update { it.copy(status = WalletStatus.Locked) }
+        stubInvoice(prepared())
+        whenever(paymentsRepo.skipConfirmation(any(), any())).thenReturn(true)
+
+        val sut = createSut()
+        walletState.update { it.copy(status = WalletStatus.Ready) }
+
+        assertIs<SendStep.Review>(sut.uiState.value.step)
+        verify(paymentsRepo, never()).skipConfirmation(any(), any())
+    }
+
+    @Test
+    fun `a wearer who looked away while quickpay was decided is asked to hold`() = test {
+        val prepared = prepared()
+        stubInvoice(prepared)
+        whenever(paymentsRepo.skipConfirmation(eq(prepared), any())).doSuspendableAnswer {
+            ambientMonitor.set(true)
+            it.getArgument<() -> Boolean>(1)()
+        }
+
+        val sut = createSut()
+
+        assertIs<SendStep.Review>(sut.uiState.value.step)
+        verify(paymentsRepo, never()).send(any())
+    }
+
+    @Test
+    fun `a quickpay send that fails shows the failure like any other`() = test {
+        val prepared = prepared()
+        stubInvoice(prepared)
+        whenever(paymentsRepo.skipConfirmation(eq(prepared), any())).thenReturn(true)
+        whenever(paymentsRepo.send(prepared)).thenReturn(Result.failure(SendError.Failed()))
+
+        val sut = createSut()
+
+        assertEquals(SendStep.Failed(SendFailure.Failed), sut.uiState.value.step)
+    }
+
+    @Test
+    fun `without quickpay the send waits on review, written in the phone's unit`() = test {
+        whenever(settingsStore.data)
+            .thenReturn(flowOf(WatchSettings(displayUnit = BitcoinDisplayUnit.CLASSIC)))
+        val prepared = prepared(amountSats = 21_000uL)
+        stubInvoice(prepared)
+        whenever(paymentsRepo.skipConfirmation(eq(prepared), any())).thenReturn(false)
+
+        val sut = createSut()
+
+        val step = assertIs<SendStep.Review>(sut.uiState.value.step)
+        assertEquals("0.00021000", step.amount.text)
+        verify(paymentsRepo, never()).send(any())
     }
 
     @Test

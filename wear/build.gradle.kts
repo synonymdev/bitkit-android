@@ -230,6 +230,8 @@ dependencies {
     implementation(libs.bitkit.core)
     implementation(libs.zxing)
     implementation(libs.breez.sdk.spark) { exclude(group = "net.java.dev.jna", module = "jna") }
+    // Read-only import of the phone's settings backup; see docs/wear.md, Settings sync.
+    implementation(libs.vss.client)
     // Lifecycle
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)

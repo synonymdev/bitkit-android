@@ -1,0 +1,21 @@
+<journey name="wear settings swap survives import">
+  <description>
+    The wearer's own swap of the balance's unit lasts across an import of the phone's settings, as long as the phone's
+    setting stays the same: with fiat first on the phone, a tap puts bitcoin first on the watch, and it is still first
+    after a restart and the import that follows it. Emulator and physical watch.
+
+    Precondition: run settings-import-units.xml first, and change nothing on the phone since. Watch: the wallet of
+    settings-import-units.xml, the app open on the Settings page, where that journey ends.
+  </description>
+  <actions>
+    <action>Swipe right three times to the Balance page (README › Watch gestures)</action>
+    <action>Verify "WatchHomeBalanceSymbol" reads "€"</action>
+    <action>Tap "WatchHomeBalanceToggle"</action>
+    <action>Verify "WatchHomeBalanceSymbol" reads "₿"</action>
+    <action>Verify "WatchHomeBalance" reads the balance with eight decimals, such as "0.00050000"</action>
+    <action>Run `adb logcat -c`</action>
+    <action>Restart the app (README › Restart)</action>
+    <action>Wait up to 1 minute until `adb logcat -d -s BitkitWear` lists "Imported the phone's settings"</action>
+    <action>Verify "WatchHomeBalanceSymbol" still reads "₿": the wearer's swap lasts while the phone's setting stays the same</action>
+  </actions>
+</journey>

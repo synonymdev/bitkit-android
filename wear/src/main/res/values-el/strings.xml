@@ -64,6 +64,8 @@
     <string name="send__sent">Στάλθηκε</string>
     <string name="send__unknown">Δες τη δραστηριότητα</string>
     <string name="send__waiting">Αναμονή για δίκτυο</string>
+    <string name="settings__phone_settings">Ρυθμίσεις τηλεφώνου</string>
+    <string name="settings__phone_settings_failed">Αδυναμία εισαγωγής</string>
     <string name="settings__remove_wallet">Αφαίρεση πορτοφολιού</string>
     <string name="settings__remove_wallet_confirm_title">Αφαίρεση πορτοφολιού;</string>
     <string name="settings__remove_wallet_failed">Αδυναμία αφαίρεσης πορτοφολιού</string>

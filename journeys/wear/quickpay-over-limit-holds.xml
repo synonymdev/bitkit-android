@@ -1,0 +1,28 @@
+<journey name="wear quickpay over limit holds">
+  <description>
+    With QuickPay on in the phone's settings, an invoice above the phone's QuickPay amount still opens the review and
+    is paid only by the hold. Emulator and physical watch.
+
+    Precondition, in this order, as quickpay-skips-hold.xml: Private settings wallet, never the public test phrase
+    alone, restored on the watch on the local ./spark stack and funded there with at least 12 000 sats before any
+    phone setting changed (journeys/wear/README.md › Private settings wallet, step 5). Then Phone settings on VSS,
+    see README › Phone settings on VSS, with Default Unit Bitcoin, Denomination Modern, Local Currency USD and
+    QuickPay on at $1 and 5×, and the phone app closed. Watch: the app open on the Balance page and the loading ring
+    stopped. The fiat value below is in dollars, which is what those units give. 10 000 sats are above $1 while a bitcoin costs more than $10 000. README › Holding to pay
+    has the hold gesture.
+  </description>
+  <actions>
+    <action>Swipe left three times to the Settings page (README › Watch gestures)</action>
+    <action>Run `adb logcat -c`</action>
+    <action>Tap "WatchSettingsSync"</action>
+    <action>Wait up to 15 s until `adb logcat -d -s BitkitWear` lists "Imported the phone's settings"</action>
+    <action>Swipe right three times to the Balance page</action>
+    <action>Wait up to 1 minute until "WatchHomeBalanceSecondary" reads a fiat value: without the rates QuickPay holds whatever the amount</action>
+    <action>Run `../bitkit-docker/spark invoice 10000` and note the BOLT11 invoice it prints as &lt;invoice&gt;</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;invoice&gt;" to.bitkit.dev`</action>
+    <action>Wait up to 10 s until "WatchSendHold" is listed</action>
+    <action>Verify "WatchSendSent" does not get listed within 5 s: nothing was paid</action>
+    <action>Hold "WatchSendHold" for 2 s as in README › Holding to pay</action>
+    <action>Wait up to 15 s until "WatchSendSent" is listed</action>
+  </actions>
+</journey>

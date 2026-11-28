@@ -13,12 +13,18 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.wear.R
+import to.bitkit.wear.data.AmbientMonitor
+import to.bitkit.wear.data.ElapsedClock
+import to.bitkit.wear.data.ForegroundMonitor
 import to.bitkit.wear.data.SettingsStore
+import to.bitkit.wear.ext.runSuspendCatching
+import to.bitkit.wear.models.BitcoinDisplayUnit
 import to.bitkit.wear.models.PaymentState
 import to.bitkit.wear.models.PreparedSend
 import to.bitkit.wear.models.SendError
@@ -38,9 +44,18 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * The send flow for one payment input from a deeplink: it waits for the wallet, reads the input, asks for an amount
  * only when the input names none, prices the send and shows it for review. The send goes out only after the hold to
- * pay completes, unless [PaymentsRepo.skipConfirmation] says otherwise, and the result closes the flow by itself.
+ * pay completes, unless [PaymentsRepo.skipConfirmation] lets it out under QuickPay, straight from pricing to sending,
+ * and the result closes the flow by itself.
  * The app pays only online: a wallet that is offline before the send starts ends the flow on [SendStep.Offline],
  * and the request is dropped, not kept for when the network returns.
+ *
+ * QuickPay is asked only for a send the wearer is there for: one priced within [QUICKPAY_WINDOW] of its link, with
+ * the app on screen, out of ambient mode and the watch unlocked all the while. A link that waited longer for the
+ * wallet, as while it connects, or across a lock, a pause or ambient mode, always ends on the review and the hold,
+ * so nothing is ever paid long after the wearer looked away. A wallet that turns offline during that wait ends the
+ * flow as above, with no QuickPay and no review. Only the first flow of a link asks: one that Android
+ * builds again for the same link, as after the process was killed and the back stack restored, finds its mark in the
+ * saved state and ends on the review.
  */
 @HiltViewModel
 class SendViewModel @Inject constructor(
@@ -49,6 +64,9 @@ class SendViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
     private val currencyRepo: CurrencyRepo,
     private val settingsStore: SettingsStore,
+    private val foregroundMonitor: ForegroundMonitor,
+    private val ambientMonitor: AmbientMonitor,
+    private val clock: ElapsedClock,
 ) : ViewModel() {
     companion object {
         private const val TAG = "SendViewModel"
@@ -67,6 +85,15 @@ class SendViewModel @Inject constructor(
 
         /** The longest amount the wearer can type, in digits: more than every bitcoin there will be, in sats. */
         const val MAX_AMOUNT_DIGITS = 16
+
+        /**
+         * How long after its link arrived a send may still go out under QuickPay: long enough for a wallet that
+         * connects and syncs as the link opens the app, and short enough that the wearer still looks at it.
+         */
+        val QUICKPAY_WINDOW = 30.seconds
+
+        /** The saved state's mark that a flow already ran for this link, so a rebuilt one never asks QuickPay. */
+        const val KEY_STARTED = "send_started"
     }
 
     private val input: String = savedStateHandle.get<String>(Routes.SEND_INPUT).orEmpty()
@@ -79,12 +106,39 @@ class SendViewModel @Inject constructor(
 
     private var request: SendRequest? = null
     private var prepared: PreparedSend? = null
+    private var unit = BitcoinDisplayUnit.MODERN
 
     /** Reads, prices and shows the request before the send; cancelled when the wallet goes offline. */
     private var flow: Job? = null
 
+    /** When the link arrived, on [clock]. */
+    private val arrivedAtMs = clock.nowMs()
+
+    /**
+     * Whether the wearer was away at some time since the link arrived: see [isAttended]. It never turns back, and a
+     * flow rebuilt for a link that already had one starts with it set, however long ago the link arrived.
+     */
+    @Volatile
+    private var wasAway = savedStateHandle.get<Boolean>(KEY_STARTED) == true
+
+    /** Whether the wallet was seen out of [WalletStatus.Paused], which it may be in only while the app returns. */
+    private var hasLeftPause = false
+
     init {
+        savedStateHandle[KEY_STARTED] = true
         flow = viewModelScope.launch { start() }
+        viewModelScope.launch {
+            combine(
+                walletRepo.walletState,
+                foregroundMonitor.isForeground,
+                ambientMonitor.isAmbient,
+            ) { wallet, isForeground, isAmbient -> Triple(wallet.status, isForeground, isAmbient) }
+                .collect { (status, isForeground, isAmbient) ->
+                    val isPausedAgain = status == WalletStatus.Paused && hasLeftPause
+                    if (status != WalletStatus.Paused) hasLeftPause = true
+                    if (!isThere(status, isForeground, isAmbient) || isPausedAgain) wasAway = true
+                }
+        }
         viewModelScope.launch {
             walletRepo.walletState.collect { wallet ->
                 _uiState.update { it.copy(isWalletReady = wallet.status == WalletStatus.Ready) }
@@ -170,21 +224,50 @@ class SendViewModel @Inject constructor(
         }
         if (_uiState.value.step is SendStep.Offline) return
         prepared = result
-        if (paymentsRepo.skipConfirmation(result)) {
+        unit = runSuspendCatching { settingsStore.data.first().displayUnit }.getOrDefault(BitcoinDisplayUnit.MODERN)
+        // Asked last and only when it can apply, since a yes is counted against the day's limit. The wearer may
+        // have looked away while it was answered, hence the second look, which the repo takes before it says yes.
+        if (isQuickPayOpen() && paymentsRepo.skipConfirmation(result, ::canQuickPay)) {
+            Logger.info("Skipped the hold to pay under QuickPay", context = TAG)
             send(result)
             return
         }
         show(review(result, request))
     }
 
+    /** Whether QuickPay may be asked for a send priced now: see the class. */
+    private fun isQuickPayOpen(): Boolean =
+        canQuickPay() && clock.nowMs() - arrivedAtMs in 0..QUICKPAY_WINDOW.inWholeMilliseconds
+
+    /**
+     * Whether the wearer is there and the wallet is not offline, by its status now and by a request already
+     * dropped for it, which nothing pays later.
+     */
+    private fun canQuickPay(): Boolean = isAttended() &&
+        walletRepo.walletState.value.status != WalletStatus.Offline &&
+        _uiState.value.step !is SendStep.Offline
+
+    /**
+     * Whether the wearer was there since the link arrived and still is: the app on screen, not in ambient mode, the
+     * watch never locked, and the wallet never paused after it ran.
+     */
+    private fun isAttended(): Boolean = !wasAway && isThere(
+        walletRepo.walletState.value.status,
+        foregroundMonitor.isForeground.value,
+        ambientMonitor.isAmbient.value,
+    )
+
+    private fun isThere(status: WalletStatus, isForeground: Boolean, isAmbient: Boolean): Boolean =
+        isForeground && !isAmbient && status != WalletStatus.Locked
+
     private suspend fun review(prepared: PreparedSend, request: SendRequest): SendStep.Review {
         val currency = settingsStore.data.first().selectedCurrency
         val amount = prepared.amountSats.toLong()
         val isFeeShown = prepared.feeSats > 0uL && prepared.feeSats * 100uL >= prepared.amountSats * FEE_SHOWN_PERCENT
         return SendStep.Review(
-            amount = bitcoinAmount(amount),
+            amount = bitcoinAmount(amount, unit),
             fiat = fiatAmount(amount, currencyRepo.rates.value, currency),
-            fee = if (isFeeShown) bitcoinAmount(prepared.feeSats.toLong()) else null,
+            fee = if (isFeeShown) bitcoinAmount(prepared.feeSats.toLong(), unit) else null,
             payee = (prepared.payee ?: request.payee)?.takeIf { it.isNotBlank() },
         )
     }
@@ -223,7 +306,7 @@ class SendViewModel @Inject constructor(
 
     /** Shows [result] with [amountSats] and then closes the flow. */
     private suspend fun finish(result: SendResult, amountSats: ULong) {
-        _uiState.update { it.copy(step = SendStep.Done(result, bitcoinAmount(amountSats.toLong()))) }
+        _uiState.update { it.copy(step = SendStep.Done(result, bitcoinAmount(amountSats.toLong(), unit))) }
         delay(if (result == SendResult.Sent) SENT_CLOSE_DELAY else PENDING_CLOSE_DELAY)
         _effects.send(SendEffect.Close)
     }

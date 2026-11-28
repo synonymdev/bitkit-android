@@ -12,10 +12,12 @@ import breez_sdk_spark.SendPaymentMethod
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.Scanner
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -50,6 +52,7 @@ import to.bitkit.wear.services.WatchSparkService
 import to.bitkit.wear.utils.Logger
 import java.net.URI
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
@@ -67,6 +70,7 @@ class PaymentsRepo @Inject constructor(
     private val selfSendGuard: SelfSendGuard,
     private val ownInvoiceStore: OwnInvoiceStore,
     private val uncertainSendStore: UncertainSendStore,
+    private val quickPayRepo: QuickPayRepo,
 ) {
     companion object {
         private const val TAG = "PaymentsRepo"
@@ -138,12 +142,49 @@ class PaymentsRepo @Inject constructor(
     /** Emits whenever Spark reports a payment or a sync, so the activity list reads [recentPayments] again. */
     val paymentChanges: Flow<Unit> get() = sparkService.events.map { }
 
+    /** What [skipConfirmation] counted against the QuickPay limit, by [PreparedSend.transferKey], until [send] ends. */
+    private val quickPayReservations = ConcurrentHashMap<String, QuickPayReservation>()
+
     /**
-     * Whether a send goes out without the hold to pay (QuickPay). Always false until the watch has QuickPay settings
-     * (PR 3), which check [prepared] against the wearer's limit here and nowhere else.
+     * Whether [prepared] goes out without the hold to pay (QuickPay), by the phone's rules. This is the one place
+     * that decides it. It does only when all of these hold:
+     * - the wallet is ready;
+     * - [prepared] came from [prepare], so the self-send guard and every check before the hold passed;
+     * - its request fixes the amount, as a BOLT11 invoice with an amount, also inside a `bitcoin:` URI, or an LNURL
+     *   or a Lightning address that takes one amount only; an amount the wearer typed is always reviewed, and so is
+     *   a Spark address;
+     * - [QuickPayRepo.reserve] takes the payment's amount, without its fee, under the phone's QuickPay settings;
+     * - [canSend] still says yes after all of that, which is where the caller answers for the wearer being there:
+     *   see `SendViewModel`.
+     *
+     * A yes counts the payment against today's QuickPay limit, so ask once per send and only when about to [send],
+     * which takes it out again when nothing was paid. A no counts nothing, and neither does a caller that is
+     * cancelled before it hears the yes. Anything that cannot be told answers no, and the wearer holds to pay.
      */
-    @Suppress("FunctionOnlyReturningConstant", "UNUSED_PARAMETER")
-    fun skipConfirmation(prepared: PreparedSend): Boolean = false
+    suspend fun skipConfirmation(prepared: PreparedSend, canSend: () -> Boolean): Boolean = try {
+        withContext(ioDispatcher) {
+            if (!isReady() || sparkService.isWiping) return@withContext false
+            if (!prepared.isAmountFixed) return@withContext false
+            quickPayRepo.awaitRate()
+            // A caller that goes away meanwhile does not stop this halfway, with a count that nothing takes out.
+            withContext(NonCancellable) {
+                val reservation = quickPayRepo.reserve(prepared.amountSats) ?: return@withContext false
+                // The wallet may have locked, paused or been wiped, or the wearer left, while the limit was read.
+                if (!isReady() || sparkService.isWiping || !canSend()) {
+                    quickPayRepo.release(reservation)
+                    return@withContext false
+                }
+                quickPayReservations[prepared.transferKey] = reservation
+                true
+            }
+        }
+    } catch (e: CancellationException) {
+        // The caller went away and never hears the yes, so it sends nothing.
+        withContext(NonCancellable) {
+            quickPayReservations.remove(prepared.transferKey)?.let { quickPayRepo.release(it) }
+        }
+        throw e
+    }
 
     /**
      * Creates an amountless BOLT11 invoice paid into the Spark balance, valid for [INVOICE_EXPIRY_SECS], and
@@ -272,7 +313,14 @@ class PaymentsRepo @Inject constructor(
                 when (request) {
                     is SendRequest.Invoice -> {
                         ensureAmount(amount, 1uL, MAX_SATS)
-                        prepare(request.bolt11, amount, isAmountInRequest = request.amountSats != null, request.payee)
+                        val isAmountInRequest = request.amountSats != null
+                        prepare(
+                            paymentRequest = request.bolt11,
+                            amountSats = amount,
+                            isAmountInRequest = isAmountInRequest,
+                            payee = request.payee,
+                            isAmountFixed = isAmountInRequest,
+                        )
                     }
                     is SendRequest.Lnurl -> {
                         ensureAmount(amount, request.minSats, request.maxSats)
@@ -282,6 +330,7 @@ class PaymentsRepo @Inject constructor(
                             isAmountInRequest = true,
                             payee = request.payee,
                             exactMsats = amount * MSATS_PER_SAT,
+                            isAmountFixed = request.data.minSendable == request.data.maxSendable,
                         )
                     }
                     is SendRequest.SparkAddress -> {
@@ -325,6 +374,7 @@ class PaymentsRepo @Inject constructor(
         payee: String?,
         exactMsats: ULong? = null,
         sparkPayee: String? = null,
+        isAmountFixed: Boolean = false,
     ): PreparedSend {
         ensureNotOwn(paymentRequest)
         val response = runSuspendCatching {
@@ -355,6 +405,7 @@ class PaymentsRepo @Inject constructor(
             expiresAtSecs = invoice?.expiresAt,
             sparkPayee = sparkPayee.takeIf { invoice == null },
             transferKey = UUID.randomUUID().toString(),
+            isAmountFixed = isAmountFixed,
         )
     }
 
@@ -397,6 +448,9 @@ class PaymentsRepo @Inject constructor(
      * address encodes, until its outcome is known, and a retry goes out under the same key. Every send is noted there
      * before it goes out, so a refusal that follows an attempt of unknown outcome, also one the app was closed
      * during, is never read as nothing sent.
+     *
+     * A send that [skipConfirmation] counted against the QuickPay limit is taken out of the count again when it
+     * fails with a [SendError] other than [SendError.Unknown].
      */
     suspend fun send(prepared: PreparedSend): Result<WatchPayment> = sendScope.async {
         runSuspendCatching {
@@ -422,6 +476,14 @@ class PaymentsRepo @Inject constructor(
             }
         }.onFailure {
             Logger.error("Failed to send a payment", it, context = TAG)
+        }.also { result ->
+            // As on the phone, a QuickPay payment that did not go out or failed is not counted. One whose outcome
+            // is unknown may have been paid, so it stays counted, and so does one that failed in a way not foreseen.
+            val reservation = quickPayReservations.remove(prepared.transferKey)
+            val error = result.exceptionOrNull()
+            if (reservation != null && error is SendError && error !is SendError.Unknown) {
+                quickPayRepo.release(reservation)
+            }
         }
     }.await()
 

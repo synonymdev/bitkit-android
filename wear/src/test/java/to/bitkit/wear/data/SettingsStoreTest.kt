@@ -8,7 +8,10 @@ import kotlinx.coroutines.job
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import to.bitkit.wear.models.BitcoinDisplayUnit
+import to.bitkit.wear.models.PhoneSettings
 import to.bitkit.wear.models.PrimaryDisplay
+import to.bitkit.wear.models.QuickPayLimits
 import to.bitkit.wear.security.FakeDeviceLock
 import to.bitkit.wear.security.FakeSeedKey
 import to.bitkit.wear.security.KeystoreSeedStore
@@ -19,6 +22,7 @@ import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -26,6 +30,11 @@ import kotlin.test.assertTrue
  * a new process over what is on disk.
  */
 class SettingsStoreTest : BaseUnitTest() {
+    private companion object {
+        val QUICK_PAY = QuickPayLimits(isEnabled = true, amountUsd = 10, dailyMultiplier = 3)
+        val PHONE_SETTINGS = PhoneSettings(PrimaryDisplay.FIAT, BitcoinDisplayUnit.CLASSIC, "EUR", QUICK_PAY)
+    }
+
     @get:Rule
     val folder = TemporaryFolder()
 
@@ -77,6 +86,100 @@ class SettingsStoreTest : BaseUnitTest() {
         assertFalse(markerFile.exists())
         assertFalse(next.isRemovedNoticePending())
         assertEquals(WatchSettings(), next.data.first())
+        close()
+    }
+
+    @Test
+    fun `the phone's settings are adopted and survive a restart`() = test {
+        open().applyPhoneSettings(PHONE_SETTINGS, syncedAtMs = 5_000L)
+        close()
+
+        val settings = open().data.first()
+
+        assertEquals(
+            WatchSettings(
+                primaryDisplay = PrimaryDisplay.FIAT,
+                selectedCurrency = "EUR",
+                displayUnit = BitcoinDisplayUnit.CLASSIC,
+                quickPay = QUICK_PAY,
+                phoneSyncedAtMs = 5_000L,
+            ),
+            settings,
+        )
+        close()
+    }
+
+    @Test
+    fun `nothing is imported until the phone's settings are applied`() = test {
+        val settings = open().data.first()
+
+        assertNull(settings.quickPay)
+        assertNull(settings.phoneSyncedAtMs)
+        assertEquals(BitcoinDisplayUnit.MODERN, settings.displayUnit)
+        close()
+    }
+
+    @Test
+    fun `display values the backup does not hold keep the watch's, and unreadable quickpay turns it off`() = test {
+        val sut = open()
+        sut.applyPhoneSettings(PHONE_SETTINGS, syncedAtMs = 5_000L)
+
+        sut.applyPhoneSettings(PhoneSettings(null, null, null, quickPay = null), syncedAtMs = 6_000L)
+
+        val settings = sut.data.first()
+        assertEquals(PrimaryDisplay.FIAT, settings.primaryDisplay)
+        assertEquals(BitcoinDisplayUnit.CLASSIC, settings.displayUnit)
+        assertEquals("EUR", settings.selectedCurrency)
+        assertNull(settings.quickPay)
+        assertEquals(6_000L, settings.phoneSyncedAtMs)
+        close()
+    }
+
+    @Test
+    fun `the wearer's unit swap lasts until the phone's setting changes`() = test {
+        val sut = open()
+        sut.applyPhoneSettings(PHONE_SETTINGS, syncedAtMs = 5_000L)
+        sut.setPrimaryDisplay(PrimaryDisplay.BITCOIN)
+
+        sut.applyPhoneSettings(PHONE_SETTINGS, syncedAtMs = 6_000L)
+        assertEquals(PrimaryDisplay.BITCOIN, sut.data.first().primaryDisplay)
+
+        sut.applyPhoneSettings(PHONE_SETTINGS.copy(primaryDisplay = PrimaryDisplay.BITCOIN), syncedAtMs = 7_000L)
+        sut.applyPhoneSettings(PHONE_SETTINGS, syncedAtMs = 8_000L)
+        assertEquals(PrimaryDisplay.FIAT, sut.data.first().primaryDisplay)
+        close()
+    }
+
+    @Test
+    fun `clearing quickpay keeps the display values and forgets the import time`() = test {
+        val sut = open()
+        sut.applyPhoneSettings(PHONE_SETTINGS, syncedAtMs = 5_000L)
+
+        sut.clearQuickPay()
+
+        val settings = sut.data.first()
+        assertNull(settings.quickPay)
+        assertNull(settings.phoneSyncedAtMs)
+        assertEquals(BitcoinDisplayUnit.CLASSIC, settings.displayUnit)
+        assertEquals("EUR", settings.selectedCurrency)
+        close()
+    }
+
+    @Test
+    fun `the wallet's wipe clears everything imported from the phone, as does an overtaken import`() = test {
+        val sut = open()
+        sut.applyPhoneSettings(PHONE_SETTINGS, syncedAtMs = 5_000L)
+
+        sut.finishWipe()
+
+        assertEquals(WatchSettings(), sut.data.first())
+
+        sut.applyPhoneSettings(PHONE_SETTINGS, syncedAtMs = 5_000L)
+        sut.clearPhoneSettings()
+
+        assertEquals(WatchSettings(), sut.data.first())
+        close()
+        assertEquals(WatchSettings(), open().data.first())
         close()
     }
 

@@ -65,6 +65,8 @@
     <string name="send__sent">Enviado</string>
     <string name="send__unknown">Veja a atividade</string>
     <string name="send__waiting">Aguardando a rede</string>
+    <string name="settings__phone_settings">Ajustes do celular</string>
+    <string name="settings__phone_settings_failed">Não foi possível importar</string>
     <string name="settings__remove_wallet">Remover carteira</string>
     <string name="settings__remove_wallet_confirm_title">Remover carteira?</string>
     <string name="settings__remove_wallet_failed">Não foi possível remover a carteira</string>

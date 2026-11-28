@@ -65,6 +65,8 @@
     <string name="send__sent">Enviat</string>
     <string name="send__unknown">Revisa l\'activitat</string>
     <string name="send__waiting">Esperant la xarxa</string>
+    <string name="settings__phone_settings">Configuració del telèfon</string>
+    <string name="settings__phone_settings_failed">No s\'ha pogut importar</string>
     <string name="settings__remove_wallet">Elimina la cartera</string>
     <string name="settings__remove_wallet_confirm_title">Eliminar la cartera?</string>
     <string name="settings__remove_wallet_failed">No s\'ha pogut eliminar la cartera</string>

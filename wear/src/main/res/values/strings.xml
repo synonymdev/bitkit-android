@@ -64,6 +64,8 @@
     <string name="send__sent">Sent</string>
     <string name="send__unknown">Check activity</string>
     <string name="send__waiting">Waiting for network</string>
+    <string name="settings__phone_settings">Phone settings</string>
+    <string name="settings__phone_settings_failed">Couldn\'t import</string>
     <string name="settings__remove_wallet">Remove wallet</string>
     <string name="settings__remove_wallet_confirm_title">Remove wallet?</string>
     <string name="settings__remove_wallet_failed">Couldn\'t remove wallet</string>

@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.wear.data.SettingsStore
+import to.bitkit.wear.models.BitcoinDisplayUnit
 import to.bitkit.wear.models.WatchPayment
 import to.bitkit.wear.repositories.PaymentsRepo
 import to.bitkit.wear.repositories.WalletRepo
@@ -32,18 +34,25 @@ import javax.inject.Inject
 class ActivityViewModel internal constructor(
     private val paymentsRepo: PaymentsRepo,
     private val walletRepo: WalletRepo,
+    private val settingsStore: SettingsStore,
     private val nowSecs: () -> Long,
 ) : ViewModel() {
     @Inject
     constructor(
         paymentsRepo: PaymentsRepo,
         walletRepo: WalletRepo,
-    ) : this(paymentsRepo, walletRepo, { Instant.now().epochSecond })
+        settingsStore: SettingsStore,
+    ) : this(paymentsRepo, walletRepo, settingsStore, { Instant.now().epochSecond })
 
     private val _uiState = MutableStateFlow(ActivityUiState())
     val uiState: StateFlow<ActivityUiState> = _uiState.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            settingsStore.data.map { it.displayUnit }.distinctUntilChanged().collect { unit ->
+                _uiState.update { it.copy(unit = unit) }
+            }
+        }
         viewModelScope.launch {
             val connected = walletRepo.walletState
                 .map { it.status in connectedStatuses }
@@ -73,6 +82,8 @@ data class ActivityUiState(
     val isLoaded: Boolean = false,
     /** When the list was read, in epoch seconds, which the relative times count from. */
     val nowSecs: Long = 0,
+    /** How bitcoin amounts are written, as on the phone. */
+    val unit: BitcoinDisplayUnit = BitcoinDisplayUnit.MODERN,
 ) {
     fun payment(id: String): WatchPayment? = payments.firstOrNull { it.id == id }
 }

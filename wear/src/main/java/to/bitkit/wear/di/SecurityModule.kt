@@ -1,6 +1,7 @@
 package to.bitkit.wear.di
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
@@ -15,12 +16,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import to.bitkit.wear.data.AdapterNfcMonitor
 import to.bitkit.wear.data.ConnectivityNetworkMonitor
+import to.bitkit.wear.data.ElapsedClock
 import to.bitkit.wear.data.ForegroundMonitor
 import to.bitkit.wear.data.NetworkMonitor
 import to.bitkit.wear.data.NfcMonitor
 import to.bitkit.wear.data.OwnInvoiceStore
 import to.bitkit.wear.data.ProcessForegroundMonitor
+import to.bitkit.wear.data.QuickPaySpendStore
 import to.bitkit.wear.data.SettingsOwnInvoiceStore
+import to.bitkit.wear.data.SettingsQuickPaySpendStore
 import to.bitkit.wear.data.SettingsUncertainSendStore
 import to.bitkit.wear.data.UncertainSendStore
 import to.bitkit.wear.data.WipeMarker
@@ -36,7 +40,9 @@ import to.bitkit.wear.security.SeedKey
 import to.bitkit.wear.security.SeedStore
 import to.bitkit.wear.services.CoreInputDecoder
 import to.bitkit.wear.services.InputDecoder
+import to.bitkit.wear.services.PhoneBackupReader
 import to.bitkit.wear.services.SelfSendGuard
+import to.bitkit.wear.services.VssPhoneBackupReader
 import to.bitkit.wear.services.WalletSelfSendGuard
 import java.io.File
 import javax.inject.Singleton
@@ -84,6 +90,14 @@ abstract class SecurityModule {
     @Singleton
     abstract fun bindSelfSendGuard(guard: WalletSelfSendGuard): SelfSendGuard
 
+    @Binds
+    @Singleton
+    abstract fun bindQuickPaySpendStore(store: SettingsQuickPaySpendStore): QuickPaySpendStore
+
+    @Binds
+    @Singleton
+    abstract fun bindPhoneBackupReader(reader: VssPhoneBackupReader): PhoneBackupReader
+
     companion object {
         private const val SEED_DIR = "seed"
         private const val SETTINGS_NAME = "settings"
@@ -102,6 +116,10 @@ abstract class SecurityModule {
             key: SeedKey,
             deviceLock: DeviceLock,
         ): SeedStore = KeystoreSeedStore(seedDirectory(context), key, deviceLock, isSoftwareKeyAllowed = Env.isDebug)
+
+        @Provides
+        @Singleton
+        fun provideElapsedClock(): ElapsedClock = ElapsedClock { SystemClock.elapsedRealtime() }
 
         @Provides
         @Singleton

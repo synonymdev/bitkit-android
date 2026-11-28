@@ -5,16 +5,20 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.wear.data.SettingsStore
+import to.bitkit.wear.data.WatchSettings
 import to.bitkit.wear.models.PaymentState
 import to.bitkit.wear.models.ReceiveError
 import to.bitkit.wear.models.ReceiveInvoice
@@ -34,6 +38,7 @@ import kotlin.time.Duration.Companion.seconds
 class ReceiveViewModelTest : BaseUnitTest() {
     private val paymentsRepo = mock<PaymentsRepo>()
     private val walletRepo = mock<WalletRepo>()
+    private val settingsStore = mock<SettingsStore> { on { data } doReturn flowOf(WatchSettings()) }
     private val walletState = MutableStateFlow(WalletState(WalletStatus.Ready, 0uL, hasSynced = true))
 
     @Before
@@ -43,7 +48,7 @@ class ReceiveViewModelTest : BaseUnitTest() {
 
     private val created = mutableListOf<ReceiveViewModel>()
 
-    private fun createSut() = ReceiveViewModel(paymentsRepo, walletRepo) { NOW }.also { created += it }
+    private fun createSut() = ReceiveViewModel(paymentsRepo, walletRepo, settingsStore) { NOW }.also { created += it }
 
     /** An unpaid invoice is replaced forever, so the view models stop before the test drains its scheduler. */
     override fun onTestEnd() = created.forEach { it.viewModelScope.cancel() }

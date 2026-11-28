@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import to.bitkit.wear.data.AmbientMonitor
 import to.bitkit.wear.data.ForegroundMonitor
 import to.bitkit.wear.data.NetworkMonitor
 import to.bitkit.wear.data.NfcMonitor
@@ -22,13 +23,15 @@ import to.bitkit.wear.data.NfcState
 import to.bitkit.wear.data.SettingsStore
 import to.bitkit.wear.data.WatchSettings
 import to.bitkit.wear.models.BITCOIN_SYMBOL
+import to.bitkit.wear.models.BitcoinDisplayUnit
 import to.bitkit.wear.models.FxRate
 import to.bitkit.wear.models.PrimaryDisplay
 import to.bitkit.wear.models.fiatValue
 import to.bitkit.wear.models.formatCurrency
-import to.bitkit.wear.models.formatToModernDisplay
+import to.bitkit.wear.models.formatMoney
 import to.bitkit.wear.models.isSymbolSuffix
 import to.bitkit.wear.repositories.CurrencyRepo
+import to.bitkit.wear.repositories.SettingsSyncRepo
 import to.bitkit.wear.repositories.WalletRepo
 import to.bitkit.wear.repositories.WalletState
 import to.bitkit.wear.repositories.WalletStatus
@@ -42,7 +45,9 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * The home screen's state, and what keeps it fresh while Home is open: it starts the wallet and fetches the exchange
  * rates when the app comes on screen and every [RATES_REFRESH_INTERVAL] from then, when the wallet becomes ready,
- * and when the network returns while there are no rates yet.
+ * and when the network returns while there are no rates yet. It imports the phone's settings each time the wallet
+ * is ready with the app on screen and not in ambient mode, so at every start and return, and every
+ * [SETTINGS_SYNC_INTERVAL] from then; [SettingsSyncRepo.sync] skips an import that follows another too closely.
  */
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -52,6 +57,8 @@ class HomeViewModel @Inject constructor(
     nfcMonitor: NfcMonitor,
     networkMonitor: NetworkMonitor,
     foregroundMonitor: ForegroundMonitor,
+    private val settingsSyncRepo: SettingsSyncRepo,
+    ambientMonitor: AmbientMonitor,
 ) : ViewModel() {
     companion object {
         private const val TAG = "HomeViewModel"
@@ -61,6 +68,9 @@ class HomeViewModel @Inject constructor(
 
         /** How often the exchange rates are fetched again while the app is on screen. */
         val RATES_REFRESH_INTERVAL = 5.minutes
+
+        /** How often the phone's settings are imported again while the wallet is ready and the app in use. */
+        val SETTINGS_SYNC_INTERVAL = 5.minutes
     }
 
     val uiState: StateFlow<HomeUiState> = combine(
@@ -89,6 +99,20 @@ class HomeViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .drop(1)
                 .collect { isReady -> if (isReady) fetchRates() }
+        }
+        viewModelScope.launch {
+            combine(
+                foregroundMonitor.isForeground,
+                walletRepo.walletState.map { it.status == WalletStatus.Ready },
+                ambientMonitor.isAmbient,
+            ) { isForeground, isReady, isAmbient -> isForeground && isReady && !isAmbient }
+                .distinctUntilChanged()
+                .collectLatest { canSync ->
+                    while (canSync) {
+                        settingsSyncRepo.sync()
+                        delay(SETTINGS_SYNC_INTERVAL)
+                    }
+                }
         }
         viewModelScope.launch {
             // Only a change counts as the network returning, so the value at the start is skipped.
@@ -133,7 +157,7 @@ internal fun homeUiState(
 ): HomeUiState {
     // A balance no sync confirmed this session, such as 0 for a wallet restored offline, is never shown.
     val sats = wallet.balanceSats?.takeIf { wallet.hasSynced }?.toLong()
-    val bitcoin = sats?.let { bitcoinAmount(it, locale) }
+    val bitcoin = sats?.let { bitcoinAmount(it, settings.displayUnit, locale) }
     val fiat = sats?.let { fiatAmount(it, rates, settings.selectedCurrency, locale) }
     val showsFiatFirst = settings.primaryDisplay == PrimaryDisplay.FIAT && fiat != null
     return HomeUiState(
@@ -150,9 +174,12 @@ internal fun homeUiState(
     )
 }
 
-/** [sats] in bitcoin, as the balance shows it. */
-fun bitcoinAmount(sats: Long, locale: Locale = Locale.getDefault()): DisplayAmount =
-    DisplayAmount(BITCOIN_SYMBOL, sats.formatToModernDisplay(locale))
+/** [sats] in bitcoin, written in [unit], as the balance shows it. */
+fun bitcoinAmount(
+    sats: Long,
+    unit: BitcoinDisplayUnit = BitcoinDisplayUnit.MODERN,
+    locale: Locale = Locale.getDefault(),
+): DisplayAmount = DisplayAmount(BITCOIN_SYMBOL, sats.formatMoney(unit, locale))
 
 /** [sats] in [currency] at its rate in [rates], or null without that rate. */
 fun fiatAmount(

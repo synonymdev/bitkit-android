@@ -12,6 +12,7 @@ import java.util.Locale
 const val BITCOIN_SYMBOL = "₿"
 const val SATS_IN_BTC = 100_000_000
 const val BTC_SCALE = 8
+const val CLASSIC_DECIMALS = 8
 const val SATS_GROUPING_SEPARATOR = ' '
 const val FIAT_GROUPING_SEPARATOR = ','
 const val DECIMAL_SEPARATOR = '.'
@@ -48,6 +49,9 @@ enum class PrimaryDisplay {
     }
 }
 
+/** How a bitcoin amount is written: [MODERN] in sats, [CLASSIC] in bitcoin with eight decimals, as on the phone. */
+enum class BitcoinDisplayUnit { MODERN, CLASSIC }
+
 /** [sats] in the currency of [rate], or null when the rate is unusable. */
 fun fiatValue(sats: Long, rate: FxRate): BigDecimal? {
     if (rate.rate <= 0.0) return null
@@ -64,6 +68,23 @@ fun Long.formatToModernDisplay(locale: Locale = Locale.getDefault()): String {
         isGroupingUsed = true
     }
     return formatter.format(this)
+}
+
+fun Long.formatToClassicDisplay(locale: Locale = Locale.getDefault()): String {
+    val symbols = DecimalFormatSymbols(locale).apply {
+        decimalSeparator = DECIMAL_SEPARATOR
+    }
+    val formatter = DecimalFormat("0.${"0".repeat(CLASSIC_DECIMALS)}", symbols).apply {
+        minimumFractionDigits = CLASSIC_DECIMALS
+        maximumFractionDigits = CLASSIC_DECIMALS
+        isGroupingUsed = false
+    }
+    return formatter.format(BigDecimal.valueOf(this).movePointLeft(BTC_SCALE))
+}
+
+fun Long.formatMoney(unit: BitcoinDisplayUnit, locale: Locale = Locale.getDefault()): String = when (unit) {
+    BitcoinDisplayUnit.MODERN -> formatToModernDisplay(locale)
+    BitcoinDisplayUnit.CLASSIC -> formatToClassicDisplay(locale)
 }
 
 /** Whether [currencyCode]'s symbol follows the amount, as the phone shows it. */

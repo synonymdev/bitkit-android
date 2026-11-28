@@ -3,7 +3,8 @@
 > Do not publish the watch app yet: two live Spark instances on one seed are unsafe until #2152 is resolved.
 
 The `:wear` module is a standalone Wear OS app (issue #2105, epic #2077). It runs its own Spark wallet through the
-Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only needed to set it up (from PR 3).
+Breez SDK, with no LDK node, no Room database and no Firebase. It needs no phone nearby: it adopts the phone's
+settings by reading the phone's backup (see Settings sync).
 
 ## Module overview
 
@@ -66,17 +67,22 @@ Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only
   bitkit-core, as on the phone.
 - `services`: `WatchSparkService` (connect, disconnect, sync, info, storage wipe, invoices, sends and the payment
   list, with the phone's SDK settings and the local regtest fixture), `SparkSendKey` (the idempotency keys of
-  sends, a copy of the phone's), `InputDecoder` (bitkit-core's reader of payment inputs) and `SelfSendGuard`.
+  sends, a copy of the phone's), `InputDecoder` (bitkit-core's reader of payment inputs), `SelfSendGuard` and
+  `PhoneBackupReader`, the read-only way to the phone's backups on VSS.
 - `repositories`: `WalletRepo` (wallet state and balance, restore, start, lock, background and network handling,
   wipe and its recovery at launch), `PaymentsRepo` (receive, read an input, price, send, recent payments; see
-  Payments) and `CurrencyRepo` (Blocktank rates and the unit shown first).
-- `data`: `SettingsStore` (display settings and the wipe's notes, with `WipeMarker` for the note itself),
-  `OwnInvoiceStore` (the invoices this wallet created, in the settings file), the rates
+  Payments), `CurrencyRepo` (Blocktank rates and the unit shown first), `SettingsSyncRepo` (the import of the
+  phone's settings) and `QuickPayRepo` (whether a send may skip the hold to pay).
+- `data`: `SettingsStore` (display settings, what was imported from the phone and the wipe's notes, with
+  `WipeMarker` for the note itself), `OwnInvoiceStore` (the invoices this wallet created, in the settings file),
+  `QuickPaySpendStore` (the day's QuickPay spend, in the settings file), the rates
   client, `NetworkMonitor` (`ConnectivityManager`'s default network, online once the system validated it),
-  `NfcMonitor` (the NFC adapter's state) and `ForegroundMonitor` (the process lifecycle: whether the app is on
-  screen).
+  `NfcMonitor` (the NFC adapter's state), `ForegroundMonitor` (the process lifecycle: whether the app is on
+  screen), `AmbientMonitor` (whether the activity is in ambient mode) and `ElapsedClock` (the time since boot,
+  sleep included, for ages).
 - `tile`: `BalanceTileService` (the balance tile), `TileState` (what it shows) and `TileUpdates` (asks the system
   to draw it again). See Tile below.
+- `models`: among others `PhoneSettingsParser`, the reader of the phone's settings backup.
 - `ui`: one `MainActivity` with `testTagsAsResourceId`, a `SwipeDismissableNavHost` with the routes Onboarding,
   the Restore graph, Wallet removed, Home, About, Receive QR, Send, Activity detail and Not supported, and the M3
   Expressive theme (black background, Brand orange, Inter Tight). `LaunchRequest` reads what an intent asks for
@@ -152,7 +158,8 @@ On-screen copy stays short: a title or one line of at most about six words per s
   disconnect that already began always finishes, and the wallet then connects again. When Spark cannot be
   disconnected, the app keeps hold of it so the next lock, pause or wipe tries again: each of them disconnects
   whatever the wallet's status says, as does a start that finds the watch locked. Ambient mode is not the
-  background: the app stays on screen and connected.
+  background: the app stays on screen and connected. `AmbientMonitor` carries it from the activity to what runs
+  outside the screens: in ambient mode the phone's settings are not imported and no send goes out under QuickPay.
 - **Receive.** The Receive page is one large round QR button (`WatchReceiveOpen`); it has no amount entry. It opens
   the receive QR (`WatchReceiveQr`): an amountless invoice, uppercased so the code uses QR's alphanumeric mode, black
   on white with the standard four-module quiet zone, error correction L, filling the largest square inside the round
@@ -173,19 +180,19 @@ On-screen copy stays short: a title or one line of at most about six words per s
   amount, with the same haptic, so the always-on screen shows no amount; the amount shows once the watch wakes. Debug builds log each invoice shown (`Showing invoice`), which is how the
   journeys read it.
 - **Tile.** The Bitkit tile (`BalanceTileService`) uses the tiles and ProtoLayout Material 3 libraries: a primary
-  layout with the balance in the main slot and an edge button below. With a wallet it shows the balance in bitcoin
-  (white, as on the Balance page) and a round Brand orange edge button with the QR icon ("Receive" to accessibility
-  services), which opens the app on the receive QR: the launch intent carries the extra `to.bitkit.wear.OPEN` with
-  `receive`, which `LaunchRequest` reads as `Receive`, and the receive QR opens above Home, as a payment link's send
-  does. Without a wallet it shows the Bitkit mark and a "Restore" edge button that opens the app. Tiles cannot use
-  the app's fonts, so the balance is in the system font.
+  layout with the balance in the main slot and an edge button below. With a wallet it shows the balance in bitcoin,
+  in the unit (Modern or Classic) imported from the phone, white, as on the Balance page, and a round Brand orange
+  edge button with the QR icon ("Receive" to accessibility services), which opens the app on the receive QR: the
+  launch intent carries the extra `to.bitkit.wear.OPEN` with `receive`, which `LaunchRequest` reads as `Receive`,
+  and the receive QR opens above Home, as a payment link's send does. Without a wallet it shows the Bitkit mark and
+  a "Restore" edge button that opens the app. Tiles cannot use the app's fonts, so the balance is in the system font.
   - The tile only reads `WalletRepo`'s state in memory and never starts the wallet, so the balance shows only once
     the app loaded it in this process and a sync confirmed it, as on the Balance page; until then, and while the
     watch is locked, the dimmed mark stands in for it. A removed wallet shows the signed-out tile at once.
-  - `TileUpdates`, started by `WearApp`, asks the system to draw the tile again whenever the balance shown or the
-    wallet's status changes, and once when the process starts, so a tile drawn by an earlier process drops a balance
-    the new one has not loaded. Each tile is fresh for 15 min, after which the system asks again; a tile drawn just
-    before the process died can show the last balance until then.
+  - `TileUpdates`, started by `WearApp`, asks the system to draw the tile again whenever the balance shown, its
+    unit or the wallet's status changes, and once when the process starts, so a tile drawn by an earlier process drops
+    a balance the new one has not loaded. Each tile is fresh for 15 min, after which the system asks again; a tile
+    drawn just before the process died can show the last balance until then.
   - Privacy: the tile shows the balance on the tile carousel, so it hides it while the wallet is disconnected
     because the watch locked (`WalletStatus.Locked`). Tiles have no ambient mode: in ambient the system shows the watch face, so the app's rule that the always-on screen
     shows no amount holds without code in the tile. The tile carries no secret: the receive invoice is made by the
@@ -205,7 +212,9 @@ On-screen copy stays short: a title or one line of at most about six words per s
   without an amount, an amountless invoice, a Spark address or an LNURL with a range, gets a minimal amount entry
   (the number keyboard, the LNURL range below it); Receive never has one.
   - Review: the amount in the balance's large style, fiat below in the small style, the fee only when it is at
-    least 1 % of the amount, and one line naming the payee when the input names one. The pay button is the edge
+    least 1 % of the amount, and one line naming the payee when the input names one. The fee line
+    (`WatchSendFee`) may wrap to 2 lines and is never cut: under Classic a long translation, as the Italian
+    "Commissione ₿ 0.00001234", does not fit one. The pay button is the edge
     button, "Hold to pay" (`WatchSendHold`).
   - Hold to pay: holding the button fills a ring around the bezel (`HoldToPayRing`, the geometry of `BezelLoading`)
     over 1.2 s, with a light tick (`SegmentTick`) at each quarter and the confirm haptic at the end, and only then
@@ -218,7 +227,8 @@ On-screen copy stays short: a title or one line of at most about six words per s
     request is dropped, never kept to pay when the network returns, so nothing (QuickPay included) pays it later.
     Once the hold completed and the send started, going offline changes nothing: the send keeps its pending or
     unknown outcome.
-    `PaymentsRepo.skipConfirmation` is asked before the hold; it is always false until QuickPay (PR 3).
+    `PaymentsRepo.skipConfirmation` is asked once the send is priced, for a send the wearer is there for: under
+    the phone's QuickPay the review and the hold are skipped and the send goes out at once (see QuickPay).
   - Screen readers: a screen reader's wearer cannot hold, and the button's click pays nothing, so the button
     offers "Pay" as a custom accessibility action, picked from the actions menu, and as its long click (a double
     tap and hold); both only while the hold is enabled. `SendReviewTest` checks the three; the actions menu of
@@ -237,19 +247,24 @@ On-screen copy stays short: a title or one line of at most about six words per s
     unreadable invoice and an own invoice end there before any hold.
 - **Activity.** The Activity page lists the newest 20 payments from Spark's local list: a direction icon (or a
   clock for pending, a cross for failed), the amount with its sign and how long ago (`WatchActivityItem-0` onwards).
+  An amount too long for one line, as with eight decimals on a small screen, takes a second line.
   It is read when Spark connects and after every payment or sync, and the last list stays while Spark is
   disconnected, with its times counted again every minute; a list just read counts from its own time. A tap opens the detail: the amount, the fee of a send, the
   date and time and the status (`WatchActivityDetailAmount`, `…Fee`, `…Time`, `…Status`); Spark's list carries no payee or description. With no
   payments it shows a dimmed icon and "No activity" (`WatchActivityEmpty`). A detail whose payment the list does not
   hold, while it loads or after newer payments pushed it out, shows the dimmed icon (`WatchActivityDetailMissing`).
   Ambient mode hides the amounts.
-- **Settings.** A short list of icon rows: About and Remove wallet. The unit has no setting: tapping the balance is
-  the only way to switch it, and the choice is kept in the settings store across restarts. Remove wallet asks with a
-  one-line title and the two round ✕/✓ buttons.
+- **Settings.** A short list of icon rows: About, Phone settings and Remove wallet. The watch has no settings of
+  its own to edit: the units, the currency and QuickPay come from the phone (see Settings sync). The Phone settings
+  row (`WatchSettingsSync`) shows how long ago they were last imported (`WatchSettingsSyncTime`, absent until a first
+  import, or after the phone's backup was found missing or unreadable; it moves on every minute while the page is
+  open), and a tap imports them now under the loading ring. An import from the tap that fails shows one line under
+  the row (`WatchSettingsSyncFailed`). Tapping the balance still swaps which unit shows first, and the choice is kept across restarts until the
+  phone's own setting changes. Remove wallet asks with a one-line title and the two round ✕/✓ buttons.
 - **Loading.** Every wait shows `BezelLoading`: an indeterminate ring around the screen edge (test tag
   `BezelLoading`), with the screen's content readable inside it. It covers connecting and syncing on Balance, saving
-  the restored wallet, removing the wallet, making an invoice, the first activity list, and a send being read,
-  priced and sent. It is hidden in ambient mode. Accessibility services report only
+  the restored wallet, removing the wallet, importing the phone's settings from the Settings page, making an
+  invoice, the first activity list, and a send being read, priced and sent. It is hidden in ambient mode. Accessibility services report only
   content that no node above it covers, so the full-screen ring has no semantics; its one progress node
   (`BezelLoading`) is a stroke-sized spot at the top of the ring, and the content beneath stays reachable by TalkBack
   and `android layout`. `BezelPadding` and `BezelStrokeWidth` hold the ring's padding and stroke for other edge
@@ -329,8 +344,181 @@ in any other state.
   the invoice. The same holds the other way round for a send of unknown outcome on the watch that the phone's list
   does not show. A transfer to a Spark address has no shared key at all: the phone and the watch each pay it when
   asked. Pairing closes both by sharing the send records.
-- **QuickPay.** `PaymentsRepo.skipConfirmation` is the one place that decides whether a send skips the hold to
-  pay. It is always false until the watch has QuickPay settings (PR 3).
+- **QuickPay.** `PaymentsRepo.skipConfirmation` is the one place that decides whether a send skips the review and
+  the hold to pay. See QuickPay below.
+
+### QuickPay
+
+The watch has no QuickPay switch. It follows the phone's: QuickPay on or off, the amount per payment in US dollars
+and the daily limit, which is that amount times a multiplier, all read from the phone's settings backup (see
+Settings sync). The decision follows the rules of the phone's own `QuickPayRepo`, with two differences that the
+watch needs, listed below. A send skips the review and the hold, and goes from pricing straight to sending and the
+usual result screens, only when every one of these holds:
+
+- The wallet is connected and synced (`WalletStatus.Ready`), and no wipe runs.
+- The send was priced by `PaymentsRepo.prepare`, so the self-send guard, the expiry, the balance and every other
+  check before the hold passed. A request those checks refuse never reaches QuickPay.
+- The request fixes the amount, as on the phone: a BOLT11 invoice that carries its amount, also the one inside a
+  `bitcoin:` URI, or an LNURL-pay link or a Lightning address whose smallest and largest amount are the same. The
+  link's scheme and case change nothing, since the request is what `PaymentsRepo.decoderInput` leaves of it: an
+  uppercase `BITCOIN:` URI with an amount counts like a lowercase one, and an `lnurlp://` link like any LNURL. An
+  amount the wearer typed always gets the review and the hold, and so does a Spark address, which names no amount.
+- QuickPay is on in the settings last imported from the phone. They count however long ago the import was, as the
+  phone's own settings do on the phone.
+- The amount, without the fee, is no more than the phone's QuickPay amount. As on the phone, the QuickPay amount is
+  turned into sats at the dollar rate, rounded half up, and the invoice's sats are compared with that. The
+  invoice's unrounded dollar value is compared with the QuickPay amount too, which is the phone's check when it
+  pays: where the sats rounded up, the last sat is worth a fraction of a cent too much and is reviewed.
+- Today's QuickPay payments from this watch, with this one, stay within the daily limit. The payment counts as its
+  dollar value in cents, rounded half up and at least one cent, as on the phone.
+- The wearer is there: the first of the two differences below.
+
+The rate is the last one the watch fetched, whatever its age: the phone has no age limit on its rates either. The
+phone keeps its rates across restarts and the watch does not, so when QuickPay is on and no dollar rate is in yet,
+as for a link that started the app, the decision first fetches the rates, for 5 s at most under the loading ring
+(`QuickPayRepo.awaitRate`). Without a rate the answer is no.
+
+The two differences from the phone:
+
+- **The wearer has to be there** (`SendViewModel`, `MainActivity`). The phone turns QuickPay off for a scan it put
+  off across its lock, since whoever unlocks did not confirm it. The watch has the same case in more shapes, so:
+  - The send is priced within 30 s of its link arriving (`QUICKPAY_WINDOW`), and from the link to the decision the
+    app stayed on screen and out of ambient mode, the watch was never locked, and the wallet was not paused again
+    once it ran. A link that waited longer for the wallet, as one opened on a wallet that takes minutes to
+    connect, always ends on the review and the hold. The 30 s cover a wallet that connects and syncs as
+    the link opens the app. The wait never runs across `WalletStatus.Offline`: an offline wallet ends the flow on
+    the offline refusal (see Send), the request is dropped, and QuickPay is not asked for it, then or when the
+    network returns.
+  - It is the link's first send flow. Android keeps the Send route and its link in the saved back stack, and
+    builds the flow again when it restores the app, as after the process was killed in the background. The first
+    flow leaves a mark in that saved state (`SendViewModel.KEY_STARTED`), and a flow that finds it never asks
+    QuickPay, whenever it is built.
+  - A link that Android sends again from Recents is no request at all. A task that a link created keeps that
+    link as its intent, and opening the task from Recents starts the app with it again
+    (`FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`), minutes or hours after the wearer saw it. `MainActivity` takes such a
+    launch as a plain one (`isReplayedLaunch`): the app opens on Home and nothing is priced or paid.
+- **QuickPay is off until the phone's settings were imported.** The phone has its settings at hand; the watch has
+  none of its own. So QuickPay is off before the first import, and it is turned off by an import that finds no
+  backup, a backup that cannot be decrypted or read, one with a newer layout, or QuickPay values outside what the
+  phone's sliders offer (1 to 50 dollars, 1× to 50×). An import that fails, as without a network, changes nothing.
+
+Anything that cannot be read answers no, and the wearer holds to pay as without QuickPay: no rate, a settings file
+or a count that cannot be read.
+
+- **Daily limit.** `QuickPaySpendStore` keeps one day and its spend in cents in the settings file, which the wipe
+  clears. A payment is counted when QuickPay lets it out, before it is sent. As on the phone, it is taken out
+  again when it did not go out, as when the wearer turned out to have looked away meanwhile, and when it failed
+  (`PaymentsRepo.send`), and when the send flow was closed while QuickPay was decided. It stays counted when it
+  was paid, when it is still pending, when its outcome is unknown and when the send ended in an error the watch
+  does not know. The phone goes on to take out a pending payment that fails later, from its ledger; the watch keeps no
+  ledger, so that one stays counted, and so does a payment the app was closed during. The count can only run ahead
+  of what was paid, never behind. The day is the watch's local date; a date earlier than the one last counted
+  starts no new count, so setting the watch's clock back frees nothing.
+- **Known gap: a change on the phone takes an import to arrive.** QuickPay turned off or lowered on the phone
+  applies on the watch from the first import after the phone uploaded its settings. A watch that cannot read the
+  backup, as without a network, and a phone that could not upload it, leave the old settings in force. The Phone
+  settings row shows when they were last imported.
+- **Known gap: two counts.** The phone keeps its own count of the day's QuickPay payments and the watch cannot read
+  it, so the phone and the watch each allow the daily limit: together up to twice the limit a day. Pairing (PR 4)
+  is where the two can share one count.
+- **Known limit: a link sent from the phone.** Being there is measured as the watch unlocked, the app on screen
+  and out of ambient mode. It is not measured as a look or a touch: the watch has no sensor it could ask. An app on
+  the paired phone can open a `lightning:` link on the watch (`RemoteActivityHelper`) while the wearer looks at the
+  phone. With the watch on the wrist and unlocked, and the screen lit by the launch, that send counts as attended
+  and goes out under QuickPay with no touch on the watch, as a link from another app on the watch does. It is
+  bounded by the phone's QuickPay amount per payment and by the daily limit, and by the two counts above. Whether
+  a remote launch lights the screen was not tried on a device. Nothing in V1 tells such a launch from a tap on
+  the watch; turning QuickPay off on the phone is the wearer's way to rule it out.
+- **Known gap: the phone's payment PIN.** The phone can ask for its PIN before a QuickPay limit is raised; the
+  watch has no PIN and adopts whatever the phone saved.
+
+## Settings sync
+
+The watch holds the same seed as the phone, so it can read what the phone backed up. It imports the phone's settings
+from VSS and never writes there.
+
+- **What the phone stores.** The phone uploads its whole settings file as the backup category `SETTINGS`: one JSON
+  envelope (`SettingsBackupV1`) with `version` 1, `createdAt` and `settings` (`BackupRepo.getBackupDataBytes`,
+  `SettingsData` in the phone's `SettingsStore.kt`), stored on VSS under the key `SETTINGS`. The phone uploads it
+  about 5 s after a setting changes. The phone reads a bitkit-ios backup under the same keys, with enums in
+  Swift's form (`BackupJson.kt`), and the watch reads those the same way; no bitkit-ios backup was tried.
+- **What the watch adopts.** Six of those keys, and nothing else:
+  - `primaryDisplay` (bitcoin or fiat first) and `displayUnit` (`MODERN` for sats, `CLASSIC` for bitcoin with
+    eight decimals). The balance, the send review and result, the paid receive and the activity list and detail
+    are written in that unit; the amount entry of a send stays in sats.
+  - `selectedCurrency`, the fiat currency.
+  - `isQuickPayEnabled`, `quickPayAmount` (US dollars) and `quickPayDailyLimitMultiplier`.
+
+  The phone stores no other QuickPay value and no watch-specific limit; none is invented here.
+- **Access.** `VssPhoneBackupReader` sets vss-client up exactly as the phone's `VssBackupClient` and
+  `VssStoreIdProvider` do: the server (`Env.vssServerUrl`), the store id derived from the recovery phrase and
+  passphrase with the prefix `bitkit_v1_` plus the network name, and the LNURL-auth sign-in
+  (`Env.lnurlAuthServerUrl`) whose key the library derives from the same seed. The library decrypts the object with
+  a key from the seed too. Dev and tnet builds use Blocktank's staging servers, as the phone does; the phone's
+  `E2E_VSS_SERVER_URL` override for local backup tests has no counterpart on the watch.
+- **Kept equal to the phone.** `wear/src/test/resources/phone-backup-contract.json` holds what the watch relies on:
+  the backup's key, the six settings in the phone's encoding, and each network's store id prefix and two servers.
+  The phone's `WatchBackupContractTest` compares it with what the phone app's own serializer writes and with the
+  phone's `Env` for the network it is built for; the watch's `PhoneBackupContractTest` reads the same file with the
+  watch's parser and compares the watch's `Env` for every network. A renamed setting or a moved server fails one of
+  them. The phone's values for mainnet and testnet are compared only when its tests run in a build for that network.
+- **Read-only, by structure.** `PhoneBackupReader` is the watch's only way to VSS and has one call, a read of one
+  key. Its implementation is the only source file that names the VSS library, and it imports four of its
+  functions, derive the store id, sign in, get one object, shut the client down, and its error type.
+  `PhoneBackupReaderTest` fails the
+  build when the interface gains a call, when another file names the library, or when any source names one of the
+  library's store, delete, put, list or LDK calls. The sign-in itself asks the LNURL-auth server for a token and
+  changes nothing on VSS; in the library's source the client's constructor and its get make no put or delete
+  request (read at the head of synonymdev/vss-rust-client-ffi on 2026-11-28; the shipped binary is 0.5.26-rc2).
+- **No client kept.** The library keeps one client for the process, with keys derived from the seed. Each import
+  builds it, reads and shuts it down, so nothing of the wallet stays in it once the read is over. The library runs
+  each of its calls to the end on the calling thread (`block_on`), so a read cannot be interrupted: one that was
+  given up is abandoned, ends with the HTTP call it is in and only then shuts its client down. Until then, a
+  moment after a lock or a pause, the client is still alive.
+- **The library's timeouts** (read in synonymdev/vss-rust-client-ffi at `v0.5.26-rc2` and its `vss-client-ng`
+  0.4.0). Each request to the VSS server ends after 10 s, for the connection, for a read and in all, and a failed
+  one is tried again up to 10 times with at most 15 s of pauses in total, so a read of the backup ends by itself.
+  The sign-in before it does not: the LNURL-auth requests go through an HTTP client built without a timeout. A
+  sign-in server that accepts the connection and never answers would hold the read, and the reader behind it,
+  until the connection drops, and every later import would wait its 30 s behind it and import nothing until the
+  app's process ends. The watch then goes on with the settings last imported, and a tap on the Phone settings row
+  shows the failure. A timeout there has to come from the library.
+- **Who waits.** `SettingsSyncRepo` runs each import in a scope of its own, and the read apart from the import.
+  A caller only waits: one that is cancelled returns at once, and the import goes on and lands. The import stops waiting for its read after 30 s or when the wallet stops being
+  ready, at once in both cases, and then writes nothing.
+- **When.** While Home is open, each time the wallet is ready with the app on screen and out of ambient mode, so at
+  every start, every return to the app and every wake from ambient mode, and every 5 minutes from then; and on a tap on the Phone settings row. An import
+  within a minute of the last read of this wallet's backup is skipped (`MIN_READ_GAP`), so a wallet that keeps
+  losing and finding its network does not sign in each time; the tap is never skipped. None is started in the
+  background or in ambient mode, and none for a wallet that is not connected and synced: a read under way is given
+  up the moment the wallet stops being ready, as on a lock or a pause, whoever started it, and its client is shut
+  down when its HTTP call returns. An import under way when the watch goes ambient or its caller leaves still
+  lands. Reading takes about 2 s; it is given up after 30 s.
+- **Outcomes.** A backup that was read replaces the six values. The phone's `primaryDisplay` is adopted when it
+  differs from the one last imported, so the wearer's own swap on the balance lasts until the phone's setting
+  changes. A display value the backup lacks, or holds in a form the watch cannot read, keeps the watch's. A backup
+  that is missing, cannot be decrypted or decoded, is not the envelope, or has a `version` above 1 keeps the display
+  values and turns QuickPay off at once. The library reports an object it fetched and cannot decrypt or decode as
+  its get error and every failure to reach the server or sign in as another error (read in
+  synonymdev/vss-rust-client-ffi), so `VssPhoneBackupReader` takes a get error for an unreadable backup. QuickPay
+  values that are missing, mistyped or out of the phone's range turn QuickPay off. A read that fails, as without a
+  network, changes nothing, and QuickPay goes on with the settings last imported. Failures are
+  logged and never thrown. Only the wearer's own tap shows one, as one line under the row
+  (`WatchSettingsSyncFailed`, "Couldn't import"), until the next tap.
+- **Parsing.** `PhoneSettingsParser` reads the JSON tree key by key rather than into the phone's settings class, so
+  unknown keys, new settings and other types never fail it. An envelope above 256 KB is refused.
+- **Wipe.** Everything imported lives in the settings file, which the wallet's wipe clears: the units, the
+  currency, QuickPay, the import time and the day's QuickPay spend. An import that a wipe overtook is taken out
+  again, so a removed wallet's settings never reach the next wallet.
+- **Logging.** The import logs its outcome only. The seed, the store id and the backup's content are never logged.
+- **Size.** vss-client adds `libvss_rust_client_ffi.so` to the watch app: 4.3 MB for `arm64-v8a`, 2.8 MB for
+  `armeabi-v7a` and 4.8 MB for `x86_64`, about 2.0 MB gzipped for arm64, plus about 0.2 MB of bindings in the
+  debug dex. It ships its own R8 rules, and `:wear:minifyDevReleaseWithR8` passes with it.
+- **Checked on the emulator.** On the API 37 emulator a dev build signed in to the staging VSS and imported the
+  settings backup of its restored wallet 1.8 s after the wallet synced (2026-11-28).
+- **Known gap: a stale backup.** The watch sees a change only once the phone uploaded it. A phone that is offline,
+  or whose backup fails, leaves the old settings on VSS, and the watch keeps following them.
+- **Later.** Pairing (PR 4) adds a live push from the phone over the Data Layer and the watch-specific limits.
 
 ### Self-send guard
 
@@ -566,3 +754,7 @@ Measured on the emulator (Wear OS 7, API 37, 454×454 round, x86_64) unless note
   the screen off.
 - Re-wrapping the seed under an unlocked-device key when the wearer adds a screen lock after restoring.
 - bitkit-core costs the watch 47.5 MB per ABI for BIP39 alone; `Bip39` keeps a later swap to one file.
+- Whether the watch's count of the day's QuickPay payments should be shared with the phone's before pairing
+  exists.
+- Whether bitkit-ios writes all three QuickPay keys into its settings backup: the watch needs all three and leaves
+  QuickPay off when one is missing.

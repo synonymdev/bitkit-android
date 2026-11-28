@@ -15,6 +15,14 @@ class CurrencyTest {
     }
 
     @Test
+    fun `the classic unit writes bitcoin with eight decimals`() {
+        assertEquals("0.00050000", 50_000L.formatToClassicDisplay(Locale.US))
+        assertEquals("1.00000000", 100_000_000L.formatToClassicDisplay(Locale.GERMANY))
+        assertEquals("0.00000001", 1L.formatMoney(BitcoinDisplayUnit.CLASSIC, Locale.US))
+        assertEquals("50 000", 50_000L.formatMoney(BitcoinDisplayUnit.MODERN, Locale.US))
+    }
+
+    @Test
     fun `fiat value converts sats at the rate and formats with the symbol`() {
         val value = fiatValue(sats = 150_000, rate = rate("100000"))
 

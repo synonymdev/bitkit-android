@@ -2,14 +2,18 @@ package to.bitkit.wear.ui.screens.activity
 
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.wear.data.SettingsStore
+import to.bitkit.wear.data.WatchSettings
 import to.bitkit.wear.models.PaymentState
 import to.bitkit.wear.models.WatchPayment
 import to.bitkit.wear.repositories.PaymentsRepo
@@ -25,6 +29,7 @@ import kotlin.test.assertTrue
 class ActivityViewModelTest : BaseUnitTest() {
     private val paymentsRepo = mock<PaymentsRepo>()
     private val walletRepo = mock<WalletRepo>()
+    private val settingsStore = mock<SettingsStore> { on { data } doReturn flowOf(WatchSettings()) }
     private val walletState = MutableStateFlow(WalletState(WalletStatus.Connecting))
     private val paymentChanges = MutableSharedFlow<Unit>()
 
@@ -34,7 +39,7 @@ class ActivityViewModelTest : BaseUnitTest() {
         whenever(paymentsRepo.paymentChanges).thenReturn(paymentChanges)
     }
 
-    private fun createSut() = ActivityViewModel(paymentsRepo, walletRepo) { NOW }
+    private fun createSut() = ActivityViewModel(paymentsRepo, walletRepo, settingsStore) { NOW }
 
     @Test
     fun `the list is read once spark is connected`() = test {

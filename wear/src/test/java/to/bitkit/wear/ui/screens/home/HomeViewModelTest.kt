@@ -10,12 +10,15 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.wear.data.AmbientMonitor
 import to.bitkit.wear.data.NfcState
 import to.bitkit.wear.data.SettingsStore
 import to.bitkit.wear.data.WatchSettings
+import to.bitkit.wear.models.BitcoinDisplayUnit
 import to.bitkit.wear.models.FxRate
 import to.bitkit.wear.models.rate
 import to.bitkit.wear.repositories.CurrencyRepo
+import to.bitkit.wear.repositories.SettingsSyncRepo
 import to.bitkit.wear.repositories.WalletRepo
 import to.bitkit.wear.repositories.WalletState
 import to.bitkit.wear.repositories.WalletStatus
@@ -24,6 +27,7 @@ import to.bitkit.wear.security.FakeNetworkMonitor
 import to.bitkit.wear.security.FakeNfcMonitor
 import to.bitkit.wear.security.SeedStoreError
 import to.bitkit.wear.test.BaseUnitTest
+import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -38,6 +42,8 @@ class HomeViewModelTest : BaseUnitTest() {
     private val nfcMonitor = FakeNfcMonitor()
     private val networkMonitor = FakeNetworkMonitor()
     private val foregroundMonitor = FakeForegroundMonitor()
+    private val settingsSyncRepo = mock<SettingsSyncRepo>()
+    private val ambientMonitor = AmbientMonitor()
 
     private lateinit var sut: HomeViewModel
 
@@ -49,7 +55,17 @@ class HomeViewModelTest : BaseUnitTest() {
         whenever { walletRepo.start() }.thenReturn(Result.success(Unit))
         whenever { currencyRepo.refresh() }.thenReturn(Result.success(Unit))
         whenever { currencyRepo.togglePrimaryDisplay() }.thenReturn(Result.success(Unit))
-        sut = HomeViewModel(walletRepo, currencyRepo, settingsStore, nfcMonitor, networkMonitor, foregroundMonitor)
+        whenever { settingsSyncRepo.sync() }.thenReturn(Result.success(Unit))
+        sut = HomeViewModel(
+            walletRepo,
+            currencyRepo,
+            settingsStore,
+            nfcMonitor,
+            networkMonitor,
+            foregroundMonitor,
+            settingsSyncRepo,
+            ambientMonitor,
+        )
     }
 
     override fun onTestEnd() = foregroundMonitor.isForeground.update { false }
@@ -63,6 +79,60 @@ class HomeViewModelTest : BaseUnitTest() {
 
         walletState.update { it.copy(status = WalletStatus.Ready) }
         verify(currencyRepo, times(2)).refresh()
+    }
+
+    @Test
+    fun `the phone's settings are imported when the wallet is ready, on each return and every five minutes`() = test {
+        verify(settingsSyncRepo, times(1)).sync()
+
+        testScheduler.advanceTimeBy(HomeViewModel.SETTINGS_SYNC_INTERVAL + 1.seconds)
+        verify(settingsSyncRepo, times(2)).sync()
+
+        foregroundMonitor.isForeground.update { false }
+        testScheduler.advanceTimeBy(HomeViewModel.SETTINGS_SYNC_INTERVAL * 3)
+        verify(settingsSyncRepo, times(2)).sync()
+
+        foregroundMonitor.isForeground.update { true }
+        verify(settingsSyncRepo, times(3)).sync()
+
+        walletState.update { it.copy(status = WalletStatus.Paused) }
+        testScheduler.advanceTimeBy(HomeViewModel.SETTINGS_SYNC_INTERVAL * 3)
+        verify(settingsSyncRepo, times(3)).sync()
+
+        walletState.update { it.copy(status = WalletStatus.Ready) }
+        verify(settingsSyncRepo, times(4)).sync()
+    }
+
+    @Test
+    fun `the phone's settings are not imported in ambient mode, and again once the watch wakes`() = test {
+        ambientMonitor.set(true)
+        testScheduler.advanceTimeBy(HomeViewModel.SETTINGS_SYNC_INTERVAL * 3)
+        verify(settingsSyncRepo, times(1)).sync()
+
+        ambientMonitor.set(false)
+        verify(settingsSyncRepo, times(2)).sync()
+    }
+
+    @Test
+    fun `the phone's settings are not imported before the wallet is ready`() = test {
+        for (status in WalletStatus.entries - WalletStatus.Ready) {
+            walletState.update { it.copy(status = status) }
+        }
+        testScheduler.advanceTimeBy(HomeViewModel.SETTINGS_SYNC_INTERVAL * 3)
+
+        verify(settingsSyncRepo, times(1)).sync()
+    }
+
+    @Test
+    fun `the balance is written in the phone's bitcoin unit`() {
+        val state = homeUiState(
+            WalletState(WalletStatus.Ready, 50_000uL, hasSynced = true),
+            rates = emptyList(),
+            settings = WatchSettings(displayUnit = BitcoinDisplayUnit.CLASSIC),
+            locale = Locale.US,
+        )
+
+        assertEquals(DisplayAmount("₿", "0.00050000"), state.primaryAmount)
     }
 
     @Test

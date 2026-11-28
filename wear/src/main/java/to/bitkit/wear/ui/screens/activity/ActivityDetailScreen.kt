@@ -19,6 +19,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 import to.bitkit.wear.R
+import to.bitkit.wear.models.BitcoinDisplayUnit
 import to.bitkit.wear.models.PaymentState
 import to.bitkit.wear.models.WatchPayment
 import to.bitkit.wear.ui.components.BezelLoading
@@ -49,7 +50,7 @@ fun ActivityDetailScreen(
         Missing(isLoading = !uiState.isLoaded, modifier = modifier)
         return
     }
-    Content(payment = payment, isAmbient = isAmbient(), modifier = modifier)
+    Content(payment = payment, unit = uiState.unit, isAmbient = isAmbient(), modifier = modifier)
 }
 
 /** Stands in for a payment the list does not hold: while the list loads, or after newer payments pushed it out. */
@@ -69,6 +70,7 @@ private fun Missing(
 @Composable
 private fun Content(
     payment: WatchPayment,
+    unit: BitcoinDisplayUnit,
     isAmbient: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -76,7 +78,7 @@ private fun Content(
         if (!isAmbient) {
             BoxWithConstraints(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
                 LargeAmountRow(
-                    amount = bitcoinAmount(payment.amountSats.toLong()),
+                    amount = bitcoinAmount(payment.amountSats.toLong(), unit),
                     maxWidth = maxWidth,
                     amountTag = "WatchActivityDetailAmount",
                     symbolTag = "WatchActivityDetailSymbol",
@@ -84,7 +86,7 @@ private fun Content(
             }
         }
         if (payment.isSent && payment.feeSats > 0uL && !isAmbient) {
-            val fee = bitcoinAmount(payment.feeSats.toLong())
+            val fee = bitcoinAmount(payment.feeSats.toLong(), unit)
             Line(
                 text = stringResource(R.string.send__fee, "${fee.symbol} ${fee.text}"),
                 modifier = Modifier.testTag("WatchActivityDetailFee")
@@ -138,6 +140,6 @@ private fun Line(
 @Composable
 private fun Preview() {
     WearPreview {
-        Content(payment = PreviewPayment, isAmbient = false)
+        Content(payment = PreviewPayment, unit = BitcoinDisplayUnit.MODERN, isAmbient = false)
     }
 }

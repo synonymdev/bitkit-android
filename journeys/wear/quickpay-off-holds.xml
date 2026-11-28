@@ -1,0 +1,28 @@
+<journey name="wear quickpay off holds">
+  <description>
+    QuickPay turned off on the phone stops on the watch with the next import: the same small invoice that QuickPay
+    paid by itself now opens the review and waits for the hold. A watch that never imported the phone's settings
+    behaves the same. Emulator and physical watch.
+
+    Precondition: run quickpay-skips-hold.xml first, on its Private settings wallet and never the public test phrase
+    alone. Then, on the phone with the same wallet, turn QuickPay off and leave Default Unit Bitcoin, Denomination
+    Modern and Local Currency USD as that journey set them, so the amount below reads in sats; wait for the backup
+    and close the phone app, see journeys/wear/README.md › Phone settings on VSS. Watch: the
+    wallet of quickpay-skips-hold.xml on the local ./spark stack with at least 2 000 sats, the app open on the Balance
+    page and the loading ring stopped. README › Holding to pay has the hold gesture.
+  </description>
+  <actions>
+    <action>Swipe left three times to the Settings page (README › Watch gestures)</action>
+    <action>Run `adb logcat -c`</action>
+    <action>Tap "WatchSettingsSync"</action>
+    <action>Wait up to 15 s until `adb logcat -d -s BitkitWear` lists "Imported the phone's settings"</action>
+    <action>Swipe right three times to the Balance page</action>
+    <action>Run `../bitkit-docker/spark invoice 200` and note the BOLT11 invoice it prints as &lt;invoice&gt;</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;invoice&gt;" to.bitkit.dev`</action>
+    <action>Wait up to 10 s until "WatchSendHold" is listed</action>
+    <action>Verify "WatchSendAmount" reads "200"</action>
+    <action>Verify "WatchSendSent" does not get listed within 5 s: nothing was paid</action>
+    <action>Hold "WatchSendHold" for 2 s as in README › Holding to pay</action>
+    <action>Wait up to 15 s until "WatchSendSent" is listed</action>
+  </actions>
+</journey>
