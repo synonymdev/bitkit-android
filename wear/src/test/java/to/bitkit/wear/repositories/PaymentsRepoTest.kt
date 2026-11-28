@@ -621,6 +621,55 @@ class PaymentsRepoTest : BaseUnitTest() {
         }
 
     @Test
+    fun `quickpay skips the hold for an uppercase bitcoin uri with an amount, like a lowercase one`() = test {
+        whenever(quickPayRepo.reserve(500uL)).thenReturn(RESERVATION)
+        decoder.inputs["bitcoin:bcrt1q?lightning=$BOLT11"] = onchain(mapOf("lightning" to BOLT11))
+        decoder.inputs[BOLT11] = lightning(BOLT11, amountSats = 500uL)
+        val links = listOf(
+            "bitcoin:bcrt1q?lightning=$BOLT11",
+            "BITCOIN:BCRT1Q?LIGHTNING=${BOLT11.uppercase()}",
+        )
+
+        for (link in links) {
+            val request = sut.parse(link).getOrThrow()
+            assertEquals(500uL, request.fixedAmountSats, link)
+            assertTrue(sut.skipConfirmation(sut.prepare(request).getOrThrow()) { true }, link)
+        }
+
+        verify(quickPayRepo, times(2)).reserve(500uL)
+    }
+
+    @Test
+    fun `quickpay never skips the hold for an uppercase bitcoin uri without an amount`() = test {
+        whenever(quickPayRepo.reserve(any())).thenReturn(RESERVATION)
+        decoder.inputs["bitcoin:bcrt1q?lightning=$BOLT11"] = onchain(mapOf("lightning" to BOLT11))
+        decoder.inputs[BOLT11] = lightning(BOLT11, amountSats = 0uL)
+
+        val request = sut.parse("BITCOIN:BCRT1Q?LIGHTNING=${BOLT11.uppercase()}").getOrThrow()
+        assertNull(request.fixedAmountSats)
+
+        assertFalse(sut.skipConfirmation(sut.prepare(request, amountSats = 500uL).getOrThrow()) { true })
+        verify(quickPayRepo, never()).reserve(any())
+    }
+
+    @Test
+    fun `an lnurlp link follows the lnurl rule for quickpay, one amount only`() = test {
+        whenever(quickPayRepo.reserve(any())).thenReturn(RESERVATION)
+        decoder.inputs["https://pay.example/lnurlp/fixed"] = Scanner.LnurlPay(lnurl(15_000uL, 15_000uL))
+        decoder.inputs["https://pay.example/lnurlp/range"] = Scanner.LnurlPay(lnurl(10_000uL, 20_000uL))
+        stubLnurlInvoice()
+
+        val fixed = sut.parse("lnurlp://pay.example/lnurlp/fixed").getOrThrow()
+        val range = sut.parse("LNURLP://pay.example/lnurlp/range").getOrThrow()
+
+        assertEquals(15uL, fixed.fixedAmountSats)
+        assertNull(range.fixedAmountSats)
+        assertTrue(sut.skipConfirmation(sut.prepare(fixed).getOrThrow()) { true })
+        assertFalse(sut.skipConfirmation(sut.prepare(range, amountSats = 15uL).getOrThrow()) { true })
+        verify(quickPayRepo, times(1)).reserve(15uL)
+    }
+
+    @Test
     fun `quickpay holds for an lnurl whose range only rounds to one amount, as on the phone`() = test {
         whenever(quickPayRepo.reserve(any())).thenReturn(RESERVATION)
         val rounded = SendRequest.Lnurl(lnurl(14_500uL, 15_500uL), minSats = 15uL, maxSats = 15uL, payee = null)

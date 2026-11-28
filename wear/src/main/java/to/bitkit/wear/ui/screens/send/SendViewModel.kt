@@ -51,8 +51,9 @@ import kotlin.time.Duration.Companion.seconds
  *
  * QuickPay is asked only for a send the wearer is there for: one priced within [QUICKPAY_WINDOW] of its link, with
  * the app on screen, out of ambient mode and the watch unlocked all the while. A link that waited longer for the
- * wallet, as without a network, or across a lock, a pause or ambient mode, always ends on the review and the hold,
- * so nothing is ever paid long after the wearer looked away. Only the first flow of a link asks: one that Android
+ * wallet, as while it connects, or across a lock, a pause or ambient mode, always ends on the review and the hold,
+ * so nothing is ever paid long after the wearer looked away. A wallet that turns offline during that wait ends the
+ * flow as above, with no QuickPay and no review. Only the first flow of a link asks: one that Android
  * builds again for the same link, as after the process was killed and the back stack restored, finds its mark in the
  * saved state and ends on the review.
  */
@@ -226,7 +227,7 @@ class SendViewModel @Inject constructor(
         unit = runSuspendCatching { settingsStore.data.first().displayUnit }.getOrDefault(BitcoinDisplayUnit.MODERN)
         // Asked last and only when it can apply, since a yes is counted against the day's limit. The wearer may
         // have looked away while it was answered, hence the second look, which the repo takes before it says yes.
-        if (isQuickPayOpen() && paymentsRepo.skipConfirmation(result, ::isAttended)) {
+        if (isQuickPayOpen() && paymentsRepo.skipConfirmation(result, ::canQuickPay)) {
             Logger.info("Skipped the hold to pay under QuickPay", context = TAG)
             send(result)
             return
@@ -236,7 +237,15 @@ class SendViewModel @Inject constructor(
 
     /** Whether QuickPay may be asked for a send priced now: see the class. */
     private fun isQuickPayOpen(): Boolean =
-        isAttended() && clock.nowMs() - arrivedAtMs in 0..QUICKPAY_WINDOW.inWholeMilliseconds
+        canQuickPay() && clock.nowMs() - arrivedAtMs in 0..QUICKPAY_WINDOW.inWholeMilliseconds
+
+    /**
+     * Whether the wearer is there and the wallet is not offline, by its status now and by a request already
+     * dropped for it, which nothing pays later.
+     */
+    private fun canQuickPay(): Boolean = isAttended() &&
+        walletRepo.walletState.value.status != WalletStatus.Offline &&
+        _uiState.value.step !is SendStep.Offline
 
     /**
      * Whether the wearer was there since the link arrived and still is: the app on screen, not in ambient mode, the

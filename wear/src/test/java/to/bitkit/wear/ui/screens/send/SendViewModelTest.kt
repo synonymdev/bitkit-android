@@ -170,7 +170,7 @@ class SendViewModelTest : BaseUnitTest() {
 
     @Test
     fun `a link that waited long for the wallet is reviewed and held, never paid under quickpay`() = test {
-        for (status in listOf(WalletStatus.Offline, WalletStatus.Error, WalletStatus.Connecting)) {
+        for (status in listOf(WalletStatus.Error, WalletStatus.Connecting)) {
             walletState.update { it.copy(status = status) }
             stubInvoice(prepared())
             whenever(paymentsRepo.skipConfirmation(any(), any())).thenReturn(true)
@@ -185,6 +185,49 @@ class SendViewModelTest : BaseUnitTest() {
         verify(paymentsRepo, never()).skipConfirmation(any(), any())
         verify(paymentsRepo, never()).send(any())
     }
+
+    @Test
+    fun `a wallet that turns offline while the link waits for it ends on the offline error, without quickpay`() =
+        test {
+            for (status in listOf(WalletStatus.Idle, WalletStatus.Paused, WalletStatus.Connecting)) {
+                walletState.update { it.copy(status = status) }
+                stubInvoice(prepared())
+                whenever(paymentsRepo.skipConfirmation(any(), any())).thenReturn(true)
+
+                val sut = createSut()
+                assertEquals(SendStep.Loading, sut.uiState.value.step, "$status")
+                walletState.update { it.copy(status = WalletStatus.Connecting) }
+                walletState.update { it.copy(status = WalletStatus.Offline) }
+                // The network returns well within the QuickPay window: the dropped request stays dropped.
+                walletState.update { it.copy(status = WalletStatus.Connecting) }
+                walletState.update { it.copy(status = WalletStatus.Ready) }
+
+                assertEquals(SendStep.Offline, sut.uiState.value.step, "$status")
+                assertFalse(sut.uiState.value.isHoldEnabled)
+                sut.onHoldComplete()
+            }
+            verify(paymentsRepo, never()).parse(any())
+            verify(paymentsRepo, never()).skipConfirmation(any(), any())
+            verify(paymentsRepo, never()).send(any())
+        }
+
+    @Test
+    fun `a wallet that turns offline while quickpay is decided ends on the offline error and sends nothing`() =
+        test {
+            val prepared = prepared()
+            stubInvoice(prepared)
+            whenever(paymentsRepo.skipConfirmation(eq(prepared), any())).doSuspendableAnswer {
+                walletState.update { state -> state.copy(status = WalletStatus.Offline) }
+                it.getArgument<() -> Boolean>(1)()
+            }
+
+            val sut = createSut()
+
+            assertEquals(SendStep.Offline, sut.uiState.value.step)
+            walletState.update { it.copy(status = WalletStatus.Ready) }
+            assertEquals(SendStep.Offline, sut.uiState.value.step)
+            verify(paymentsRepo, never()).send(any())
+        }
 
     @Test
     fun `a flow rebuilt for a link that already had one is reviewed and held, never paid under quickpay`() = test {
