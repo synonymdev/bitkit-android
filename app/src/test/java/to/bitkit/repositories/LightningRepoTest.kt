@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
@@ -128,6 +129,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import breez_sdk_spark.PaymentStatus as SparkPaymentStatus
@@ -1526,6 +1528,410 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a spark send held for the node's listing is retried once the starting node runs`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
+        var authorizations = 0
+
+        val payment = async { sut.payInvoice("bolt11", 1_000uL, onBeforeSend = { authorizations++ == 0 }) }
+        runCurrent()
+        assertFalse(payment.isCompleted, "The send failed instead of waiting for the starting node")
+        assertEquals(0, authorizations, "The send was authorized before the node listed its sends")
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashesSeeded = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        startNodeForTesting()
+
+        assertEquals("hash", payment.await().getOrThrow())
+        verify(sparkRepo, times(1)).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `a spark send held for the node's listing fails with the hold once the node start times out`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        var isAuthorizationAsked = false
+
+        val payment = async {
+            sut.payInvoice("bolt11", 1_000uL, onBeforeSend = {
+                isAuthorizationAsked = true
+                true
+            })
+        }
+        advanceTimeBy(59.seconds)
+        assertFalse(payment.isCompleted)
+        advanceTimeBy(2.seconds)
+
+        assertIs<ServiceError.NodeNotStarted>(payment.await().exceptionOrNull())
+        assertFalse(isAuthorizationAsked)
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a spark send held for the node's listing fails at once when the node cannot run`() = test {
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+
+        val payment = async { sut.payInvoice("bolt11", 1_000uL) }
+        runCurrent()
+
+        assertTrue(payment.isCompleted)
+        assertIs<ServiceError.NodeNotStarted>(payment.await().exceptionOrNull())
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    // Reachable only while a running node is being reset: the stale-graph restart and the recovery screen's reset.
+    @Test
+    fun `a held spark send fails with the hold after the bound when a running node never lists`() = test {
+        startNodeForTesting()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+
+        val payment = async { sut.payInvoice("bolt11", 1_000uL) }
+        advanceTimeBy(59.seconds)
+        assertFalse(payment.isCompleted, "The send gave up while the node could still list its sends in time")
+        advanceTimeBy(2.seconds)
+
+        assertIs<ServiceError.NodeNotStarted>(payment.await().exceptionOrNull())
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a listing that fails during the hold returns the hold's failure instead of throwing`() = test {
+        startNodeForTesting()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        var listings = 0
+        whenever(lightningService.listPayments()).doSuspendableAnswer {
+            if (listings++ == 0) null else throw AppError("listing failed")
+        }
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+
+        val payment = runCatching { sut.payInvoice("bolt11", 1_000uL) }
+
+        assertTrue(payment.isSuccess, "The send threw instead of returning its failure")
+        assertIs<ServiceError.NodeNotStarted>(payment.getOrThrow().exceptionOrNull())
+        assertTrue(listings > 1)
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a held spark send keeps waiting through a failed start when another start is queued`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.sync()).thenReturn(Unit)
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(any())).thenReturn(null)
+        val failed = CompletableDeferred<Unit>()
+        var starts = 0
+        whenever { lightningService.start(anyOrNull(), any()) }.doSuspendableAnswer {
+            if (starts++ == 0) {
+                failed.await()
+                throw AppError("start failed")
+            }
+        }
+
+        val payment = async { sut.payInvoice("bolt11", 1_000uL) }
+        runCurrent()
+        val failingStart = async { sut.start(shouldRetry = false) }
+        runCurrent()
+        val queuedStart = async { sut.start(shouldRetry = false) }
+        runCurrent()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashesSeeded = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        failed.complete(Unit)
+
+        assertTrue(failingStart.await().isFailure)
+        assertTrue(queuedStart.await().isSuccess)
+        assertEquals("hash", payment.await().getOrThrow())
+    }
+
+    @Test
+    fun `a held spark send ends when a wipe begins, before any storage is wiped`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+
+        val payment = async { sut.payInvoice("bolt11", 1_000uL) }
+        runCurrent()
+        sut.setWiping(true)
+        assertTrue(sut.start().isFailure)
+        runCurrent()
+
+        assertTrue(payment.isCompleted, "The send kept waiting through a wipe")
+        assertIs<ServiceError.NodeNotStarted>(payment.await().exceptionOrNull())
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a spark send held while a restart stops the node is retried once the restart runs it`() = test {
+        startNodeForTesting()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
+        withHeldStop { stopped ->
+            val restart = async { sut.restartNode() }
+            runCurrent()
+            whenever(lightningService.listPayments()).thenReturn(null)
+
+            val payment = async { sut.payInvoice("bolt11", 1_000uL) }
+            runCurrent()
+            assertFalse(payment.isCompleted)
+            whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashesSeeded = true)))
+            whenever(lightningService.listPayments()).thenReturn(emptyList())
+            stopped.complete(Unit)
+
+            assertTrue(restart.await().isSuccess)
+            assertEquals("hash", payment.await().getOrThrow())
+        }
+    }
+
+    @Test
+    fun `a held spark send waits for the listing when the node runs before it can list`() = test {
+        startNodeForTesting()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
+
+        val payment = async { sut.payInvoice("bolt11", 1_000uL) }
+        advanceTimeBy(5.seconds)
+        assertFalse(payment.isCompleted, "The send used its retry before the node could list")
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashesSeeded = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+
+        assertEquals("hash", payment.await().getOrThrow())
+        verify(sparkRepo, times(1)).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a held spark send sends nothing when its caller is cancelled during the wait`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        var isAuthorizationAsked = false
+
+        val payment = async {
+            sut.payInvoice("bolt11", 1_000uL, onBeforeSend = {
+                isAuthorizationAsked = true
+                true
+            })
+        }
+        runCurrent()
+        assertFalse(payment.isCompleted)
+        payment.cancel()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashesSeeded = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        startNodeForTesting()
+        advanceTimeBy(2.minutes)
+
+        assertTrue(payment.isCancelled)
+        assertFalse(isAuthorizationAsked)
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `a held spark send fails promptly when the node start fails`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(lightningService.node).thenReturn(mock())
+        whenever { lightningService.start(anyOrNull(), any()) }.doSuspendableAnswer { throw AppError("start failed") }
+
+        val payment = async { sut.payInvoice("bolt11", 1_000uL) }
+        runCurrent()
+        assertFalse(payment.isCompleted)
+        assertTrue(sut.start(shouldRetry = false).isFailure)
+        runCurrent()
+
+        assertTrue(payment.isCompleted, "The send kept waiting for a node whose start failed")
+        assertIs<ServiceError.NodeNotStarted>(payment.await().exceptionOrNull())
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `a held spark send sends nothing when the wallet is wiped during the wait`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
+        whenever(sparkRepo.wipe(0)).thenReturn(Result.success(Unit))
+        whenever(lightningService.node).thenReturn(mock())
+        withHeldStop { stopped ->
+            var isAuthorizationAsked = false
+
+            val payment = async {
+                sut.payInvoice("bolt11", 1_000uL, onBeforeSend = {
+                    isAuthorizationAsked = true
+                    true
+                })
+            }
+            runCurrent()
+            val wipe = launch { sut.wipeStorage(0) }
+            runCurrent()
+            // The next wallet's node starts behind the wipe, so the wait sees a start coming all along.
+            whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashesSeeded = true)))
+            whenever(lightningService.listPayments()).thenReturn(emptyList())
+            val start = launch { startNodeForTesting() }
+            runCurrent()
+            stopped.complete(Unit)
+            wipe.join()
+            start.join()
+
+            assertIs<ServiceError.NodeNotStarted>(payment.await().exceptionOrNull())
+            assertFalse(isAuthorizationAsked)
+            verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+        }
+    }
+
+    @Test
+    fun `a spark send held while the node stops is retried once the queued start runs`() = test {
+        startNodeForTesting()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("hash"))
+        withHeldStop { stopped ->
+            val stop = launch { sut.stop() }
+            runCurrent()
+            assertEquals(NodeLifecycleState.Stopping, sut.lightningState.value.nodeLifecycleState)
+            whenever(lightningService.listPayments()).thenReturn(null)
+
+            val payment = async { sut.payInvoice("bolt11", 1_000uL) }
+            runCurrent()
+            assertFalse(payment.isCompleted, "The send failed while the node was stopping")
+            val start = launch { sut.start() }
+            runCurrent()
+            whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashesSeeded = true)))
+            whenever(lightningService.listPayments()).thenReturn(emptyList())
+            stopped.complete(Unit)
+            stop.join()
+            start.join()
+
+            assertEquals("hash", payment.await().getOrThrow())
+            verify(sparkRepo, times(1)).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+        }
+    }
+
+    @Test
+    fun `a spark send held while the node stops fails once it is stopped with no start coming`() = test {
+        startNodeForTesting()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        withHeldStop { stopped ->
+            val stop = launch { sut.stop() }
+            runCurrent()
+            whenever(lightningService.listPayments()).thenReturn(null)
+
+            val payment = async { sut.payInvoice("bolt11", 1_000uL) }
+            runCurrent()
+            assertFalse(payment.isCompleted)
+            stopped.complete(Unit)
+            stop.join()
+            runCurrent()
+
+            assertTrue(payment.isCompleted, "The send kept waiting for a node nothing starts")
+            assertIs<ServiceError.NodeNotStarted>(payment.await().exceptionOrNull())
+            verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+        }
+    }
+
+    @Test
+    fun `the retry after the node starts returns the node's payment when it lists the invoice as paid`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        var isAuthorizationAsked = false
+
+        val payment = async {
+            sut.payInvoice("bolt11", 1_000uL, onBeforeSend = {
+                isAuthorizationAsked = true
+                true
+            })
+        }
+        runCurrent()
+        whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("bolt11", PaymentStatus.SUCCEEDED)))
+        startNodeForTesting()
+
+        assertEquals("bolt11", payment.await().getOrThrow())
+        assertFalse(isAuthorizationAsked)
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `the retry after the node starts pays over the node when its channels cover the amount`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        whenever(sparkRepo.payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Result.success("spark-hash"))
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("node-hash")
+
+        val payment = async { sut.payInvoice("bolt11", 1_000uL) }
+        runCurrent()
+        assertFalse(payment.isCompleted)
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashesSeeded = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.channels).thenReturn(
+            listOf(createChannelDetails().copy(isUsable = true, nextOutboundHtlcLimitMsat = 2_000_000uL)),
+        )
+        startNodeForTesting()
+
+        assertEquals("node-hash", payment.await().getOrThrow())
+        verify(lightningService, times(1)).send(eq("bolt11"), eq(1_000uL), anyOrNull(), anyOrNull())
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `the retry after the node starts sends nothing when the node lists its earlier send`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(ldkSendHashes = listOf("bolt11"))))
+        whenever(lightningService.listPayments()).thenReturn(null)
+        whenever(sparkRepo.canSend(1_000uL)).thenReturn(true)
+        var isAuthorizationAsked = false
+
+        val payment = async {
+            sut.payInvoice("bolt11", 1_000uL, onBeforeSend = {
+                isAuthorizationAsked = true
+                true
+            })
+        }
+        runCurrent()
+        assertFalse(payment.isCompleted)
+        whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("bolt11", PaymentStatus.PENDING)))
+        startNodeForTesting()
+
+        assertIs<PaymentPendingException>(payment.await().exceptionOrNull())
+        assertFalse(isAuthorizationAsked)
+        verify(sparkRepo, never()).payInvoice(any(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+        verify(lightningService, never()).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
     fun `spark still pays while the node can't list when the node never tried the invoice`() = test {
         startNodeForTesting()
         whenever(lightningService.listPayments()).thenReturn(null)
@@ -1587,6 +1993,17 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertNull(store.data.first().ldkHistoryUnseededSince)
         assertEquals(listOf("paid"), store.data.first().ldkSendHashes)
+    }
+
+    /** Holds the node's stop until [block] releases it or ends, as a stop left held would hang a failed test. */
+    private suspend fun withHeldStop(block: suspend (CompletableDeferred<Unit>) -> Unit) {
+        val stopped = CompletableDeferred<Unit>()
+        whenever(lightningService.stop()).doSuspendableAnswer { stopped.await() }
+        try {
+            block(stopped)
+        } finally {
+            stopped.complete(Unit)
+        }
     }
 
     private suspend fun restoredCacheWithInvoiceAt(createdAt: Long) {
@@ -1997,6 +2414,77 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertIs<PaymentPendingException>(sut.payInvoice("h", 1_000uL).exceptionOrNull())
         verify(lightningService).send(any(), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `a failed node send with no attempt live settles as failed`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
+        assertEquals("h", sut.payInvoice("h", 1_000uL).getOrThrow())
+
+        // Its failure event was handled before the caller watched for it, so the caller reads the settled payment.
+        whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("h", PaymentStatus.FAILED)))
+
+        assertEquals("h", assertIs<Event.PaymentFailed>(sut.settledSparkSendEvent("h")).paymentHash)
+    }
+
+    @Test
+    fun `a failed node send settles nothing while a retry of it is sent`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
+        assertEquals("h", sut.payInvoice("h", 1_000uL).getOrThrow())
+        whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("h", PaymentStatus.FAILED)))
+        val proceed = CompletableDeferred<Unit>()
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            proceed.await()
+            "h"
+        }
+        val retry = backgroundScope.launch { sut.payInvoice("h", 1_000uL) }
+        runCurrent()
+
+        assertNull(sut.settledSparkSendEvent("h"))
+        proceed.complete(Unit)
+        retry.join()
+    }
+
+    @Test
+    fun `a failed node send settles nothing when a retry of it ends while the payments are listed`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
+        assertEquals("h", sut.payInvoice("h", 1_000uL).getOrThrow())
+        val proceed = CompletableDeferred<Unit>()
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).doSuspendableAnswer {
+            proceed.await()
+            "h"
+        }
+        val retry = backgroundScope.launch { sut.payInvoice("h", 1_000uL) }
+        runCurrent()
+        // The listing reads the earlier attempt's failed row, and the retry is sent and released before it returns.
+        whenever(lightningService.listPayments()).doSuspendableAnswer {
+            proceed.complete(Unit)
+            retry.join()
+            listOf(nodeSend("h", PaymentStatus.FAILED))
+        }
+
+        assertNull(sut.settledSparkSendEvent("h"))
+    }
+
+    @Test
+    fun `a failed node send is left to its event when the caller can still get it`() = test {
+        startNodeForTesting()
+        whenever(lightningService.channels).thenReturn(listOf(createChannelDetails().copy(isUsable = true)))
+        whenever(lightningService.listPayments()).thenReturn(emptyList())
+        whenever(lightningService.send(any(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn("h")
+        assertEquals("h", sut.payInvoice("h", 1_000uL).getOrThrow())
+        whenever(lightningService.listPayments()).thenReturn(listOf(nodeSend("h", PaymentStatus.FAILED)))
+
+        assertNull(sut.settledSparkSendEvent("h", includeNodeFailure = false))
     }
 
     @Test

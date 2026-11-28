@@ -799,6 +799,39 @@ class MoveToSparkRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a payment Spark can send alone never needs the update, whatever the channels hold`() {
+        val channelSets = listOf(
+            null,
+            emptyList(),
+            listOf(channel("c1", 10_000uL)),
+            listOf(channel("c1", 100_000uL)),
+            listOf(channel("c1", 100_000uL), channel("c2", 400_000uL)),
+        )
+        val sparkStates = listOf(0uL, 1uL, 999uL, 50_000uL, 1_000_000uL).flatMap { balance ->
+            listOf(
+                SparkState(isReady = true, balanceSats = balance),
+                SparkState(isReady = false, balanceSats = balance),
+                SparkState(isReady = true, isExiting = true, balanceSats = balance),
+                SparkState(isReady = false, isExiting = true, balanceSats = balance),
+            )
+        }
+        for (spark in sparkStates) {
+            val amounts = listOf(0uL, 1uL, 500uL, 10_000uL, 100_000uL, 149_125uL, 2_000_000uL) +
+                listOf(spark.sendableSats, spark.sendableSats + 1uL, spark.balanceSats)
+            for (channels in channelSets) {
+                for (amount in amounts.filter { spark.canSend(it) }) {
+                    assertTrue(
+                        !MoveToSparkMath.needsUpdateToSend(amount, channels, spark),
+                        "'$amount' sats need the update though Spark sends them alone: $spark, $channels",
+                    )
+                }
+            }
+            if (!spark.isReady) assertTrue(amounts.none { spark.canSend(it) })
+            if (spark.isExiting) assertTrue(amounts.none { it > 0uL && spark.canSend(it) })
+        }
+    }
+
+    @Test
     fun `max send counts the combined balance`() {
         val channels = listOf(channel("c1", 100_000uL))
         val spark = SparkState(isReady = true, balanceSats = 50_000uL)

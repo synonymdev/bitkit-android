@@ -6648,7 +6648,7 @@ class AppViewModel @Inject constructor(
         )
         if (quickPayHandled) return
 
-        waitForUsableChannels(walletGeneration, amount)
+        waitForUsableChannels(walletGeneration, amount.coerceAtLeast(1u))
         if (!canSendLightning(amount)) {
             val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
             val shortfall = amount.safe() - maxSendLightning.safe()
@@ -6932,8 +6932,12 @@ class AppViewModel @Inject constructor(
         val open = invoiceHash != null && quickPayRepo.hasOpen(invoiceHash)
         // QuickPay has no confirm screen to show the update fee, so a payment that needs the update is reviewed. While
         // the node starts or its channels reconnect their balance is unknown, so that is decided once they are usable.
+        // An amount Spark covers alone never needs the update, so it does not wait for the node. An amountless
+        // invoice has no amount to cover yet, so it keeps the wait.
         val isQuickPayOn = settingsStore.data.first().isQuickPayEnabled
-        if (!open && isQuickPayOn && channelsAreSettling()) waitForUsableChannels(walletGeneration)
+        if (!open && isQuickPayOn && channelsAreSettling()) {
+            waitForUsableChannels(walletGeneration, amountSats.takeIf { it > 0uL })
+        }
         if (!open && moveToSparkRepo.needsUpdateToSend(amountSats)) return false
         val canApply = open || canApplyQuickPay(amountSats)
         requireCurrentPaymentPreparation(walletGeneration)
@@ -8984,7 +8988,11 @@ class AppViewModel @Inject constructor(
                         outcome(it)?.let { result -> WatchResult.Complete(result) } ?: WatchResult.Continue()
                     }
                 }
-                lightningRepo.settledSparkSendEvent(hash)?.let(::outcome)?.also { watch.cancel() } ?: watch.await()
+                // A node failure comes with its reason in the watched event, which the payment list does not carry.
+                lightningRepo.settledSparkSendEvent(hash, includeNodeFailure = false)
+                    ?.let(::outcome)
+                    ?.also { watch.cancel() }
+                    ?: watch.await()
             }
             return result ?: Result.failure(PaymentPendingException(hash))
         }

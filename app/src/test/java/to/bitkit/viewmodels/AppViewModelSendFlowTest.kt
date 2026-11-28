@@ -12399,7 +12399,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val invoice = lightningInvoice(bolt11, 1_000u)
         val paymentHash = invoice.paymentHash.toHex()
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12436,7 +12436,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val paymentHash = invoice.paymentHash.toHex()
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 1_000u)).thenReturn(Result.success(paymentHash))
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 2_000u)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12469,7 +12469,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val paymentHash = invoice.paymentHash.toHex()
         whenever(context.getString(R.string.wallet__send_quickpay__already_paid)).thenReturn("Already paid")
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12506,7 +12506,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val invoice = lightningInvoice(bolt11, 0u)
         val paymentHash = invoice.paymentHash.toHex()
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = 2_000u)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12534,7 +12534,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val invoice = lightningInvoice(bolt11, 1_000u)
         val paymentHash = invoice.paymentHash.toHex()
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12560,7 +12560,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val invoice = lightningInvoice(bolt11, 1_000u)
         val paymentHash = invoice.paymentHash.toHex()
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12608,7 +12608,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val paymentHash = invoice.paymentHash.toHex()
         whenever(moveToSparkRepo.needsUpdateToSend(1_000uL)).thenReturn(true)
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12636,7 +12636,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val invoice = lightningInvoice(bolt11, 1_000u)
         val paymentHash = invoice.paymentHash.toHex()
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -12841,7 +12841,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.onSendSuccess(details)
             Result.success(paymentHash)
         }
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -20830,7 +20830,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val paymentHash = "spark_hash"
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = paymentHash,
                 paymentHash = paymentHash,
@@ -20862,7 +20862,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
             .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
         // Spark's success was handled after the send returned pending, before the send screen tracked it.
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenReturn(
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenReturn(
             Event.PaymentSuccessful(
                 paymentId = paymentHash,
                 paymentHash = paymentHash,
@@ -20896,7 +20896,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
             .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
         // The send screen moved on to a payment to a contact before the pending send's success was read.
-        whenever(lightningRepo.settledSparkSendEvent(paymentHash)).thenAnswer {
+        whenever(lightningRepo.settledSparkSendEvent(eq(paymentHash), any())).thenAnswer {
             setActiveContactPaymentContext(nextContactKey)
             Event.PaymentSuccessful(
                 paymentId = paymentHash,
@@ -24619,6 +24619,144 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(lightningRepo, atLeastOnce()).waitForUsableChannels()
         assertNull(sut.quickPayData.value, "QuickPay paid a payment that needs the update")
+    }
+
+    @Test
+    fun `a scan while the node starts uses QuickPay without the channel wait when Spark covers the amount`() = test {
+        val bolt11 = "lnbcrt1quickpaysparkstarting"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        whenever(lightningRepo.canSendWithSpark(500u)).thenReturn(true)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting)))
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).waitForUsableChannels(any())
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
+        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `a scan while the node starts waits for the channels when Spark covers less than the amount`() = test {
+        val bolt11 = "lnbcrt1quickpaysparkshort"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        whenever(lightningRepo.canSendWithSpark(any())).thenAnswer { (it.arguments[0] as Long) <= 499L }
+        val nodeState = MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting))
+        whenever(lightningRepo.lightningState).thenReturn(nodeState)
+        var isQuickPaySetBeforeWait = false
+        whenever(lightningRepo.waitForUsableChannels()).thenAnswer {
+            isQuickPaySetBeforeWait = sut.quickPayData.value != null
+            nodeState.value = LightningState(nodeLifecycleState = NodeLifecycleState.Running)
+            Unit
+        }
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        verify(lightningRepo).waitForUsableChannels()
+        assertFalse(isQuickPaySetBeforeWait)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
+    }
+
+    @Test
+    fun `an amountless scan while the node starts keeps the channel wait when Spark is ready with no balance`() = test {
+        val bolt11 = "lnbcrt1quickpayamountless"
+        // QuickPay never takes a zero amount.
+        enableQuickPay(canApply = false)
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+        whenever(lightningRepo.canSendWithSpark(0u)).thenReturn(true)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting)))
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        // Once before the QuickPay decision and once before the send path reads what Lightning can send.
+        verify(lightningRepo, times(2)).waitForUsableChannels()
+        verify(lightningRepo, never()).waitForUsableChannels(awaitUsable = false)
+        assertNull(sut.quickPayData.value)
+    }
+
+    @Test
+    fun `a scan with unusable channels uses QuickPay without waiting for them when Spark covers the amount`() = test {
+        val bolt11 = "lnbcrt1quickpaysparkpeeroffline"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        whenever(lightningRepo.canSendWithSpark(500u)).thenReturn(true)
+        val offlinePeerChannel = mock<ChannelDetails> { on { isUsable } doReturn false }
+        whenever(lightningRepo.lightningState).thenReturn(
+            MutableStateFlow(
+                LightningState(
+                    nodeLifecycleState = NodeLifecycleState.Running,
+                    channels = persistentListOf(offlinePeerChannel),
+                )
+            )
+        )
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).waitForUsableChannels()
+        verify(lightningRepo).waitForUsableChannels(awaitUsable = false)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
+    }
+
+    @Test
+    fun `a fixed lnurl scan while the node starts uses QuickPay without the channel wait when Spark covers`() = test {
+        val input = "lnurl1quickpaysparkstarting"
+        val data =
+            LnurlPayData(input, "https://example.com/callback", 1_000_000uL, 1_000_000uL, "[]", null, false, null)
+        enableQuickPay()
+        whenever(coreService.decode(input)).thenReturn(Scanner.LnurlPay(data))
+        whenever(lightningRepo.canSend(1_000u)).thenReturn(true)
+        whenever(lightningRepo.canSendWithSpark(1_000u)).thenReturn(true)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting)))
+
+        sut.onScanResult(input)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).waitForUsableChannels(any())
+        assertEquals(QuickPayData.LnurlPay(sats = 1_000u, data = data), sut.quickPayData.value?.data)
+    }
+
+    @Test
+    fun `a unified scan while the node starts uses QuickPay without the channel wait when Spark covers`() = test {
+        val bolt11 = "lnbcrt1quickpaysparkunified"
+        val uri = "bitcoin:$REGTEST_ADDRESS?amount=0.0002&lightning=$bolt11"
+        enableQuickPay()
+        stubUnifiedScan(uri = uri, bolt11 = bolt11, amountSats = 20_000u, payeeNodeId = FOREIGN_NODE_ID.fromHex())
+        whenever(lightningRepo.canSendWithSpark(20_000u)).thenReturn(true)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting)))
+
+        sut.onScanResult(uri)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).waitForUsableChannels(any())
+        assertEquals(QuickPayData.Bolt11(sats = 20_000u, bolt11 = bolt11), sut.quickPayData.value?.data)
+    }
+
+    @Test
+    fun `a payment that needs the update is never sent by QuickPay when the channel wait is skipped`() = test {
+        val bolt11 = "lnbcrt1quickpaysparkupdate"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        whenever(lightningRepo.canSendWithSpark(500u)).thenReturn(true)
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Starting)))
+        whenever(moveToSparkRepo.needsUpdateToSend(500uL)).thenReturn(true)
+        whenever(moveToSparkRepo.quote()).thenReturn(Result.success(MoveToSparkQuote("lnbcrt1spark", 500uL, 1uL)))
+        whenever(moveToSparkRepo.estimateFeeAfterUpdate(bolt11, 500uL)).thenReturn(2uL)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertNull(sut.quickPayData.value, "QuickPay paid a payment that needs the update")
+        verify(quickPayRepo, never()).canApply(any<ULong>())
     }
 
     @Test
