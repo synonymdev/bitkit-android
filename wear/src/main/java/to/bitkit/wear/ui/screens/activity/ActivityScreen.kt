@@ -26,9 +26,10 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import to.bitkit.wear.R
 import to.bitkit.wear.models.BITCOIN_SYMBOL
+import to.bitkit.wear.models.BitcoinDisplayUnit
 import to.bitkit.wear.models.PaymentState
 import to.bitkit.wear.models.WatchPayment
-import to.bitkit.wear.models.formatToModernDisplay
+import to.bitkit.wear.models.formatMoney
 import to.bitkit.wear.ui.components.BezelLoading
 import to.bitkit.wear.ui.components.CenteredScreen
 import to.bitkit.wear.ui.components.ListScreen
@@ -130,7 +131,7 @@ private fun List(
                     FilledTonalButton(
                         onClick = { onPaymentClick(payment.id) },
                         icon = { DirectionIcon(payment = payment) },
-                        label = { Text(text = payment.amountText(), maxLines = 1) },
+                        label = { Text(text = payment.amountText(uiState.unit), maxLines = 1) },
                         secondaryLabel = {
                             Text(text = relativeTime(payment.timestampSecs.toLong(), uiState.nowSecs), maxLines = 1)
                         },
@@ -167,9 +168,9 @@ internal fun DirectionIcon(
 }
 
 /** The payment's amount in bitcoin, with the phone's sign for its direction. */
-internal fun WatchPayment.amountText(): String {
+internal fun WatchPayment.amountText(unit: BitcoinDisplayUnit = BitcoinDisplayUnit.MODERN): String {
     val sign = if (isSent) "-" else "+"
-    return "$sign $BITCOIN_SYMBOL ${amountSats.toLong().formatToModernDisplay()}"
+    return "$sign $BITCOIN_SYMBOL ${amountSats.toLong().formatMoney(unit)}"
 }
 
 /** How long ago [timestampSecs] was; a time ahead of the watch's clock, set by Spark's servers, counts as now. */

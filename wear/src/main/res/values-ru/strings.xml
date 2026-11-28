@@ -66,6 +66,7 @@
     <string name="send__sent">Отправлено</string>
     <string name="send__unknown">Проверьте активность</string>
     <string name="send__waiting">Ожидание сети</string>
+    <string name="settings__phone_settings">Настройки телефона</string>
     <string name="settings__remove_wallet">Удалить кошелёк</string>
     <string name="settings__remove_wallet_confirm_title">Удалить кошелёк?</string>
     <string name="settings__remove_wallet_failed">Не удалось удалить кошелёк</string>

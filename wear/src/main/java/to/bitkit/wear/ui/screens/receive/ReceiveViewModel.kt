@@ -17,7 +17,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import to.bitkit.wear.data.SettingsStore
 import to.bitkit.wear.env.Env
+import to.bitkit.wear.ext.runSuspendCatching
+import to.bitkit.wear.models.BitcoinDisplayUnit
 import to.bitkit.wear.models.ReceiveInvoice
 import to.bitkit.wear.models.WatchPayment
 import to.bitkit.wear.repositories.PaymentsRepo
@@ -39,6 +42,7 @@ import kotlin.time.Duration.Companion.seconds
 class ReceiveViewModel internal constructor(
     private val paymentsRepo: PaymentsRepo,
     private val walletRepo: WalletRepo,
+    private val settingsStore: SettingsStore,
     private val nowSecs: () -> Long,
 ) : ViewModel() {
     companion object {
@@ -61,7 +65,8 @@ class ReceiveViewModel internal constructor(
     constructor(
         paymentsRepo: PaymentsRepo,
         walletRepo: WalletRepo,
-    ) : this(paymentsRepo, walletRepo, { Instant.now().epochSecond })
+        settingsStore: SettingsStore,
+    ) : this(paymentsRepo, walletRepo, settingsStore, { Instant.now().epochSecond })
 
     private val _uiState = MutableStateFlow(ReceiveUiState())
     val uiState: StateFlow<ReceiveUiState> = _uiState.asStateFlow()
@@ -86,7 +91,9 @@ class ReceiveViewModel internal constructor(
             rotation.cancelAndJoin()
             coroutineContext.cancelChildren()
             Logger.info("Received payment '${payment.id}'", context = TAG)
-            _uiState.update { ReceiveUiState(paidAmount = bitcoinAmount(payment.amountSats.toLong())) }
+            val unit = runSuspendCatching { settingsStore.data.first().displayUnit }
+                .getOrDefault(BitcoinDisplayUnit.MODERN)
+            _uiState.update { ReceiveUiState(paidAmount = bitcoinAmount(payment.amountSats.toLong(), unit)) }
         }
     }
 

@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import breez_sdk_spark.PrepareSendPaymentResponse
 import com.synonym.bitkitcore.LnurlPayData
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -15,10 +16,12 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.wear.data.SettingsStore
 import to.bitkit.wear.data.WatchSettings
+import to.bitkit.wear.models.BitcoinDisplayUnit
 import to.bitkit.wear.models.FxRate
 import to.bitkit.wear.models.PaymentState
 import to.bitkit.wear.models.PreparedSend
@@ -52,6 +55,7 @@ class SendViewModelTest : BaseUnitTest() {
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(currencyRepo.rates).thenReturn(MutableStateFlow(emptyList<FxRate>()))
         whenever(settingsStore.data).thenReturn(flowOf(WatchSettings()))
+        whenever { paymentsRepo.skipConfirmation(any()) }.thenReturn(false)
     }
 
     private fun createSut() = SendViewModel(
@@ -116,15 +120,51 @@ class SendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `the quickpay hook sends without the hold`() = test {
+    fun `quickpay sends without the review or the hold and ends on the same result`() = test {
+        val prepared = prepared()
+        stubInvoice(prepared)
+        val sent = CompletableDeferred<Result<WatchPayment>>()
+        whenever(paymentsRepo.skipConfirmation(prepared)).thenReturn(true)
+        whenever(paymentsRepo.send(prepared)).doSuspendableAnswer { sent.await() }
+
+        val sut = createSut()
+
+        assertIs<SendStep.Sending>(sut.uiState.value.step)
+        assertFalse(sut.uiState.value.isHoldEnabled)
+        verify(paymentsRepo, times(1)).skipConfirmation(prepared)
+
+        sent.complete(Result.success(payment(PaymentState.Completed)))
+
+        val done = assertIs<SendStep.Done>(sut.uiState.value.step)
+        assertEquals(SendResult.Sent, done.result)
+        verify(paymentsRepo, times(1)).send(prepared)
+    }
+
+    @Test
+    fun `a quickpay send that fails shows the failure like any other`() = test {
         val prepared = prepared()
         stubInvoice(prepared)
         whenever(paymentsRepo.skipConfirmation(prepared)).thenReturn(true)
-        whenever(paymentsRepo.send(prepared)).thenReturn(Result.success(payment(PaymentState.Completed)))
+        whenever(paymentsRepo.send(prepared)).thenReturn(Result.failure(SendError.Failed()))
 
-        createSut()
+        val sut = createSut()
 
-        verify(paymentsRepo).send(prepared)
+        assertEquals(SendStep.Failed(SendFailure.Failed), sut.uiState.value.step)
+    }
+
+    @Test
+    fun `without quickpay the send waits on review, written in the phone's unit`() = test {
+        whenever(settingsStore.data)
+            .thenReturn(flowOf(WatchSettings(displayUnit = BitcoinDisplayUnit.CLASSIC)))
+        val prepared = prepared(amountSats = 21_000uL)
+        stubInvoice(prepared)
+        whenever(paymentsRepo.skipConfirmation(prepared)).thenReturn(false)
+
+        val sut = createSut()
+
+        val step = assertIs<SendStep.Review>(sut.uiState.value.step)
+        assertEquals("0.00021000", step.amount.text)
+        verify(paymentsRepo, never()).send(any())
     }
 
     @Test

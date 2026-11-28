@@ -29,6 +29,7 @@ import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.wear.data.FakeOwnInvoiceStore
@@ -79,6 +80,7 @@ class PaymentsRepoTest : BaseUnitTest() {
     private val ownInvoices = FakeOwnInvoiceStore()
     private val uncertainSends = FakeUncertainSendStore()
     private val decoder = FakeInputDecoder()
+    private val quickPayRepo = mock<QuickPayRepo>()
 
     private lateinit var sut: PaymentsRepo
 
@@ -101,6 +103,7 @@ class PaymentsRepoTest : BaseUnitTest() {
             WalletSelfSendGuard(sparkService, ownInvoices),
             ownInvoices,
             uncertainSends,
+            quickPayRepo,
         )
     }
 
@@ -114,6 +117,7 @@ class PaymentsRepoTest : BaseUnitTest() {
             WalletSelfSendGuard(sparkService, ownInvoices),
             ownInvoices,
             uncertainSends,
+            quickPayRepo,
         )
     }
 
@@ -538,8 +542,86 @@ class PaymentsRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `quickpay never skips the confirmation yet`() = test {
+    fun `quickpay skips the hold for an invoice with an amount, at its cost with the fee`() = test {
+        whenever(quickPayRepo.reserve(500uL + FEE)).thenReturn(true)
+
+        assertTrue(sut.skipConfirmation(preparedSend()))
+
+        verify(quickPayRepo, times(1)).reserve(any())
+    }
+
+    @Test
+    fun `quickpay holds when the limits say no`() = test {
+        whenever(quickPayRepo.reserve(any())).thenReturn(false)
+
         assertFalse(sut.skipConfirmation(preparedSend()))
+    }
+
+    @Test
+    fun `quickpay never skips the hold for an amount the wearer typed`() = test {
+        whenever(quickPayRepo.reserve(any())).thenReturn(true)
+        val amountless = sut.prepare(SendRequest.Invoice(BOLT11, null, null), amountSats = 500uL).getOrThrow()
+
+        assertFalse(sut.skipConfirmation(amountless))
+
+        verify(quickPayRepo, never()).reserve(any())
+    }
+
+    @Test
+    fun `quickpay never skips the hold for a spark address or an lnurl payment`() = test {
+        whenever(quickPayRepo.reserve(any())).thenReturn(true)
+        whenever(sparkService.parse(SPARK_ADDRESS)).thenReturn(sparkAddressInput(OTHER_IDENTITY))
+        whenever(sparkService.prepareSend(SPARK_ADDRESS, 500uL)).thenReturn(preparedTransfer())
+        val transfer = sut.prepare(SendRequest.SparkAddress(SPARK_ADDRESS), amountSats = 500uL).getOrThrow()
+        val fixed = SendRequest.Lnurl(lnurl(), minSats = 15uL, maxSats = 15uL, payee = null)
+        decoder.lnurlInvoices[15_000uL] = LNURL_BOLT11
+        decoder.inputs[LNURL_BOLT11] = lightning(LNURL_BOLT11, amountSats = 15uL)
+        whenever(sparkService.parse(LNURL_BOLT11)).thenReturn(invoiceInput(LNURL_BOLT11, "cc".repeat(32)))
+        whenever(sparkService.prepareSend(LNURL_BOLT11, null)).thenReturn(prepared(amountMsat = 15_000uL))
+        val lnurl = sut.prepare(fixed).getOrThrow()
+
+        assertFalse(sut.skipConfirmation(transfer))
+        assertFalse(sut.skipConfirmation(lnurl))
+
+        verify(quickPayRepo, never()).reserve(any())
+    }
+
+    @Test
+    fun `quickpay never skips the hold unless the wallet is ready`() = test {
+        whenever(quickPayRepo.reserve(any())).thenReturn(true)
+        val prepared = preparedSend()
+        for (status in WalletStatus.entries - WalletStatus.Ready) {
+            walletState.update { it.copy(status = status) }
+
+            assertFalse(sut.skipConfirmation(prepared), "$status")
+        }
+
+        verify(quickPayRepo, never()).reserve(any())
+    }
+
+    @Test
+    fun `quickpay never skips the hold during a wipe or once the wallet stopped being ready meanwhile`() = test {
+        val prepared = preparedSend()
+        whenever(sparkService.isWiping).thenReturn(true)
+        assertFalse(sut.skipConfirmation(prepared))
+        verify(quickPayRepo, never()).reserve(any())
+
+        whenever(sparkService.isWiping).thenReturn(false)
+        whenever(quickPayRepo.reserve(any())).doSuspendableAnswer {
+            walletState.update { it.copy(status = WalletStatus.Locked) }
+            true
+        }
+        assertFalse(sut.skipConfirmation(prepared))
+    }
+
+    @Test
+    fun `a request the checks refuse never reaches quickpay`() = test {
+        whenever(quickPayRepo.reserve(any())).thenReturn(true)
+        ownInvoices.add(PAYMENT_HASH, SparkFixtures.TIMESTAMP + SparkFixtures.EXPIRY)
+
+        assertIs<SendError.OwnInvoice>(sut.prepare(SendRequest.Invoice(BOLT11, 500uL, null)).exceptionOrNull())
+
+        verify(quickPayRepo, never()).reserve(any())
     }
 
     // endregion

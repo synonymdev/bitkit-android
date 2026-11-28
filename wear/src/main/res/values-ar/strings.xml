@@ -68,6 +68,7 @@
     <string name="send__sent">تم الإرسال</string>
     <string name="send__unknown">تحقق من النشاط</string>
     <string name="send__waiting">في انتظار الشبكة</string>
+    <string name="settings__phone_settings">إعدادات الهاتف</string>
     <string name="settings__remove_wallet">إزالة المحفظة</string>
     <string name="settings__remove_wallet_confirm_title">إزالة المحفظة؟</string>
     <string name="settings__remove_wallet_failed">تعذّرت إزالة المحفظة</string>

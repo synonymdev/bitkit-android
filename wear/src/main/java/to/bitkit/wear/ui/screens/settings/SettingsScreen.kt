@@ -1,5 +1,6 @@
 package to.bitkit.wear.ui.screens.settings
 
+import android.text.format.DateUtils
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +31,7 @@ import to.bitkit.wear.ui.components.BezelLoading
 import to.bitkit.wear.ui.components.ListScreen
 import to.bitkit.wear.ui.components.WearPreview
 import to.bitkit.wear.ui.components.WearPreviewDevices
+import java.time.Instant
 
 @Composable
 fun SettingsScreen(
@@ -41,6 +43,7 @@ fun SettingsScreen(
     Content(
         uiState = uiState,
         onAboutClick = onAboutClick,
+        onSyncClick = viewModel::onSyncClick,
         onRemoveClick = viewModel::onRemoveClick,
         onRemoveConfirm = viewModel::onRemoveConfirm,
         onRemoveDismiss = viewModel::onRemoveDismiss,
@@ -52,6 +55,7 @@ fun SettingsScreen(
 private fun Content(
     uiState: SettingsUiState,
     onAboutClick: () -> Unit,
+    onSyncClick: () -> Unit,
     onRemoveClick: () -> Unit,
     onRemoveConfirm: () -> Unit,
     onRemoveDismiss: () -> Unit,
@@ -77,6 +81,28 @@ private fun Content(
                         .fillMaxWidth()
                         .transformedHeight(this, spec)
                         .testTag("WatchSettingsAbout")
+                )
+            }
+            item {
+                FilledTonalButton(
+                    onClick = onSyncClick,
+                    enabled = !uiState.isSyncing && !uiState.isRemoving,
+                    icon = { RowIcon(R.drawable.ic_sync) },
+                    label = { Text(stringResource(R.string.settings__phone_settings), maxLines = 1) },
+                    secondaryLabel = uiState.phoneSyncedAtMs?.let { syncedAtMs ->
+                        {
+                            Text(
+                                text = syncedAgo(syncedAtMs),
+                                maxLines = 1,
+                                modifier = Modifier.testTag("WatchSettingsSyncTime")
+                            )
+                        }
+                    },
+                    transformation = SurfaceTransformation(spec),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .transformedHeight(this, spec)
+                        .testTag("WatchSettingsSync")
                 )
             }
             item {
@@ -111,7 +137,7 @@ private fun Content(
                 }
             }
         }
-        if (uiState.isRemoving) BezelLoading()
+        if (uiState.isRemoving || uiState.isSyncing) BezelLoading()
     }
     AlertDialog(
         visible = uiState.isRemoveDialogVisible,
@@ -133,6 +159,17 @@ private fun Content(
     )
 }
 
+/** How long ago the phone's settings were imported; a time ahead of the watch's clock counts as now. */
+private fun syncedAgo(syncedAtMs: Long): String {
+    val now = Instant.now().toEpochMilli()
+    return DateUtils.getRelativeTimeSpanString(
+        syncedAtMs.coerceAtMost(now),
+        now,
+        DateUtils.MINUTE_IN_MILLIS,
+        DateUtils.FORMAT_ABBREV_RELATIVE,
+    ).toString()
+}
+
 @Composable
 private fun RowIcon(
     @DrawableRes id: Int,
@@ -146,8 +183,9 @@ private fun RowIcon(
 private fun Preview() {
     WearPreview {
         Content(
-            uiState = SettingsUiState(),
+            uiState = SettingsUiState(phoneSyncedAtMs = 0),
             onAboutClick = {},
+            onSyncClick = {},
             onRemoveClick = {},
             onRemoveConfirm = {},
             onRemoveDismiss = {},
@@ -162,6 +200,7 @@ private fun PreviewRemoveConfirm() {
         Content(
             uiState = SettingsUiState(isRemoveDialogVisible = true),
             onAboutClick = {},
+            onSyncClick = {},
             onRemoveClick = {},
             onRemoveConfirm = {},
             onRemoveDismiss = {},

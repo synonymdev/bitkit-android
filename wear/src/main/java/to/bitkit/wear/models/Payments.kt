@@ -74,6 +74,11 @@ class PreparedSend internal constructor(
      * unless an earlier transfer to that wallet is still in doubt: then its key is used again.
      */
     internal val transferKey: String,
+    /**
+     * Whether this pays a BOLT11 invoice that carries its amount, the only kind of request QuickPay covers. An
+     * amount the wearer typed is never fixed, and neither is any LNURL or Spark address payment.
+     */
+    internal val isAmountFixed: Boolean = false,
 ) {
     val totalSats: ULong get() = amountSats + feeSats
 }

@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.wear.R
 import to.bitkit.wear.data.SettingsStore
+import to.bitkit.wear.ext.runSuspendCatching
+import to.bitkit.wear.models.BitcoinDisplayUnit
 import to.bitkit.wear.models.PaymentState
 import to.bitkit.wear.models.PreparedSend
 import to.bitkit.wear.models.SendError
@@ -38,7 +40,8 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * The send flow for one payment input from a deeplink: it waits for the wallet, reads the input, asks for an amount
  * only when the input names none, prices the send and shows it for review. The send goes out only after the hold to
- * pay completes, unless [PaymentsRepo.skipConfirmation] says otherwise, and the result closes the flow by itself.
+ * pay completes, unless [PaymentsRepo.skipConfirmation] lets it out under QuickPay, straight from pricing to sending,
+ * and the result closes the flow by itself.
  * The app pays only online: a wallet that is offline before the send starts ends the flow on [SendStep.Offline],
  * and the request is dropped, not kept for when the network returns.
  */
@@ -79,6 +82,7 @@ class SendViewModel @Inject constructor(
 
     private var request: SendRequest? = null
     private var prepared: PreparedSend? = null
+    private var unit = BitcoinDisplayUnit.MODERN
 
     /** Reads, prices and shows the request before the send; cancelled when the wallet goes offline. */
     private var flow: Job? = null
@@ -170,7 +174,9 @@ class SendViewModel @Inject constructor(
         }
         if (_uiState.value.step is SendStep.Offline) return
         prepared = result
+        unit = runSuspendCatching { settingsStore.data.first().displayUnit }.getOrDefault(BitcoinDisplayUnit.MODERN)
         if (paymentsRepo.skipConfirmation(result)) {
+            Logger.info("Skipped the hold to pay under QuickPay", context = TAG)
             send(result)
             return
         }
@@ -182,9 +188,9 @@ class SendViewModel @Inject constructor(
         val amount = prepared.amountSats.toLong()
         val isFeeShown = prepared.feeSats > 0uL && prepared.feeSats * 100uL >= prepared.amountSats * FEE_SHOWN_PERCENT
         return SendStep.Review(
-            amount = bitcoinAmount(amount),
+            amount = bitcoinAmount(amount, unit),
             fiat = fiatAmount(amount, currencyRepo.rates.value, currency),
-            fee = if (isFeeShown) bitcoinAmount(prepared.feeSats.toLong()) else null,
+            fee = if (isFeeShown) bitcoinAmount(prepared.feeSats.toLong(), unit) else null,
             payee = (prepared.payee ?: request.payee)?.takeIf { it.isNotBlank() },
         )
     }
@@ -223,7 +229,7 @@ class SendViewModel @Inject constructor(
 
     /** Shows [result] with [amountSats] and then closes the flow. */
     private suspend fun finish(result: SendResult, amountSats: ULong) {
-        _uiState.update { it.copy(step = SendStep.Done(result, bitcoinAmount(amountSats.toLong()))) }
+        _uiState.update { it.copy(step = SendStep.Done(result, bitcoinAmount(amountSats.toLong(), unit))) }
         delay(if (result == SendResult.Sent) SENT_CLOSE_DELAY else PENDING_CLOSE_DELAY)
         _effects.send(SendEffect.Close)
     }

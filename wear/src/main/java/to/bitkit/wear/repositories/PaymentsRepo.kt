@@ -67,6 +67,7 @@ class PaymentsRepo @Inject constructor(
     private val selfSendGuard: SelfSendGuard,
     private val ownInvoiceStore: OwnInvoiceStore,
     private val uncertainSendStore: UncertainSendStore,
+    private val quickPayRepo: QuickPayRepo,
 ) {
     companion object {
         private const val TAG = "PaymentsRepo"
@@ -139,11 +140,25 @@ class PaymentsRepo @Inject constructor(
     val paymentChanges: Flow<Unit> get() = sparkService.events.map { }
 
     /**
-     * Whether a send goes out without the hold to pay (QuickPay). Always false until the watch has QuickPay settings
-     * (PR 3), which check [prepared] against the wearer's limit here and nowhere else.
+     * Whether [prepared] goes out without the hold to pay (QuickPay). This is the one place that decides it. It does
+     * only when all of these hold:
+     * - the wallet is ready;
+     * - [prepared] came from [prepare], so the self-send guard and every check before the hold passed;
+     * - it pays a BOLT11 invoice that carries its amount: an amount the wearer typed is always reviewed, since the
+     *   review is the one place that shows what was typed, its fee and its payee, and so is every LNURL, Lightning
+     *   address and Spark address payment;
+     * - [QuickPayRepo.reserve] takes the payment's cost, fee included, under the phone's QuickPay settings.
+     *
+     * A yes counts the payment against today's QuickPay limit, so ask once per send and only when about to send.
+     * Anything that cannot be told answers no, and the wearer holds to pay.
      */
-    @Suppress("FunctionOnlyReturningConstant", "UNUSED_PARAMETER")
-    fun skipConfirmation(prepared: PreparedSend): Boolean = false
+    suspend fun skipConfirmation(prepared: PreparedSend): Boolean = withContext(ioDispatcher) {
+        if (!isReady() || sparkService.isWiping) return@withContext false
+        if (!prepared.isAmountFixed) return@withContext false
+        val isAllowed = quickPayRepo.reserve(prepared.totalSats)
+        // The wallet may have locked, paused or been wiped while the limit was read.
+        isAllowed && isReady() && !sparkService.isWiping
+    }
 
     /**
      * Creates an amountless BOLT11 invoice paid into the Spark balance, valid for [INVOICE_EXPIRY_SECS], and
@@ -272,7 +287,14 @@ class PaymentsRepo @Inject constructor(
                 when (request) {
                     is SendRequest.Invoice -> {
                         ensureAmount(amount, 1uL, MAX_SATS)
-                        prepare(request.bolt11, amount, isAmountInRequest = request.amountSats != null, request.payee)
+                        val isAmountInRequest = request.amountSats != null
+                        prepare(
+                            paymentRequest = request.bolt11,
+                            amountSats = amount,
+                            isAmountInRequest = isAmountInRequest,
+                            payee = request.payee,
+                            isAmountFixed = isAmountInRequest,
+                        )
                     }
                     is SendRequest.Lnurl -> {
                         ensureAmount(amount, request.minSats, request.maxSats)
@@ -325,6 +347,7 @@ class PaymentsRepo @Inject constructor(
         payee: String?,
         exactMsats: ULong? = null,
         sparkPayee: String? = null,
+        isAmountFixed: Boolean = false,
     ): PreparedSend {
         ensureNotOwn(paymentRequest)
         val response = runSuspendCatching {
@@ -355,6 +378,7 @@ class PaymentsRepo @Inject constructor(
             expiresAtSecs = invoice?.expiresAt,
             sparkPayee = sparkPayee.takeIf { invoice == null },
             transferKey = UUID.randomUUID().toString(),
+            isAmountFixed = isAmountFixed,
         )
     }
 
