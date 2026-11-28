@@ -57,6 +57,10 @@ class CacheStore internal constructor(
     private val store: DataStore<AppCacheData>,
     private val clock: Clock = Clock.System,
 ) {
+    companion object {
+        private const val TAG = "CacheStore"
+    }
+
     @Inject
     constructor(@ApplicationContext context: Context) : this(context.appCacheDataStore)
 
@@ -179,15 +183,15 @@ class CacheStore internal constructor(
      * device's invoices are added the same way.
      */
     suspend fun addSparkOwnInvoice(paymentHash: String, expiresAt: Long, now: Long) {
+        var dropped = 0
         store.updateData { data ->
             val unexpired = (data.sparkOwnInvoices + (paymentHash.lowercase() to expiresAt)).entries
                 .filter { it.value > now }
-            if (unexpired.size > MAX_SPARK_OWN_INVOICES) {
-                Logger.warn("Dropped '${unexpired.size - MAX_SPARK_OWN_INVOICES}' unexpired own Spark invoices")
-            }
+            dropped = (unexpired.size - MAX_SPARK_OWN_INVOICES).coerceAtLeast(0)
             val invoices = unexpired.sortedByDescending { it.value }.take(MAX_SPARK_OWN_INVOICES)
             data.copy(sparkOwnInvoices = invoices.associate { it.key to it.value })
         }
+        if (dropped > 0) Logger.warn("Dropped '$dropped' unexpired own Spark invoices", context = TAG)
     }
 
     /** Whether [paymentHash] is a Spark invoice of this wallet that has not expired at [now], in epoch seconds. */
