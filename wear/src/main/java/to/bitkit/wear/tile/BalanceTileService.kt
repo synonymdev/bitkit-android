@@ -28,7 +28,11 @@ import androidx.wear.tiles.TileBuilders
 import androidx.wear.tiles.TileService
 import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.first
 import to.bitkit.wear.R
+import to.bitkit.wear.data.SettingsStore
+import to.bitkit.wear.ext.runSuspendCatching
+import to.bitkit.wear.models.BitcoinDisplayUnit
 import to.bitkit.wear.repositories.WalletRepo
 import to.bitkit.wear.ui.LaunchRequest
 import to.bitkit.wear.ui.MainActivity
@@ -68,9 +72,14 @@ class BalanceTileService : TileService() {
     @Inject
     lateinit var walletRepo: WalletRepo
 
+    @Inject
+    lateinit var settingsStore: SettingsStore
+
     override fun onTileRequest(requestParams: RequestBuilders.TileRequest): ListenableFuture<TileBuilders.Tile> =
         SuspendToFutureAdapter.launchFuture {
-            val state = tileState(walletRepo.hasWallet(), walletRepo.walletState.value)
+            val unit = runSuspendCatching { settingsStore.data.first().displayUnit }
+                .getOrDefault(BitcoinDisplayUnit.MODERN)
+            val state = tileState(walletRepo.hasWallet(), walletRepo.walletState.value, unit)
             TileBuilders.Tile.Builder()
                 .setResourcesVersion(RESOURCES_VERSION)
                 .setFreshnessIntervalMillis(FRESHNESS.inWholeMilliseconds)

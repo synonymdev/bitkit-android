@@ -180,19 +180,19 @@ On-screen copy stays short: a title or one line of at most about six words per s
   amount, with the same haptic, so the always-on screen shows no amount; the amount shows once the watch wakes. Debug builds log each invoice shown (`Showing invoice`), which is how the
   journeys read it.
 - **Tile.** The Bitkit tile (`BalanceTileService`) uses the tiles and ProtoLayout Material 3 libraries: a primary
-  layout with the balance in the main slot and an edge button below. With a wallet it shows the balance in bitcoin
-  (white, as on the Balance page) and a round Brand orange edge button with the QR icon ("Receive" to accessibility
-  services), which opens the app on the receive QR: the launch intent carries the extra `to.bitkit.wear.OPEN` with
-  `receive`, which `LaunchRequest` reads as `Receive`, and the receive QR opens above Home, as a payment link's send
-  does. Without a wallet it shows the Bitkit mark and a "Restore" edge button that opens the app. Tiles cannot use
-  the app's fonts, so the balance is in the system font.
+  layout with the balance in the main slot and an edge button below. With a wallet it shows the balance in bitcoin,
+  in the unit (Modern or Classic) imported from the phone, white, as on the Balance page, and a round Brand orange
+  edge button with the QR icon ("Receive" to accessibility services), which opens the app on the receive QR: the
+  launch intent carries the extra `to.bitkit.wear.OPEN` with `receive`, which `LaunchRequest` reads as `Receive`,
+  and the receive QR opens above Home, as a payment link's send does. Without a wallet it shows the Bitkit mark and
+  a "Restore" edge button that opens the app. Tiles cannot use the app's fonts, so the balance is in the system font.
   - The tile only reads `WalletRepo`'s state in memory and never starts the wallet, so the balance shows only once
     the app loaded it in this process and a sync confirmed it, as on the Balance page; until then, and while the
     watch is locked, the dimmed mark stands in for it. A removed wallet shows the signed-out tile at once.
-  - `TileUpdates`, started by `WearApp`, asks the system to draw the tile again whenever the balance shown or the
-    wallet's status changes, and once when the process starts, so a tile drawn by an earlier process drops a balance
-    the new one has not loaded. Each tile is fresh for 15 min, after which the system asks again; a tile drawn just
-    before the process died can show the last balance until then.
+  - `TileUpdates`, started by `WearApp`, asks the system to draw the tile again whenever the balance shown, its
+    unit or the wallet's status changes, and once when the process starts, so a tile drawn by an earlier process drops
+    a balance the new one has not loaded. Each tile is fresh for 15 min, after which the system asks again; a tile
+    drawn just before the process died can show the last balance until then.
   - Privacy: the tile shows the balance on the tile carousel, so it hides it while the wallet is disconnected
     because the watch locked (`WalletStatus.Locked`). Tiles have no ambient mode: in ambient the system shows the watch face, so the app's rule that the always-on screen
     shows no amount holds without code in the tile. The tile carries no secret: the receive invoice is made by the
