@@ -340,12 +340,20 @@ android screen capture -o shot.png
 ```
 
 Screen recordings, up to 170 s (the recorder stops at 180 s). The recording takes the screen's own size: 454 px
-square on the large emulator, 384 px on the small one.
+square on the large emulator, 384 px on the small one. Start the recorder in the background, run the steps, then
+stop it and wait for it to finish writing before pulling the file: a file pulled while `screenrecord` still writes
+has no `moov` atom and does not play.
 
 ```bash
-adb shell screenrecord --time-limit 170 /sdcard/<name>.mp4
+adb shell 'screenrecord --time-limit 170 /sdcard/<name>.mp4' &
+REC=$!
+# ... run the journey's steps ...
+adb shell pkill -INT screenrecord
+wait "$REC"
+sleep 2
 adb pull /sdcard/<name>.mp4
 adb shell rm /sdcard/<name>.mp4
+grep -q moov <name>.mp4 || echo "<name>.mp4 has no moov atom: record it again"
 ```
 
 The word and passphrase screens record as black frames (`FLAG_SECURE`), which is what `screenshot-blocked.xml`
