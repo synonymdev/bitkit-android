@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.FilledIconButton
 import androidx.wear.compose.material3.Icon
@@ -39,13 +40,15 @@ fun ReceiveScreen(
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_qr_code),
-                contentDescription = null,
+                contentDescription = stringResource(R.string.receive__title),
                 modifier = Modifier.size(ICON_SIZE)
             )
         }
         Text(
             text = stringResource(R.string.receive__title),
             style = MaterialTheme.typography.titleSmall,
+            // The button says it already; read once.
+            modifier = Modifier.clearAndSetSemantics {}
         )
     }
 }

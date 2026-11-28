@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
@@ -27,6 +28,9 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -52,6 +56,7 @@ import to.bitkit.wear.ui.components.SmallAmountRow
 import to.bitkit.wear.ui.components.WearPreview
 import to.bitkit.wear.ui.components.WearPreviewDevices
 import to.bitkit.wear.ui.components.amountRowGap
+import to.bitkit.wear.ui.components.isAmbient
 import to.bitkit.wear.ui.components.rememberHoldToPayState
 import to.bitkit.wear.ui.screens.home.DisplayAmount
 import to.bitkit.wear.ui.theme.Colors
@@ -65,7 +70,8 @@ private const val LOADING_ICON_ALPHA = 0.4f
 /**
  * The send flow of a deeplink: review with the hold to pay, the send under way, and its result, which closes the
  * flow by itself ([onClose]). The amount entry shows only for an input that names no amount. While a send is under
- * way the screen stays on and cannot be left ([onBusyChange]).
+ * way the screen stays on and cannot be left ([onBusyChange]). In ambient mode a step with an amount hides behind a
+ * dimmed bolt, as no amount shows on the always-on screen.
  */
 @Composable
 fun SendScreen(
@@ -86,6 +92,8 @@ fun SendScreen(
         }
     }
     LaunchedEffect(uiState.isBusy) { currentOnBusyChange(uiState.isBusy) }
+    // A screen that leaves while busy must not leave the swipe to dismiss off for every other screen.
+    DisposableEffect(Unit) { onDispose { currentOnBusyChange(false) } }
     val step = uiState.step
     LaunchedEffect(step is SendStep.Done, step is SendStep.Failed) {
         when (step) {
@@ -98,6 +106,7 @@ fun SendScreen(
     BackHandler(enabled = uiState.isBusy) {}
     Content(
         uiState = uiState,
+        isAmbient = isAmbient(),
         onAmountChange = viewModel::onAmountChange,
         onAmountConfirm = viewModel::onAmountConfirm,
         onHoldComplete = viewModel::onHoldComplete,
@@ -109,13 +118,20 @@ fun SendScreen(
 @Composable
 private fun Content(
     uiState: SendUiState,
+    isAmbient: Boolean,
     onAmountChange: (String) -> Unit,
     onAmountConfirm: () -> Unit,
     onHoldComplete: () -> Unit,
     onCloseClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    when (val step = uiState.step) {
+    val step = uiState.step
+    // The always-on screen shows no amount, typed, reviewed or sent, and nothing to hold.
+    if (isAmbient && (step is SendStep.Amount || step is SendStep.Review || step is SendStep.Done)) {
+        Hidden(modifier = modifier)
+        return
+    }
+    when (step) {
         SendStep.Loading -> Loading(isOffline = uiState.isOffline, modifier = modifier)
         is SendStep.Amount -> Amount(
             step = step,
@@ -127,13 +143,25 @@ private fun Content(
         is SendStep.Review -> Review(
             step = step,
             isHoldEnabled = uiState.isHoldEnabled,
-            isOffline = !uiState.isWalletReady,
+            isOffline = uiState.isOffline,
+            isConnecting = !uiState.isWalletReady && !uiState.isOffline,
             onHoldComplete = onHoldComplete,
             modifier = modifier
         )
         is SendStep.Sending -> Sending(isWaiting = step.isWaiting, modifier = modifier)
         is SendStep.Done -> Done(step = step, modifier = modifier)
         is SendStep.Failed -> Failed(failure = step.failure, onCloseClick = onCloseClick, modifier = modifier)
+    }
+}
+
+@Composable
+private fun Hidden(modifier: Modifier = Modifier) {
+    CenteredScreen(modifier = modifier) {
+        StatusIcon(
+            icon = R.drawable.ic_bolt,
+            tint = Colors.White.copy(alpha = LOADING_ICON_ALPHA),
+            modifier = Modifier.testTag("WatchSendHidden")
+        )
     }
 }
 
@@ -254,10 +282,12 @@ private fun Review(
     step: SendStep.Review,
     isHoldEnabled: Boolean,
     isOffline: Boolean,
+    isConnecting: Boolean,
     onHoldComplete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val holdState = rememberHoldToPayState(enabled = isHoldEnabled, onComplete = onHoldComplete)
+    val payLabel = stringResource(R.string.send__pay)
     CenteredScreen(
         edgeButton = {
             EdgeButton(
@@ -266,12 +296,25 @@ private fun Review(
                 enabled = isHoldEnabled,
                 buttonSize = EdgeButtonSize.Medium,
                 interactionSource = holdState.interactionSource,
-                modifier = Modifier.testTag("WatchSendHold")
+                modifier = Modifier
+                    .testTag("WatchSendHold")
+                    .semantics {
+                        // A screen reader cannot hold, and its double tap is the click that pays nothing, so paying
+                        // is a named action its wearer picks from the actions menu.
+                        if (isHoldEnabled) {
+                            customActions = listOf(
+                                CustomAccessibilityAction(payLabel) {
+                                    onHoldComplete()
+                                    true
+                                },
+                            )
+                        }
+                    }
             ) {
                 Text(stringResource(R.string.send__hold))
             }
         },
-        overlay = { HoldToPayRing(state = holdState) },
+        overlay = { if (isConnecting) BezelLoading() else HoldToPayRing(state = holdState) },
         modifier = modifier
     ) {
         BoxWithConstraints(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
@@ -429,6 +472,7 @@ private fun PreviewReview() {
     WearPreview {
         Content(
             uiState = SendUiState(step = PreviewReviewStep, isWalletReady = true),
+            isAmbient = false,
             onAmountChange = {},
             onAmountConfirm = {},
             onHoldComplete = {},
@@ -443,6 +487,37 @@ private fun PreviewReviewOffline() {
     WearPreview {
         Content(
             uiState = SendUiState(step = PreviewReviewStep, isOffline = true),
+            isAmbient = false,
+            onAmountChange = {},
+            onAmountConfirm = {},
+            onHoldComplete = {},
+            onCloseClick = {},
+        )
+    }
+}
+
+@WearPreviewDevices
+@Composable
+private fun PreviewReviewConnecting() {
+    WearPreview {
+        Content(
+            uiState = SendUiState(step = PreviewReviewStep),
+            isAmbient = false,
+            onAmountChange = {},
+            onAmountConfirm = {},
+            onHoldComplete = {},
+            onCloseClick = {},
+        )
+    }
+}
+
+@WearPreviewDevices
+@Composable
+private fun PreviewAmbient() {
+    WearPreview {
+        Content(
+            uiState = SendUiState(step = PreviewReviewStep, isWalletReady = true),
+            isAmbient = true,
             onAmountChange = {},
             onAmountConfirm = {},
             onHoldComplete = {},
@@ -457,6 +532,7 @@ private fun PreviewAmount() {
     WearPreview {
         Content(
             uiState = SendUiState(step = SendStep.Amount(minSats = 1uL, maxSats = 100_000uL), amountText = "2100"),
+            isAmbient = false,
             onAmountChange = {},
             onAmountConfirm = {},
             onHoldComplete = {},
@@ -471,6 +547,7 @@ private fun PreviewSending() {
     WearPreview {
         Content(
             uiState = SendUiState(step = SendStep.Sending(isWaiting = true)),
+            isAmbient = false,
             onAmountChange = {},
             onAmountConfirm = {},
             onHoldComplete = {},
@@ -485,6 +562,7 @@ private fun PreviewSent() {
     WearPreview {
         Content(
             uiState = SendUiState(step = SendStep.Done(SendResult.Sent, PreviewBitcoin)),
+            isAmbient = false,
             onAmountChange = {},
             onAmountConfirm = {},
             onHoldComplete = {},
@@ -499,6 +577,7 @@ private fun PreviewFailed() {
     WearPreview {
         Content(
             uiState = SendUiState(step = SendStep.Failed(SendFailure.OwnInvoice)),
+            isAmbient = false,
             onAmountChange = {},
             onAmountConfirm = {},
             onHoldComplete = {},

@@ -104,6 +104,47 @@ class ReceiveViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `the invoice stays on screen until its replacement exists`() = test {
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice()))
+        whenever(paymentsRepo.awaitPaid(any())).doSuspendableAnswer { awaitCancellation() }
+        val sut = createSut()
+        walletState.update { it.copy(status = WalletStatus.Offline) }
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice("lnbcrt1next")))
+
+        testScheduler.advanceTimeBy(LIFETIME.seconds - ReceiveViewModel.EXPIRY_MARGIN + 1.seconds)
+        assertEquals(BOLT11.uppercase(), sut.uiState.value.qrContent)
+
+        walletState.update { it.copy(status = WalletStatus.Ready) }
+        assertEquals("LNBCRT1NEXT", sut.uiState.value.qrContent)
+    }
+
+    @Test
+    fun `an invoice that expires before the wallet is ready again leaves the screen`() = test {
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice()))
+        whenever(paymentsRepo.awaitPaid(any())).doSuspendableAnswer { awaitCancellation() }
+        val sut = createSut()
+        walletState.update { it.copy(status = WalletStatus.Offline) }
+
+        testScheduler.advanceTimeBy(LIFETIME.seconds + 1.seconds)
+
+        assertNull(sut.uiState.value.qrContent)
+        assertTrue(sut.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `an invoice the watch's clock takes for expired still shows for a moment`() = test {
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice(lifetime = 0)))
+        whenever(paymentsRepo.awaitPaid(any())).doSuspendableAnswer { awaitCancellation() }
+        createSut()
+
+        testScheduler.advanceTimeBy(ReceiveViewModel.MIN_LIFETIME - 1.seconds)
+        verify(paymentsRepo, times(1)).createInvoice()
+
+        testScheduler.advanceTimeBy(2.seconds)
+        verify(paymentsRepo, times(2)).createInvoice()
+    }
+
+    @Test
     fun `a failed invoice shows the error until retried`() = test {
         whenever(paymentsRepo.createInvoice()).thenReturn(Result.failure(ReceiveError.NotReady()))
         val sut = createSut()
@@ -119,7 +160,8 @@ class ReceiveViewModelTest : BaseUnitTest() {
         assertEquals(BOLT11.uppercase(), sut.uiState.value.qrContent)
     }
 
-    private fun invoice() = ReceiveInvoice(BOLT11, PAYMENT_HASH, (NOW + LIFETIME).toULong())
+    private fun invoice(bolt11: String = BOLT11, lifetime: Long = LIFETIME) =
+        ReceiveInvoice(bolt11, PAYMENT_HASH, (NOW + lifetime).toULong())
 
     private fun payment(amountSats: ULong) = WatchPayment(
         id = "receipt",

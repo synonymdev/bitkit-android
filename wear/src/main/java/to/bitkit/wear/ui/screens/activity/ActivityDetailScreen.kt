@@ -21,6 +21,7 @@ import androidx.wear.compose.material3.Text
 import to.bitkit.wear.R
 import to.bitkit.wear.models.PaymentState
 import to.bitkit.wear.models.WatchPayment
+import to.bitkit.wear.ui.components.BezelLoading
 import to.bitkit.wear.ui.components.CenteredScreen
 import to.bitkit.wear.ui.components.LargeAmountRow
 import to.bitkit.wear.ui.components.WearPreview
@@ -43,8 +44,26 @@ fun ActivityDetailScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val payment = uiState.payment(paymentId) ?: return
+    val payment = uiState.payment(paymentId)
+    if (payment == null) {
+        Missing(isLoading = !uiState.isLoaded, modifier = modifier)
+        return
+    }
     Content(payment = payment, isAmbient = isAmbient(), modifier = modifier)
+}
+
+/** Stands in for a payment the list does not hold: while the list loads, or after newer payments pushed it out. */
+@Composable
+private fun Missing(
+    isLoading: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    CenteredScreen(
+        overlay = { if (isLoading) BezelLoading() },
+        modifier = modifier
+    ) {
+        DimIcon(modifier = Modifier.testTag("WatchActivityDetailMissing"))
+    }
 }
 
 @Composable

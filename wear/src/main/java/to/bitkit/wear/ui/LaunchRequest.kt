@@ -7,25 +7,17 @@ sealed interface LaunchRequest {
     /** Pay the payment input of a `lightning:`, `bitcoin:` or `spark:` link. */
     data class Send(val input: String) : LaunchRequest
 
-    /** Show the receive QR, as from the tile. */
-    data object Receive : LaunchRequest
-
     companion object {
-        /** The extra that asks for [Receive], set by the tile. */
-        const val EXTRA_OPEN = "to.bitkit.wear.OPEN"
-        const val OPEN_RECEIVE = "receive"
-
         private val SEND_SCHEMES = setOf("lightning", "bitcoin", "spark")
 
-        /** The request of an intent with [action], [data] and the [open] extra, or null for a plain launch. */
-        fun from(action: String?, data: String?, open: String?): LaunchRequest? {
-            if (open == OPEN_RECEIVE) return Receive
+        /** The request of an intent with [action] and [data], or null for a plain launch. */
+        fun from(action: String?, data: String?): LaunchRequest? {
             if (action != Intent.ACTION_VIEW || data.isNullOrBlank()) return null
             val scheme = data.substringBefore(':', missingDelimiterValue = "").lowercase()
             return if (scheme in SEND_SCHEMES) Send(data) else null
         }
 
         fun from(intent: Intent?): LaunchRequest? =
-            intent?.let { from(it.action, it.dataString, it.getStringExtra(EXTRA_OPEN)) }
+            intent?.let { from(it.action, it.dataString) }
     }
 }

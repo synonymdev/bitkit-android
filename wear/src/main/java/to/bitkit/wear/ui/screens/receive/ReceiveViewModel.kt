@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.wear.env.Env
+import to.bitkit.wear.models.ReceiveInvoice
 import to.bitkit.wear.repositories.PaymentsRepo
 import to.bitkit.wear.repositories.WalletRepo
 import to.bitkit.wear.repositories.WalletStatus
@@ -39,6 +40,12 @@ class ReceiveViewModel internal constructor(
 
         /** How long before its expiry an invoice is replaced, so a payer never scans one that is about to expire. */
         val EXPIRY_MARGIN = 60.seconds
+
+        /**
+         * The shortest time an invoice shows before it is replaced, so a watch whose clock runs ahead of Spark's
+         * does not make invoices one after another.
+         */
+        val MIN_LIFETIME = 30.seconds
     }
 
     @Inject
@@ -62,25 +69,38 @@ class ReceiveViewModel internal constructor(
     private fun refresh() {
         job?.cancel()
         job = viewModelScope.launch {
+            _uiState.update { ReceiveUiState(isLoading = true) }
             while (true) {
-                _uiState.update { ReceiveUiState(isLoading = true) }
-                walletRepo.walletState.first { it.status == WalletStatus.Ready }
-                val invoice = paymentsRepo.createInvoice().getOrElse {
-                    _uiState.update { state -> state.copy(isLoading = false, isError = true) }
+                // The invoice on screen stays until its replacement exists, or until it is about to expire.
+                val isShowing = _uiState.value.qrContent != null
+                val replaced = if (isShowing) withTimeoutOrNull(EXPIRY_MARGIN) { create() } else null
+                val created = replaced ?: run {
+                    _uiState.update { ReceiveUiState(isLoading = true) }
+                    create()
+                }
+                val invoice = created.getOrElse {
+                    _uiState.update { ReceiveUiState(isError = true) }
                     return@launch
                 }
                 if (Env.isDebug) Logger.debug("Showing invoice '${invoice.bolt11}'", context = TAG)
-                _uiState.update { it.copy(qrContent = invoice.bolt11.uppercase(), isLoading = false) }
+                _uiState.update { ReceiveUiState(qrContent = invoice.bolt11.uppercase()) }
                 val lifetime = (invoice.expiresAtSecs.toLong() - nowSecs()).seconds - EXPIRY_MARGIN
-                val paid = withTimeoutOrNull(lifetime.coerceAtLeast(0.seconds)) { paymentsRepo.awaitPaid(invoice) }
+                val paid = withTimeoutOrNull(lifetime.coerceAtLeast(MIN_LIFETIME)) { paymentsRepo.awaitPaid(invoice) }
                 if (paid != null) {
                     Logger.info("Received payment '${paid.id}'", context = TAG)
                     _uiState.update { ReceiveUiState(paidAmount = bitcoinAmount(paid.amountSats.toLong())) }
                     return@launch
                 }
                 Logger.debug("Replacing invoice '${invoice.paymentHash}' before it expires", context = TAG)
+                _uiState.update { it.copy(isLoading = true) }
             }
         }
+    }
+
+    /** Makes an invoice once the wallet is ready. */
+    private suspend fun create(): Result<ReceiveInvoice> {
+        walletRepo.walletState.first { it.status == WalletStatus.Ready }
+        return paymentsRepo.createInvoice()
     }
 }
 

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -22,6 +23,7 @@ import androidx.wear.compose.material3.SurfaceTransformation
 import androidx.wear.compose.material3.Text
 import androidx.wear.compose.material3.lazy.transformedHeight
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.delay
 import to.bitkit.wear.R
 import to.bitkit.wear.models.BITCOIN_SYMBOL
 import to.bitkit.wear.models.PaymentState
@@ -34,12 +36,17 @@ import to.bitkit.wear.ui.components.WearPreview
 import to.bitkit.wear.ui.components.WearPreviewDevices
 import to.bitkit.wear.ui.components.isAmbient
 import to.bitkit.wear.ui.theme.Colors
+import java.time.Instant
+import kotlin.time.Duration.Companion.minutes
 
 /** The size of the empty state's icon. */
 private val EMPTY_ICON_SIZE = 40.dp
 
 /** The opacity of the icons that stand in for the list while it is empty, loading or hidden. */
 private const val DIM_ALPHA = 0.4f
+
+/** How often the relative times are counted again. */
+private val RELATIVE_TIME_TICK = 1.minutes
 
 /**
  * The activity page of the home pager: the newest payments, each with its direction, amount and how long ago it
@@ -52,8 +59,15 @@ fun ActivityScreen(
     viewModel: ActivityViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // The relative times move on while the page stays open and Spark reports nothing new.
+    val nowSecs by produceState(uiState.nowSecs, uiState.nowSecs) {
+        while (true) {
+            delay(RELATIVE_TIME_TICK)
+            value = Instant.now().epochSecond
+        }
+    }
     Content(
-        uiState = uiState,
+        uiState = uiState.copy(nowSecs = nowSecs),
         isAmbient = isAmbient(),
         onPaymentClick = onPaymentClick,
         modifier = modifier
@@ -155,7 +169,7 @@ private fun relativeTime(timestampSecs: Long, nowSecs: Long): String = DateUtils
 ).toString()
 
 @Composable
-private fun DimIcon(modifier: Modifier = Modifier) {
+internal fun DimIcon(modifier: Modifier = Modifier) {
     Icon(
         painter = painterResource(R.drawable.ic_history),
         contentDescription = null,
