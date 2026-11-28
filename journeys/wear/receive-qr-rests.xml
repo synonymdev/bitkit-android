@@ -1,7 +1,7 @@
 <journey name="wear receive qr rests">
   <description>
     A receive QR that is not touched for 2 min rests: it hides behind the dimmed QR icon and stops holding the screen
-    on at full brightness; a tap shows it again. Emulator and physical watch.
+    on at full brightness; a tap anywhere on the screen shows it again. Emulator and physical watch.
 
     Precondition: Restored wallet on the local ./spark stack, see journeys/wear/README.md › Local ./spark stack and
     › Restored wallet, on the Balance page with the loading ring stopped, and the always-on screen on (README › Watch

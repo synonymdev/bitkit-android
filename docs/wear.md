@@ -157,7 +157,7 @@ On-screen copy stays short: a title or one line of at most about six words per s
   screen (1/√2 of its width). Each module is one bitmap pixel scaled up without smoothing (zxing, as on the phone).
   While the QR shows, the screen stays on at full brightness; both end when it leaves. After 2 min without a touch
   the QR rests: it hides behind the dimmed QR icon (`WatchReceiveHidden`, "Show QR") and the screen may turn off
-  again, so a forgotten QR does not hold the screen at full brightness; a tap on the icon, or waking the watch from
+  again, so a forgotten QR does not hold the screen at full brightness; a tap anywhere on that screen, or waking the watch from
   ambient mode, shows it for another 2 min. The invoice is made once the
   wallet is ready, under the loading ring; a failure shows one line and a retry (`WatchReceiveError`,
   `WatchReceiveRetry`). An invoice is replaced by a new one a minute before it expires, and it stays on screen until
@@ -167,7 +167,8 @@ On-screen copy stays short: a title or one line of at most about six words per s
   invoice shows for at least 30 s, also when the watch's clock runs ahead. Paid, the QR turns into a
   check with the amount (`WatchReceivePaid`, `WatchReceivePaidAmount`) and a firm click (the `LongPress` haptic), unlike
   the confirm pattern that ends a send; a tap on the check shows a new invoice. In ambient mode the QR is replaced by
-  a dimmed QR icon (`WatchReceiveHidden`). Debug builds log each invoice shown (`Showing invoice`), which is how the
+  a dimmed QR icon (`WatchReceiveHidden`), and an invoice paid meanwhile shows the check dimmed and without the
+  amount, with the same haptic, so the always-on screen shows no amount; the amount shows once the watch wakes. Debug builds log each invoice shown (`Showing invoice`), which is how the
   journeys read it.
 - **Send.** There is no Send page or button. A `lightning:`, `bitcoin:` or `spark:` link opens the app
   (`MainActivity` is `singleTop`, so a link reaches the open app) and the send flow above Home; without a wallet,
@@ -195,7 +196,8 @@ On-screen copy stays short: a title or one line of at most about six words per s
     did not settle in time, or one that was already under way, from the watch or the phone, shows a clock and
     "Pending"; an outcome Spark could not report shows "Check activity", never a failure; both close after 3 s. The
     amount is the one Spark paid. A request that was not sent because another send still holds the wallet shows
-    "Wallet busy" as a failure, never "Pending". A refusal or a failure shows a cross, one line of at most four words and
+    "Wallet busy" as a failure, never "Pending"; the request whose own stalled call Spark still holds shows "Pending",
+    since that call may still pay. A refusal or a failure shows a cross, one line of at most four words and
     an OK button (`WatchSendError`, `WatchSendClose`), with the reject haptic. Insufficient funds, an expired or
     unreadable invoice and an own invoice end there before any hold.
 - **Activity.** The Activity page lists the newest 20 payments from Spark's local list: a direction icon (or a
@@ -243,7 +245,8 @@ in any other state.
   by closing, and one send runs at a time. An invoice's send first syncs with Spark, for up to 20 s, and is
   refused when the sync does not reach Spark. The call returns when Spark has the payment; a call that stalls for
   a minute ends as an unknown outcome, and nothing else is sent until Spark returns that call: another request is
-  refused as busy (`SendError.Busy`, "Wallet busy"), since nothing of it went out. The result then waits
+  refused as busy (`SendError.Busy`, "Wallet busy"), since nothing of it went out, and the same request (the same
+  invoice, or a transfer to the same Spark wallet) is reported as under way (`SendError.InFlight`, "Pending"). The result then waits
   up to a minute for the payment to settle and reports it as pending after that. A lock, a pause or a wipe waits up to 10 s for a send before it
   disconnects, from the moment the send is noted until Spark returns its call; a wallet that is disconnected before
   Spark got the call, or wiped before the note was written, sent nothing: "Wallet not ready", and no note stays. The send screen keeps the screen on, so the app stays on screen and connected while it waits.

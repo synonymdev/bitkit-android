@@ -1,0 +1,23 @@
+<journey name="wear receive paid ambient">
+  <description>
+    An invoice paid while the watch is in ambient mode shows the check without the amount, so the always-on screen
+    shows no amount; waking the watch shows the amount. Emulator and physical watch.
+
+    Precondition: Restored wallet on the local ./spark stack, see journeys/wear/README.md › Local ./spark stack and
+    › Restored wallet, on the Balance page with the loading ring stopped, and the always-on screen on (README › Watch
+    gestures). Gestures are written for the 454 px screen; scale them as in README › What differs.
+  </description>
+  <actions>
+    <action>Swipe the pager left once: `adb shell input swipe 400 227 60 227 300`</action>
+    <action>Tap "WatchReceiveOpen"</action>
+    <action>Wait up to 10 s until `adb shell uiautomator dump` lists "WatchReceiveQr" (README, top)</action>
+    <action>Read the invoice from the log as in README › Reading the receive invoice and note it as &lt;invoice&gt;</action>
+    <action>Run `adb shell input keyevent KEYCODE_SLEEP`</action>
+    <action>Wait up to 5 s until "WatchReceiveHidden" is listed</action>
+    <action>Run `../bitkit-docker/spark pay &lt;invoice&gt; 1000` from this repo's parent checkout</action>
+    <action>Wait up to 20 s until "WatchReceivePaid" is listed</action>
+    <action>Verify "WatchReceivePaidAmount" is not listed</action>
+    <action>Run `adb shell input keyevent KEYCODE_WAKEUP`</action>
+    <action>Wait up to 5 s until "WatchReceivePaidAmount" reads "1 000"</action>
+  </actions>
+</journey>
