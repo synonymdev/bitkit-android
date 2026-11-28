@@ -5,6 +5,7 @@ import android.os.StrictMode
 import dagger.hilt.android.HiltAndroidApp
 import to.bitkit.wear.data.ForegroundMonitor
 import to.bitkit.wear.env.Env
+import to.bitkit.wear.tile.TileUpdates
 import to.bitkit.wear.utils.Logger
 import javax.inject.Inject
 
@@ -14,10 +15,14 @@ class WearApp : Application() {
     @Inject
     lateinit var foregroundMonitor: ForegroundMonitor
 
+    @Inject
+    lateinit var tileUpdates: TileUpdates
+
     override fun onCreate() {
         if (Env.isDebug) logMainThreadBlocking()
         super.onCreate()
         if (Env.isDebug) Logger.init { filesDir }
+        tileUpdates.start()
     }
 
     /**

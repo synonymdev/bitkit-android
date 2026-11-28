@@ -15,6 +15,7 @@ navCompose = "2.9.8"
 room = "2.8.5"
 slf4j = "2.0.20"
 wearCompose = "1.7.2"
+wearProtolayout = "1.4.2"
 haze = "1.7.3"
 
 [libraries]
@@ -105,6 +106,10 @@ wear-compose-foundation = { module = "androidx.wear.compose:compose-foundation",
 wear-compose-material3 = { module = "androidx.wear.compose:compose-material3", version.ref = "wearCompose" }
 wear-compose-navigation = { module = "androidx.wear.compose:compose-navigation", version.ref = "wearCompose" }
 wear-tooling-preview = { module = "androidx.wear:wear-tooling-preview", version = "1.0.0" }
+wear-tiles = { module = "androidx.wear.tiles:tiles", version = "1.6.2" }
+wear-protolayout = { module = "androidx.wear.protolayout:protolayout", version.ref = "wearProtolayout" }
+wear-protolayout-material3 = { module = "androidx.wear.protolayout:protolayout-material3", version.ref = "wearProtolayout" }
+concurrent-futures-ktx = { module = "androidx.concurrent:concurrent-futures-ktx", version = "1.2.0" }
 lottie = { module = "com.airbnb.android:lottie-compose", version = "6.7.1" }
 charts = { module = "io.github.ehsannarmani:compose-charts", version = "1.0.0" }
 coil-bom = { module = "io.coil-kt.coil3:coil-bom", version.ref = "coil" }

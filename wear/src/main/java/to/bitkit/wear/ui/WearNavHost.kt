@@ -174,8 +174,9 @@ private fun NavController.showRestoreWord(index: Int) {
 }
 
 /**
- * Opens what [request] asks for above Home: the send flow of a deeplink. Without a wallet, or outside Home's back
- * stack, such as during the restore, the request is dropped; the caller drops it while a send is under way.
+ * Opens what [request] asks for above Home: the send flow of a deeplink, or the tile's receive QR. Without a wallet,
+ * or outside Home's back stack, such as during the restore, the request is dropped; the caller drops it while a send
+ * is under way.
  */
 private fun NavController.showLaunchRequest(request: LaunchRequest) {
     val hasHome = runCatching { getBackStackEntry(Routes.HOME) }.isSuccess
@@ -186,6 +187,7 @@ private fun NavController.showLaunchRequest(request: LaunchRequest) {
     popBackStack(Routes.HOME, inclusive = false)
     when (request) {
         is LaunchRequest.Send -> navigateTo(Routes.send(request.input))
+        LaunchRequest.Receive -> navigateTo(Routes.RECEIVE_QR)
     }
 }
 
