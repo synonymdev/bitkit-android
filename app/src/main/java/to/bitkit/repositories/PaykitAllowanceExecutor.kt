@@ -478,9 +478,12 @@ class PaykitAllowanceExecutor @Inject constructor(
                             entry?.let { journalOutcome(it) }
                                 ?: PaymentOutcome.UNKNOWN.takeIf { attempt.status == PaymentExecutionStatus.SUBMITTED }
                         }
-                        outcome?.let { record(attempt.attemptId, it, identity) }
+                        // Left open when the proof could not be discarded, so the next recovery tries again.
+                        val settles = outcome != PaymentOutcome.FAILED ||
+                            discardUnsentLightningProof(attempt.attemptId, identity)
+                        if (settles) outcome?.let { record(attempt.attemptId, it, identity) }
                         // One that paid nothing gives the payee's list back, as a live failure does.
-                        if (outcome == PaymentOutcome.FAILED && entry?.isAutomatic == true) {
+                        if (settles && outcome == PaymentOutcome.FAILED && entry?.isAutomatic == true) {
                             releasePaymentList(entry, identity)
                         }
                     }
@@ -622,6 +625,17 @@ class PaykitAllowanceExecutor @Inject constructor(
         (entry.stage == Stage.PREPARED || entry.stage == Stage.SUBMITTED) &&
             entry.paymentHash != null &&
             !payer.canListLightningPayments()
+
+    /**
+     * A failed payment has no proof to deliver, and a started proof left in place hides its request from the pending
+     * list. Discarded before the outcome is saved, so a kill in between leaves the attempt open for the next recovery.
+     */
+    private suspend fun discardUnsentLightningProof(attemptId: String, identity: String): Boolean {
+        val entry = localState(identity).journal.firstOrNull { it.attemptId == attemptId } ?: return true
+        if (entry.stage == Stage.SUCCEEDED || entry.stage == Stage.FAILED) return true
+        val paymentHash = entry.paymentHash ?: return true
+        return payer.discardLightningProof(paymentHash, entry.requestId).isSuccess
+    }
 
     private suspend fun record(attemptId: String, outcome: PaymentOutcome, identity: String) {
         paykitSdkService.recordPaymentOutcome(PaymentOutcomeReport(attemptId, outcome))
