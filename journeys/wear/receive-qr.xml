@@ -13,12 +13,12 @@
     <action>Verify the Receive page: "WatchReceiveOpen" is listed</action>
     <action>Tap "WatchReceiveOpen"</action>
     <action>Wait up to 10 s until `adb shell uiautomator dump` lists "WatchReceiveQr" (README, top)</action>
-    <action>Verify from a screenshot that a black-on-white QR code fills the middle of the screen</action>
-    <action>Read the invoice from the log as in README › Reading the receive invoice and verify it starts with "lnbcrt"</action>
+    <action>Read the invoice from the log as in README › Reading the receive invoice</action>
+    <action>Verify the invoice starts with "lnbcrt"</action>
     <action>Run `adb shell input keyevent KEYCODE_SLEEP`</action>
     <action>Wait up to 5 s until "WatchReceiveHidden" is listed with the content-desc "QR hidden"</action>
     <action>Run `adb shell input keyevent KEYCODE_WAKEUP`</action>
     <action>Wait up to 5 s until "WatchReceiveHidden" is not listed</action>
-    <action>Verify from a screenshot that the QR code shows again</action>
+    <action>Verify from a screenshot that a black-on-white QR code fills the middle of the screen</action>
   </actions>
 </journey>

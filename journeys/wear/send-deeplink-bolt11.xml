@@ -12,10 +12,13 @@
     <action>Run `../bitkit-docker/spark invoice 1000` and note the BOLT11 invoice it prints as &lt;invoice&gt;</action>
     <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;invoice&gt;" to.bitkit.dev`</action>
     <action>Wait up to 10 s until "WatchSendHold" is listed</action>
-    <action>Verify "WatchSendAmount" reads "1 000" and "WatchSendAmountSymbol" reads "₿"</action>
+    <action>Verify "WatchSendAmount" reads "1 000"</action>
+    <action>Verify "WatchSendAmountSymbol" reads "₿"</action>
     <action>Hold "WatchSendHold" for 2 s as in README › Holding to pay</action>
     <action>Wait up to 15 s until "WatchSendSent" is listed</action>
     <action>Verify "WatchSendResultAmount" reads "1 000"</action>
-    <action>Wait 4 s and verify the Balance page: "WatchHomeBalance" is listed and "WatchSendSent" is not</action>
+    <action>Wait 4 s</action>
+    <action>Verify the Balance page: "WatchHomeBalance" is listed</action>
+    <action>Verify "WatchSendSent" is not listed</action>
   </actions>
 </journey>

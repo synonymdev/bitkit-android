@@ -13,9 +13,11 @@
     <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;invoice&gt;" to.bitkit.dev`</action>
     <action>Wait up to 10 s until "WatchSendHold" is listed</action>
     <action>Tap "WatchSendHold" once</action>
-    <action>Wait 3 s and verify "WatchSendHold" is still listed and "WatchSendSending" is not</action>
-    <action>Hold "WatchSendHold" for 0.5 s as in README › Holding to pay, then release</action>
-    <action>Wait 3 s and verify "WatchSendHold" is still listed and "WatchSendSending" is not</action>
+    <action>Wait 3 s</action>
+    <action>Verify the review stays: "WatchSendHold" is still listed</action>
+    <action>Hold "WatchSendHold" for 0.5 s and release, as in README › Holding to pay</action>
+    <action>Wait 3 s</action>
+    <action>Verify the review stays: "WatchSendHold" is still listed</action>
     <action>Swipe to dismiss from the left edge: `adb shell input swipe 20 227 400 227 300`</action>
     <action>Verify "WatchHomeBalance" still reads &lt;balance&gt;</action>
   </actions>

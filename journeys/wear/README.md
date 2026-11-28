@@ -16,7 +16,7 @@ What `android layout` misses on the watch, verified on the API 37 emulator:
   `uiautomator dump` lists it. The same goes for `RestoreHidden`, the empty screen the restore shows in ambient mode.
 - **The receive QR.** `WatchReceiveQr` is an image with no text or action, so `android layout` leaves it out;
   `adb shell uiautomator dump` lists it. Check it there or from a screenshot. `WatchReceiveHidden`, the dimmed icon
-  that replaces it in ambient mode, has a content-desc and is listed.
+  that replaces it in ambient mode and once it rests, has a content-desc and is listed.
 - **Suggestion chips.** A chip's tag (`RestoreSuggestion-0`, counted from 0) is on the button and its word is a
   text node at the same `center`. A chip below the screen edge is not listed until the screen scrolls.
 - **The keyboard.** The Wear OS keyboard is a full-screen window that `android layout` does not show. It lists the
@@ -114,6 +114,7 @@ the command line. Run `receive-paid.xml` first: it funds the wallet the send jou
 | `nfc-hint-states.xml` | hosted, physical watch only | yes |
 | `screenshot-blocked.xml` | none | no |
 | `receive-qr.xml` | local | no |
+| `receive-qr-rests.xml` | local | no |
 | `receive-paid.xml` | local | no, it funds the wallet with 50 000 sats |
 | `send-deeplink-bolt11.xml` | local | yes, 2 000 sats |
 | `send-hold-cancel.xml` | local | yes, 2 000 sats |

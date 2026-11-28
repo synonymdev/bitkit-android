@@ -9,7 +9,6 @@
   </description>
   <actions>
     <action>Swipe the pager left to Receive: `adb shell input swipe 400 227 60 227 300`</action>
-    <action>Wait up to 5 s until "WatchReceiveOpen" is listed</action>
     <action>Swipe the pager left to Activity: `adb shell input swipe 400 227 60 227 300`</action>
     <action>Wait up to 10 s until "WatchActivityItem-0" is listed</action>
     <action>Verify "WatchActivityItem-0" shows "- ₿ 1 000"</action>

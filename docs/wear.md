@@ -155,10 +155,15 @@ On-screen copy stays short: a title or one line of at most about six words per s
   the receive QR (`WatchReceiveQr`): an amountless invoice, uppercased so the code uses QR's alphanumeric mode, black
   on white with the standard four-module quiet zone, error correction L, filling the largest square inside the round
   screen (1/√2 of its width). Each module is one bitmap pixel scaled up without smoothing (zxing, as on the phone).
-  While the QR shows, the screen stays on at full brightness; both end when it leaves. The invoice is made once the
+  While the QR shows, the screen stays on at full brightness; both end when it leaves. After 2 min without a touch
+  the QR rests: it hides behind the dimmed QR icon (`WatchReceiveHidden`, "Show QR") and the screen may turn off
+  again, so a forgotten QR does not hold the screen at full brightness; a tap on the icon, or waking the watch from
+  ambient mode, shows it for another 2 min. The invoice is made once the
   wallet is ready, under the loading ring; a failure shows one line and a retry (`WatchReceiveError`,
   `WatchReceiveRetry`). An invoice is replaced by a new one a minute before it expires, and it stays on screen until
-  the new one exists; when the wallet is not ready by then, the loading ring takes its place as it expires. An
+  the new one exists; a replacement that fails is tried again every 5 s meanwhile, and when none exists by then, the
+  loading ring, or the error, takes its place as it expires. A replaced invoice is still watched until it expires, so
+  a payer who scanned the earlier QR gets the check too. An
   invoice shows for at least 30 s, also when the watch's clock runs ahead. Paid, the QR turns into a
   check with the amount (`WatchReceivePaid`, `WatchReceivePaidAmount`) and a firm click (the `LongPress` haptic), unlike
   the confirm pattern that ends a send; a tap on the check shows a new invoice. In ambient mode the QR is replaced by
@@ -179,8 +184,9 @@ On-screen copy stays short: a title or one line of at most about six words per s
     the line "Offline"; while the wallet connects, locks or pauses, it is disabled under the loading ring.
     `PaymentsRepo.skipConfirmation` is asked before the hold; it is always false until QuickPay (PR 3).
   - Screen readers: a screen reader's wearer cannot hold, and the button's click pays nothing, so the button
-    offers "Pay" as a custom accessibility action, picked from the actions menu. The Receive button reads
-    "Receive".
+    offers "Pay" as a custom accessibility action, picked from the actions menu, and as its long click (a double
+    tap and hold); both only while the hold is enabled. `SendReviewTest` checks the three; the actions menu of
+    TalkBack on a watch has not been tried on a device. The Receive button reads "Receive".
   - Ambient: the amount entry, the review and the result are replaced by a dimmed bolt (`WatchSendHidden`), so
     the always-on screen shows no amount; the hold starts over when the watch wakes.
   - Sending: the loading ring, with "Waiting for network" after 3 s. The screen stays on and the flow cannot be
@@ -188,13 +194,14 @@ On-screen copy stays short: a title or one line of at most about six words per s
   - Result: sent shows a check, "Sent" and the amount with the confirm haptic, and closes after 2 s. A payment that
     did not settle in time, or one that was already under way, from the watch or the phone, shows a clock and
     "Pending"; an outcome Spark could not report shows "Check activity", never a failure; both close after 3 s. The
-    amount is the one Spark paid. A refusal or a failure shows a cross, one line of at most four words and
+    amount is the one Spark paid. A request that was not sent because another send still holds the wallet shows
+    "Wallet busy" as a failure, never "Pending". A refusal or a failure shows a cross, one line of at most four words and
     an OK button (`WatchSendError`, `WatchSendClose`), with the reject haptic. Insufficient funds, an expired or
     unreadable invoice and an own invoice end there before any hold.
 - **Activity.** The Activity page lists the newest 20 payments from Spark's local list: a direction icon (or a
   clock for pending, a cross for failed), the amount with its sign and how long ago (`WatchActivityItem-0` onwards).
   It is read when Spark connects and after every payment or sync, and the last list stays while Spark is
-  disconnected, with its times counted again every minute. A tap opens the detail: the amount, the fee of a send, the
+  disconnected, with its times counted again every minute; a list just read counts from its own time. A tap opens the detail: the amount, the fee of a send, the
   date and time and the status (`WatchActivityDetailAmount`, `…Fee`, `…Time`, `…Status`); Spark's list carries no payee or description. With no
   payments it shows a dimmed icon and "No activity" (`WatchActivityEmpty`). A detail whose payment the list does not
   hold, while it loads or after newer payments pushed it out, shows the dimmed icon (`WatchActivityDetailMissing`).
@@ -235,9 +242,11 @@ in any other state.
 - **Sending.** A send runs in the repository's own scope, so the screen that started it cannot cancel it, also not
   by closing, and one send runs at a time. An invoice's send first syncs with Spark, for up to 20 s, and is
   refused when the sync does not reach Spark. The call returns when Spark has the payment; a call that stalls for
-  a minute ends as an unknown outcome, and nothing else is sent until Spark returns that call. The result then waits
-  up to a minute for the payment to settle and reports it as pending after that. A lock, a pause or a wipe waits up to 10 s for a send Spark is taking before it
-  disconnects. The send screen keeps the screen on, so the app stays on screen and connected while it waits.
+  a minute ends as an unknown outcome, and nothing else is sent until Spark returns that call: another request is
+  refused as busy (`SendError.Busy`, "Wallet busy"), since nothing of it went out. The result then waits
+  up to a minute for the payment to settle and reports it as pending after that. A lock, a pause or a wipe waits up to 10 s for a send before it
+  disconnects, from the moment the send is noted until Spark returns its call; a wallet that is disconnected before
+  Spark got the call, or wiped before the note was written, sent nothing: "Wallet not ready", and no note stays. The send screen keeps the screen on, so the app stays on screen and connected while it waits.
   **Known gap:** a wearer who leaves the app during that wait pauses the wallet 10 s later (see Background); the
   settlement is then not seen and the send reports pending after the minute, although it may have completed. The
   activity list shows the real state once the app is back.
@@ -251,11 +260,22 @@ in any other state.
   cannot be read, refuses the send.
 - **Spark addresses.** A Spark address has no payment hash to derive a key from, so its transfer goes out under a
   random key. `UncertainSendStore`, in the settings file the wipe clears, notes every send before it goes out and
-  drops it once Spark shows its payment or refuses it unsent. A transfer whose outcome was never learned, also
-  because the app was closed during it, keeps its key there: the next send to the same address syncs and asks
-  Spark's list. A transfer the list shows completed is not sent again ("Already paid", once), one it shows pending
+  drops it once Spark shows its payment or refuses it unsent. A transfer is noted under the Spark identity public
+  key its address encodes, which the `sp…` and the `spark…` spelling of one wallet's address share. A transfer whose
+  outcome was never learned, also because the app was closed during it, keeps its key there: the next send to the
+  same wallet syncs and asks Spark's list about every transfer noted for it. A transfer the list shows completed is not sent again ("Already paid", once), one it shows pending
   is "Pending", one it shows failed makes way for a new key, and one it does not show goes out again under the
   same key, which pays once. Without a sync that reaches Spark, nothing is sent to that address.
+- **Reused key on a Spark address.** That a reused key pays once also for a transfer to a Spark address was read
+  from the SDK's source at tag 0.28.3, not tried against the operators. `SendPaymentRequest.idempotency_key` is
+  documented for "all Spark based transfers": a reused key returns the same payment, and the payment's id is the key.
+  `orchestrate_send` first returns the payment its local storage holds under the key. Otherwise the key is the
+  transfer id handed to the operators (`send/spark_address.rs`, `TransferService.send_transfer_inner`), and when
+  they refuse the submission, as for an id they already hold ("a transfer id is single-use"),
+  `recover_committed_transfer` asks them for that id and returns the earlier transfer. The one part the source
+  cannot show is that the operators refuse a second submission of an id. The watch does not lean on it alone: a
+  transfer goes out again under its key only after a sync that reached Spark shows no payment under it, and any
+  error on that send is "unknown" with the note kept, never a new key.
 - **Unknown outcome.** When the send call fails or stalls after Spark may have taken the payment and Spark's list
   does not show it, the result is "unknown", never "failed". The activity list tells once Spark lists it, and
   sending the same request again from the watch goes out under the same key, so it cannot pay twice. A refusal
