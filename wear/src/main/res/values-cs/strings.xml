@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about__title">O aplikaci</string>
+    <string name="activity__empty">Žádná aktivita</string>
+    <string name="activity__received">Přijato</string>
+    <string name="activity__sent">Odesláno</string>
+    <string name="activity__status_completed">Dokončeno</string>
+    <string name="activity__status_failed">Selhání</string>
+    <string name="activity__status_pending">Zpracovávání</string>
+    <string name="activity__title">Aktivita</string>
     <string name="common__next">Další</string>
     <string name="common__ok">OK</string>
     <string name="common__retry">Opakovat</string>
@@ -11,6 +18,11 @@
     <string name="home__offline">Offline</string>
     <string name="home__toggle_unit">Přepnout jednotku</string>
     <string name="onboarding__restore">Obnovit</string>
+    <string name="receive__error">Fakturu nelze vytvořit</string>
+    <string name="receive__hidden">QR skryt</string>
+    <string name="receive__new">Nová faktura</string>
+    <string name="receive__paid">Zaplaceno</string>
+    <string name="receive__title">Přijmout</string>
     <string name="removed__title">Peněženka odebrána</string>
     <string name="restore__checksum_review">Zkontrolovat</string>
     <string name="restore__checksum_title">Neplatná fráze</string>
@@ -32,6 +44,26 @@
     <string name="restore__word_no_match">Žádná shoda</string>
     <string name="restore__word_placeholder">Slovo %1$d</string>
     <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="send__amount_confirm">Pokračovat</string>
+    <string name="send__amount_placeholder">Částka</string>
+    <string name="send__amount_range">%1$s – %2$s</string>
+    <string name="send__error_already_paid">Již zaplaceno</string>
+    <string name="send__error_expired">Faktura vypršela</string>
+    <string name="send__error_failed">Platba selhala</string>
+    <string name="send__error_in_flight">Platba se zpracovává</string>
+    <string name="send__error_insufficient">Nedostatek prostředků</string>
+    <string name="send__error_invalid">Neplatná faktura</string>
+    <string name="send__error_not_ready">Peněženka není připravena</string>
+    <string name="send__error_out_of_range">Mimo rozsah</string>
+    <string name="send__error_own_invoice">Vlastní fakturu nelze zaplatit</string>
+    <string name="send__error_unsupported">Nepodporováno</string>
+    <string name="send__fee">Poplatek %1$s</string>
+    <string name="send__hold">Podržte pro platbu</string>
+    <string name="send__offline">Offline</string>
+    <string name="send__pending">Zpracovávání</string>
+    <string name="send__sent">Odesláno</string>
+    <string name="send__unknown">Zkontrolujte aktivitu</string>
+    <string name="send__waiting">Čekání na síť</string>
     <string name="settings__remove_wallet">Odebrat peněženku</string>
     <string name="settings__remove_wallet_confirm_title">Odebrat peněženku?</string>
     <string name="settings__remove_wallet_failed">Peněženku nelze odebrat</string>

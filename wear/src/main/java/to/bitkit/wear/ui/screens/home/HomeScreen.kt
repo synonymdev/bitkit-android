@@ -16,6 +16,8 @@ import androidx.wear.compose.material3.HorizontalPagerScaffold
 import kotlinx.collections.immutable.ImmutableList
 import to.bitkit.wear.ui.components.LocalListBottomInset
 import to.bitkit.wear.ui.components.PageIndicatorPadding
+import to.bitkit.wear.ui.screens.activity.ActivityScreen
+import to.bitkit.wear.ui.screens.receive.ReceiveScreen
 import to.bitkit.wear.ui.screens.settings.SettingsScreen
 
 /**
@@ -26,6 +28,8 @@ import to.bitkit.wear.ui.screens.settings.SettingsScreen
  */
 @Composable
 fun HomeScreen(
+    onReceiveClick: () -> Unit,
+    onPaymentClick: (String) -> Unit,
     onAboutClick: () -> Unit,
     onWalletRemove: () -> Unit,
     onSeedKeyLoss: () -> Unit,
@@ -47,6 +51,8 @@ fun HomeScreen(
                 CompositionLocalProvider(LocalListBottomInset provides PageIndicatorPadding) {
                     when (pages[page]) {
                         HomePage.Balance -> BalancePage(viewModel = viewModel)
+                        HomePage.Receive -> ReceiveScreen(onQrClick = onReceiveClick)
+                        HomePage.Activity -> ActivityScreen(onPaymentClick = onPaymentClick)
                         HomePage.Settings -> SettingsScreen(onAboutClick = onAboutClick)
                     }
                 }

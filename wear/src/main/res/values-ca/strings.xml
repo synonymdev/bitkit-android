@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about__title">Quant a</string>
+    <string name="activity__empty">Sense activitat</string>
+    <string name="activity__received">Rebut</string>
+    <string name="activity__sent">Enviat</string>
+    <string name="activity__status_completed">Completat</string>
+    <string name="activity__status_failed">Ha fallat</string>
+    <string name="activity__status_pending">Pendent</string>
+    <string name="activity__title">Activitat</string>
     <string name="common__next">Següent</string>
     <string name="common__ok">OK</string>
     <string name="common__retry">Reintentar</string>
@@ -11,6 +18,11 @@
     <string name="home__offline">Sense connexió</string>
     <string name="home__toggle_unit">Canvia la unitat</string>
     <string name="onboarding__restore">Restaurar</string>
+    <string name="receive__error">No s\'ha creat la factura</string>
+    <string name="receive__hidden">QR amagat</string>
+    <string name="receive__new">Nova factura</string>
+    <string name="receive__paid">Pagat</string>
+    <string name="receive__title">Rebre</string>
     <string name="removed__title">Cartera eliminada</string>
     <string name="restore__checksum_review">Revisa</string>
     <string name="restore__checksum_title">Frase no vàlida</string>
@@ -31,6 +43,26 @@
     <string name="restore__word_no_match">Cap coincidència</string>
     <string name="restore__word_placeholder">Paraula %1$d</string>
     <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="send__amount_confirm">Continua</string>
+    <string name="send__amount_placeholder">Import</string>
+    <string name="send__amount_range">%1$s – %2$s</string>
+    <string name="send__error_already_paid">Ja pagada</string>
+    <string name="send__error_expired">Factura caducada</string>
+    <string name="send__error_failed">El pagament ha fallat</string>
+    <string name="send__error_in_flight">Pagament pendent</string>
+    <string name="send__error_insufficient">Fons insuficients</string>
+    <string name="send__error_invalid">Factura no vàlida</string>
+    <string name="send__error_not_ready">Wallet no a punt</string>
+    <string name="send__error_out_of_range">Fora de rang</string>
+    <string name="send__error_own_invoice">És la teva factura</string>
+    <string name="send__error_unsupported">No compatible</string>
+    <string name="send__fee">Comissió %1$s</string>
+    <string name="send__hold">Mantén per pagar</string>
+    <string name="send__offline">Sense connexió</string>
+    <string name="send__pending">Pendent</string>
+    <string name="send__sent">Enviat</string>
+    <string name="send__unknown">Revisa l\'activitat</string>
+    <string name="send__waiting">Esperant la xarxa</string>
     <string name="settings__remove_wallet">Elimina la cartera</string>
     <string name="settings__remove_wallet_confirm_title">Eliminar la cartera?</string>
     <string name="settings__remove_wallet_failed">No s\'ha pogut eliminar la cartera</string>

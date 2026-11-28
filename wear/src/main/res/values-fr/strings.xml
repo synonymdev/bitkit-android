@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about__title">À propos</string>
+    <string name="activity__empty">Aucune activité</string>
+    <string name="activity__received">Reçu</string>
+    <string name="activity__sent">Envoyé</string>
+    <string name="activity__status_completed">Terminé</string>
+    <string name="activity__status_failed">Échec</string>
+    <string name="activity__status_pending">En attente</string>
+    <string name="activity__title">Activité</string>
     <string name="common__next">Suivant</string>
     <string name="common__ok">OK</string>
     <string name="common__retry">Réessayer</string>
@@ -11,6 +18,11 @@
     <string name="home__offline">Hors ligne</string>
     <string name="home__toggle_unit">Changer d\'unité</string>
     <string name="onboarding__restore">Restaurer</string>
+    <string name="receive__error">Facture non créée</string>
+    <string name="receive__hidden">QR masqué</string>
+    <string name="receive__new">Nouvelle facture</string>
+    <string name="receive__paid">Payé</string>
+    <string name="receive__title">Recevoir</string>
     <string name="removed__title">Wallet supprimé</string>
     <string name="restore__checksum_review">Vérifier</string>
     <string name="restore__checksum_title">Phrase invalide</string>
@@ -31,6 +43,26 @@
     <string name="restore__word_no_match">Aucune correspondance</string>
     <string name="restore__word_placeholder">Mot %1$d</string>
     <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="send__amount_confirm">Continuer</string>
+    <string name="send__amount_placeholder">Montant</string>
+    <string name="send__amount_range">%1$s – %2$s</string>
+    <string name="send__error_already_paid">Déjà payée</string>
+    <string name="send__error_expired">Facture expirée</string>
+    <string name="send__error_failed">Échec du paiement</string>
+    <string name="send__error_in_flight">Paiement en attente</string>
+    <string name="send__error_insufficient">Fonds insuffisants</string>
+    <string name="send__error_invalid">Facture invalide</string>
+    <string name="send__error_not_ready">Wallet pas prêt</string>
+    <string name="send__error_out_of_range">Hors limites</string>
+    <string name="send__error_own_invoice">Votre propre facture</string>
+    <string name="send__error_unsupported">Non pris en charge</string>
+    <string name="send__fee">Frais %1$s</string>
+    <string name="send__hold">Maintenir pour payer</string>
+    <string name="send__offline">Hors ligne</string>
+    <string name="send__pending">En attente</string>
+    <string name="send__sent">Envoyé</string>
+    <string name="send__unknown">Voir l\'activité</string>
+    <string name="send__waiting">En attente du réseau</string>
     <string name="settings__remove_wallet">Supprimer le wallet</string>
     <string name="settings__remove_wallet_confirm_title">Supprimer le wallet ?</string>
     <string name="settings__remove_wallet_failed">Impossible de supprimer le wallet</string>

@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="about__title">About</string>
+    <string name="activity__empty">No activity</string>
+    <string name="activity__received">Received</string>
+    <string name="activity__sent">Sent</string>
+    <string name="activity__status_completed">Completed</string>
+    <string name="activity__status_failed">Failed</string>
+    <string name="activity__status_pending">Pending</string>
+    <string name="activity__title">Activity</string>
     <string name="common__next">Next</string>
     <string name="common__ok">OK</string>
     <string name="common__retry">Retry</string>
@@ -11,6 +18,11 @@
     <string name="home__offline">Offline</string>
     <string name="home__toggle_unit">Switch unit</string>
     <string name="onboarding__restore">Restore</string>
+    <string name="receive__error">Couldn\'t create invoice</string>
+    <string name="receive__hidden">QR hidden</string>
+    <string name="receive__new">New invoice</string>
+    <string name="receive__paid">Paid</string>
+    <string name="receive__title">Receive</string>
     <string name="removed__title">Wallet removed</string>
     <string name="restore__checksum_review">Review</string>
     <string name="restore__checksum_title">Invalid phrase</string>
@@ -30,6 +42,26 @@
     <string name="restore__word_no_match">No match</string>
     <string name="restore__word_placeholder">Word %1$d</string>
     <string name="restore__word_progress">%1$d/%2$d</string>
+    <string name="send__amount_confirm">Continue</string>
+    <string name="send__amount_placeholder">Amount</string>
+    <string name="send__amount_range">%1$s – %2$s</string>
+    <string name="send__error_already_paid">Already paid</string>
+    <string name="send__error_expired">Invoice expired</string>
+    <string name="send__error_failed">Payment failed</string>
+    <string name="send__error_in_flight">Payment pending</string>
+    <string name="send__error_insufficient">Not enough funds</string>
+    <string name="send__error_invalid">Invalid invoice</string>
+    <string name="send__error_not_ready">Wallet not ready</string>
+    <string name="send__error_out_of_range">Out of range</string>
+    <string name="send__error_own_invoice">Can\'t pay own invoice</string>
+    <string name="send__error_unsupported">Not supported</string>
+    <string name="send__fee">Fee %1$s</string>
+    <string name="send__hold">Hold to pay</string>
+    <string name="send__offline">Offline</string>
+    <string name="send__pending">Pending</string>
+    <string name="send__sent">Sent</string>
+    <string name="send__unknown">Check activity</string>
+    <string name="send__waiting">Waiting for network</string>
     <string name="settings__remove_wallet">Remove wallet</string>
     <string name="settings__remove_wallet_confirm_title">Remove wallet?</string>
     <string name="settings__remove_wallet_failed">Couldn\'t remove wallet</string>

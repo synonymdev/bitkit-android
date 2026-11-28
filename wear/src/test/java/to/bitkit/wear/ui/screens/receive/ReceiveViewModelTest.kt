@@ -1,0 +1,139 @@
+package to.bitkit.wear.ui.screens.receive
+
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
+import org.junit.Before
+import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
+import to.bitkit.wear.models.PaymentState
+import to.bitkit.wear.models.ReceiveError
+import to.bitkit.wear.models.ReceiveInvoice
+import to.bitkit.wear.models.WatchPayment
+import to.bitkit.wear.repositories.PaymentsRepo
+import to.bitkit.wear.repositories.WalletRepo
+import to.bitkit.wear.repositories.WalletState
+import to.bitkit.wear.repositories.WalletStatus
+import to.bitkit.wear.test.BaseUnitTest
+import to.bitkit.wear.ui.screens.home.DisplayAmount
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+
+class ReceiveViewModelTest : BaseUnitTest() {
+    private val paymentsRepo = mock<PaymentsRepo>()
+    private val walletRepo = mock<WalletRepo>()
+    private val walletState = MutableStateFlow(WalletState(WalletStatus.Ready, 0uL, hasSynced = true))
+
+    @Before
+    fun setUp() {
+        whenever(walletRepo.walletState).thenReturn(walletState)
+    }
+
+    private val created = mutableListOf<ReceiveViewModel>()
+
+    private fun createSut() = ReceiveViewModel(paymentsRepo, walletRepo) { NOW }.also { created += it }
+
+    /** An unpaid invoice is replaced forever, so the view models stop before the test drains its scheduler. */
+    override fun onTestEnd() = created.forEach { it.viewModelScope.cancel() }
+
+    @Test
+    fun `shows the uppercased invoice once the wallet is ready`() = test {
+        walletState.update { it.copy(status = WalletStatus.Connecting) }
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice()))
+        whenever(paymentsRepo.awaitPaid(any())).doSuspendableAnswer { awaitCancellation() }
+
+        val sut = createSut()
+
+        assertTrue(sut.uiState.value.isLoading)
+        verify(paymentsRepo, never()).createInvoice()
+
+        walletState.update { it.copy(status = WalletStatus.Ready) }
+
+        assertEquals(BOLT11.uppercase(), sut.uiState.value.qrContent)
+        assertFalse(sut.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `a paid invoice turns into the check with its amount`() = test {
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice()))
+        whenever(paymentsRepo.awaitPaid(any())).thenReturn(payment(21_000uL))
+
+        val sut = createSut()
+
+        assertNull(sut.uiState.value.qrContent)
+        assertEquals(DisplayAmount("₿", "21 000"), sut.uiState.value.paidAmount)
+    }
+
+    @Test
+    fun `a new invoice replaces the paid one on refresh`() = test {
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice()))
+        whenever(paymentsRepo.awaitPaid(any())).thenReturn(payment(21_000uL))
+        val sut = createSut()
+        whenever(paymentsRepo.awaitPaid(any())).doSuspendableAnswer { awaitCancellation() }
+
+        sut.onRefreshClick()
+
+        assertNull(sut.uiState.value.paidAmount)
+        assertEquals(BOLT11.uppercase(), sut.uiState.value.qrContent)
+        verify(paymentsRepo, times(2)).createInvoice()
+    }
+
+    @Test
+    fun `an invoice is replaced shortly before it expires`() = test {
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice()))
+        whenever(paymentsRepo.awaitPaid(any())).doSuspendableAnswer { awaitCancellation() }
+        createSut()
+        verify(paymentsRepo, times(1)).createInvoice()
+
+        testScheduler.advanceTimeBy(LIFETIME.seconds - ReceiveViewModel.EXPIRY_MARGIN - 1.seconds)
+        verify(paymentsRepo, times(1)).createInvoice()
+
+        testScheduler.advanceTimeBy(2.seconds)
+        verify(paymentsRepo, times(2)).createInvoice()
+    }
+
+    @Test
+    fun `a failed invoice shows the error until retried`() = test {
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.failure(ReceiveError.NotReady()))
+        val sut = createSut()
+
+        assertTrue(sut.uiState.value.isError)
+        assertNull(sut.uiState.value.qrContent)
+
+        whenever(paymentsRepo.createInvoice()).thenReturn(Result.success(invoice()))
+        whenever(paymentsRepo.awaitPaid(any())).doSuspendableAnswer { awaitCancellation() }
+        sut.onRefreshClick()
+
+        assertFalse(sut.uiState.value.isError)
+        assertEquals(BOLT11.uppercase(), sut.uiState.value.qrContent)
+    }
+
+    private fun invoice() = ReceiveInvoice(BOLT11, PAYMENT_HASH, (NOW + LIFETIME).toULong())
+
+    private fun payment(amountSats: ULong) = WatchPayment(
+        id = "receipt",
+        isSent = false,
+        amountSats = amountSats,
+        feeSats = 0uL,
+        timestampSecs = NOW.toULong(),
+        state = PaymentState.Completed,
+    )
+
+    private companion object {
+        const val BOLT11 = "lnbcrt1invoice"
+        const val PAYMENT_HASH = "ab12"
+        const val NOW = 1_800_000_000L
+        const val LIFETIME = 3_600L
+    }
+}

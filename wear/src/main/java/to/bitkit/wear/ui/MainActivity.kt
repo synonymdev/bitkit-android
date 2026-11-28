@@ -1,11 +1,14 @@
 package to.bitkit.wear.ui
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
@@ -30,9 +33,14 @@ class MainActivity : ComponentActivity() {
 
     private val startViewModel: StartViewModel by viewModels()
 
+    /** What the intent that opened the app asks for, until the navigation shows it. */
+    private var launchRequest by mutableStateOf<LaunchRequest?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        // A recreated activity has shown its intent's request already.
+        if (savedInstanceState == null) launchRequest = LaunchRequest.from(intent)
         val splashStart = TimeSource.Monotonic.markNow()
         splashScreen.setKeepOnScreenCondition {
             startViewModel.uiState.value.isStarting && splashStart.elapsedNow() < SPLASH_LIMIT
@@ -46,7 +54,13 @@ class MainActivity : ComponentActivity() {
                         }
                     ) {
                         val uiState by startViewModel.uiState.collectAsStateWithLifecycle()
-                        uiState.startRoute?.let { WearNavHost(startRoute = it) }
+                        uiState.startRoute?.let {
+                            WearNavHost(
+                                startRoute = it,
+                                launchRequest = launchRequest,
+                                onLaunchRequestHandle = { launchRequest = null },
+                            )
+                        }
                         if (uiState.isStarting) BezelLoading()
                         if (uiState.isRecoveryFailed) {
                             StartErrorScreen(
@@ -58,6 +72,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        LaunchRequest.from(intent)?.let { launchRequest = it }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
