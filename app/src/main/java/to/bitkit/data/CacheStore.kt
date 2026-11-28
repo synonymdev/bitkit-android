@@ -450,6 +450,8 @@ data class AppCacheData(
     val unfinishedPubkySwaps: List<String> = listOf(),
     /** The hold payment hash of each unfinished Pubky Swaps route by swap id, so its failure stops the swap. */
     val pubkySwapHoldHashes: Map<String, String> = mapOf(),
+    /** The wake grant id of each unfinished Pubky Swaps route by swap id, so the grant is revoked once it ends. */
+    val pubkySwapWakeGrants: Map<String, String> = mapOf(),
     /** Hashes of the latest Lightning sends Spark started, so the node holds off while Spark can't list them. */
     val sparkSendHashes: List<String> = listOf(),
     /** Invoice expiry in epoch seconds of the [sparkSendHashes] that know it. */

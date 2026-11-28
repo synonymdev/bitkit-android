@@ -23733,6 +23733,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         destinationAddress = REGTEST_ADDRESS,
         htlcAddress = REGTEST_ADDRESS,
         timeoutBlockHeight = 0u,
+        providerTakesWake = false,
     )
 
     private fun lightningInvoice(

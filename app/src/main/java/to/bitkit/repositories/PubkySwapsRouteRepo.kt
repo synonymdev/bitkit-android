@@ -12,6 +12,7 @@ import com.synonym.bitkitcore.pubkySwapsAdvance
 import com.synonym.bitkitcore.pubkySwapsCommitRoute
 import com.synonym.bitkitcore.pubkySwapsRestore
 import com.synonym.bitkitcore.pubkySwapsRoutePaykitPayment
+import com.synonym.bitkitcore.pubkySwapsSendWakeCapability
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
@@ -43,6 +44,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.fcm.WakeHandlers
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.toCoreNetwork
@@ -70,6 +72,7 @@ class PubkySwapsRouteRepo @Inject constructor(
     private val pubkyRepo: PubkyRepo,
     private val lightningRepo: LightningRepo,
     private val cacheStore: CacheStore,
+    private val wakeRepo: WakeRepo,
 ) {
     companion object {
         private const val TAG = "PubkySwapsRouteRepo"
@@ -88,6 +91,15 @@ class PubkySwapsRouteRepo @Inject constructor(
 
         /** How long a restore waits before asking again the providers it read only in part. */
         private val RESTORE_RETRY_INTERVAL = 1.minutes
+
+        /** How long a swap's wake grant lasts: past a reverse swap's claim window. It is revoked once the swap ends. */
+        private const val WAKE_GRANT_DAYS = 2u
+
+        /** How often a `swap.claimable` wake advances the unfinished swaps. */
+        private val WAKE_CLAIM_POLL_INTERVAL = 3.seconds
+
+        /** How long a `swap.claimable` wake advances the unfinished swaps before it leaves them to the background. */
+        private val WAKE_CLAIM_TIMEOUT = 2.minutes
     }
 
     private val scope = appScope(ioDispatcher, TAG)
@@ -264,8 +276,98 @@ class PubkySwapsRouteRepo @Inject constructor(
         pubkySwapsCommitRoute(quoteId, Env.electrumServerUrl, mnemonic, passphrase).also {
             committed.add(it.swapId)
             track(listOf(it.swapId))
+            if (it.providerTakesWake) scope.launch(walletJob) { handOverWake(it.swapId) }
         }
     }
+
+    // Best effort: the swap goes on without a wake, as it does on a provider that takes none.
+    private suspend fun handOverWake(swapId: String) {
+        val grant = wakeRepo.createGrant(WakeHandlers.SWAP_CLAIMABLE_TOPIC, WAKE_GRANT_DAYS)
+            .onFailure { Logger.warn("Failed to create wake grant for Pubky Swaps route '$swapId'", it, context = TAG) }
+            .getOrNull() ?: return
+        if (!rememberWakeGrant(swapId, grant.id)) {
+            revokeWakeGrant(swapId, grant.id)
+            return
+        }
+        val isClaimable = withSecrets { mnemonic, passphrase ->
+            pubkySwapsSendWakeCapability(swapId, grant.gatewayUrl, grant.token, grant.expiresAt, mnemonic, passphrase)
+        }.getOrElse {
+            Logger.warn("Failed to send wake capability of Pubky Swaps route '$swapId'", it, context = TAG)
+            forgetWakeGrant(swapId)
+            return
+        }
+        Logger.info("Sent wake capability of Pubky Swaps route '$swapId'", context = TAG)
+        // The provider sends no wake for a swap already claimable, so it is advanced now instead.
+        if (!isClaimable) return
+        forgetWakeGrant(swapId)
+        if (swapId !in claiming) advanceInBackground(swapId)
+    }
+
+    private suspend fun rememberWakeGrant(swapId: String, grantId: String): Boolean {
+        var isKept = false
+        runSuspendCatching {
+            cacheStore.update {
+                isKept = swapId in it.unfinishedPubkySwaps
+                if (!isKept) return@update it
+                it.copy(pubkySwapWakeGrants = it.pubkySwapWakeGrants + (swapId to grantId))
+            }
+        }.onFailure {
+            isKept = false
+            Logger.warn("Failed to record wake grant of Pubky Swaps route '$swapId'", it, context = TAG)
+        }
+        return isKept
+    }
+
+    private suspend fun forgetWakeGrant(swapId: String) {
+        var grantId: String? = null
+        runSuspendCatching {
+            cacheStore.update {
+                grantId = it.pubkySwapWakeGrants[swapId]
+                it.copy(pubkySwapWakeGrants = it.pubkySwapWakeGrants - swapId)
+            }
+        }.onFailure { Logger.warn("Failed to drop wake grant of Pubky Swaps route '$swapId'", it, context = TAG) }
+        grantId?.let { revokeWakeGrant(swapId, it) }
+    }
+
+    private suspend fun revokeWakeGrant(swapId: String, grantId: String) {
+        wakeRepo.revokeGrant(grantId)
+            .onFailure { Logger.warn("Failed to revoke wake grant of Pubky Swaps route '$swapId'", it, context = TAG) }
+    }
+
+    /**
+     * Claims the swaps a `swap.claimable` wake is for. The wake names none, so every unfinished swap is advanced until
+     * each has its claim broadcast or has ended, or [WAKE_CLAIM_TIMEOUT] passes, and then left to the background
+     * advance, which rebroadcasts the claims until they confirm. Fails when no claim went out and a swap is still open.
+     */
+    suspend fun claimAfterWake(): Result<Unit> = runSuspendCatching {
+        val swapIds = cacheStore.data.first().unfinishedPubkySwaps.filterNot { it in dropped }
+        val open = swapIds.toMutableSet()
+        var isClaimBroadcast = false
+        withTimeoutOrNull(WAKE_CLAIM_TIMEOUT) {
+            while (open.isNotEmpty()) {
+                open.toList().forEach { swapId ->
+                    val advance = advanceOnce(swapId)
+                    val isEnded = when (advance.getOrNull()?.state) {
+                        is PubkySwapRouteState.ClaimBroadcast, is PubkySwapRouteState.Claimed -> {
+                            isClaimBroadcast = true
+                            true
+                        }
+                        is PubkySwapRouteState.Failed -> true
+                        null -> advance.exceptionOrNull() is PubkySwapException.NotFound
+                        else -> false
+                    }
+                    if (isEnded) open.remove(swapId)
+                }
+                if (open.isNotEmpty()) delay(WAKE_CLAIM_POLL_INTERVAL)
+            }
+        }
+        swapIds.filterNot { it in claiming }.forEach { advanceInBackground(it) }
+        if (!isClaimBroadcast && open.isNotEmpty()) throw PubkySwapWakeUnclaimedException(open.toList())
+    }
+
+    private suspend fun advanceOnce(swapId: String) =
+        withSecrets { mnemonic, passphrase -> pubkySwapsAdvance(swapId, mnemonic, passphrase) }
+            .onFailure { Logger.warn("Failed to advance Pubky Swaps route '$swapId' after a wake", it, context = TAG) }
 
     /** Records the hold payment of a committed swap, so its failure stops the swap, also after a restart. */
     suspend fun watchHold(swapId: String, holdPaymentHash: String) {
@@ -415,6 +517,7 @@ class PubkySwapsRouteRepo @Inject constructor(
                 )
             }
         }.onFailure { Logger.warn("Failed to drop finished Pubky Swaps route '$swapId'", it, context = TAG) }
+        forgetWakeGrant(swapId)
     }
 
     private suspend fun pollClaim(
@@ -477,6 +580,10 @@ data class RestoredPubkySwaps(
 
 /** The swap's hold payment failed, so the provider never funds its lockup and the swap is not advanced further. */
 class PubkySwapHoldFailedException(swapId: String) : AppError("Hold payment of swap '$swapId' failed")
+
+/** A `swap.claimable` wake after which no claim went out and these swaps are still open. */
+class PubkySwapWakeUnclaimedException(swapIds: List<String>) :
+    AppError("No claim went out after a wake for swaps '$swapIds'")
 
 /** A claim wait that ran out with the swap still open: its hold payment may yet settle. */
 class PubkySwapClaimTimeoutException(swapId: String, cause: Throwable?) :
