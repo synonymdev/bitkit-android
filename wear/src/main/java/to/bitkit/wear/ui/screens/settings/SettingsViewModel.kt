@@ -33,12 +33,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    /** Imports the phone's settings now, from the row that shows when they were last imported. */
+    /**
+     * Imports the phone's settings now, from the row that shows when they were last imported. The wearer asked, so
+     * it reads also right after another import, and a failure shows.
+     */
     fun onSyncClick() {
         if (_uiState.value.isSyncing) return
-        _uiState.update { it.copy(isSyncing = true) }
+        _uiState.update { it.copy(isSyncing = true, isSyncFailed = false) }
         viewModelScope.launch {
-            settingsSyncRepo.sync()
+            settingsSyncRepo.sync(isForced = true).onFailure { _uiState.update { it.copy(isSyncFailed = true) } }
             _uiState.update { it.copy(isSyncing = false) }
         }
     }
@@ -71,6 +74,7 @@ data class SettingsUiState(
     val isRemoving: Boolean = false,
     val isRemoveFailed: Boolean = false,
     val isSyncing: Boolean = false,
+    val isSyncFailed: Boolean = false,
     /** When the phone's settings were last imported, in epoch milliseconds, or null when there is no import. */
     val phoneSyncedAtMs: Long? = null,
 )

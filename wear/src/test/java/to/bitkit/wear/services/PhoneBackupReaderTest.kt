@@ -14,8 +14,12 @@ class PhoneBackupReaderTest {
         const val VSS_PACKAGE = "com.synonym.vssclient"
         const val READER_FILE = "PhoneBackupReader.kt"
 
-        /** Everything of vss-client the watch may call: derive the store id, sign in, read one object, shut down. */
+        /**
+         * Everything of vss-client the watch may name: the calls that derive the store id, sign in, read one object
+         * and shut down, and the library's error type, which calls nothing.
+         */
         val ALLOWED_IMPORTS = setOf(
+            "$VSS_PACKAGE.VssException",
             "$VSS_PACKAGE.vssDeriveStoreId",
             "$VSS_PACKAGE.vssGet",
             "$VSS_PACKAGE.vssNewClientWithLnurlAuth",
@@ -43,7 +47,7 @@ class PhoneBackupReaderTest {
     }
 
     @Test
-    fun `the reader imports only the calls that derive, sign in, read and shut down`() {
+    fun `the reader imports only the error type and the calls that derive, sign in, read and shut down`() {
         val reader = sources.single { it.name == READER_FILE }.readText()
         val imports = reader.lines().filter { it.startsWith("import $VSS_PACKAGE") }.map { it.removePrefix("import ") }
 

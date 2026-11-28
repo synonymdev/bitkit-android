@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import to.bitkit.wear.data.ElapsedClock
 import to.bitkit.wear.data.RatesHttpClient
 import to.bitkit.wear.data.SettingsStore
 import to.bitkit.wear.di.IoDispatcher
@@ -16,14 +17,14 @@ import to.bitkit.wear.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration
-import kotlin.time.TimeMark
-import kotlin.time.TimeSource
+import kotlin.time.Duration.Companion.milliseconds
 
 @Singleton
 class CurrencyRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val ratesHttpClient: RatesHttpClient,
     private val settingsStore: SettingsStore,
+    private val clock: ElapsedClock,
 ) {
     companion object {
         private const val TAG = "CurrencyRepo"
@@ -33,16 +34,16 @@ class CurrencyRepo @Inject constructor(
     val rates: StateFlow<List<FxRate>> = _rates.asStateFlow()
 
     @Volatile
-    private var ratesFetched: TimeMark? = null
+    private var ratesFetchedAtMs: Long? = null
 
-    /** How long ago [rates] were fetched, or null when they never were. */
-    fun ratesAge(): Duration? = ratesFetched?.elapsedNow()
+    /** How long ago [rates] were fetched, the time the watch slept included, or null when they never were. */
+    fun ratesAge(): Duration? = ratesFetchedAtMs?.let { (clock.nowMs() - it).milliseconds }
 
     suspend fun refresh(): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val tickers = ratesHttpClient.fetchLatestRates().tickers
             _rates.update { tickers }
-            ratesFetched = TimeSource.Monotonic.markNow()
+            ratesFetchedAtMs = clock.nowMs()
         }
     }
 

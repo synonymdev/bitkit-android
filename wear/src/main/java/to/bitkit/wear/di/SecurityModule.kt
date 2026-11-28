@@ -1,6 +1,7 @@
 package to.bitkit.wear.di
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
@@ -15,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import to.bitkit.wear.data.AdapterNfcMonitor
 import to.bitkit.wear.data.ConnectivityNetworkMonitor
+import to.bitkit.wear.data.ElapsedClock
 import to.bitkit.wear.data.ForegroundMonitor
 import to.bitkit.wear.data.NetworkMonitor
 import to.bitkit.wear.data.NfcMonitor
@@ -114,6 +116,10 @@ abstract class SecurityModule {
             key: SeedKey,
             deviceLock: DeviceLock,
         ): SeedStore = KeystoreSeedStore(seedDirectory(context), key, deviceLock, isSoftwareKeyAllowed = Env.isDebug)
+
+        @Provides
+        @Singleton
+        fun provideElapsedClock(): ElapsedClock = ElapsedClock { SystemClock.elapsedRealtime() }
 
         @Provides
         @Singleton

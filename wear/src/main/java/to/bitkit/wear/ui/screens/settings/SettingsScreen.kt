@@ -31,7 +31,7 @@ import to.bitkit.wear.ui.components.BezelLoading
 import to.bitkit.wear.ui.components.ListScreen
 import to.bitkit.wear.ui.components.WearPreview
 import to.bitkit.wear.ui.components.WearPreviewDevices
-import java.time.Instant
+import to.bitkit.wear.ui.screens.activity.rememberNowSecs
 
 @Composable
 fun SettingsScreen(
@@ -40,8 +40,11 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // Moves on every minute, so the import's age also grows while the page stays open.
+    val syncedSecs = (uiState.phoneSyncedAtMs ?: 0) / DateUtils.SECOND_IN_MILLIS
     Content(
         uiState = uiState,
+        nowMs = rememberNowSecs(loadedSecs = syncedSecs) * DateUtils.SECOND_IN_MILLIS,
         onAboutClick = onAboutClick,
         onSyncClick = viewModel::onSyncClick,
         onRemoveClick = viewModel::onRemoveClick,
@@ -54,6 +57,7 @@ fun SettingsScreen(
 @Composable
 private fun Content(
     uiState: SettingsUiState,
+    nowMs: Long,
     onAboutClick: () -> Unit,
     onSyncClick: () -> Unit,
     onRemoveClick: () -> Unit,
@@ -88,11 +92,11 @@ private fun Content(
                     onClick = onSyncClick,
                     enabled = !uiState.isSyncing && !uiState.isRemoving,
                     icon = { RowIcon(R.drawable.ic_sync) },
-                    label = { Text(stringResource(R.string.settings__phone_settings), maxLines = 1) },
+                    label = { Text(stringResource(R.string.settings__phone_settings)) },
                     secondaryLabel = uiState.phoneSyncedAtMs?.let { syncedAtMs ->
                         {
                             Text(
-                                text = syncedAgo(syncedAtMs),
+                                text = syncedAgo(syncedAtMs, nowMs),
                                 maxLines = 1,
                                 modifier = Modifier.testTag("WatchSettingsSyncTime")
                             )
@@ -104,6 +108,20 @@ private fun Content(
                         .transformedHeight(this, spec)
                         .testTag("WatchSettingsSync")
                 )
+            }
+            if (uiState.isSyncFailed) {
+                item {
+                    Text(
+                        text = stringResource(R.string.settings__phone_settings_failed),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .transformedHeight(this, spec)
+                            .testTag("WatchSettingsSyncFailed")
+                    )
+                }
             }
             item {
                 FilledTonalButton(
@@ -159,16 +177,13 @@ private fun Content(
     )
 }
 
-/** How long ago the phone's settings were imported; a time ahead of the watch's clock counts as now. */
-private fun syncedAgo(syncedAtMs: Long): String {
-    val now = Instant.now().toEpochMilli()
-    return DateUtils.getRelativeTimeSpanString(
-        syncedAtMs.coerceAtMost(now),
-        now,
-        DateUtils.MINUTE_IN_MILLIS,
-        DateUtils.FORMAT_ABBREV_RELATIVE,
-    ).toString()
-}
+/** How long before [nowMs] the phone's settings were imported; a time ahead of it counts as now. */
+private fun syncedAgo(syncedAtMs: Long, nowMs: Long): String = DateUtils.getRelativeTimeSpanString(
+    syncedAtMs.coerceAtMost(nowMs),
+    nowMs,
+    DateUtils.MINUTE_IN_MILLIS,
+    DateUtils.FORMAT_ABBREV_RELATIVE,
+).toString()
 
 @Composable
 private fun RowIcon(
@@ -183,7 +198,8 @@ private fun RowIcon(
 private fun Preview() {
     WearPreview {
         Content(
-            uiState = SettingsUiState(phoneSyncedAtMs = 0),
+            uiState = SettingsUiState(phoneSyncedAtMs = 0, isSyncFailed = true),
+            nowMs = 120_000,
             onAboutClick = {},
             onSyncClick = {},
             onRemoveClick = {},
@@ -199,6 +215,7 @@ private fun PreviewRemoveConfirm() {
     WearPreview {
         Content(
             uiState = SettingsUiState(isRemoveDialogVisible = true),
+            nowMs = 0,
             onAboutClick = {},
             onSyncClick = {},
             onRemoveClick = {},

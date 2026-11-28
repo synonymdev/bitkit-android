@@ -10,6 +10,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.wear.data.AmbientMonitor
 import to.bitkit.wear.data.NfcState
 import to.bitkit.wear.data.SettingsStore
 import to.bitkit.wear.data.WatchSettings
@@ -42,6 +43,7 @@ class HomeViewModelTest : BaseUnitTest() {
     private val networkMonitor = FakeNetworkMonitor()
     private val foregroundMonitor = FakeForegroundMonitor()
     private val settingsSyncRepo = mock<SettingsSyncRepo>()
+    private val ambientMonitor = AmbientMonitor()
 
     private lateinit var sut: HomeViewModel
 
@@ -62,6 +64,7 @@ class HomeViewModelTest : BaseUnitTest() {
             networkMonitor,
             foregroundMonitor,
             settingsSyncRepo,
+            ambientMonitor,
         )
     }
 
@@ -98,6 +101,16 @@ class HomeViewModelTest : BaseUnitTest() {
 
         walletState.update { it.copy(status = WalletStatus.Ready) }
         verify(settingsSyncRepo, times(4)).sync()
+    }
+
+    @Test
+    fun `the phone's settings are not imported in ambient mode, and again once the watch wakes`() = test {
+        ambientMonitor.set(true)
+        testScheduler.advanceTimeBy(HomeViewModel.SETTINGS_SYNC_INTERVAL * 3)
+        verify(settingsSyncRepo, times(1)).sync()
+
+        ambientMonitor.set(false)
+        verify(settingsSyncRepo, times(2)).sync()
     }
 
     @Test

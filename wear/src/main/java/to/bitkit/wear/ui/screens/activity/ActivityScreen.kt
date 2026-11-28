@@ -131,7 +131,7 @@ private fun List(
                     FilledTonalButton(
                         onClick = { onPaymentClick(payment.id) },
                         icon = { DirectionIcon(payment = payment) },
-                        label = { Text(text = payment.amountText(uiState.unit), maxLines = 1) },
+                        label = { Text(text = payment.amountText(uiState.unit), maxLines = 2) },
                         secondaryLabel = {
                             Text(text = relativeTime(payment.timestampSecs.toLong(), uiState.nowSecs), maxLines = 1)
                         },

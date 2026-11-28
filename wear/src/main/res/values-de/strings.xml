@@ -65,6 +65,7 @@
     <string name="send__unknown">Aktivität prüfen</string>
     <string name="send__waiting">Warte auf Netzwerk</string>
     <string name="settings__phone_settings">Telefon-Einstellungen</string>
+    <string name="settings__phone_settings_failed">Import fehlgeschlagen</string>
     <string name="settings__remove_wallet">Wallet entfernen</string>
     <string name="settings__remove_wallet_confirm_title">Wallet entfernen?</string>
     <string name="settings__remove_wallet_failed">Wallet konnte nicht entfernt werden</string>

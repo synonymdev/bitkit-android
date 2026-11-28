@@ -13,11 +13,15 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.wear.R
+import to.bitkit.wear.data.AmbientMonitor
+import to.bitkit.wear.data.ElapsedClock
+import to.bitkit.wear.data.ForegroundMonitor
 import to.bitkit.wear.data.SettingsStore
 import to.bitkit.wear.ext.runSuspendCatching
 import to.bitkit.wear.models.BitcoinDisplayUnit
@@ -44,6 +48,11 @@ import kotlin.time.Duration.Companion.seconds
  * and the result closes the flow by itself.
  * The app pays only online: a wallet that is offline before the send starts ends the flow on [SendStep.Offline],
  * and the request is dropped, not kept for when the network returns.
+ *
+ * QuickPay is asked only for a send the wearer is there for: one priced within [QUICKPAY_WINDOW] of its link, with
+ * the app on screen, out of ambient mode and the watch unlocked all the while. A link that waited longer for the
+ * wallet, as without a network, or across a lock, a pause or ambient mode, always ends on the review and the hold,
+ * so nothing is ever paid long after the wearer looked away.
  */
 @HiltViewModel
 class SendViewModel @Inject constructor(
@@ -52,6 +61,9 @@ class SendViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
     private val currencyRepo: CurrencyRepo,
     private val settingsStore: SettingsStore,
+    private val foregroundMonitor: ForegroundMonitor,
+    private val ambientMonitor: AmbientMonitor,
+    private val clock: ElapsedClock,
 ) : ViewModel() {
     companion object {
         private const val TAG = "SendViewModel"
@@ -70,6 +82,12 @@ class SendViewModel @Inject constructor(
 
         /** The longest amount the wearer can type, in digits: more than every bitcoin there will be, in sats. */
         const val MAX_AMOUNT_DIGITS = 16
+
+        /**
+         * How long after its link arrived a send may still go out under QuickPay: long enough for a wallet that
+         * connects and syncs as the link opens the app, and short enough that the wearer still looks at it.
+         */
+        val QUICKPAY_WINDOW = 30.seconds
     }
 
     private val input: String = savedStateHandle.get<String>(Routes.SEND_INPUT).orEmpty()
@@ -87,8 +105,29 @@ class SendViewModel @Inject constructor(
     /** Reads, prices and shows the request before the send; cancelled when the wallet goes offline. */
     private var flow: Job? = null
 
+    /** When the link arrived, on [clock]. */
+    private val arrivedAtMs = clock.nowMs()
+
+    /** Whether the wearer was away at some time since the link arrived: see [isAttended]. It never turns back. */
+    private var wasAway = false
+
+    /** Whether the wallet was seen out of [WalletStatus.Paused], which it may be in only while the app returns. */
+    private var hasLeftPause = false
+
     init {
         flow = viewModelScope.launch { start() }
+        viewModelScope.launch {
+            combine(
+                walletRepo.walletState,
+                foregroundMonitor.isForeground,
+                ambientMonitor.isAmbient,
+            ) { wallet, isForeground, isAmbient -> Triple(wallet.status, isForeground, isAmbient) }
+                .collect { (status, isForeground, isAmbient) ->
+                    val isPausedAgain = status == WalletStatus.Paused && hasLeftPause
+                    if (status != WalletStatus.Paused) hasLeftPause = true
+                    if (!isThere(status, isForeground, isAmbient) || isPausedAgain) wasAway = true
+                }
+        }
         viewModelScope.launch {
             walletRepo.walletState.collect { wallet ->
                 _uiState.update { it.copy(isWalletReady = wallet.status == WalletStatus.Ready) }
@@ -175,13 +214,32 @@ class SendViewModel @Inject constructor(
         if (_uiState.value.step is SendStep.Offline) return
         prepared = result
         unit = runSuspendCatching { settingsStore.data.first().displayUnit }.getOrDefault(BitcoinDisplayUnit.MODERN)
-        if (paymentsRepo.skipConfirmation(result)) {
+        // Asked last and only when it can apply, since a yes is counted against the day's limit. The wearer may
+        // have looked away while it was answered, hence the second look.
+        if (isQuickPayOpen() && paymentsRepo.skipConfirmation(result) && isAttended()) {
             Logger.info("Skipped the hold to pay under QuickPay", context = TAG)
             send(result)
             return
         }
         show(review(result, request))
     }
+
+    /** Whether QuickPay may be asked for a send priced now: see the class. */
+    private fun isQuickPayOpen(): Boolean =
+        isAttended() && clock.nowMs() - arrivedAtMs in 0..QUICKPAY_WINDOW.inWholeMilliseconds
+
+    /**
+     * Whether the wearer was there since the link arrived and still is: the app on screen, not in ambient mode, the
+     * watch never locked, and the wallet never paused after it ran.
+     */
+    private fun isAttended(): Boolean = !wasAway && isThere(
+        walletRepo.walletState.value.status,
+        foregroundMonitor.isForeground.value,
+        ambientMonitor.isAmbient.value,
+    )
+
+    private fun isThere(status: WalletStatus, isForeground: Boolean, isAmbient: Boolean): Boolean =
+        isForeground && !isAmbient && status != WalletStatus.Locked
 
     private suspend fun review(prepared: PreparedSend, request: SendRequest): SendStep.Review {
         val currency = settingsStore.data.first().selectedCurrency

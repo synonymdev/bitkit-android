@@ -65,6 +65,7 @@
     <string name="send__unknown">Bekijk activiteit</string>
     <string name="send__waiting">Wachten op netwerk</string>
     <string name="settings__phone_settings">Telefooninstellingen</string>
+    <string name="settings__phone_settings_failed">Importeren mislukt</string>
     <string name="settings__remove_wallet">Wallet verwijderen</string>
     <string name="settings__remove_wallet_confirm_title">Wallet verwijderen?</string>
     <string name="settings__remove_wallet_failed">Wallet verwijderen mislukt</string>

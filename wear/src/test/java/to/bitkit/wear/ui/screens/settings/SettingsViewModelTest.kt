@@ -48,17 +48,33 @@ class SettingsViewModelTest : BaseUnitTest() {
     @Test
     fun `a tap on the row imports the phone's settings once at a time`() = test {
         val gate = CompletableDeferred<Result<Unit>>()
-        whenever { settingsSyncRepo.sync() }.doSuspendableAnswer { gate.await() }
+        whenever { settingsSyncRepo.sync(isForced = true) }.doSuspendableAnswer { gate.await() }
 
         sut.onSyncClick()
         sut.onSyncClick()
 
         assertTrue(sut.uiState.value.isSyncing)
-        verify(settingsSyncRepo, times(1)).sync()
+        verify(settingsSyncRepo, times(1)).sync(isForced = true)
 
-        gate.complete(Result.failure(SparkError.WipeInProgress()))
+        gate.complete(Result.success(Unit))
 
         assertFalse(sut.uiState.value.isSyncing)
+        assertFalse(sut.uiState.value.isSyncFailed)
+    }
+
+    @Test
+    fun `a tapped import that fails shows the failure until the next tap`() = test {
+        whenever { settingsSyncRepo.sync(isForced = true) }.thenReturn(Result.failure(SparkError.WipeInProgress()))
+
+        sut.onSyncClick()
+
+        assertTrue(sut.uiState.value.isSyncFailed)
+        assertFalse(sut.uiState.value.isSyncing)
+
+        whenever { settingsSyncRepo.sync(isForced = true) }.thenReturn(Result.success(Unit))
+        sut.onSyncClick()
+
+        assertFalse(sut.uiState.value.isSyncFailed)
     }
 
     @Test

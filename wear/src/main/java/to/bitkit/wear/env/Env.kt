@@ -47,22 +47,24 @@ internal object Env {
         WalletNetwork.TESTNET -> null
     }
 
-    /** The namespace of this network's backups on VSS, the phone's `Env.vssStoreIdPrefix`. */
-    val vssStoreIdPrefix: String get() = "bitkit_v1_${network.name.lowercase()}"
+    /**
+     * The namespace of [network]'s backups on VSS, the phone's `Env.vssStoreIdPrefix`. This and the two servers
+     * below must equal the phone's: `phone-backup-contract.json` in the tests holds them, and a test on each side
+     * compares its own values with that file.
+     */
+    fun vssStoreIdPrefix(network: WalletNetwork = this.network): String = "bitkit_v1_${network.name.lowercase()}"
 
     /** The phone's backup server. The watch only ever reads from it. */
-    val vssServerUrl: String
-        get() = when (network) {
-            WalletNetwork.BITCOIN -> "https://api.bitkit.to/vss_rs_auth"
-            else -> "https://bitkit.stag0.blocktank.to/vss_rs_auth"
-        }
+    fun vssServerUrl(network: WalletNetwork = this.network): String = when (network) {
+        WalletNetwork.BITCOIN -> "https://api.bitkit.to/vss_rs_auth"
+        else -> "https://bitkit.stag0.blocktank.to/vss_rs_auth"
+    }
 
     /** The LNURL-auth server that signs the watch in to [vssServerUrl], as it does the phone. */
-    val lnurlAuthServerUrl: String
-        get() = when (network) {
-            WalletNetwork.BITCOIN -> "https://bitkit.to/lnurl_auth/auth"
-            else -> "https://bitkit.stag0.blocktank.to/lnurl_auth/auth"
-        }
+    fun lnurlAuthServerUrl(network: WalletNetwork = this.network): String = when (network) {
+        WalletNetwork.BITCOIN -> "https://bitkit.to/lnurl_auth/auth"
+        else -> "https://bitkit.stag0.blocktank.to/lnurl_auth/auth"
+    }
 
     val btcRatesServer: String
         get() = when (network) {

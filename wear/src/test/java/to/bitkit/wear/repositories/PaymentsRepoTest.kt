@@ -27,6 +27,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -551,6 +552,27 @@ class PaymentsRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `quickpay waits for a running import and the rates before it reads the limits`() = test {
+        whenever(quickPayRepo.reserve(any())).thenReturn(true)
+
+        sut.skipConfirmation(preparedSend())
+
+        val order = inOrder(quickPayRepo)
+        order.verify(quickPayRepo).awaitInputs()
+        order.verify(quickPayRepo).reserve(any())
+    }
+
+    @Test
+    fun `quickpay holds when the wallet stopped being ready while it waited for the import`() = test {
+        whenever(quickPayRepo.reserve(any())).thenReturn(true)
+        whenever(quickPayRepo.awaitInputs()).doSuspendableAnswer {
+            walletState.update { it.copy(status = WalletStatus.Paused) }
+        }
+
+        assertFalse(sut.skipConfirmation(preparedSend()))
+    }
+
+    @Test
     fun `quickpay holds when the limits say no`() = test {
         whenever(quickPayRepo.reserve(any())).thenReturn(false)
 
@@ -564,6 +586,7 @@ class PaymentsRepoTest : BaseUnitTest() {
 
         assertFalse(sut.skipConfirmation(amountless))
 
+        verify(quickPayRepo, never()).awaitInputs()
         verify(quickPayRepo, never()).reserve(any())
     }
 

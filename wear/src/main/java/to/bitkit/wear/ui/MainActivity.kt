@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -18,9 +19,12 @@ import androidx.wear.compose.foundation.LocalAmbientModeManager
 import androidx.wear.compose.foundation.rememberAmbientModeManager
 import androidx.wear.compose.material3.AppScaffold
 import dagger.hilt.android.AndroidEntryPoint
+import to.bitkit.wear.data.AmbientMonitor
 import to.bitkit.wear.ui.components.BezelLoading
+import to.bitkit.wear.ui.components.isAmbient
 import to.bitkit.wear.ui.screens.start.StartErrorScreen
 import to.bitkit.wear.ui.theme.BitkitWearTheme
+import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
@@ -30,6 +34,9 @@ class MainActivity : ComponentActivity() {
         /** How long the splash screen may stay while the first screen is picked; the loading ring takes over. */
         private val SPLASH_LIMIT = 1.seconds
     }
+
+    @Inject
+    lateinit var ambientMonitor: AmbientMonitor
 
     private val startViewModel: StartViewModel by viewModels()
 
@@ -48,6 +55,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             BitkitWearTheme {
                 CompositionLocalProvider(LocalAmbientModeManager provides rememberAmbientModeManager()) {
+                    val isAmbient = isAmbient()
+                    SideEffect { ambientMonitor.set(isAmbient) }
                     AppScaffold(
                         modifier = Modifier.semantics {
                             testTagsAsResourceId = true // see https://github.com/appium/appium/issues/15138

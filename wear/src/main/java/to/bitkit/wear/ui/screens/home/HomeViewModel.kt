@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import to.bitkit.wear.data.AmbientMonitor
 import to.bitkit.wear.data.ForegroundMonitor
 import to.bitkit.wear.data.NetworkMonitor
 import to.bitkit.wear.data.NfcMonitor
@@ -45,7 +46,8 @@ import kotlin.time.Duration.Companion.seconds
  * The home screen's state, and what keeps it fresh while Home is open: it starts the wallet and fetches the exchange
  * rates when the app comes on screen and every [RATES_REFRESH_INTERVAL] from then, when the wallet becomes ready,
  * and when the network returns while there are no rates yet. It imports the phone's settings each time the wallet
- * is ready with the app on screen, so at every start and return, and every [SETTINGS_SYNC_INTERVAL] from then.
+ * is ready with the app on screen and not in ambient mode, so at every start and return, and every
+ * [SETTINGS_SYNC_INTERVAL] from then; [SettingsSyncRepo.sync] skips an import that follows another too closely.
  */
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -56,6 +58,7 @@ class HomeViewModel @Inject constructor(
     networkMonitor: NetworkMonitor,
     foregroundMonitor: ForegroundMonitor,
     private val settingsSyncRepo: SettingsSyncRepo,
+    ambientMonitor: AmbientMonitor,
 ) : ViewModel() {
     companion object {
         private const val TAG = "HomeViewModel"
@@ -66,7 +69,7 @@ class HomeViewModel @Inject constructor(
         /** How often the exchange rates are fetched again while the app is on screen. */
         val RATES_REFRESH_INTERVAL = 5.minutes
 
-        /** How often the phone's settings are imported again while the wallet is ready and the app on screen. */
+        /** How often the phone's settings are imported again while the wallet is ready and the app in use. */
         val SETTINGS_SYNC_INTERVAL = 5.minutes
     }
 
@@ -101,7 +104,8 @@ class HomeViewModel @Inject constructor(
             combine(
                 foregroundMonitor.isForeground,
                 walletRepo.walletState.map { it.status == WalletStatus.Ready },
-            ) { isForeground, isReady -> isForeground && isReady }
+                ambientMonitor.isAmbient,
+            ) { isForeground, isReady, isAmbient -> isForeground && isReady && !isAmbient }
                 .distinctUntilChanged()
                 .collectLatest { canSync ->
                     while (canSync) {

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.update
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -25,11 +26,13 @@ import to.bitkit.wear.security.FakeSeedStore
 import to.bitkit.wear.security.SeedStoreError
 import to.bitkit.wear.security.WalletSeed
 import to.bitkit.wear.services.PhoneBackupReader
+import to.bitkit.wear.services.PhoneBackupUnreadable
 import to.bitkit.wear.services.SparkError
 import to.bitkit.wear.services.WatchSparkService
 import to.bitkit.wear.test.BaseUnitTest
 import java.io.IOException
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -58,6 +61,7 @@ class SettingsSyncRepoTest : BaseUnitTest() {
     private val walletState = MutableStateFlow(WalletState(WalletStatus.Ready, 1uL, hasSynced = true))
     private val reads = mutableListOf<Pair<WalletSeed, String>>()
     private var read: suspend () -> ByteArray? = { BACKUP }
+    private var elapsedMs = 90_000L
     private val reader = PhoneBackupReader { seed, key ->
         reads += seed to key
         read()
@@ -70,7 +74,16 @@ class SettingsSyncRepoTest : BaseUnitTest() {
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(sparkService.wipeToken()).thenReturn(TOKEN)
         whenever(sparkService.isCurrent(TOKEN)).thenReturn(true)
-        sut = SettingsSyncRepo(testDispatcher, seedStore, reader, settingsStore, sparkService, walletRepo) { NOW }
+        sut = SettingsSyncRepo(
+            testDispatcher,
+            seedStore,
+            reader,
+            settingsStore,
+            sparkService,
+            walletRepo,
+            { elapsedMs },
+            { NOW },
+        )
     }
 
     @Test
@@ -97,10 +110,93 @@ class SettingsSyncRepoTest : BaseUnitTest() {
         for (raw in listOf("garbage", """{"version":2,"settings":{"isQuickPayEnabled":true}}""")) {
             read = { raw.toByteArray() }
 
-            assertTrue(sut.sync().isSuccess, raw)
+            assertTrue(sut.sync(isForced = true).isSuccess, raw)
         }
 
         verify(settingsStore, times(2)).clearQuickPay()
+        verifyNoMoreInteractions(settingsStore)
+    }
+
+    @Test
+    fun `a backup that cannot be decrypted turns quickpay off at once`() = test {
+        read = { throw PhoneBackupUnreadable() }
+
+        assertTrue(sut.sync().isSuccess)
+
+        verify(settingsStore).clearQuickPay()
+        verifyNoMoreInteractions(settingsStore)
+    }
+
+    @Test
+    fun `an import right after another reads nothing, unless the wearer asked or a minute passed`() = test {
+        sut.sync().getOrThrow()
+
+        elapsedMs += SettingsSyncRepo.MIN_READ_GAP.inWholeMilliseconds - 1
+        assertTrue(sut.sync().isSuccess)
+        assertEquals(1, reads.size)
+
+        assertTrue(sut.sync(isForced = true).isSuccess)
+        assertEquals(2, reads.size)
+
+        elapsedMs += SettingsSyncRepo.MIN_READ_GAP.inWholeMilliseconds
+        assertTrue(sut.sync().isSuccess)
+        assertEquals(3, reads.size)
+        verify(settingsStore, times(3)).applyPhoneSettings(SETTINGS, NOW)
+    }
+
+    @Test
+    fun `a missing backup counts as read, a failed read does not, and another wallet's read never does`() = test {
+        read = { throw IOException("offline") }
+        assertTrue(sut.sync().isFailure)
+        read = { null }
+        assertTrue(sut.sync().isSuccess)
+        assertTrue(sut.sync().isSuccess)
+        assertEquals(2, reads.size)
+
+        // A wipe and a restore later the last read was the removed wallet's.
+        whenever(sparkService.wipeToken()).thenReturn(TOKEN + 2)
+        whenever(sparkService.isCurrent(TOKEN + 2)).thenReturn(true)
+        assertTrue(sut.sync().isSuccess)
+        assertEquals(3, reads.size)
+    }
+
+    @Test
+    fun `a second import that waited for the first joins it and reads nothing`() = test {
+        val gate = CompletableDeferred<Unit>()
+        read = {
+            gate.await()
+            BACKUP
+        }
+        val first = async { sut.sync() }
+        val second = async { sut.sync() }
+
+        gate.complete(Unit)
+
+        assertTrue(first.await().isSuccess)
+        assertTrue(second.await().isSuccess)
+        assertEquals(1, reads.size)
+    }
+
+    @Test
+    fun `a read is given up the moment the wallet stops being ready`() = test {
+        for (status in listOf(WalletStatus.Locked, WalletStatus.Paused, WalletStatus.Offline)) {
+            walletState.update { it.copy(status = WalletStatus.Ready) }
+            var isReadEnded = false
+            read = {
+                try {
+                    awaitCancellation()
+                } finally {
+                    isReadEnded = true
+                }
+            }
+            val result = async { sut.sync(isForced = true) }
+            assertFalse(result.isCompleted)
+
+            walletState.update { it.copy(status = status) }
+
+            assertIs<SettingsSyncError.NotReady>(result.await().exceptionOrNull(), "$status")
+            assertTrue(isReadEnded, "$status")
+        }
         verifyNoMoreInteractions(settingsStore)
     }
 
@@ -176,5 +272,21 @@ class SettingsSyncRepoTest : BaseUnitTest() {
 
         verify(settingsStore, never()).applyPhoneSettings(any(), any())
         verifyNoMoreInteractions(settingsStore)
+    }
+
+    @Test
+    fun `a caller that goes away after the read still gets the outcome written whole`() = test {
+        val stored = CompletableDeferred<Unit>()
+        whenever(settingsStore.applyPhoneSettings(any(), any())).doSuspendableAnswer { stored.await() }
+        val result = async { sut.sync() }
+
+        // A wipe overtakes the import while it is stored, and the caller leaves.
+        whenever(sparkService.isCurrent(TOKEN)).thenReturn(false)
+        result.cancel()
+        stored.complete(Unit)
+
+        val order = inOrder(settingsStore)
+        order.verify(settingsStore).applyPhoneSettings(SETTINGS, NOW)
+        order.verify(settingsStore).clearPhoneSettings()
     }
 }

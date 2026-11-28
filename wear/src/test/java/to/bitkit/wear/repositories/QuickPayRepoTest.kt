@@ -1,11 +1,20 @@
 package to.bitkit.wear.repositories
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.wear.data.FakeQuickPaySpendStore
 import to.bitkit.wear.data.SettingsStore
@@ -24,6 +33,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 
 /** At 100 000 dollars a bitcoin one sat is a tenth of a cent, so 5 dollars are exactly 5 000 sats. */
+@OptIn(ExperimentalCoroutinesApi::class)
 class QuickPayRepoTest : BaseUnitTest() {
     private companion object {
         /** 2026-11-28T12:00:00Z */
@@ -35,6 +45,8 @@ class QuickPayRepoTest : BaseUnitTest() {
     private val settingsStore = mock<SettingsStore>()
     private val currencyRepo = mock<CurrencyRepo>()
     private val spend = FakeQuickPaySpendStore()
+    private val settingsSyncRepo = mock<SettingsSyncRepo>()
+    private var zone = ZoneId.of("UTC")
     private val settings = MutableStateFlow(WatchSettings(quickPay = LIMITS, phoneSyncedAtMs = NOW))
     private val rates = MutableStateFlow(listOf(rate("100000"), rate("90000", quote = "EUR")))
     private var now = NOW
@@ -47,7 +59,95 @@ class QuickPayRepoTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(settings)
         whenever(currencyRepo.rates).thenReturn(rates)
         whenever(currencyRepo.ratesAge()).thenAnswer { ratesAge }
-        sut = QuickPayRepo(testDispatcher, settingsStore, currencyRepo, spend, { now }, { ZoneId.of("UTC") })
+        whenever { settingsSyncRepo.sync() }.thenReturn(Result.success(Unit))
+        whenever { currencyRepo.refresh() }.thenReturn(Result.success(Unit))
+        sut = QuickPayRepo(testDispatcher, settingsStore, currencyRepo, spend, settingsSyncRepo, { now }, { zone })
+    }
+
+    private fun makeImportStale() {
+        now = NOW + QuickPayRepo.MAX_SETTINGS_AGE.inWholeMilliseconds + 1
+    }
+
+    @Test
+    fun `an import still under way when the payment is priced is waited for, and then decides`() = test {
+        makeImportStale()
+        val imported = CompletableDeferred<Unit>()
+        whenever(settingsSyncRepo.sync()).doSuspendableAnswer {
+            imported.await()
+            settings.update { it.copy(phoneSyncedAtMs = now) }
+            Result.success(Unit)
+        }
+        assertFalse(sut.reserve(1uL))
+
+        val waiting = async { sut.awaitInputs() }
+        assertFalse(waiting.isCompleted)
+
+        imported.complete(Unit)
+        waiting.await()
+
+        assertTrue(sut.reserve(FIVE_DOLLARS))
+        verify(currencyRepo, never()).refresh()
+    }
+
+    @Test
+    fun `missing or old rates are fetched before the payment is decided`() = test {
+        whenever(currencyRepo.refresh()).doSuspendableAnswer {
+            ratesAge = Duration.ZERO
+            Result.success(Unit)
+        }
+        for (age in listOf(null, QuickPayRepo.MAX_RATES_AGE + 1.milliseconds)) {
+            ratesAge = age
+
+            sut.awaitInputs()
+
+            assertTrue(sut.reserve(1uL), "$age")
+        }
+        verify(currencyRepo, times(2)).refresh()
+        verify(settingsSyncRepo, never()).sync(any())
+    }
+
+    @Test
+    fun `the wait for an import and rates ends after five seconds and the payment then holds`() = test {
+        makeImportStale()
+        ratesAge = null
+        whenever(settingsSyncRepo.sync()).doSuspendableAnswer { awaitCancellation() }
+        whenever(currencyRepo.refresh()).doSuspendableAnswer { awaitCancellation() }
+
+        val waiting = async { sut.awaitInputs() }
+        testScheduler.advanceTimeBy(QuickPayRepo.INPUTS_TIMEOUT.inWholeMilliseconds - 1)
+        assertFalse(waiting.isCompleted)
+        testScheduler.advanceTimeBy(2)
+
+        assertTrue(waiting.isCompleted)
+        assertFalse(sut.reserve(1uL))
+        assertEquals(0L, spend.spentCents)
+    }
+
+    @Test
+    fun `an import that fails ends the wait and the payment holds`() = test {
+        makeImportStale()
+        whenever(settingsSyncRepo.sync()).thenReturn(Result.failure(IOException("offline")))
+
+        sut.awaitInputs()
+
+        assertFalse(sut.reserve(1uL))
+    }
+
+    @Test
+    fun `nothing is waited for with a fresh import and rates, with quickpay off or before any import`() = test {
+        sut.awaitInputs()
+
+        makeImportStale()
+        ratesAge = null
+        settings.update { it.copy(quickPay = LIMITS.copy(isEnabled = false)) }
+        sut.awaitInputs()
+        settings.update { WatchSettings() }
+        sut.awaitInputs()
+        whenever(settingsStore.data).thenReturn(flow { throw IOException("disk") })
+        sut.awaitInputs()
+
+        verify(settingsSyncRepo, never()).sync(any())
+        verify(currencyRepo, never()).refresh()
     }
 
     @Test
@@ -156,7 +256,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `the next day starts a new count, read in the watch's time zone`() = test {
+    fun `the next day starts a new count`() = test {
         repeat(3) { sut.reserve(FIVE_DOLLARS) }
         assertFalse(sut.reserve(1uL))
 
@@ -165,6 +265,25 @@ class QuickPayRepoTest : BaseUnitTest() {
 
         assertTrue(sut.reserve(FIVE_DOLLARS))
         assertEquals("2026-11-29", spend.day)
+    }
+
+    @Test
+    fun `the day is the watch's local date where that differs from the date in UTC`() = test {
+        // Noon UTC on the 28th is 02:00 on the 29th at UTC+14.
+        zone = ZoneId.of("Pacific/Kiritimati")
+        repeat(3) { assertTrue(sut.reserve(FIVE_DOLLARS)) }
+        assertEquals("2026-11-29", spend.day)
+
+        // 23:00 UTC, the 28th still, and 13:00 on the 29th there: the same day.
+        now = NOW + 11.hours.inWholeMilliseconds
+        settings.update { it.copy(phoneSyncedAtMs = now) }
+        assertFalse(sut.reserve(1uL))
+
+        // 10:30 UTC on the 29th is 00:30 on the 30th there: a new day, although UTC's date is the one counted.
+        now = NOW + 22.hours.inWholeMilliseconds + 30.minutes.inWholeMilliseconds
+        settings.update { it.copy(phoneSyncedAtMs = now) }
+        assertTrue(sut.reserve(FIVE_DOLLARS))
+        assertEquals("2026-11-30", spend.day)
     }
 
     @Test

@@ -1,0 +1,31 @@
+{
+  "settingsKey": "SETTINGS",
+  "settingsBackup": {
+    "version": 1,
+    "settings": {
+      "primaryDisplay": "FIAT",
+      "displayUnit": "CLASSIC",
+      "selectedCurrency": "EUR",
+      "isQuickPayEnabled": true,
+      "quickPayAmount": 10,
+      "quickPayDailyLimitMultiplier": 3
+    }
+  },
+  "networks": {
+    "BITCOIN": {
+      "storeIdPrefix": "bitkit_v1_bitcoin",
+      "vssServerUrl": "https://api.bitkit.to/vss_rs_auth",
+      "lnurlAuthServerUrl": "https://bitkit.to/lnurl_auth/auth"
+    },
+    "TESTNET": {
+      "storeIdPrefix": "bitkit_v1_testnet",
+      "vssServerUrl": "https://bitkit.stag0.blocktank.to/vss_rs_auth",
+      "lnurlAuthServerUrl": "https://bitkit.stag0.blocktank.to/lnurl_auth/auth"
+    },
+    "REGTEST": {
+      "storeIdPrefix": "bitkit_v1_regtest",
+      "vssServerUrl": "https://bitkit.stag0.blocktank.to/vss_rs_auth",
+      "lnurlAuthServerUrl": "https://bitkit.stag0.blocktank.to/lnurl_auth/auth"
+    }
+  }
+}

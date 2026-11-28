@@ -147,16 +147,19 @@ class PaymentsRepo @Inject constructor(
      * - it pays a BOLT11 invoice that carries its amount: an amount the wearer typed is always reviewed, since the
      *   review is the one place that shows what was typed, its fee and its payee, and so is every LNURL, Lightning
      *   address and Spark address payment;
-     * - [QuickPayRepo.reserve] takes the payment's cost, fee included, under the phone's QuickPay settings.
+     * - [QuickPayRepo.reserve] takes the payment's cost, fee included, under the phone's QuickPay settings, after
+     *   [QuickPayRepo.awaitInputs] gave an import and rates that are on their way a moment to arrive.
      *
-     * A yes counts the payment against today's QuickPay limit, so ask once per send and only when about to send.
-     * Anything that cannot be told answers no, and the wearer holds to pay.
+     * The caller answers for the wearer being there: see `SendViewModel`. A yes counts the payment against today's
+     * QuickPay limit, so ask once per send and only when about to send. Anything that cannot be told answers no, and
+     * the wearer holds to pay.
      */
     suspend fun skipConfirmation(prepared: PreparedSend): Boolean = withContext(ioDispatcher) {
         if (!isReady() || sparkService.isWiping) return@withContext false
         if (!prepared.isAmountFixed) return@withContext false
+        quickPayRepo.awaitInputs()
         val isAllowed = quickPayRepo.reserve(prepared.totalSats)
-        // The wallet may have locked, paused or been wiped while the limit was read.
+        // The wallet may have locked, paused or been wiped while the limit was awaited and read.
         isAllowed && isReady() && !sparkService.isWiping
     }
 
