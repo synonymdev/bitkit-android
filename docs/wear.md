@@ -64,11 +64,14 @@ Breez SDK, with no LDK node, no Room database and no Firebase. The phone is only
 - `security`: `SeedStore` with its Keystore-backed implementation, `SeedKey` (the AndroidKeyStore seam), `DeviceLock`
   (screen lock state) and `Bip39`, the one interface every BIP39 call goes through. `CoreBip39` backs it with
   bitkit-core, as on the phone.
-- `services/WatchSparkService`: connect, disconnect, sync, info and storage wipe, with the phone's SDK settings and
-  the local regtest fixture. Payments, and the idempotency keys they use, come with PR 2.
+- `services`: `WatchSparkService` (connect, disconnect, sync, info, storage wipe, invoices, sends and the payment
+  list, with the phone's SDK settings and the local regtest fixture), `SparkSendKey` (the idempotency keys of
+  sends, a copy of the phone's), `InputDecoder` (bitkit-core's reader of payment inputs) and `SelfSendGuard`.
 - `repositories`: `WalletRepo` (wallet state and balance, restore, start, lock, background and network handling,
-  wipe and its recovery at launch) and `CurrencyRepo` (Blocktank rates and the unit shown first).
-- `data`: `SettingsStore` (display settings and the wipe's notes, with `WipeMarker` for the note itself), the rates
+  wipe and its recovery at launch), `PaymentsRepo` (receive, read an input, price, send, recent payments; see
+  Payments) and `CurrencyRepo` (Blocktank rates and the unit shown first).
+- `data`: `SettingsStore` (display settings and the wipe's notes, with `WipeMarker` for the note itself),
+  `OwnInvoiceStore` (the invoices this wallet created, in the settings file), the rates
   client, `NetworkMonitor` (`ConnectivityManager`'s default network, online once the system validated it),
   `NfcMonitor` (the NFC adapter's state) and `ForegroundMonitor` (the process lifecycle: whether the app is on
   screen).
@@ -161,6 +164,65 @@ On-screen copy stays short: a title or one line of at most about six words per s
   Tight; content centered inside the round screen and clear of the time; icons rather than labels where the icon is
   clear; no stacked button lists. Icon and text buttons morph their shape on press and the theme uses the expressive
   (spring) motion scheme. Icons are vector drawables in `res/drawable`, with no icon library.
+
+## Payments
+
+`PaymentsRepo` holds every payment rule; the screens only show what it returns. Everything that reaches Spark needs
+the wallet connected and synced (`WalletStatus.Ready`): no invoice is made, nothing is priced and nothing is sent
+in any other state.
+
+- **Receive.** An amountless BOLT11 invoice from Spark, valid for one hour. The receive screen waits for its
+  payment, which arrives as an SDK event; Spark's payment list is read at the start of the wait and after every
+  sync, so a payment that landed while the wallet was disconnected is found too.
+- **Inputs.** A BOLT11 invoice, an LNURL-pay link, a Lightning address and a BIP21 URI with a `lightning`
+  parameter are read by bitkit-core, as on the phone. A Spark address is read by the Breez SDK's parser, since
+  bitkit-core has no such type; only text with the shape of a Spark address is handed to it, because the SDK's
+  parser may look other text up on the network. On-chain addresses and every other input are refused.
+- **Pricing.** Before the hold to pay, a send is priced by Spark and checked: the amount (an amountless invoice
+  and a Spark address need one, an LNURL amount has to be in the service's range), expiry, the self-send guard, and
+  the balance against the amount plus its fee. The invoice an LNURL service returns has to be for exactly the
+  amount asked.
+- **Sending.** The send call cannot be cancelled by the screen that started it, and one send runs at a time. It
+  returns when Spark has the payment; the result then waits up to a minute for it to settle and reports it as
+  pending after that.
+- **Paying once.** An invoice is sent under an idempotency key derived from the wallet seed, the payment hash and
+  the attempt number (`SparkSendKey`, the same derivation as the phone and iOS). Spark makes one transfer per key,
+  so the same invoice sent from the watch and the phone, or twice from the watch, is paid once. Before each send
+  Spark's payment list is read: an invoice it shows paid or pending is not sent again, and each attempt it shows
+  failed moves the send to the next key. A list that cannot be read refuses the send. The watch keeps no record of
+  its own; Spark's list is the record.
+- **Unknown outcome.** When the send call fails after Spark may have taken the payment and Spark's list does not
+  show it, the result is "unknown", never "failed". The activity list tells once Spark lists it, and sending the
+  invoice again cannot pay twice.
+- **QuickPay.** `PaymentsRepo.skipConfirmation` is the one place that decides whether a send skips the hold to
+  pay. It is always false until the watch has QuickPay settings (PR 3).
+
+### Self-send guard
+
+The phone and the watch share one Spark wallet, so neither may pay a request the other, or itself, created. Both
+refuse with "Cannot Pay Own Invoice". Two checks recognise such a request:
+
+- **Spark identity.** Both devices have the wallet's Spark identity public key (`getInfo().identityPubkey`). A
+  Spark address encodes it, and a BOLT11 invoice carries it as the node of a route hint hop with the short
+  channel id 17592187092992000001 (`16000000x16000000x1`) when the wallet that made it had the SDK's
+  `preferSparkOverLightning` on.
+- **Payment hash.** Each device remembers the payment hashes of the invoices it created on Spark until they
+  expire, at most 200, and refuses to pay them. The watch keeps them in its settings file, which the wallet's wipe
+  clears (`OwnInvoiceStore`); the phone keeps them in its cache store (`sparkOwnInvoices`).
+
+The second check exists because Bitkit creates its invoices with `preferSparkOverLightning` off: such an invoice
+names Spark's provider node as its payee and one of that node's channels as its only route hint, which every Spark
+wallet's invoices share, and nothing in it tells whose it is. This was read from invoices made with SDK 0.28.3 on
+the local regtest stack on 2026-11-27: with the setting off the invoice had the provider's hint alone, and with it
+on it gained the hint above, whose node equalled the identity key. The SDK itself prices a payment of the wallet's
+own invoice without complaint.
+
+**Known gap.** A device does not know the invoices the other one created: the watch pays an invoice the phone made,
+and the phone one the watch made, until the two share their hashes. Both stores take hashes from outside
+(`OwnInvoiceStore.add`, `CacheStore.addSparkOwnInvoice`), which the pairing work (PR 4) uses to merge them. An
+unpaired watch has no way to learn the phone's invoices. The watch runs the guard when an input is read, if the
+wallet is ready then, and always before a send is priced, also on the invoice an LNURL service returns; a guard
+that cannot tell refuses the send.
 
 ## Seed storage
 
