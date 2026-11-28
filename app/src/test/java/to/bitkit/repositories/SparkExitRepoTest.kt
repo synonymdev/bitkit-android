@@ -1273,6 +1273,93 @@ class SparkExitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a start keeps an ended exit's address listed while a savings send to it is unresolved`() = test {
+        val endedAddress = "bcrt1qendedexit"
+        val ended = SparkExitFixtures.record(Phase.Done).copy(
+            funding = listOf(SparkExitRecord.Funding(index = 5u, address = endedAddress, pubkey = "02ab")),
+        )
+        SparkExitStore(File(Env.sparkExitRecordPath(0))).save(ended)
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(savingsSendTo(endedAddress))
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+        sut.loadQuote().getOrThrow()
+
+        sut.start(fundFromSavings = false).getOrThrow()
+        sut.onAppBackgrounded()
+
+        val listed = SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(0))).load().single()
+        assertEquals(endedAddress, listed.address)
+        assertEquals(SparkExitEarlierAddress.Kind.CANCELLED_FUNDING, listed.kind)
+        assertEquals(listOf(listed), sut.state.value.earlierAddresses)
+    }
+
+    @Test
+    fun `a start over an ended exit whose savings send went out lists nothing`() = test {
+        val endedAddress = "bcrt1qendedexit"
+        val ended = SparkExitFixtures.record(Phase.Done).copy(
+            funding = listOf(SparkExitRecord.Funding(index = 5u, address = endedAddress, pubkey = "02ab")),
+        )
+        SparkExitStore(File(Env.sparkExitRecordPath(0))).save(ended)
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(
+            savingsSendTo(endedAddress).copy(evidence = OnchainSendEvidence.Accepted, txid = "ab".repeat(32)),
+        )
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+        sut.loadQuote().getOrThrow()
+
+        sut.start(fundFromSavings = false).getOrThrow()
+        sut.onAppBackgrounded()
+
+        assertTrue(SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(0))).load().isEmpty())
+    }
+
+    @Test
+    fun `a start over an ended exit is refused while the send journal can't be read`() = test {
+        SparkExitStore(File(Env.sparkExitRecordPath(0))).save(SparkExitFixtures.record(Phase.Done))
+        whenever(lightning.currentOnchainSendAttempt()).thenThrow(IllegalStateException("journal unreadable"))
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+        sut.loadQuote().getOrThrow()
+
+        assertTrue(sut.start(fundFromSavings = false).isFailure)
+        verify(sparkRepo, never()).holdForExit()
+        assertIs<Phase.Done>(assertNotNull(SparkExitStore(File(Env.sparkExitRecordPath(0))).load()).phase)
+    }
+
+    @Test
+    fun `a start over an ended exit is refused when its address can't be listed`() = test {
+        val endedAddress = "bcrt1qendedexit"
+        val ended = SparkExitFixtures.record(Phase.Done).copy(
+            funding = listOf(SparkExitRecord.Funding(index = 5u, address = endedAddress, pubkey = "02ab")),
+        )
+        SparkExitStore(File(Env.sparkExitRecordPath(0))).save(ended)
+        // A directory where the list's file goes fails the write.
+        File(Env.sparkExitEarlierAddressesPath(0)).mkdirs()
+        whenever(lightning.currentOnchainSendAttempt()).thenReturn(savingsSendTo(endedAddress))
+        val sut = quotedSut(FakeSparkExitRecovering())
+        sut.load().getOrThrow()
+        sut.loadQuote().getOrThrow()
+
+        assertTrue(sut.start(fundFromSavings = false).isFailure)
+        verify(sparkRepo, never()).holdForExit()
+        assertIs<Phase.Done>(assertNotNull(SparkExitStore(File(Env.sparkExitRecordPath(0))).load()).phase)
+    }
+
+    private fun savingsSendTo(address: String) = OnchainSendAttempt(
+        walletId = "wallet-0",
+        attemptId = "attempt-1",
+        requestId = null,
+        orderId = null,
+        address = address,
+        amountSats = 9_000uL,
+        isMaxAmount = false,
+        feeRateSatsPerVByte = 2uL,
+        isTransfer = false,
+        channelId = null,
+        tags = emptyList(),
+    )
+
+    @Test
     fun `an exit that funds a cancelled exit's address again takes it off the list`() = test {
         val store = SparkExitEarlierAddressStore(File(Env.sparkExitEarlierAddressesPath(0)))
         val kind = SparkExitEarlierAddress.Kind.CANCELLED_FUNDING
