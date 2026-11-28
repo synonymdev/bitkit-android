@@ -1,6 +1,5 @@
 package to.bitkit.wear.repositories
 
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
@@ -9,7 +8,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
 import org.junit.Before
 import org.junit.Test
-import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -26,10 +24,11 @@ import java.io.IOException
 import java.time.ZoneId
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 
 /** At 100 000 dollars a bitcoin one sat is a tenth of a cent, so 5 dollars are exactly 5 000 sats. */
@@ -45,12 +44,10 @@ class QuickPayRepoTest : BaseUnitTest() {
     private val settingsStore = mock<SettingsStore>()
     private val currencyRepo = mock<CurrencyRepo>()
     private val spend = FakeQuickPaySpendStore()
-    private val settingsSyncRepo = mock<SettingsSyncRepo>()
     private var zone = ZoneId.of("UTC")
     private val settings = MutableStateFlow(WatchSettings(quickPay = LIMITS, phoneSyncedAtMs = NOW))
     private val rates = MutableStateFlow(listOf(rate("100000"), rate("90000", quote = "EUR")))
     private var now = NOW
-    private var ratesAge: Duration? = 1.minutes
 
     private lateinit var sut: QuickPayRepo
 
@@ -58,110 +55,75 @@ class QuickPayRepoTest : BaseUnitTest() {
     fun setUp() {
         whenever(settingsStore.data).thenReturn(settings)
         whenever(currencyRepo.rates).thenReturn(rates)
-        whenever(currencyRepo.ratesAge()).thenAnswer { ratesAge }
-        whenever { settingsSyncRepo.sync() }.thenReturn(Result.success(Unit))
         whenever { currencyRepo.refresh() }.thenReturn(Result.success(Unit))
-        sut = QuickPayRepo(testDispatcher, settingsStore, currencyRepo, spend, settingsSyncRepo, { now }, { zone })
-    }
-
-    private fun makeImportStale() {
-        now = NOW + QuickPayRepo.MAX_SETTINGS_AGE.inWholeMilliseconds + 1
+        sut = QuickPayRepo(testDispatcher, settingsStore, currencyRepo, spend, { now }, { zone })
     }
 
     @Test
-    fun `an import still under way when the payment is priced is waited for, and then decides`() = test {
-        makeImportStale()
-        val imported = CompletableDeferred<Unit>()
-        whenever(settingsSyncRepo.sync()).doSuspendableAnswer {
-            imported.await()
-            settings.update { it.copy(phoneSyncedAtMs = now) }
-            Result.success(Unit)
-        }
-        assertFalse(sut.reserve(1uL))
-
-        val waiting = async { sut.awaitInputs() }
-        assertFalse(waiting.isCompleted)
-
-        imported.complete(Unit)
-        waiting.await()
-
-        assertTrue(sut.reserve(FIVE_DOLLARS))
-        verify(currencyRepo, never()).refresh()
-    }
-
-    @Test
-    fun `missing or old rates are fetched before the payment is decided`() = test {
+    fun `a missing dollar rate is fetched before the payment is decided, while quickpay is on`() = test {
+        rates.update { listOf(rate("90000", quote = "EUR")) }
         whenever(currencyRepo.refresh()).doSuspendableAnswer {
-            ratesAge = Duration.ZERO
+            rates.update { listOf(rate("100000")) }
             Result.success(Unit)
         }
-        for (age in listOf(null, QuickPayRepo.MAX_RATES_AGE + 1.milliseconds)) {
-            ratesAge = age
 
-            sut.awaitInputs()
+        sut.awaitRate()
 
-            assertTrue(sut.reserve(1uL), "$age")
-        }
-        verify(currencyRepo, times(2)).refresh()
-        verify(settingsSyncRepo, never()).sync(any())
+        assertNotNull(sut.reserve(1uL))
+        verify(currencyRepo, times(1)).refresh()
     }
 
     @Test
-    fun `the wait for an import and rates ends after five seconds and the payment then holds`() = test {
-        makeImportStale()
-        ratesAge = null
-        whenever(settingsSyncRepo.sync()).doSuspendableAnswer { awaitCancellation() }
+    fun `the wait for the rate ends after five seconds and the payment then holds`() = test {
+        rates.update { emptyList() }
         whenever(currencyRepo.refresh()).doSuspendableAnswer { awaitCancellation() }
 
-        val waiting = async { sut.awaitInputs() }
-        testScheduler.advanceTimeBy(QuickPayRepo.INPUTS_TIMEOUT.inWholeMilliseconds - 1)
+        val waiting = async { sut.awaitRate() }
+        testScheduler.advanceTimeBy(QuickPayRepo.RATE_TIMEOUT.inWholeMilliseconds - 1)
         assertFalse(waiting.isCompleted)
         testScheduler.advanceTimeBy(2)
 
         assertTrue(waiting.isCompleted)
-        assertFalse(sut.reserve(1uL))
+        assertNull(sut.reserve(1uL))
         assertEquals(0L, spend.spentCents)
     }
 
     @Test
-    fun `an import that fails ends the wait and the payment holds`() = test {
-        makeImportStale()
-        whenever(settingsSyncRepo.sync()).thenReturn(Result.failure(IOException("offline")))
+    fun `no rate is fetched with one at hand, with quickpay off or before any import`() = test {
+        sut.awaitRate()
 
-        sut.awaitInputs()
-
-        assertFalse(sut.reserve(1uL))
-    }
-
-    @Test
-    fun `nothing is waited for with a fresh import and rates, with quickpay off or before any import`() = test {
-        sut.awaitInputs()
-
-        makeImportStale()
-        ratesAge = null
+        rates.update { emptyList() }
         settings.update { it.copy(quickPay = LIMITS.copy(isEnabled = false)) }
-        sut.awaitInputs()
+        sut.awaitRate()
         settings.update { WatchSettings() }
-        sut.awaitInputs()
+        sut.awaitRate()
         whenever(settingsStore.data).thenReturn(flow { throw IOException("disk") })
-        sut.awaitInputs()
+        sut.awaitRate()
 
-        verify(settingsSyncRepo, never()).sync(any())
         verify(currencyRepo, never()).refresh()
     }
 
     @Test
+    fun `the last import decides however old it is, as the phone's own settings do`() = test {
+        now = NOW + 30.days.inWholeMilliseconds
+        assertNotNull(sut.reserve(1uL))
+
+        settings.update { it.copy(phoneSyncedAtMs = null) }
+        assertNotNull(sut.reserve(1uL))
+    }
+
+    @Test
     fun `a payment of exactly the phone's amount skips the hold and one sat more does not`() = test {
-        assertFalse(sut.reserve(FIVE_DOLLARS + 1uL))
+        assertNull(sut.reserve(FIVE_DOLLARS + 1uL))
         assertEquals(0L, spend.spentCents)
 
-        assertTrue(sut.reserve(FIVE_DOLLARS))
+        assertNotNull(sut.reserve(FIVE_DOLLARS))
         assertEquals(500L, spend.spentCents)
     }
 
     @Test
     fun `the smallest payment skips the hold and counts as a whole cent`() = test {
-        assertTrue(sut.reserve(1uL))
+        assertNotNull(sut.reserve(1uL))
 
         assertEquals(1L, spend.spentCents)
     }
@@ -170,100 +132,119 @@ class QuickPayRepoTest : BaseUnitTest() {
     fun `nothing skips the hold before the phone's settings were ever imported`() = test {
         settings.update { WatchSettings() }
 
-        assertFalse(sut.reserve(1uL))
-        assertFalse(sut.reserve(FIVE_DOLLARS))
+        assertNull(sut.reserve(1uL))
+        assertNull(sut.reserve(FIVE_DOLLARS))
     }
 
     @Test
     fun `nothing skips the hold while quickpay is off on the phone`() = test {
         settings.update { it.copy(quickPay = LIMITS.copy(isEnabled = false)) }
 
-        assertFalse(sut.reserve(1uL))
+        assertNull(sut.reserve(1uL))
     }
 
     @Test
-    fun `limits without the time of their import skip nothing`() = test {
-        settings.update { it.copy(phoneSyncedAtMs = null) }
-
-        assertFalse(sut.reserve(1uL))
-    }
-
-    @Test
-    fun `an import older than fifteen minutes, or from the future, skips nothing`() = test {
-        now = NOW + QuickPayRepo.MAX_SETTINGS_AGE.inWholeMilliseconds
-        assertTrue(sut.reserve(1uL))
-
-        now += 1
-        assertFalse(sut.reserve(1uL))
-
-        now = NOW - 1
-        assertFalse(sut.reserve(1uL))
-    }
-
-    @Test
-    fun `without a fresh dollar rate nothing skips the hold`() = test {
-        ratesAge = null
-        assertFalse(sut.reserve(1uL))
-
-        ratesAge = QuickPayRepo.MAX_RATES_AGE + 1.milliseconds
-        assertFalse(sut.reserve(1uL))
-
-        ratesAge = QuickPayRepo.MAX_RATES_AGE
+    fun `without a dollar rate nothing skips the hold`() = test {
         rates.update { listOf(rate("90000", quote = "EUR")) }
-        assertFalse(sut.reserve(1uL))
+        assertNull(sut.reserve(1uL))
 
         for (price in listOf("n/a", "0", "-100000", "")) {
             rates.update { listOf(rate(price)) }
-            assertFalse(sut.reserve(1uL), price)
+            assertNull(sut.reserve(1uL), price)
         }
         assertEquals(0L, spend.spentCents)
 
         rates.update { listOf(rate("100000")) }
-        assertTrue(sut.reserve(1uL))
+        assertNotNull(sut.reserve(1uL))
+    }
+
+    @Test
+    fun `the amount is valued and rounded as on the phone`() = test {
+        // 5 dollars at 64 321.98 are 7 773.39 sats, which the phone rounds to 7 773.
+        rates.update { listOf(rate("64321.98")) }
+        assertNull(sut.reserve(7_774uL))
+
+        // 7 773 sats are 499.97 cents, counted as 500; 100 sats are 6.43 cents, counted as 6.
+        assertEquals(500L, sut.reserve(7_773uL)?.cents)
+        assertEquals(6L, sut.reserve(100uL)?.cents)
+    }
+
+    @Test
+    fun `a payment counts for no more than the phone's amount`() = test {
+        // At 3 000 000 dollars a bitcoin 5 dollars round up to 167 sats, which are worth 501 cents.
+        rates.update { listOf(rate("3000000")) }
+
+        assertEquals(500L, sut.reserve(167uL)?.cents)
+        assertNull(sut.reserve(168uL))
+    }
+
+    @Test
+    fun `a payment that failed is taken out of the day's count again`() = test {
+        repeat(2) { assertNotNull(sut.reserve(FIVE_DOLLARS)) }
+        val failed = assertNotNull(sut.reserve(FIVE_DOLLARS))
+        assertNull(sut.reserve(1uL))
+
+        sut.release(failed)
+
+        assertEquals(1_000L, spend.spentCents)
+        assertNotNull(sut.reserve(FIVE_DOLLARS))
+    }
+
+    @Test
+    fun `a payment of an earlier day is not taken out of today's count`() = test {
+        val yesterday = assertNotNull(sut.reserve(FIVE_DOLLARS))
+        now = NOW + 12.hours.inWholeMilliseconds
+        assertNotNull(sut.reserve(FIVE_DOLLARS))
+
+        sut.release(yesterday)
+
+        assertEquals(500L, spend.spentCents)
+        spend.failure = IOException("disk")
+        sut.release(yesterday)
     }
 
     @Test
     fun `the limit follows the rate, not the sats`() = test {
         rates.update { listOf(rate("200000")) }
 
-        assertFalse(sut.reserve(2_501uL))
-        assertTrue(sut.reserve(2_500uL))
+        assertNull(sut.reserve(2_501uL))
+        assertNotNull(sut.reserve(2_500uL))
     }
 
     @Test
     fun `no amount and an absurd amount skip nothing`() = test {
-        assertFalse(sut.reserve(0uL))
-        assertFalse(sut.reserve(ULong.MAX_VALUE))
-        assertFalse(sut.reserve(Long.MAX_VALUE.toULong()))
+        assertNull(sut.reserve(0uL))
+        assertNull(sut.reserve(ULong.MAX_VALUE))
+        assertNull(sut.reserve(Long.MAX_VALUE.toULong()))
     }
 
     @Test
     fun `the day's payments stop at the phone's daily limit`() = test {
-        repeat(3) { assertTrue(sut.reserve(FIVE_DOLLARS), "payment $it") }
+        repeat(3) { assertNotNull(sut.reserve(FIVE_DOLLARS), "payment $it") }
 
-        assertFalse(sut.reserve(1uL))
+        assertNull(sut.reserve(1uL))
         assertEquals(1_500L, spend.spentCents)
     }
 
     @Test
     fun `a payment that would pass the daily limit is refused whole`() = test {
-        assertTrue(sut.reserve(FIVE_DOLLARS))
-        assertTrue(sut.reserve(FIVE_DOLLARS))
-        assertTrue(sut.reserve(4_000uL))
+        assertNotNull(sut.reserve(FIVE_DOLLARS))
+        assertNotNull(sut.reserve(FIVE_DOLLARS))
+        assertNotNull(sut.reserve(4_000uL))
 
-        assertFalse(sut.reserve(1_001uL))
-        assertTrue(sut.reserve(1_000uL))
+        // 1 005 sats are 100.5 cents, counted as 101.
+        assertNull(sut.reserve(1_005uL))
+        assertNotNull(sut.reserve(1_000uL))
     }
 
     @Test
     fun `the next day starts a new count`() = test {
         repeat(3) { sut.reserve(FIVE_DOLLARS) }
-        assertFalse(sut.reserve(1uL))
+        assertNull(sut.reserve(1uL))
 
         now = NOW + 12.hours.inWholeMilliseconds
-        settings.update { it.copy(phoneSyncedAtMs = now) }
 
-        assertTrue(sut.reserve(FIVE_DOLLARS))
+        assertNotNull(sut.reserve(FIVE_DOLLARS))
         assertEquals("2026-11-29", spend.day)
     }
 
@@ -271,28 +252,26 @@ class QuickPayRepoTest : BaseUnitTest() {
     fun `the day is the watch's local date where that differs from the date in UTC`() = test {
         // Noon UTC on the 28th is 02:00 on the 29th at UTC+14.
         zone = ZoneId.of("Pacific/Kiritimati")
-        repeat(3) { assertTrue(sut.reserve(FIVE_DOLLARS)) }
+        repeat(3) { assertNotNull(sut.reserve(FIVE_DOLLARS)) }
         assertEquals("2026-11-29", spend.day)
 
         // 23:00 UTC, the 28th still, and 13:00 on the 29th there: the same day.
         now = NOW + 11.hours.inWholeMilliseconds
-        settings.update { it.copy(phoneSyncedAtMs = now) }
-        assertFalse(sut.reserve(1uL))
+        assertNull(sut.reserve(1uL))
 
         // 10:30 UTC on the 29th is 00:30 on the 30th there: a new day, although UTC's date is the one counted.
         now = NOW + 22.hours.inWholeMilliseconds + 30.minutes.inWholeMilliseconds
-        settings.update { it.copy(phoneSyncedAtMs = now) }
-        assertTrue(sut.reserve(FIVE_DOLLARS))
+        assertNotNull(sut.reserve(FIVE_DOLLARS))
         assertEquals("2026-11-30", spend.day)
     }
 
     @Test
     fun `settings or a count that cannot be read skip nothing`() = test {
         spend.failure = IOException("disk")
-        assertFalse(sut.reserve(1uL))
+        assertNull(sut.reserve(1uL))
 
         spend.failure = null
         whenever(settingsStore.data).thenReturn(flow { throw IOException("disk") })
-        assertFalse(sut.reserve(1uL))
+        assertNull(sut.reserve(1uL))
     }
 }

@@ -117,6 +117,7 @@ class SendViewModel @Inject constructor(
      * Whether the wearer was away at some time since the link arrived: see [isAttended]. It never turns back, and a
      * flow rebuilt for a link that already had one starts with it set, however long ago the link arrived.
      */
+    @Volatile
     private var wasAway = savedStateHandle.get<Boolean>(KEY_STARTED) == true
 
     /** Whether the wallet was seen out of [WalletStatus.Paused], which it may be in only while the app returns. */
@@ -224,8 +225,8 @@ class SendViewModel @Inject constructor(
         prepared = result
         unit = runSuspendCatching { settingsStore.data.first().displayUnit }.getOrDefault(BitcoinDisplayUnit.MODERN)
         // Asked last and only when it can apply, since a yes is counted against the day's limit. The wearer may
-        // have looked away while it was answered, hence the second look.
-        if (isQuickPayOpen() && paymentsRepo.skipConfirmation(result) && isAttended()) {
+        // have looked away while it was answered, hence the second look, which the repo takes before it says yes.
+        if (isQuickPayOpen() && paymentsRepo.skipConfirmation(result, ::isAttended)) {
             Logger.info("Skipped the hold to pay under QuickPay", context = TAG)
             send(result)
             return

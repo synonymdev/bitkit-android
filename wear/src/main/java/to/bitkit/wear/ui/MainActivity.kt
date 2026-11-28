@@ -46,8 +46,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
-        // A recreated activity has shown its intent's request already.
-        if (savedInstanceState == null) launchRequest = LaunchRequest.from(intent)
+        // A recreated activity has shown its intent's request already, and so has one opened again from Recents.
+        if (savedInstanceState == null && !isReplayedLaunch(intent.flags)) launchRequest = LaunchRequest.from(intent)
         val splashStart = TimeSource.Monotonic.markNow()
         splashScreen.setKeepOnScreenCondition {
             startViewModel.uiState.value.isStarting && splashStart.elapsedNow() < SPLASH_LIMIT

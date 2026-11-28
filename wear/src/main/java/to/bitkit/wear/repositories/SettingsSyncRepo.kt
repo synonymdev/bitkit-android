@@ -94,9 +94,8 @@ class SettingsSyncRepo internal constructor(
     /**
      * Reads the phone's settings backup and adopts it, for a wallet that is ready. A backup that is missing, cannot
      * be decrypted or read, or has a newer layout keeps the watch's display values and turns QuickPay off. A read
-     * that fails, as without a network, changes nothing: QuickPay then stops by itself once the last import is too
-     * old ([QuickPayRepo.MAX_SETTINGS_AGE]). An import that a wallet wipe overtook is taken out again, so nothing of a
-     * removed wallet's settings stays.
+     * that fails, as without a network, changes nothing: QuickPay goes on with the settings last imported. An import
+     * that a wallet wipe overtook is taken out again, so nothing of a removed wallet's settings stays.
      *
      * The import runs in the repo's own scope and the caller only waits for it: a caller that is cancelled or
      * timed out returns at once, and the import goes on and lands for the next one to find. The import itself stops

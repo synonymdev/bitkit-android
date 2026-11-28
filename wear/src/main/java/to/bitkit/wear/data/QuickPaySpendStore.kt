@@ -11,11 +11,14 @@ import javax.inject.Singleton
 /** What the watch's QuickPay payments added up to today, in US cents, for the daily limit. */
 interface QuickPaySpendStore {
     /**
-     * Adds [cents] to the spend of [dayKey], an ISO date, unless that takes the day above [capCents]. Returns whether
-     * it was added. A day earlier than the one last counted does not start a new count, so setting the watch's date
-     * back frees nothing.
+     * Adds [cents] to the spend of [dayKey], an ISO date, unless that takes the day above [capCents]. Returns the day
+     * it was added to, or null when it was not. A day earlier than the one last counted does not start a new count:
+     * the payment is added to the day last counted, so setting the watch's date back frees nothing.
      */
-    suspend fun reserve(dayKey: String, cents: Long, capCents: Long): Boolean
+    suspend fun reserve(dayKey: String, cents: Long, capCents: Long): String?
+
+    /** Takes [cents] out of the spend of [dayKey] again, when that is still the day counted. */
+    suspend fun release(dayKey: String, cents: Long)
 }
 
 /** [QuickPaySpendStore] in the watch's settings file, so the wallet's wipe clears it with the settings. */
@@ -26,18 +29,26 @@ class SettingsQuickPaySpendStore @Inject constructor(
     private val dayKey = stringPreferencesKey("quickpay_spend_day")
     private val centsKey = longPreferencesKey("quickpay_spend_cents")
 
-    override suspend fun reserve(dayKey: String, cents: Long, capCents: Long): Boolean {
-        if (cents <= 0 || capCents <= 0) return false
-        var isReserved = false
+    override suspend fun reserve(dayKey: String, cents: Long, capCents: Long): String? {
+        if (cents <= 0 || capCents <= 0) return null
+        var reservedDay: String? = null
         dataStore.edit { prefs ->
             val countedDay = prefs[this.dayKey]
-            val isNewDay = countedDay == null || dayKey > countedDay
-            val spent = if (isNewDay) 0L else prefs[centsKey] ?: 0L
+            val day = if (countedDay == null || dayKey > countedDay) dayKey else countedDay
+            val spent = if (day == countedDay) prefs[centsKey] ?: 0L else 0L
             if (spent < 0 || cents > capCents - spent) return@edit
-            prefs[this.dayKey] = if (isNewDay) dayKey else requireNotNull(countedDay)
+            prefs[this.dayKey] = day
             prefs[centsKey] = spent + cents
-            isReserved = true
+            reservedDay = day
         }
-        return isReserved
+        return reservedDay
+    }
+
+    override suspend fun release(dayKey: String, cents: Long) {
+        if (cents <= 0) return
+        dataStore.edit { prefs ->
+            if (prefs[this.dayKey] != dayKey) return@edit
+            prefs[centsKey] = ((prefs[centsKey] ?: 0L) - cents).coerceAtLeast(0L)
+        }
     }
 }

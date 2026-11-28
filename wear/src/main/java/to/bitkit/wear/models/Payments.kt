@@ -75,8 +75,9 @@ class PreparedSend internal constructor(
      */
     internal val transferKey: String,
     /**
-     * Whether this pays a BOLT11 invoice that carries its amount, the only kind of request QuickPay covers. An
-     * amount the wearer typed is never fixed, and neither is any LNURL or Spark address payment.
+     * Whether the request fixes the amount, the only kind of send QuickPay covers: a BOLT11 invoice that carries its
+     * amount, or an LNURL or a Lightning address whose smallest and largest amount are the same, as on the phone. An
+     * amount the wearer typed is never fixed, and neither is a Spark address payment.
      */
     internal val isAmountFixed: Boolean = false,
 ) {

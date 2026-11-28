@@ -1,9 +1,7 @@
 package to.bitkit.wear.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -13,7 +11,11 @@ import to.bitkit.wear.data.SettingsStore
 import to.bitkit.wear.di.IoDispatcher
 import to.bitkit.wear.ext.runSuspendCatching
 import to.bitkit.wear.models.BTC_SCALE
+import to.bitkit.wear.models.FxRate
+import to.bitkit.wear.models.QuickPayLimits
+import to.bitkit.wear.models.SATS_IN_BTC
 import to.bitkit.wear.models.USD
+import to.bitkit.wear.models.fiatValue
 import to.bitkit.wear.utils.Logger
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -21,13 +23,12 @@ import java.time.Instant
 import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Decides whether a payment goes out under the phone's QuickPay settings, which the watch imports and never sets.
- * Everything that is missing, stale or unreadable answers no.
+ * Decides whether a payment goes out under the phone's QuickPay settings, which the watch imports and never sets, by
+ * the rules of the phone's own `QuickPayRepo`: the same amount, rate, rounding and daily count. It reads the settings
+ * as last imported, however long ago. Everything that is missing or unreadable answers no.
  */
 @Singleton
 class QuickPayRepo internal constructor(
@@ -35,7 +36,6 @@ class QuickPayRepo internal constructor(
     private val settingsStore: SettingsStore,
     private val currencyRepo: CurrencyRepo,
     private val spendStore: QuickPaySpendStore,
-    private val settingsSyncRepo: SettingsSyncRepo,
     private val nowMs: () -> Long,
     private val zone: () -> ZoneId,
 ) {
@@ -43,17 +43,8 @@ class QuickPayRepo internal constructor(
         private const val TAG = "QuickPayRepo"
         private const val CENTS_SCALE = 2
 
-        /**
-         * How old the last import of the phone's settings may be. A watch that could not read them for longer asks
-         * for the hold again, so QuickPay turned off on the phone stops on the watch within this time.
-         */
-        val MAX_SETTINGS_AGE = 15.minutes
-
-        /** How old the exchange rates may be for the limit, which is in dollars, to be checked against them. */
-        val MAX_RATES_AGE = 1.hours
-
-        /** How long [awaitInputs] holds a payment back for a new import and new rates before it goes on without. */
-        val INPUTS_TIMEOUT = 5.seconds
+        /** How long [awaitRate] holds a payment back for the dollar rate before it goes on without. */
+        val RATE_TIMEOUT = 5.seconds
     }
 
     @Inject
@@ -62,13 +53,11 @@ class QuickPayRepo internal constructor(
         settingsStore: SettingsStore,
         currencyRepo: CurrencyRepo,
         spendStore: QuickPaySpendStore,
-        settingsSyncRepo: SettingsSyncRepo,
     ) : this(
         ioDispatcher,
         settingsStore,
         currencyRepo,
         spendStore,
-        settingsSyncRepo,
         System::currentTimeMillis,
         ZoneId::systemDefault,
     )
@@ -76,65 +65,66 @@ class QuickPayRepo internal constructor(
     private val mutex = Mutex()
 
     /**
-     * Brings what [reserve] reads up to date before it is asked, for a payment that arrives as the app starts or
-     * returns: the import and the rates are then on their way but not in yet. When the last import has QuickPay on
-     * and is older than [MAX_SETTINGS_AGE], it waits for an import, joining one that runs; when the rates are missing
-     * or older than [MAX_RATES_AGE], it fetches them. Both together take at most [INPUTS_TIMEOUT]: only the wait
-     * ends then, and an import still under way goes on and lands for the next payment. It decides nothing:
-     * whatever is still missing or old afterwards makes [reserve] answer no. A watch whose last import has QuickPay
-     * off, or that has none, never waits here.
+     * Fetches the rates when QuickPay is on and no dollar rate is in yet, as for a payment whose link started the
+     * app: the watch keeps no rates across restarts, where the phone has its cached ones. It waits at most
+     * [RATE_TIMEOUT] and decides nothing: without a rate [reserve] answers no.
      */
-    suspend fun awaitInputs(): Unit = withContext(ioDispatcher) {
+    suspend fun awaitRate(): Unit = withContext(ioDispatcher) {
         runSuspendCatching {
-            val settings = settingsStore.data.first()
-            if (settings.quickPay?.isEnabled != true) return@runSuspendCatching
-            val isImportFresh = settings.phoneSyncedAtMs?.let { isFresh(nowMs() - it) } == true
-            val areRatesFresh = currencyRepo.ratesAge()?.let { it <= MAX_RATES_AGE } == true
-            withTimeoutOrNull(INPUTS_TIMEOUT) {
-                coroutineScope {
-                    if (!isImportFresh) launch { settingsSyncRepo.sync() }
-                    if (!areRatesFresh) launch { currencyRepo.refresh() }
-                }
-            }
-        }.onFailure { Logger.warn("Failed to refresh what QuickPay reads", it, context = TAG) }
+            if (settingsStore.data.first().quickPay?.isEnabled != true) return@runSuspendCatching
+            if (currencyRepo.rates.value.rateFor(USD) != null) return@runSuspendCatching
+            withTimeoutOrNull(RATE_TIMEOUT) { currencyRepo.refresh() }
+        }.onFailure { Logger.warn("Failed to fetch the rate QuickPay reads", it, context = TAG) }
     }
-
-    private fun isFresh(settingsAgeMs: Long): Boolean = settingsAgeMs in 0..MAX_SETTINGS_AGE.inWholeMilliseconds
 
     /**
-     * Whether a payment that costs [totalSats], its fee included, may skip the hold to pay, and if so counts it
-     * against today's limit. It may when QuickPay was imported from the phone within [MAX_SETTINGS_AGE] and is on,
-     * a dollar rate no older than [MAX_RATES_AGE] values the payment at no more than the phone's QuickPay amount, and
-     * today's QuickPay payments from this watch stay within the phone's daily limit with it. A yes is counted
-     * whether or not the payment then succeeds. Any failure to read or count answers no.
+     * Whether a payment of [amountSats], its fee not counted, may skip the hold to pay; if so it is counted against
+     * today's limit and returned as what [release] takes back. It may when QuickPay is on in the last import, the
+     * amount is no more than the phone's QuickPay amount in sats at the dollar rate, and today's QuickPay payments
+     * from this watch stay within the phone's daily limit with it. Any failure to read or count answers null.
      */
-    suspend fun reserve(totalSats: ULong): Boolean = withContext(ioDispatcher) {
-        runSuspendCatching { mutex.withLock { reserveLocked(totalSats) } }
+    suspend fun reserve(amountSats: ULong): QuickPayReservation? = withContext(ioDispatcher) {
+        runSuspendCatching { mutex.withLock { reserveLocked(amountSats) } }
             .onFailure { Logger.warn("Failed to check QuickPay", it, context = TAG) }
-            .getOrDefault(false)
+            .getOrNull()
     }
 
-    private suspend fun reserveLocked(totalSats: ULong): Boolean {
-        val settings = settingsStore.data.first()
-        val quickPay = settings.quickPay?.takeIf { it.isEnabled } ?: return false
-        val now = nowMs()
-        if (!isFresh(now - (settings.phoneSyncedAtMs ?: return false))) return false
-        val ratesAge = currencyRepo.ratesAge() ?: return false
-        if (ratesAge > MAX_RATES_AGE) return false
-        val rate = currencyRepo.rates.value.rateFor(USD)?.lastPrice?.toBigDecimalOrNull() ?: return false
-        val cents = usdCents(totalSats, rate) ?: return false
-        if (cents > quickPay.thresholdCents) return false
-        val dayKey = Instant.ofEpochMilli(now).atZone(zone()).toLocalDate().toString()
-        return spendStore.reserve(dayKey, cents, quickPay.dailyCapCents)
+    /**
+     * Takes [reservation] out of its day's count again, for a payment that did not go out or that failed, as the
+     * phone does. A count that cannot be written stays, which only makes the day's limit tighter.
+     */
+    suspend fun release(reservation: QuickPayReservation): Unit = withContext(ioDispatcher) {
+        runSuspendCatching { mutex.withLock { spendStore.release(reservation.dayKey, reservation.cents) } }
+            .onFailure { Logger.warn("Failed to release a QuickPay payment", it, context = TAG) }
     }
 
-    /** [sats] at [usdPerBtc] in US cents, rounded up so a payment never counts for less than it is worth. */
-    private fun usdCents(sats: ULong, usdPerBtc: BigDecimal): Long? {
-        if (sats == 0uL || sats > Long.MAX_VALUE.toULong() || usdPerBtc.signum() <= 0) return null
-        val cents = BigDecimal.valueOf(sats.toLong())
-            .multiply(usdPerBtc)
-            .movePointLeft(BTC_SCALE - CENTS_SCALE)
-            .setScale(0, RoundingMode.CEILING)
-        return runCatching { cents.longValueExact() }.getOrNull()
+    private suspend fun reserveLocked(amountSats: ULong): QuickPayReservation? {
+        val quickPay = settingsStore.data.first().quickPay?.takeIf { it.isEnabled } ?: return null
+        if (amountSats == 0uL || amountSats > Long.MAX_VALUE.toULong()) return null
+        val rate = currencyRepo.rates.value.rateFor(USD) ?: return null
+        val thresholdSats = thresholdSats(quickPay, rate) ?: return null
+        if (thresholdSats == 0uL || amountSats > thresholdSats) return null
+        val cents = reserveCents(amountSats, rate, quickPay) ?: return null
+        val today = Instant.ofEpochMilli(nowMs()).atZone(zone()).toLocalDate().toString()
+        val dayKey = spendStore.reserve(today, cents, quickPay.dailyCapCents) ?: return null
+        return QuickPayReservation(dayKey, cents)
+    }
+
+    private fun thresholdSats(quickPay: QuickPayLimits, rate: FxRate): ULong? {
+        if (rate.rate <= 0.0) return null
+        val sats = BigDecimal.valueOf(quickPay.amountUsd.toDouble())
+            .divide(BigDecimal.valueOf(rate.rate), BTC_SCALE, RoundingMode.HALF_UP)
+            .multiply(BigDecimal(SATS_IN_BTC))
+            .setScale(0, RoundingMode.HALF_UP)
+        return runCatching { sats.longValueExact().toULong() }.getOrNull()
+    }
+
+    private fun reserveCents(amountSats: ULong, rate: FxRate, quickPay: QuickPayLimits): Long? {
+        val fiat = fiatValue(amountSats.toLong(), rate) ?: return null
+        val cents = fiat.movePointRight(CENTS_SCALE).setScale(0, RoundingMode.HALF_UP).toLong()
+        return minOf(cents, quickPay.thresholdCents).coerceAtLeast(1L)
     }
 }
+
+/** A payment counted against the QuickPay limit of [dayKey], an ISO date, as [cents] US cents. */
+data class QuickPayReservation(val dayKey: String, val cents: Long)

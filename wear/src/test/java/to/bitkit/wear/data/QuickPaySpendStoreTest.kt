@@ -9,8 +9,9 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import to.bitkit.wear.test.BaseUnitTest
 import java.io.File
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 /** A [QuickPaySpendStore] in memory, counting as the real one does. */
 class FakeQuickPaySpendStore : QuickPaySpendStore {
@@ -18,15 +19,20 @@ class FakeQuickPaySpendStore : QuickPaySpendStore {
     var spentCents = 0L
     var failure: Throwable? = null
 
-    override suspend fun reserve(dayKey: String, cents: Long, capCents: Long): Boolean {
+    override suspend fun reserve(dayKey: String, cents: Long, capCents: Long): String? {
         failure?.let { throw it }
-        if (cents <= 0 || capCents <= 0) return false
+        if (cents <= 0 || capCents <= 0) return null
         val isNewDay = day.let { it == null || dayKey > it }
         val spent = if (isNewDay) 0L else spentCents
-        if (cents > capCents - spent) return false
+        if (cents > capCents - spent) return null
         if (isNewDay) day = dayKey
         spentCents = spent + cents
-        return true
+        return day
+    }
+
+    override suspend fun release(dayKey: String, cents: Long) {
+        failure?.let { throw it }
+        if (dayKey == day) spentCents = (spentCents - cents).coerceAtLeast(0L)
     }
 }
 
@@ -46,14 +52,14 @@ class QuickPaySpendStoreTest : BaseUnitTest() {
     @Test
     fun `a day takes payments up to its cap and not a cent more, also after a restart`() = test {
         val sut = open().first
-        assertTrue(sut.reserve(TODAY, cents = 400, capCents = 1_000))
-        assertTrue(sut.reserve(TODAY, cents = 500, capCents = 1_000))
+        assertNotNull(sut.reserve(TODAY, cents = 400, capCents = 1_000))
+        assertNotNull(sut.reserve(TODAY, cents = 500, capCents = 1_000))
         close()
         val next = open().first
 
-        assertFalse(next.reserve(TODAY, cents = 101, capCents = 1_000))
-        assertTrue(next.reserve(TODAY, cents = 100, capCents = 1_000))
-        assertFalse(next.reserve(TODAY, cents = 1, capCents = 1_000))
+        assertNull(next.reserve(TODAY, cents = 101, capCents = 1_000))
+        assertNotNull(next.reserve(TODAY, cents = 100, capCents = 1_000))
+        assertNull(next.reserve(TODAY, cents = 1, capCents = 1_000))
         close()
     }
 
@@ -61,30 +67,58 @@ class QuickPaySpendStoreTest : BaseUnitTest() {
     fun `a refused payment counts for nothing`() = test {
         val sut = open().first
 
-        assertFalse(sut.reserve(TODAY, cents = 1_001, capCents = 1_000))
+        assertNull(sut.reserve(TODAY, cents = 1_001, capCents = 1_000))
 
-        assertTrue(sut.reserve(TODAY, cents = 1_000, capCents = 1_000))
+        assertNotNull(sut.reserve(TODAY, cents = 1_000, capCents = 1_000))
         close()
     }
 
     @Test
     fun `a new day starts from nothing and an earlier day does not`() = test {
         val sut = open().first
-        assertTrue(sut.reserve(TOMORROW, cents = 1_000, capCents = 1_000))
+        assertNotNull(sut.reserve(TOMORROW, cents = 1_000, capCents = 1_000))
 
-        assertFalse(sut.reserve(TODAY, cents = 1, capCents = 1_000))
-        assertFalse(sut.reserve(TOMORROW, cents = 1, capCents = 1_000))
+        assertNull(sut.reserve(TODAY, cents = 1, capCents = 1_000))
+        assertNull(sut.reserve(TOMORROW, cents = 1, capCents = 1_000))
 
-        assertTrue(sut.reserve("2026-11-30", cents = 1_000, capCents = 1_000))
+        assertNotNull(sut.reserve("2026-11-30", cents = 1_000, capCents = 1_000))
+        close()
+    }
+
+    @Test
+    fun `a payment of an earlier day is counted under the day last counted`() = test {
+        val sut = open().first
+        assertEquals(TOMORROW, sut.reserve(TOMORROW, cents = 400, capCents = 1_000))
+
+        assertEquals(TOMORROW, sut.reserve(TODAY, cents = 600, capCents = 1_000))
+        assertNull(sut.reserve(TOMORROW, cents = 1, capCents = 1_000))
+        close()
+    }
+
+    @Test
+    fun `a released payment frees its cents in the day counted, and nothing in another day`() = test {
+        val sut = open().first
+        assertNotNull(sut.reserve(TODAY, cents = 1_000, capCents = 1_000))
+
+        sut.release(TOMORROW, cents = 1_000)
+        sut.release(TODAY, cents = 0)
+        assertNull(sut.reserve(TODAY, cents = 1, capCents = 1_000))
+
+        sut.release(TODAY, cents = 400)
+        assertNull(sut.reserve(TODAY, cents = 401, capCents = 1_000))
+        assertNotNull(sut.reserve(TODAY, cents = 400, capCents = 1_000))
+
+        sut.release(TODAY, cents = 5_000)
+        assertNotNull(sut.reserve(TODAY, cents = 1_000, capCents = 1_000))
         close()
     }
 
     @Test
     fun `a lowered cap counts what was already spent`() = test {
         val sut = open().first
-        assertTrue(sut.reserve(TODAY, cents = 800, capCents = 1_000))
+        assertNotNull(sut.reserve(TODAY, cents = 800, capCents = 1_000))
 
-        assertFalse(sut.reserve(TODAY, cents = 1, capCents = 500))
+        assertNull(sut.reserve(TODAY, cents = 1, capCents = 500))
         close()
     }
 
@@ -92,21 +126,21 @@ class QuickPaySpendStoreTest : BaseUnitTest() {
     fun `nothing and less than nothing are refused`() = test {
         val sut = open().first
 
-        assertFalse(sut.reserve(TODAY, cents = 0, capCents = 1_000))
-        assertFalse(sut.reserve(TODAY, cents = -5, capCents = 1_000))
-        assertFalse(sut.reserve(TODAY, cents = 1, capCents = 0))
-        assertFalse(sut.reserve(TODAY, cents = Long.MAX_VALUE, capCents = 1_000))
+        assertNull(sut.reserve(TODAY, cents = 0, capCents = 1_000))
+        assertNull(sut.reserve(TODAY, cents = -5, capCents = 1_000))
+        assertNull(sut.reserve(TODAY, cents = 1, capCents = 0))
+        assertNull(sut.reserve(TODAY, cents = Long.MAX_VALUE, capCents = 1_000))
         close()
     }
 
     @Test
     fun `the wallet's wipe forgets the day's spend with the settings`() = test {
         val (sut, settings) = open()
-        assertTrue(sut.reserve(TODAY, cents = 1_000, capCents = 1_000))
+        assertNotNull(sut.reserve(TODAY, cents = 1_000, capCents = 1_000))
 
         settings.finishWipe()
 
-        assertTrue(sut.reserve(TODAY, cents = 1_000, capCents = 1_000))
+        assertNotNull(sut.reserve(TODAY, cents = 1_000, capCents = 1_000))
         close()
     }
 
